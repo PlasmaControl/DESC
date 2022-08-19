@@ -219,6 +219,7 @@ def compute_cartesian_coords(
     R_transform,
     Z_transform,
     data=None,
+    straight=True,
     **kwargs,
 ):
     """Compute Cartesian coordinates (X,Y,Z).
@@ -244,8 +245,15 @@ def compute_cartesian_coords(
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     data["phi"] = data["zeta"]
-    data["X"] = data["R"] * jnp.cos(data["phi"])
-    data["Y"] = data["R"] * jnp.sin(data["phi"])
+
+    if straight:
+        data["X"] = data["R"] 
+        idx_r000 = R_transform.basis.get_idx(0,0,0)
+        R0 = R_lmn[idx_r000]
+        data["Y"] = data["phi"]  * R0
+    else:
+        data["X"] = data["R"] * jnp.cos(data["phi"])
+        data["Y"] = data["R"] * jnp.sin(data["phi"])
 
     return data
 
@@ -400,7 +408,9 @@ def compute_covariant_basis(
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
     data["0"] = jnp.zeros(R_transform.num_nodes)
 
-    R_major = 10 # get from R_00 boundary
+    #R_major = 10 # get from R_00 boundary
+    idx_r000 = R_transform.basis.get_idx(0,0,0)
+    R_major = R_lmn[idx_r000]
     data["R0"] = jnp.ones(R_transform.num_nodes) * R_major
 
 

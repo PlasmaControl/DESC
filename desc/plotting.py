@@ -1520,8 +1520,8 @@ def plot_qs_error(
     markers = kwargs.get("markers", ["o", "o", "o"])
 
     data = eq.compute("R0")
-    data = eq.compute("|B|", data=data)
     R0 = data["R0"]
+    data = eq.compute("|B|", data=data)
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
     data = None
@@ -1585,6 +1585,9 @@ def plot_qs_error(
                 label=r"$\hat{f}_T$",
             )
     else:
+
+        import pdb
+        pdb.set_trace()
         if fB:
             ax.plot(
                 rho,

@@ -83,7 +83,24 @@ def test_total_volume(DummyStellarator):
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
     lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"][0]
     total_volume = eq.compute("V")["V"]  # default quadrature grid
-    np.testing.assert_allclose(lcfs_volume, total_volume, rtol=1e-2)
+    np.testing.assert_allclose(lcfs_volume, total_volume)
+
+
+def test_enclosed_volumes():
+    """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
+    rho = np.linspace(1 / 128, 1, 128)
+    V = 20 * (np.pi * rho) ** 2
+    V_r = 40 * np.pi ** 2 * rho
+    V_rr = 40 * np.pi ** 2
+    eq = Equilibrium()  # torus
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    np.testing.assert_allclose(compress(grid, eq.compute("V(r)", grid=grid)["V(r)"]), V)
+    np.testing.assert_allclose(
+        compress(grid, eq.compute("V_r(r)", grid=grid)["V_r(r)"]), V_r
+    )
+    np.testing.assert_allclose(
+        compress(grid, eq.compute("V_rr(r)", grid=grid)["V_rr(r)"]), V_rr
+    )
 
 
 @pytest.mark.slow
@@ -392,10 +409,10 @@ def test_currents(DSHAPE):
     data_full = eq.compute("I", grid_full)
     data_sym = eq.compute("I", grid_sym)
 
-    np.testing.assert_allclose(data_full["I"][0], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["I"][0], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"][0], data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_sym["G"][0], data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
 
 
 @pytest.mark.slow
@@ -499,7 +516,7 @@ def test_compute_grad_p_volume_avg():
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
 
 
-def test_compute_dmerc(DSHAPE_examples, HELIOTRON):
+def test_compute_dmerc(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DMerc = eq.compute("D_Mercier")["D_Mercier"]
     np.testing.assert_allclose(DMerc, 0, err_msg="should be 0 in vacuum")
@@ -513,13 +530,13 @@ def test_compute_dmerc(DSHAPE_examples, HELIOTRON):
         DMerc = compress(grid, eq.compute("D_Mercier", grid=grid)["D_Mercier"])
         all_close(DMerc, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_examples, "DSHAPE", (0.175, 0.8))
-    test(DSHAPE_examples, "DSHAPE", (0.8, 1), atol=5e-2)
+    test(DSHAPE, "DSHAPE", (0.175, 0.785))
+    test(DSHAPE, "DSHAPE", (0.785, 1), atol=5e-2)
     test(HELIOTRON, "HELIOTRON", (0.1, 0.275), rtol=11e-2)
     test(HELIOTRON, "HELIOTRON", (0.275, 0.975), rtol=5e-2)
 
 
-def test_compute_dshear(DSHAPE_examples, HELIOTRON):
+def test_compute_dshear(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DShear = eq.compute("D_shear")["D_shear"]
     np.testing.assert_allclose(DShear, 0, err_msg="should be 0 in vacuum")
@@ -531,16 +548,17 @@ def test_compute_dshear(DSHAPE_examples, HELIOTRON):
         rho, vmec = get_vmec_data(name, "DShear")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         DShear = compress(grid, eq.compute("D_shear", grid=grid)["D_shear"])
+
         assert np.all(
             DShear[np.isfinite(DShear)] >= 0
         ), "D_shear should always have a stabilizing effect."
         all_close(DShear, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_examples, "DSHAPE", (0, 1), 1e-12, 0)
+    test(DSHAPE, "DSHAPE", (0, 1), 1e-12, 0)
     test(HELIOTRON, "HELIOTRON", (0, 1), 1e-12, 0)
 
 
-def test_compute_dcurr(DSHAPE_examples, HELIOTRON):
+def test_compute_dcurr(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DCurr = eq.compute("D_current")["D_current"]
     np.testing.assert_allclose(DCurr, 0, err_msg="should be 0 in vacuum")
@@ -554,11 +572,11 @@ def test_compute_dcurr(DSHAPE_examples, HELIOTRON):
         DCurr = compress(grid, eq.compute("D_current", grid=grid)["D_current"])
         all_close(DCurr, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_examples, "DSHAPE", (0.075, 0.975))
+    test(DSHAPE, "DSHAPE", (0.075, 0.975))
     test(HELIOTRON, "HELIOTRON", (0.16, 0.9), rtol=62e-3)
 
 
-def test_compute_dwell(DSHAPE_examples, HELIOTRON):
+def test_compute_dwell(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DWell = eq.compute("D_well")["D_well"]
     np.testing.assert_allclose(DWell, 0, err_msg="should be 0 in vacuum")
@@ -572,13 +590,13 @@ def test_compute_dwell(DSHAPE_examples, HELIOTRON):
         DWell = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
         all_close(DWell, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_examples, "DSHAPE", (0.11, 0.8))
+    test(DSHAPE, "DSHAPE", (0.11, 0.785))
     test(HELIOTRON, "HELIOTRON", (0.01, 0.45), rtol=176e-3)
     test(HELIOTRON, "HELIOTRON", (0.45, 0.6), atol=6e-1)
     test(HELIOTRON, "HELIOTRON", (0.6, 0.99))
 
 
-def test_compute_dgeod(DSHAPE_examples, HELIOTRON):
+def test_compute_dgeod(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DGeod = eq.compute("D_geodesic")["D_geodesic"]
     np.testing.assert_allclose(DGeod, 0, err_msg="should be 0 in vacuum")
@@ -590,12 +608,13 @@ def test_compute_dgeod(DSHAPE_examples, HELIOTRON):
         rho, vmec = get_vmec_data(name, "DGeod")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
         DGeod = compress(grid, eq.compute("D_geodesic", grid=grid)["D_geodesic"])
+
         assert np.all(
             DGeod[np.isfinite(DGeod)] <= 0
         ), "DGeod should always have a destabilizing effect."
         all_close(DGeod, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_examples, "DSHAPE", (0.15, 0.975))
+    test(DSHAPE, "DSHAPE", (0.15, 0.975))
     test(HELIOTRON, "HELIOTRON", (0.15, 0.825), rtol=77e-3)
     test(HELIOTRON, "HELIOTRON", (0.825, 1), atol=12e-2)
 

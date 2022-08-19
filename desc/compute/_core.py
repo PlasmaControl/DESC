@@ -143,7 +143,7 @@ def compute_cartesian_coords(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -298,7 +298,7 @@ def compute_covariant_basis(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -399,7 +399,7 @@ def compute_contravariant_basis(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -447,7 +447,7 @@ def compute_jacobian(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -560,7 +560,7 @@ def compute_covariant_metric_coefficients(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -613,7 +613,7 @@ def compute_contravariant_metric_coefficients(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -674,7 +674,7 @@ def compute_toroidal_flux_gradient(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -721,7 +721,7 @@ def compute_geometry(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -739,12 +739,14 @@ def compute_geometry(
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     if check_derivs("V(r)", R_transform, Z_transform):
+        # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
         data["V(r)"] = jnp.abs(
             surface_integrals(
                 grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
             )
         )
     if check_derivs("V_r(r)", R_transform, Z_transform):
+        # See equation 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
         data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
         data["A"] = jnp.mean(

@@ -108,6 +108,8 @@ def _get_grid_surface(grid, surface_label):
         The indices of the unique values of the surface_label in grid.nodes.
     ds : ndarray
         The differential elements (dtheta * dzeta for rho surface).
+    max_surface_val : float
+        The supremum of this surface_label.
 
     """
     assert surface_label in {"rho", "theta", "zeta"}
@@ -115,16 +117,19 @@ def _get_grid_surface(grid, surface_label):
         nodes = grid.nodes[:, 0]
         unique_idx = grid.unique_rho_idx
         ds = grid.spacing[:, 1:].prod(axis=1)
+        max_surface_val = 1
     elif surface_label == "theta":
         nodes = grid.nodes[:, 1]
         unique_idx = grid.unique_theta_idx
         ds = grid.spacing[:, [0, 2]].prod(axis=1)
+        max_surface_val = 2 * jnp.pi
     else:
         nodes = grid.nodes[:, 2]
         unique_idx = grid.unique_zeta_idx
         ds = grid.spacing[:, :2].prod(axis=1)
+        max_surface_val = 2 * jnp.pi
 
-    return nodes, unique_idx, ds
+    return nodes, unique_idx, ds, max_surface_val
 
 
 def compress(grid, x, surface_label="rho"):
@@ -216,18 +221,21 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
         warnings.warn(
             colored(
-                "Integrals over constant theta surfaces are poorly defined for "
-                + "ConcentricGrid.",
+                "Integrals over constant theta surfaces are poorly defined for ConcentricGrid.",
                 "yellow",
             )
         )
 
     q = jnp.atleast_1d(q)
-    nodes, unique_idx, ds = _get_grid_surface(grid, surface_label)
-    max_surface_val = 1 if surface_label == "rho" else 2 * jnp.pi
+    nodes, unique_idx, ds, max_surface_val = _get_grid_surface(grid, surface_label)
+
+    # Separate nodes into bins with boundaries at unique values of the surface label.
+    # This groups nodes with identical surface label values.
+    # Each is assigned a weight of their contribution to the integral.
+    # The elements of each bin are summed, performing the integration.
     bins = jnp.append(nodes[unique_idx], max_surface_val)
     integrals = jnp.histogram(nodes, bins=bins, weights=ds * q)[0]
-    return expand(grid, integrals, surface_label=surface_label)
+    return expand(grid, integrals, surface_label)
 
 
 def surface_averages(
@@ -251,7 +259,7 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        Surface area of the surface being averaged over. Sign must match sqrt_g.
+        Surface areas of the surfaces to compute averages over. Sign must match sqrt_g.
         This can be supplied to avoid redundant computations.
 
     Returns

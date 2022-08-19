@@ -110,37 +110,6 @@ def DSHAPE(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def DSHAPE_examples(tmpdir_factory):
-    """Run DSHAPE example that matches input in examples/DESC."""
-    input_path = ".//tests//inputs//DSHAPE_examples"
-    output_dir = tmpdir_factory.mktemp("result")
-    desc_h5_path = output_dir.join("DSHAPE_out.h5")
-    desc_nc_path = output_dir.join("DSHAPE_out.nc")
-    vmec_nc_path = ".//tests//inputs//wout_DSHAPE.nc"
-    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
-
-    cwd = os.path.dirname(__file__)
-    exec_dir = os.path.join(cwd, "..")
-    input_filename = os.path.join(exec_dir, input_path)
-
-    print("Running DSHAPE test.")
-    print("exec_dir=", exec_dir)
-    print("cwd=", cwd)
-
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
-
-    DSHAPE_out = {
-        "input_path": input_path,
-        "desc_h5_path": desc_h5_path,
-        "desc_nc_path": desc_nc_path,
-        "vmec_nc_path": vmec_nc_path,
-        "booz_nc_path": booz_nc_path,
-    }
-    return DSHAPE_out
-
-
-@pytest.fixture(scope="session")
 def HELIOTRON(tmpdir_factory):
     """Run HELIOTRON example."""
     input_path = ".//tests//inputs//HELIOTRON"

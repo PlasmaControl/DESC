@@ -113,7 +113,6 @@ def compute_mercier_stability(
         data,
     )
 
-    # dS = |sqrt(g)| * |grad(rho)| * dt * dz
     dS = jnp.abs(data["sqrt(g)"]) * data["|grad(rho)|"]
 
     if check_derivs("D_shear", R_transform, Z_transform, L_transform):
@@ -238,9 +237,13 @@ def compute_magnetic_well(
         B2_avg = surface_averages(
             grid,
             data["|B|^2"],
-            sqrt_g=jnp.abs(data["sqrt(g)"]),
+            jnp.abs(data["sqrt(g)"]),
             denominator=data["V_r(r)"],
         )
+        # pressure = thermal + magnetic = 2 mu_0 p + B^2
+        # The surface average operation is an additive homomorphism.
+        # Thermal pressure is constant over a rho surface.
+        # surface average(pressure) = thermal + surface average(magnetic)
         dp_drho = 2 * mu_0 * data["p_r"]
         dB2_drho = (
             surface_integrals(

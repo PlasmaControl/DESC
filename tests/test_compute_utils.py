@@ -5,6 +5,7 @@ from desc.grid import ConcentricGrid, LinearGrid
 from desc.compute.utils import (
     _get_grid_surface,
     compress,
+    expand,
     surface_averages,
     surface_integrals,
 )
@@ -24,15 +25,10 @@ def random_grid(linear=False):
     )
 
 
-def benchmark_integrals(grid, q=1, surface_label="rho"):
+def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
     """Intuitive implementation of bulk surface integral function in compute.utils.
 
-    Computes surface integrals of the specified quantity for all surfaces in the grid.
-
-    Notes
-    -----
-        See D'haeseleer flux coordinates eq. 4.9.11 for more details.
-        LinearGrid will have better accuracy than QuadratureGrid for a theta surface.
+    Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
     ----------
@@ -48,8 +44,8 @@ def benchmark_integrals(grid, q=1, surface_label="rho"):
     integrals : ndarray
         Surface integrals of q over each surface in grid.
     """
-    q = np.asarray(q)
-    nodes, _, ds = _get_grid_surface(grid, surface_label)
+    nodes, _, ds, _ = _get_grid_surface(grid, surface_label)
+    weights = np.asarray(ds * q)
 
     surfaces = dict()
     # collect collocation node indices for each surface_label surface
@@ -58,18 +54,34 @@ def benchmark_integrals(grid, q=1, surface_label="rho"):
     # integration over non-contiguous elements
     integrals = list()
     for _, surface_idx in sorted(surfaces.items()):
-        integrals.append((ds * q)[surface_idx].sum())
+        integrals.append(weights[surface_idx].sum())
     return np.asarray(integrals)
 
 
 class TestComputeUtils:
+    def test_compress_expand_inverse_op(self):
+        """Test that compress() and expand() are inverse operations for surface functions."""
+
+        def test(surface_label):
+            grid = random_grid()
+            # enforce r is a surface function via compression
+            r = compress(
+                grid, np.random.random_sample(size=grid.num_nodes), surface_label
+            )
+            s = compress(grid, expand(grid, r, surface_label), surface_label)
+            np.testing.assert_allclose(r, s)
+
+        test("rho")
+        test("theta")
+        test("zeta")
+
     def test_surface_integrals(self):
         """Test the bulk surface averaging against a more intuitive implementation."""
 
         def test(surface_label):
             grid = random_grid()
             q = np.random.random_sample(size=grid.num_nodes)
-            integrals_1 = benchmark_integrals(grid, q, surface_label)
+            integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
             integrals_2 = compress(
                 grid, surface_integrals(grid, q, surface_label), surface_label
             )
@@ -79,50 +91,18 @@ class TestComputeUtils:
         test("theta")
         test("zeta")
 
-    def test_expand(self):
-        """Test the expand function."""
-
-        def test(surface_label):
-            grid = random_grid()
-            q = np.random.random_sample(size=grid.num_nodes)
-            integrals = surface_integrals(grid, q, surface_label)
-            integrals_expand = surface_integrals(grid, q, surface_label)
-
-            nodes, _, _ = _get_grid_surface(grid, surface_label)
-            _, inverse = np.unique(nodes, return_inverse=True)
-            np.testing.assert_allclose(integrals[inverse], integrals_expand)
-
-        test("rho")
-        test("theta")
-        test("zeta")
-
-    def test_compress(self):
-        """Test the compress function."""
-
-        def test(surface_label):
-            grid = random_grid()
-            q = np.random.random_sample(size=grid.num_nodes)
-            integrals = surface_integrals(grid, q, surface_label)
-            integrals_expand = surface_integrals(grid, q, surface_label)
-            np.testing.assert_allclose(
-                integrals, compress(grid, integrals_expand, surface_label)
-            )
-
-        test("rho")
-        test("theta")
-        test("zeta")
-
     def test_surface_area_unweighted(self):
         """Test the surface integral(ds) is 4pi^2, 2pi for rho, zeta surfaces."""
 
-        def test(surface_label, area, linear=False):
-            grid = random_grid(linear)
+        def test(surface_label):
+            grid = random_grid(linear=surface_label == "theta")
             areas = surface_integrals(grid, surface_label=surface_label)
-            np.testing.assert_allclose(areas, area)
+            correct_area = 4 * np.pi ** 2 if surface_label == "rho" else 2 * np.pi
+            np.testing.assert_allclose(areas, correct_area)
 
-        test("rho", 4 * np.pi ** 2)
-        test("theta", 2 * np.pi, True)
-        test("zeta", 2 * np.pi)
+        test("rho")
+        test("theta")
+        test("zeta")
 
     def test_surface_area_weighted(self, DSHAPE, HELIOTRON):
         """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
@@ -130,8 +110,8 @@ class TestComputeUtils:
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             grid = random_grid()
-            sqrtg = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
-            areas = surface_integrals(grid, sqrtg)
+            sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
+            areas = compress(grid, surface_integrals(grid, sqrt_g))
             np.testing.assert_allclose(areas, np.sort(areas))
 
         test(DSHAPE)
@@ -176,14 +156,8 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            rho = (1 - 1e-4) * np.random.default_rng().random() + 1e-4
-            grid = LinearGrid(
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=np.atleast_1d(rho),
-            )
+            rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
             data = eq.compute("|B|", grid=grid)
 
             np.testing.assert_allclose(

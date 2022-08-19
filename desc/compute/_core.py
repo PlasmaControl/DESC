@@ -698,7 +698,7 @@ def compute_toroidal_flux_gradient(
     )
 
     if check_derivs("grad(psi)", R_transform, Z_transform):
-        data["grad(psi)"] = data["psi_r"] * data["e^rho"].T
+        data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
     if check_derivs("|grad(psi)|", R_transform, Z_transform):
         data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
         data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
@@ -746,7 +746,7 @@ def compute_geometry(
             )
         )
     if check_derivs("V_r(r)", R_transform, Z_transform):
-        # See equation 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
+        # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
         data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
         data["A"] = jnp.mean(

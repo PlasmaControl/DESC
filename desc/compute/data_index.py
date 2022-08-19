@@ -76,7 +76,7 @@ data_index["|grad(psi)|"] = {
     "units_long": "Webers per meter",
     "description": "Toroidal flux gradient magnitude",
     "fun": "compute_toroidal_flux_gradient",
-    "dim": 3,
+    "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["|grad(psi)|^2"] = {
@@ -85,7 +85,7 @@ data_index["|grad(psi)|^2"] = {
     "units_long": "Webers squared per square meter",
     "description": "Toroidal flux gradient magnitude squared",
     "fun": "compute_toroidal_flux_gradient",
-    "dim": 3,
+    "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 

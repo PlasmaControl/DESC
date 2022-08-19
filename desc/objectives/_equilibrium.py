@@ -277,6 +277,9 @@ class ForceBalanceGalerkin(_Objective):
             self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
         )
 
+        #self._R_transform.build_pinv()
+        #self._Z_transform.build_pinv()
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -331,6 +334,10 @@ class ForceBalanceGalerkin(_Objective):
         
         fr_proj = self._R_transform.project(fr)
         fb_proj = self._Z_transform.project(fb)
+
+        #fr_proj = self._R_transform.fit(fr)
+        #fb_proj = self._Z_transform.fit(fb)
+
         
         f = jnp.concatenate([fr_proj, fb_proj])
         

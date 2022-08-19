@@ -6,7 +6,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy import optimize, interpolate, integrate
 
 from desc.backend import sign
-from desc.utils import Timer, area_difference
+from desc.utils import Timer
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
@@ -1093,54 +1093,6 @@ class VMECIO:
             root_fun, x0=theta_star, method="diagbroyden", options={"ftol": 1e-6}
         )
         return out.x
-
-    @classmethod
-    def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Compute average normalized area difference between VMEC and DESC equilibria.
-
-        Parameters
-        ----------
-        equil : Equilibrium
-            desc equilibrium to compare
-        vmec_data : dict
-            dictionary of vmec outputs
-        Nr : int, optional
-            number of radial surfaces to average over
-        Nt : int, optional
-            number of vartheta contours to compare
-
-        Returns
-        -------
-        area_rho : ndarray, shape(Nr, Nz)
-            normalized area difference of rho contours, computed as the symmetric
-            difference divided by the intersection
-        area_theta : ndarray, shape(Nt, Nz)
-            normalized area difference between vartheta contours, computed as the area
-            of the polygon created by closing the two vartheta contours divided by the
-            perimeter squared
-
-        """
-        # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
-        if isinstance(vmec_data, (str, os.PathLike)):
-            vmec_data = cls.read_vmec_output(vmec_data)
-
-        if equil.N == 0:
-            Nz = 1
-        else:
-            Nz = 6
-
-        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
-
-        Rr1 = coords["Rr_desc"]
-        Zr1 = coords["Zr_desc"]
-        Rv1 = coords["Rv_desc"]
-        Zv1 = coords["Zv_desc"]
-        Rr2 = coords["Rr_vmec"]
-        Zr2 = coords["Zr_vmec"]
-        Rv2 = coords["Rv_vmec"]
-        Zv2 = coords["Zv_vmec"]
-        area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-        return area_rho, area_theta
 
     @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):

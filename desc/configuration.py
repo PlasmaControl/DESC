@@ -3,14 +3,12 @@ import os
 import copy
 import numbers
 
-from termcolor import colored
 from abc import ABC
-from shapely.geometry import LineString, MultiLineString
 from inspect import signature
 
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble, load
-from desc.utils import copy_coeffs, Index, unpack_state
+from desc.utils import copy_coeffs, Index
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.profiles import Profile, PowerSeriesProfile
@@ -22,7 +20,7 @@ from desc.geometry import (
 )
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
 import desc.compute as compute_funs
-from desc.compute import arg_order, data_index
+from desc.compute import arg_order, data_index, compute_jacobian
 
 
 class _Configuration(IOAble, ABC):
@@ -696,8 +694,6 @@ class _Configuration(IOAble, ABC):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
-        self._make_labels()
-
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
 
@@ -1018,52 +1014,6 @@ class _Configuration(IOAble, ABC):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
 
-    # FIXME: update this now that x is no longer a property of Configuration
-    def _make_labels(self):
-        R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
-        Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
-        L_label = ["L_{},{},{}".format(l, m, n) for l, m, n in self.L_basis.modes]
-        return None
-
-    def get_xlabel_by_idx(self, idx):
-        """Find which mode corresponds to a given entry in x.
-
-        Parameters
-        ----------
-        idx : int or array-like of int
-            index into optimization vector x
-
-        Returns
-        -------
-        label : str or list of str
-            label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
-
-        """
-        self._make_labels()
-        idx = np.atleast_1d(idx)
-        labels = [self.xlabel.get(i, None) for i in idx]
-        return labels
-
-    def get_idx_by_xlabel(self, labels):
-        """Find which index of x corresponds to a given mode.
-
-        Parameters
-        ----------
-        label : str or list of str
-            label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
-
-        Returns
-        -------
-        idx : int or array-like of int
-            index into optimization vector x
-
-        """
-        self._make_labels()
-        if not isinstance(labels, (list, tuple)):
-            labels = [labels]
-        idx = [self.rev_xlabel.get(label, None) for label in labels]
-        return np.array(idx)
-
     def compute(self, name, grid=None, data=None, **kwargs):
         """Compute the quantity given by name on grid.
 
@@ -1305,24 +1255,22 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, nsurfs=10, ntheta=20, nzeta=None, Nt=45, Nr=20):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
+
+            Does so by checking coordianate jacobian (sqrt(g)) sign.
+            If coordinate jacobian switches sign somewhere in the volume, this indicates that
+            it is zero at some point, meaning surfaces are touching and the equilibrium is not nested
+
+            NOTE: If grid resolution used is too low, or the solution is just barely unnested, this function may
+                fail to return the correct answer.
 
         Parameters
         ----------
-        nsurfs : int, optional
-            Number of flux surfaces to check (Default = 10).
-        ntheta : int, optional
-            Number of straight field-line poloidal contours to check (Default = 20).
-        nzeta : int, optional
-            Number of toroidal planes to check. By default checks the zeta=0
-            plane for axisymmetric equilibria and 5 planes evenly spaced in
-            zeta between 0 and 2pi/NFP for non-axisymmetric equilibria.
-            Otherwise uses nzeta planes linearly spaced in zeta between 0 and 2pi/NFP.
-        Nt : int, optional
-            Number of theta coordinates to use for the rho contours (Default = 45).
-        Nr : int, optional
-            Number of rho coordinates to use for the theta contours (Default = 20).
+        grid  :  Grid, optional
+            Grid on which to evaluate the coordinate jacobian and check for the sign. (Default to QuadratureGrid with eq's current grid resolutions)
+        R_lmn, Z_lmn : ndarray, optional
+            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
 
         Returns
         -------
@@ -1330,53 +1278,27 @@ class _Configuration(IOAble, ABC):
             whether or not the surfaces are nested
 
         """
-        planes_nested_bools = []
-        if nzeta is None:
-            zetas = (
-                [0.0]
-                if self.N == 0
-                else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
-            )
-        else:
-            zetas = np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False)
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
-        for zeta in zetas:
-            r_grid = LinearGrid(rho=nsurfs, theta=Nt, zeta=zeta, endpoint=True)
-            t_grid = LinearGrid(rho=Nr, theta=ntheta, zeta=zeta, endpoint=False)
+        R_transform = Transform(
+            grid, self.R_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
+        )
+        Z_transform = Transform(
+            grid, self.Z_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
+        )
+        data = compute_jacobian(
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+        )
 
-            r_coords = self.compute("R", r_grid)
-            t_coords = self.compute("lambda", t_grid)
-
-            v_nodes = t_grid.nodes
-            v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-            v_grid = Grid(v_nodes)
-            v_coords = self.compute("R", v_grid)
-
-            # rho contours
-            Rr = r_coords["R"].reshape(
-                (r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta)
-            )[:, :, 0]
-            Zr = r_coords["Z"].reshape(
-                (r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta)
-            )[:, :, 0]
-
-            # theta contours
-            Rv = v_coords["R"].reshape(
-                (t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta)
-            )[:, :, 0]
-            Zv = v_coords["Z"].reshape(
-                (t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta)
-            )[:, :, 0]
-
-            rline = MultiLineString(
-                [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
-            )
-            vline = MultiLineString(
-                [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
-            )
-
-            planes_nested_bools.append(rline.is_simple and vline.is_simple)
-        return np.all(planes_nested_bools)
+        return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
 
     def to_sfl(
         self,

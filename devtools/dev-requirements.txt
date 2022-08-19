@@ -22,6 +22,7 @@ pytest-mpl == 0.16.0
 pytest-benchmark
 markupsafe==2.0.1
 nbmake
+shapely >= 1.8.2
 
 #For building
 build

@@ -456,13 +456,9 @@ class LinearGrid(Grid):
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
             if t.size > 1:
-                for i in range(t.size):
-                    if i == 0:
-                        dt[i] = (t[0] + t[1]) / 2
-                    elif i == t.size - 1:
-                        dt[i] = 2 * np.pi - (t[-2] + t[-1]) / 2
-                    else:
-                        dt[i] = (t[i + 1] - t[i - 1]) / 2
+                dt[0] = (t[0] + t[1]) / 2
+                dt[1:-1] = (t[2:] - t[:-2]) / 2
+                dt[-1] = 2 * np.pi - (t[-2] + t[-1]) / 2
             else:
                 dt = np.array([2 * np.pi])
 
@@ -478,13 +474,9 @@ class LinearGrid(Grid):
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
             if z.size > 1:
-                for i in range(z.size):
-                    if i == 0:
-                        dz[i] = (z[0] + z[1]) / 2
-                    elif i == z.size - 1:
-                        dz[i] = 2 * np.pi - (z[-2] + z[-1]) / 2
-                    else:
-                        dz[i] = (z[i + 1] - z[i - 1]) / 2
+                dz[0] = (z[0] + z[1]) / 2
+                dz[1:-1] = (z[2:] - z[:-2]) / 2
+                dz[-1] = 2 * np.pi - (z[-2] + z[-1]) / 2
             else:
                 dz = np.array([2 * np.pi])
 
@@ -810,13 +802,9 @@ class ConcentricGrid(Grid):
 
         drho = np.zeros_like(rho)
         if rho.size > 1:
-            for i in range(rho.size):
-                if i == 0:
-                    drho[i] = (rho[0] + rho[1]) / 2
-                elif i == rho.size - 1:
-                    drho[i] = 1 - (rho[-2] + rho[-1]) / 2
-                else:
-                    drho[i] = (rho[i + 1] - rho[i - 1]) / 2
+            drho[0] = (rho[0] + rho[1]) / 2
+            drho[1:-1] = (rho[2:] - rho[:-2]) / 2
+            drho[-1] = 1 - (rho[-2] + rho[-1]) / 2
         else:
             drho = np.array([1.0])
         r = []

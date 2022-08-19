@@ -2,7 +2,6 @@ import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-
 from desc.backend import use_jax, jnp, jit
 from desc.utils import Timer
 from desc.io import IOAble

@@ -433,13 +433,9 @@ class LinearGrid(Grid):
             r = np.atleast_1d(rho)
             dr = np.zeros_like(r)
             if r.size > 1:
-                for i in range(r.size):
-                    if i == 0:
-                        dr[i] = (r[0] + r[1]) / 2
-                    elif i == r.size - 1:
-                        dr[i] = 1 - (r[-2] + r[-1]) / 2
-                    else:
-                        dr[i] = (r[i + 1] - r[i - 1]) / 2
+                dr[0] = (r[0] + r[1]) / 2
+                dr[1:-1] = (r[1:] - r[:-1]) / 2
+                dr[-1] = 1 - (r[-2] + r[-1]) / 2
             else:
                 dr = np.array([1.0])
 

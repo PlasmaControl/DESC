@@ -136,9 +136,8 @@ def compute_mercier_stability(
     if check_derivs("D_well", R_transform, Z_transform, L_transform):
         dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
         d2V_dpsi2 = (
-            data["V_rr(r)"]
-            - data["V_r(r)"] * data["psi_rr"] / data["psi_r"] / data["psi_r"] ** 2
-        )
+            data["V_rr(r)"] - data["V_r(r)"] * data["psi_rr"] / data["psi_r"]
+        ) / data["psi_r"] ** 2
         data["D_well"] = (
             dp_dpsi
             * (

@@ -76,7 +76,7 @@ class TestComputeUtils:
         """Test the bulk surface averaging against a more intuitive implementation."""
 
         def test(surface_label):
-            grid = test_grid()
+            grid = test_grid(linear=surface_label == "theta")
             q = np.random.random_sample(size=grid.num_nodes)
             integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
             integrals_2 = compress(

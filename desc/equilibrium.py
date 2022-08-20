@@ -348,7 +348,7 @@ class Equilibrium(_Configuration, IOAble):
                     "Equilibrium has one or more spectral resolutions "
                     + "greater than the corresponding collocation grid resolution! "
                     + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N ) "
+                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
                     + "to avoid this warning.",
                     "yellow",
                 )

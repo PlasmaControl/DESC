@@ -8,7 +8,7 @@ from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute import arg_order
 
-# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
+# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):

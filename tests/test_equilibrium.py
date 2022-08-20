@@ -5,15 +5,8 @@ import pytest
 
 from .utils import area_difference, compute_coords
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid
 from desc.__main__ import main
-from desc.geometry import ZernikeRZToroidalSection
-from desc.objectives import (
-    get_fixed_boundary_constraints,
-    ObjectiveFunction,
-    ForceBalance,
-)
-from desc.transform import Transform
 
 
 def test_compute_geometry(DSHAPE):
@@ -25,7 +18,7 @@ def test_compute_geometry(DSHAPE):
     R0_vmec = float(file.variables["Rmajor_p"][-1])
     a_vmec = float(file.variables["Aminor_p"][-1])
     ar_vmec = float(file.variables["aspect"][-1])
-    file.close
+    file.close()
 
     # DESC values
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
@@ -170,9 +163,9 @@ def test_poincare_solve_not_implemented():
         "axis": np.array([[0, 10, 0]]),
         "pressure": np.array([[0, 10], [2, 5]]),
         "iota": np.array([[0, 1], [2, 3]]),
+        "surface": np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]]),
     }
 
-    inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
     eq = Equilibrium(**inputs)
     np.testing.assert_allclose(
         eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

@@ -1020,7 +1020,7 @@ data_index["sqrt(g)"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["|e_theta x e_zeta|"] = {
-    "label": "|e_{\\theta} \\times \\e_{\\zeta}|",
+    "label": "|e_{\\theta} \\times e_{\\zeta}|",
     "units": "m^{2}",
     "units_long": "square meters",
     "description": "2D jacobian determinant for constant rho surface",
@@ -1029,7 +1029,7 @@ data_index["|e_theta x e_zeta|"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["|e_zeta x e_rho|"] = {
-    "label": "|e_{\\zeta} \\times \\e_{\\rho}|",
+    "label": "|e_{\\zeta} \\times e_{\\rho}|",
     "units": "m^{2}",
     "units_long": "square meters",
     "description": "2D jacobian determinant for constant theta surface",
@@ -1038,7 +1038,7 @@ data_index["|e_zeta x e_rho|"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["|e_rho x e_theta|"] = {
-    "label": "|e_{\\rho} \\times \\e_{\\theta}|",
+    "label": "|e_{\\rho} \\times e_{\\theta}|",
     "units": "m^{2}",
     "units_long": "square meters",
     "description": "2D jacobian determinant for constant zeta surface",

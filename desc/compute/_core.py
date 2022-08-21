@@ -400,11 +400,11 @@ def compute_rotational_transform(
                 #   so that the else statement always executes.
                 enclosed_toroidal_current = current_from_fixed_iota
             else:
-                # enclosed_toroidal_current = (
-                #     mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=0)
-                # )
-                with open("debug/heliotron current tesla-meter.pkl", "rb") as file:
-                    enclosed_toroidal_current = pickle.load(file)
+                enclosed_toroidal_current = (
+                    mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=0)
+                )
+                # with open("debug/heliotron current tesla-meter.pkl", "rb") as file:
+                #     enclosed_toroidal_current = pickle.load(file)
             term1 = data["psi_r"] / data["sqrt(g)"]
             term2 = data["g_tt"] * data["lambda_z"] - data["g_tz"] * (
                 1 + data["lambda_t"]
@@ -419,11 +419,11 @@ def compute_rotational_transform(
                 #   so that the else statement always executes.
                 enclosed_toroidal_current_r = current_r_from_fixed_iota
             else:
-                # enclosed_toroidal_current_r = (
-                #     mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=1)
-                # )
-                with open("debug/heliotron current_r tesla-meter.pkl", "rb") as file:
-                    enclosed_toroidal_current_r = pickle.load(file)
+                enclosed_toroidal_current_r = (
+                    mu_0 / 2 / jnp.pi * current.compute(c_l, grid=grid, dr=1)
+                )
+                # with open("debug/heliotron current_r tesla-meter.pkl", "rb") as file:
+                #     enclosed_toroidal_current_r = pickle.load(file)
             g_tt_r = 2 * dot(data["e_theta"], data["e_theta_r"])
             g_tz_r = dot(data["e_theta_r"], data["e_zeta"]) + dot(
                 data["e_theta"], data["e_zeta_r"]

@@ -1,12 +1,11 @@
 import numpy as np
-from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import (
     data_index,
-    compute_boozer_coords,
+    compute_boozer_coordinates,
     compute_quasisymmetry_error,
 )
 from .objective_funs import _Objective
@@ -174,7 +173,7 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        data = compute_boozer_coords(
+        data = compute_boozer_coordinates(
             R_lmn,
             Z_lmn,
             L_lmn,

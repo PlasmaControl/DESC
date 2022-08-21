@@ -1,4 +1,3 @@
-from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid
 from desc.transform import Transform
@@ -96,7 +95,7 @@ class Volume(_Objective):
 
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return self._shift_scale(jnp.atleast_1d(data["V"]))
+        return self._shift_scale(data["V"])
 
 
 class AspectRatio(_Objective):
@@ -186,4 +185,4 @@ class AspectRatio(_Objective):
 
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return self._shift_scale(jnp.atleast_1d(data["R0/a"]))
+        return self._shift_scale(data["R0/a"])

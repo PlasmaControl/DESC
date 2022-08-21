@@ -612,7 +612,7 @@ class Energy(_Objective):
             self._pressure,
             self._gamma,
         )
-        return self._shift_scale(jnp.atleast_1d(data["W"]))
+        return self._shift_scale(data["W"])
 
     @property
     def gamma(self):

@@ -346,10 +346,10 @@ class Equilibrium(_Configuration, IOAble):
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
-                    + "less than the corresponding collocation grid resolution! "
+                    + "greater than the corresponding collocation grid resolution! "
                     + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher,( i.e. like eq.N_grid=2*eq.N ) "
-                    + "To avoid this warning. "
+                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
+                    + "to avoid this warning.",
                     "yellow",
                 )
             )

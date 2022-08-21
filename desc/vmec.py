@@ -31,7 +31,7 @@ class VMECIO:
 
     @classmethod
     def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
-        """Load a VMEC netCDF file as a Equilibrium.
+        """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
         ----------
@@ -102,7 +102,7 @@ class VMECIO:
         inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
         inputs["iota"][:, 1] = file.variables["ai"][:]
 
-        file.close
+        file.close()
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
@@ -934,7 +934,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^zeta")
 
-        file.close
+        file.close()
         timer.stop("Total time")
         if verbose > 1:
             timer.disp("Total time")

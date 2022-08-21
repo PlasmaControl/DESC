@@ -734,14 +734,6 @@ def plot_fsa(
     data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
 
-    # TODO: Do we want to keep this logic?
-    # FIXME: Should I add it to surface_averages()?
-    #  I think currently surface_averages() could return nan at axis.
-    if 0 in rho:
-        grid = LinearGrid(M=0, N=0, NFP=1, rho=np.array(0.0))
-        data, label = _compute(eq, name, grid, kwargs.get("component", None))
-        values[0] = np.mean(data)
-
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(rho, values, label=kwargs.get("label", None))

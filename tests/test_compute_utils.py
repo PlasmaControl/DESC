@@ -11,17 +11,6 @@ from desc.compute.utils import (
 )
 
 
-def test_grid(linear=False):
-    # Good to have enough resolution in L, M, N, so that this
-    # grid's features are not unique to low resolution.
-    L, M, N, NFP, sym = 5, 11, 9, 13, True
-    return (
-        LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=sym)
-        if linear
-        else ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=sym)
-    )
-
-
 def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
     """Intuitive implementation of bulk surface integral function in compute.utils.
 
@@ -57,10 +46,10 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
 
 class TestComputeUtils:
     def test_compress_expand_inverse_op(self):
-        """Test that compress() and expand() are inverse operations for surface functions."""
+        """Test that compress & expand are inverse operations for surface functions."""
 
         def test(surface_label):
-            grid = test_grid()
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
             # enforce r is a surface function via compression
             r = compress(
                 grid, np.random.random_sample(size=grid.num_nodes), surface_label
@@ -76,7 +65,11 @@ class TestComputeUtils:
         """Test the bulk surface averaging against a more intuitive implementation."""
 
         def test(surface_label):
-            grid = test_grid(linear=surface_label == "theta")
+            grid = (
+                LinearGrid(L=13, M=11, N=9, NFP=5, sym=True)
+                if surface_label == "theta"
+                else ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
+            )
             q = np.random.random_sample(size=grid.num_nodes)
             integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
             integrals_2 = compress(
@@ -92,7 +85,11 @@ class TestComputeUtils:
         """Test the surface integral(ds) is 4pi^2, 2pi for rho, zeta surfaces."""
 
         def test(surface_label):
-            grid = test_grid(linear=surface_label == "theta")
+            grid = (
+                LinearGrid(L=13, M=11, N=9, NFP=5, sym=True)
+                if surface_label == "theta"
+                else ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
+            )
             areas = surface_integrals(grid, surface_label=surface_label)
             correct_area = 4 * np.pi ** 2 if surface_label == "rho" else 2 * np.pi
             np.testing.assert_allclose(areas, correct_area)
@@ -106,7 +103,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = test_grid()
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
             sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
             areas = compress(grid, surface_integrals(grid, sqrt_g))
             np.testing.assert_allclose(areas, np.sort(areas))
@@ -119,7 +116,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = test_grid()
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
             data = eq.compute("p", grid=grid)
             data = eq.compute("sqrt(g)", grid=grid, data=data)
             pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
@@ -136,7 +133,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = test_grid()
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
             data = eq.compute("|B|_t", grid=grid)
             a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
             b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])

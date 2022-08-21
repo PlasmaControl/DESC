@@ -60,7 +60,7 @@ def test_1d_logpsi(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=55)
+@pytest.mark.mpl_image_compare(tolerance=60)
 def test_2d_logF(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)

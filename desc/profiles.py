@@ -1,6 +1,7 @@
 import numpy as np
-from abc import ABC, abstractmethod
 import warnings
+from abc import ABC, abstractmethod
+from scipy.special import factorial
 import scipy.optimize
 
 from desc.backend import jnp, jit
@@ -18,15 +19,15 @@ class Profile(IOAble, ABC):
     All profile classes inherit from this, and must implement
     the transform() and compute() methods.
 
-    The transform method should take an array of parameters and return the value
-    of the profile or its derivatives on the default grid that is assigned to Profile.grid.
+    The transform method should take an array of parameters and return the value of the
+    profile or its derivatives on the default grid that is assigned to Profile.grid.
     This allows the profile to be used in solving and optimizing an equilibrium.
 
     The compute method should take an array of nodes and an optional array of parameters
-    and compute the value or derivative of the profile at the specified nodes. If the
-    parameters are not given, the ones assigned to the profile should be used.
+    and compute the value or derivative of the profile at the specified nodes.
+    If the parameters are not given, the ones assigned to the profile should be used.
 
-    Subclasses must also implement getter and setting methods for name, grid, and params
+    Subclasses must also implement getter and setter methods for name, grid, and params.
 
     """
 
@@ -34,7 +35,7 @@ class Profile(IOAble, ABC):
 
     @property
     def name(self):
-        """Name of the profile"""
+        """Name of the profile."""
         return self._name
 
     @name.setter
@@ -44,32 +45,36 @@ class Profile(IOAble, ABC):
     @property
     @abstractmethod
     def grid(self):
-        """Default grid for computation"""
+        """Default grid for computation."""
 
     @grid.setter
     @abstractmethod
     def grid(self, new):
-        """Set default grid for computation"""
+        """Set default grid for computation."""
 
     @property
     @abstractmethod
     def params(self):
-        """Default parameters for computation"""
+        """Default parameters for computation."""
 
     @params.setter
     @abstractmethod
     def params(self, new):
-        """Set default params for computation"""
+        """Set default params for computation."""
 
     @abstractmethod
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
-        """compute values on specified nodes, default to using self.params"""
+        """Compute values on specified nodes, default to using self.params."""
+
+    @abstractmethod
+    def integrate(self, constant=0):
+        """Integrate the profile with respect to rho."""
 
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         return self.compute(params, grid, dr, dt, dz)
 
     def __repr__(self):
-        """string form of the object"""
+        """String form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -79,7 +84,7 @@ class Profile(IOAble, ABC):
 
 
 class PowerSeriesProfile(Profile):
-    """Profile represented by a monic power series
+    """Profile represented by a monic power series.
 
     f(x) = a[0] + a[1]*x + a[2]*x**2 + ...
 
@@ -106,17 +111,12 @@ class PowerSeriesProfile(Profile):
         self._name = name
         params = np.atleast_1d(params)
 
-        if (
-            sym == "auto"
-        ):  # check if all odd terms are zero, if so return even. Print something when does so?
+        if sym == "auto":  # sym = "even" if all odd modes are zero, else sym = False
             if modes is None:
                 modes = np.arange(params.size)
             else:
                 modes = np.atleast_1d(modes)
-            if np.all(params[modes % 2 != 0] == 0):
-                sym = "even"
-            else:
-                sym = False
+            sym = np.all(params[modes % 2 != 0] == 0)
         self.sym = "even" if sym else False
         if modes is None:
             if sym:
@@ -227,7 +227,7 @@ class PowerSeriesProfile(Profile):
         self.params = copy_coeffs(self.params, modes_old, self.basis.modes)
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
-        """Compute values of profile at specified nodes
+        """Compute values of profile at specified nodes.
 
         Parameters
         ----------
@@ -250,9 +250,22 @@ class PowerSeriesProfile(Profile):
         transform = self._get_transform(grid)
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
+    def integrate(self, constant=0):
+        """Integrate the profile with respect to rho.
+
+        Parameters
+        ----------
+        constant : float
+            Constant integration term.
+
+        """
+        modes = np.pad(self.basis.modes[:, 0] + 1, (1, 0))
+        params = np.append(constant, self.params / (self.basis.modes[:, 0] + 1))
+        return PowerSeriesProfile(params, modes, self.grid, sym="auto", name=self.name)
+
     @classmethod
     def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=""):
-        """Fit a PowerSeriesProfile from point data
+        """Fit a PowerSeriesProfile from point data.
 
         Parameters
         ----------
@@ -528,6 +541,17 @@ class SplineProfile(Profile):
         df = self._Dx @ f
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
         return fq
+
+    def integrate(self, constant=0):
+        """Integrate the profile with respect to rho.
+
+        Parameters
+        ----------
+        constant : float
+            Constant integration term.
+
+        """
+        raise NotImplementedError("SplineProfile.integrate() is not yet implemented.")
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
         """Convert this profile to a PowerSeriesProfile
@@ -808,6 +832,17 @@ class MTanhProfile(Profile):
 
         y = MTanhProfile._mtanh(xq, ped, offset, sym, width, core_poly, dx=dr)
         return y
+
+    def integrate(self, constant=0):
+        """Integrate the profile with respect to rho.
+
+        Parameters
+        ----------
+        constant : float
+            Constant integration term.
+
+        """
+        raise NotImplementedError("MTanhProfile.integrate() is not yet implemented.")
 
     @classmethod
     def from_values(

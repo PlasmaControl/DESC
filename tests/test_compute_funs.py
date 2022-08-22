@@ -88,11 +88,13 @@ def test_total_volume(DummyStellarator):
 
 def test_enclosed_volumes():
     """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
-    rho = np.linspace(1 / 128, 1, 128)
-    V = 20 * (np.pi * rho) ** 2
-    V_r = 40 * np.pi ** 2 * rho
-    V_rr = 40 * np.pi ** 2
     eq = Equilibrium()  # torus
+    R0 = eq.compute("R0")["R0"]
+    rho = np.linspace(1 / 128, 1, 128)
+    V = 2 * R0 * (np.pi * rho) ** 2
+    V_r = 4 * R0 * np.pi ** 2 * rho
+    V_rr = 4 * R0 * np.pi ** 2
+
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     np.testing.assert_allclose(compress(grid, eq.compute("V(r)", grid=grid)["V(r)"]), V)
     np.testing.assert_allclose(
@@ -101,6 +103,16 @@ def test_enclosed_volumes():
     np.testing.assert_allclose(
         compress(grid, eq.compute("V_rr(r)", grid=grid)["V_rr(r)"]), V_rr
     )
+
+
+def test_surface_areas():
+    """Test that the flux surface areas match known analytic formulas."""
+    eq = Equilibrium()  # torus
+    R0 = eq.compute("R0")["R0"]
+    rho = np.linspace(1 / 128, 1, 128)
+    A = 4 * R0 * np.pi ** 2 * rho
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    np.testing.assert_allclose(compress(grid, eq.compute("S(r)", grid=grid)["S(r)"]), A)
 
 
 @pytest.mark.slow

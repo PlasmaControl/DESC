@@ -3502,8 +3502,16 @@ data_index["D_shear"] = {
     "description": "Mercier stability criterion magnetic shear term",
     "fun": "compute_mercier_stability",
     "dim": 1,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0]],
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
 data_index["D_current"] = {
     "label": "D_{current}",
@@ -3601,4 +3609,3 @@ data_index["magnetic well"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 0]],
 }
-

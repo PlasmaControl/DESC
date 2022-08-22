@@ -70,7 +70,9 @@ class TestObjectiveFunction(unittest.TestCase):
     def test_mercier_stability(self):
         eq = Equilibrium()
         obj = MercierStability(eq=eq)
-        DMerc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi)
+        DMerc = obj.compute(
+            eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
+        )
         np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
         np.testing.assert_allclose(DMerc, 0)
 
@@ -78,7 +80,7 @@ class TestObjectiveFunction(unittest.TestCase):
         eq = Equilibrium()
         obj = MagneticWell(eq=eq)
         magnetic_well = obj.compute(
-            eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi
+            eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
         )
         np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
         np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)

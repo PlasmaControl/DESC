@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 import time
 
-from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium import Equilibrium
 from desc.__main__ import main
 
 

@@ -367,8 +367,8 @@ def compute_rotational_transform(
             term2 = data["g_tt"] * data["lambda_z"] - data["g_tz"] * (
                 1 + data["lambda_t"]
             )
-            num = surface_averages(grid, term1 * term2, match_grid=True)
-            den = surface_averages(grid, term1 * data["g_tt"], match_grid=True)
+            num = surface_averages(grid, term1 * term2)
+            den = surface_averages(grid, term1 * data["g_tt"])
             data["iota"] = (enclosed_toroidal_current + num) / den
 
         if check_derivs("iota_r", R_transform, Z_transform, L_transform):
@@ -393,16 +393,8 @@ def compute_rotational_transform(
                 - g_tz_r * (1 + data["lambda_t"])
                 - data["g_tz"] * data["lambda_rt"]
             )
-            num_r = surface_averages(
-                grid,
-                term1_r * term2 + term1 * term2_r,
-                match_grid=True,
-            )
-            den_r = surface_averages(
-                grid,
-                term1_r * data["g_tt"] + term1 * g_tt_r,
-                match_grid=True,
-            )
+            num_r = surface_averages(grid, term1_r * term2 + term1 * term2_r)
+            den_r = surface_averages(grid, term1_r * data["g_tt"] + term1 * g_tt_r)
             data["iota_r"] = (
                 enclosed_toroidal_current_r + num_r - data["iota"] * den_r
             ) / den
@@ -433,14 +425,10 @@ def compute_rotational_transform(
         #         - data["g_tz"] * data["lambda_rrt"]
         #     )
         #     num_rr = surface_averages(
-        #         grid,
-        #         term1_rr * term2 + 2 * term1_r * term2_r + term1 * term2_rr,
-        #         match_grid=True,
+        #         grid, term1_rr * term2 + 2 * term1_r * term2_r + term1 * term2_rr
         #     )
         #     den_rr = surface_averages(
-        #         grid,
-        #         term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr,
-        #         match_grid=True,
+        #         grid, term1_rr * data["g_tt"] + 2 * term1_r * g_tt_r + term1 * g_tt_rr
         #     )
         #     data["iota_rr"] = (
         #         enclosed_toroidal_current_rr

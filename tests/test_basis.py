@@ -4,8 +4,6 @@ import numpy as np
 import mpmath
 
 from desc.grid import LinearGrid
-from desc.equilibrium import Equilibrium
-from desc.transform import Transform
 from desc.basis import (
     polyder_vec,
     polyval_vec,

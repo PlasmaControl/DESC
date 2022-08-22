@@ -1,6 +1,4 @@
 import numpy as np
-from desc.utils import Timer
-from desc.grid import LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     data_index,

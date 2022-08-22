@@ -1008,11 +1008,13 @@ def compute_boozer_magnetic_field(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     data=None,
     **kwargs,
 ):
@@ -1028,6 +1030,8 @@ def compute_boozer_magnetic_field(
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -1038,6 +1042,8 @@ def compute_boozer_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -1052,11 +1058,13 @@ def compute_boozer_magnetic_field(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
 
@@ -1143,11 +1151,13 @@ def compute_contravariant_current_density(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
 

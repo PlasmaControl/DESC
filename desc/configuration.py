@@ -7,6 +7,8 @@ import warnings
 from abc import ABC
 from inspect import signature
 
+from termcolor import colored
+
 from desc.backend import jnp, jit, put, while_loop
 from desc.io import IOAble, load
 from desc.utils import copy_coeffs, Index

@@ -272,7 +272,3 @@ class ToroidalCurrent(_Objective):
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
         return self._shift_scale(I)
-<<<<<<< HEAD
-
-=======
->>>>>>> master

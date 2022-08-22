@@ -180,7 +180,6 @@ class InputReader:
         }
 
         iota_flag = False
-        current_flag = False
 
         inputs["output_path"] = self.output_path
 
@@ -422,7 +421,6 @@ class InputReader:
                 flag = True
             match = re.search(r"\sc\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
-                current_flag = True
                 c_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -528,11 +526,11 @@ class InputReader:
         if np.sum(inputs["surface"]) == 0:
             raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
 
-        # remove unused profiles
-        if not iota_flag:
-            del inputs["iota"]
-        if not current_flag:
+        # remove unused profile
+        if iota_flag:
             del inputs["current"]
+        else:
+            del inputs["iota"]
 
         # array inputs
         arrs = [

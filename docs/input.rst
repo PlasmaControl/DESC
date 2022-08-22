@@ -209,7 +209,7 @@ The profiles given in the example are:
    \iota(\rho) &= 1 + 1.5 \rho^2.
    \end{aligned}
 
-If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\iota(\rho) = 0`. 
+If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\frac{2\pi}{\mu_0} \partial_{\rho} I(\rho) = 0`. 
 Also, note that the rotational transform given is technically assumed to be
 
 .. math::

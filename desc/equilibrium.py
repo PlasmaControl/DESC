@@ -785,18 +785,18 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         p_l = np.zeros_like(equil.pressure.params)
         for l, p in inputs["pressure"]:
-            idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
-            p_l[idx_p] = p
+            idx = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
+            p_l[idx] = p
         if equil.iota is not None:
             i_l = np.zeros_like(equil.iota.params)
             for l, i in inputs["iota"]:
-                idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
-                i_l[idx_i] = i
+                idx = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
+                i_l[idx] = i
         if equil.current is not None:
             c_l = np.zeros_like(equil.current.params)
             for l, i in inputs["current"]:
-                idx_i = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
-                c_l[idx_i] = i
+                idx = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
+                c_l[idx] = i
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
             deltas["dRb"] = Rb_lmn - equil.Rb_lmn

@@ -330,7 +330,19 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
-        if iota is not None and current is not None:
+        # default profile
+        if iota is None and current is None:
+            warnings.warn(
+                colored(
+                    "Must specify either iota or current. "
+                    + "Using default profile of current=0.",
+                    "yellow",
+                )
+            )
+            self._current = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="current"
+            )
+        elif iota is not None and current is not None:
             raise ValueError("Cannot specify both iota and current profiles.")
 
         # iota
@@ -339,17 +351,6 @@ class _Configuration(IOAble, ABC):
         elif isinstance(iota, (np.ndarray, jnp.ndarray)):
             self._iota = PowerSeriesProfile(
                 modes=iota[:, 0], params=iota[:, 1], name="iota"
-            )
-        elif iota is None and current is None:
-            warnings.warn(
-                colored(
-                    "Must specify either iota or current. "
-                    + "Using default profile of iota=0.",
-                    "yellow",
-                )
-            )
-            self._iota = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="iota"
             )
         elif iota is not None:
             raise TypeError("Got unknown iota profile {}".format(iota))
@@ -363,6 +364,12 @@ class _Configuration(IOAble, ABC):
             )
         elif current is not None:
             raise TypeError("Got unknown current profile {}".format(current))
+
+        # remove unused profile from I/O attributes
+        if self.iota is None:
+            self._io_attrs_.remove("_iota")
+        else:
+            self._io_attrs_.remove("_current")
 
         # keep track of where it came from
         self._parent = None

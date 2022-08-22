@@ -174,7 +174,7 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
-            "current": np.atleast_2d((0, 0.0)),
+            "current_r": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
@@ -426,14 +426,14 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
-                prof_idx = np.where(inputs["current"][:, 0] == l)[0]
+                prof_idx = np.where(inputs["current_r"][:, 0] == l)[0]
                 if prof_idx.size == 0:
-                    prof_idx = np.atleast_1d(inputs["current"].shape[0])
-                    inputs["current"] = np.pad(
-                        inputs["current"], ((0, 1), (0, 0)), mode="constant"
+                    prof_idx = np.atleast_1d(inputs["current_r"].shape[0])
+                    inputs["current_r"] = np.pad(
+                        inputs["current_r"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["current"][prof_idx[0], 0] = l
-                inputs["current"][prof_idx[0], 1] = c_l
+                    inputs["current_r"][prof_idx[0], 0] = l
+                inputs["current_r"][prof_idx[0], 1] = c_l
                 flag = True
 
             # boundary surface coefficients
@@ -528,7 +528,7 @@ class InputReader:
 
         # remove unused profile
         if iota_flag:
-            del inputs["current"]
+            del inputs["current_r"]
         else:
             del inputs["iota"]
 
@@ -673,45 +673,23 @@ class InputReader:
         f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
         f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
 
-        # TODO: confirm if merge conflict was resolved correctly
-        f.write("\n# pressure and iota/current profiles\n")
-        if "iota" in inputs[0].keys():
+        f.write("\n# pressure and rotational transform/current profiles\n")
+        if "iota" in inputs[-1].keys():
             char = "i"
-            profile = inputs[0]["iota"]
-            profile_2 = inputs[-1]["iota"]
-        elif "current" in inputs[0].keys():
+            profile = inputs[-1]["iota"]
+        elif "current_r" in inputs[-1].keys():
             char = "c"
-            profile = inputs[0]["current"]
-            profile_2 = inputs[-1]["current"]
-        ls = np.unique(np.concatenate([inputs[0]["pressure"][:, 0], profile[:, 0]]))
+            profile = inputs[-1]["current_r"]
+        ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
-            # <<<<<<< HEAD
-            #             idx = np.where(l == inputs[0]["pressure"][:, 0])[0]
-            #             if len(idx):
-            #                 p = inputs[0]["pressure"][idx[0], 1]
-            #             else:
-            #                 p = 0.0
-            #             idx = np.where(l == profile[:, 0])[0]
-            #             if len(idx):
-            #                 i = profile[idx[0], 1]
-            # =======
-            #             idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
-            #             if len(idxp):
-            #                 p = inputs[-1]["pressure"][idxp[0], 1]
-            #             else:
-            #                 p = 0.0
-            #             idxi = np.where(l == inputs[0]["iota"][:, 0])[0]
-            #             if len(idxi):
-            #                 i = inputs[-1]["iota"][idxi[0], 1]
-            # >>>>>>> master
-            idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
-            if len(idxp):
-                p = inputs[-1]["pressure"][idxp[0], 1]
+            idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
+            if len(idx):
+                p = inputs[-1]["pressure"][idx[0], 1]
             else:
                 p = 0.0
             idx = np.where(l == profile[:, 0])[0]
             if len(idx):
-                i = profile_2[idx[0], 1]
+                i = profile[idx[0], 1]
             else:
                 i = 0.0
             f.write(
@@ -805,7 +783,7 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
-            "current": np.atleast_2d((0, 0.0)),
+            "current_r": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
@@ -961,6 +939,7 @@ class InputReader:
             if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Current is not a power series!", "yellow"))
+            # TODO: add CURRTOR
             match = re.search(r"AC\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -970,14 +949,14 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if len(inputs["current"]) < l + 1:
-                        inputs["current"] = np.pad(
-                            inputs["current"],
-                            ((0, l + 1 - len(inputs["current"])), (0, 0)),
+                    if len(inputs["current_r"]) < l + 1:
+                        inputs["current_r"] = np.pad(
+                            inputs["current_r"],
+                            ((0, l + 1 - len(inputs["current_r"])), (0, 0)),
                             mode="constant",
                         )
-                    inputs["current"][l, 1] = numbers[k]
-                    inputs["current"][l, 0] = l
+                    inputs["current_r"][l, 1] = numbers[k]
+                    inputs["current_r"][l, 0] = l
 
             # magnetic axis
             match = re.search(
@@ -1237,7 +1216,7 @@ class InputReader:
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         inputs["pressure"][:, 1] *= pres_scale
         if iota_flag:
-            del inputs["current"]
+            del inputs["current_r"]
         else:
             del inputs["iota"]
 

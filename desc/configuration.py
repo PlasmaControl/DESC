@@ -104,6 +104,7 @@ class _Configuration(IOAble, ABC):
         pressure=None,
         iota=None,
         current=None,
+        current_r=None,
         surface=None,
         axis=None,
         sym=None,
@@ -331,10 +332,10 @@ class _Configuration(IOAble, ABC):
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
         # default profile
-        if iota is None and current is None:
+        if iota is None and current is None and current_r is None:
             warnings.warn(
                 colored(
-                    "Must specify either iota or current. "
+                    "Must specify either iota or current/current_r. "
                     + "Using default profile of current=0.",
                     "yellow",
                 )
@@ -342,7 +343,9 @@ class _Configuration(IOAble, ABC):
             self._current = PowerSeriesProfile(
                 modes=np.array([0]), params=np.array([0]), name="current"
             )
-        elif iota is not None and current is not None:
+        elif current is not None and current_r is not None:
+            raise ValueError("Cannot specify both current and current_r profiles.")
+        elif iota is not None and (current is not None or current_r is not None):
             raise ValueError("Cannot specify both iota and current profiles.")
 
         # iota
@@ -358,12 +361,20 @@ class _Configuration(IOAble, ABC):
         # current
         if isinstance(current, Profile):
             self.current = current
+        elif isinstance(current_r, Profile):
+            self.current = current_r.integrate()
         elif isinstance(current, (np.ndarray, jnp.ndarray)):
             self._current = PowerSeriesProfile(
                 modes=current[:, 0], params=current[:, 1], name="current"
             )
+        elif isinstance(current_r, (np.ndarray, jnp.ndarray)):
+            self._current = PowerSeriesProfile(
+                modes=current_r[:, 0], params=current_r[:, 1], name="current"
+            ).integrate()
         elif current is not None:
             raise TypeError("Got unknown current profile {}".format(current))
+        elif current_r is not None:
+            raise TypeError("Got unknown current_r profile {}".format(current_r))
 
         # remove unused profile from I/O attributes
         if self.iota is None:

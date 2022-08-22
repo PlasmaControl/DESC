@@ -106,8 +106,8 @@ def test_surface_areas():
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute("S(r)", grid=grid)
-    A = 4 * data["R0"] * np.pi ** 2 * rho
-    np.testing.assert_allclose(A, compress(grid, data["S(r)"]))
+    S = 4 * data["R0"] * np.pi ** 2 * rho
+    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
 @pytest.mark.slow

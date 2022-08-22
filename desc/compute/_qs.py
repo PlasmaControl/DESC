@@ -1,16 +1,16 @@
-"""Compute functions for quasisymmetry objectives, i.e. Boozer, Two-Term, and Triple Product."""
+"""Compute functions for quasisymmetry objectives."""
 
 from desc.backend import jnp, put, sign
-
-from ._core import check_derivs
+from .utils import check_derivs
 from ._field import (
     compute_magnetic_field_magnitude,
     compute_covariant_magnetic_field,
     compute_B_dot_gradB,
+    compute_boozer_magnetic_field,
 )
 
 
-def compute_boozer_coords(
+def compute_boozer_coordinates(
     R_lmn,
     Z_lmn,
     L_lmn,
@@ -222,8 +222,7 @@ def compute_quasisymmetry_error(
         current,
         data=data,
     )
-    # TODO: can remove this call if compute_|B| changed to use B_covariant
-    data = compute_covariant_magnetic_field(
+    data = compute_boozer_magnetic_field(
         R_lmn,
         Z_lmn,
         L_lmn,
@@ -241,16 +240,12 @@ def compute_quasisymmetry_error(
     M = helicity[0]
     N = helicity[1]
 
-    # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
-    if check_derivs("I", R_transform, Z_transform, L_transform):
-        data["I"] = jnp.mean(data["B_theta"])
-        data["G"] = jnp.mean(data["B_zeta"])
-
     # QS two-term (T^3)
     if check_derivs("f_C", R_transform, Z_transform, L_transform):
         data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
             data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
         ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
+
     # QS triple product (T^4/m^2)
     if check_derivs("f_T", R_transform, Z_transform, L_transform):
         data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (

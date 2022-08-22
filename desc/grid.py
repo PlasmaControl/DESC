@@ -69,13 +69,12 @@ class Grid(IOAble):
         Returns
         -------
         dtheta_scale : ndarray
-            The multiplicative factor used to scale the theta spacing for each theta curve.
+            The multiplicative factor to scale the theta spacing for each theta curve.
                 number of nodes / (number of nodes - number of nodes to delete)
+
         """
         if self.sym:
             non_sym_idx = np.where(self.nodes[:, 1] > np.pi)
-            # X is np.unique(X)[return_inverse]
-            # return_counts[i] is the frequency the element np.sort(X)[i] appears in X
             __, inverse, nodes_per_rho_surf = np.unique(
                 self.nodes[:, 0], return_inverse=True, return_counts=True
             )
@@ -83,10 +82,10 @@ class Grid(IOAble):
                 self.nodes[non_sym_idx, 0], return_counts=True
             )
             if len(nodes_per_rho_surf) > len(non_sym_per_rho_surf):
-                # edge case where theta curves near axis lacks theta > pi nodes
+                # edge case where surfaces closest to axis lack theta > pi nodes
                 pad_count = len(nodes_per_rho_surf) - len(non_sym_per_rho_surf)
                 non_sym_per_rho_surf = np.pad(non_sym_per_rho_surf, (pad_count, 0))
-            # assumes number of nodes to delete from each theta curve is constant over zeta
+            # assumes number of theta nodes to delete is constant over zeta
             scale = nodes_per_rho_surf / (nodes_per_rho_surf - non_sym_per_rho_surf)
             # arrange scale factors to match spacing's arbitrary ordering
             scale = scale[inverse]
@@ -128,7 +127,8 @@ class Grid(IOAble):
         Parameters
         ----------
         dtheta_scale : ndarray
-            The multiplicative factor that was used to scale the theta spacing in _enforce_symmetry().
+            The multiplicative factor to scale the theta spacing for each theta curve.
+
         """
         nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
@@ -244,32 +244,32 @@ class Grid(IOAble):
 
     @property
     def unique_rho_idx(self):
-        """ndarray: indices of rho that result in the unique rho coordinates"""
+        """ndarray: Indices of unique rho coordinates."""
         return self._unique_rho_idx
 
     @property
     def unique_theta_idx(self):
-        """ndarray: indices of theta that result in the unique theta coordinates"""
+        """ndarray: Indices of unique theta coordinates."""
         return self._unique_theta_idx
 
     @property
     def unique_zeta_idx(self):
-        """ndarray: indices of zeta that result in the unique zeta coordinates"""
+        """ndarray: Indices of unique zeta coordinates."""
         return self._unique_zeta_idx
 
     @property
     def inverse_rho_idx(self):
-        """ndarray: indices of the unique rho array that recover the rho coordinates"""
+        """ndarray: Indices of unique_rho_idx that recover the rho coordinates."""
         return self._inverse_rho_idx
 
     @property
     def inverse_theta_idx(self):
-        """ndarray: indices of the unique theta array that recover the theta coordinates"""
+        """ndarray: Indices of unique_theta_idx that recover the theta coordinates."""
         return self._inverse_theta_idx
 
     @property
     def inverse_zeta_idx(self):
-        """ndarray: indices of the unique zeta array that recover the zeta coordinates"""
+        """ndarray: Indices of unique_zeta_idx that recover the zeta coordinates."""
         return self._inverse_zeta_idx
 
     @property
@@ -426,19 +426,20 @@ class LinearGrid(Grid):
             rho = self.L + 1
         else:
             self._L = len(np.atleast_1d(rho))
-
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
+            dr = 1 / r.size * np.ones_like(r)
         else:
             r = np.atleast_1d(rho)
-        if len(r) > 1:
-            dr = (r.max() - r.min()) / len(r)
-        else:
-            dr = 1
-        if dr == 0:
-            dr = 1
+            dr = np.zeros_like(r)
+            if r.size > 1:
+                dr[0] = (r[0] + r[1]) / 2
+                dr[1:-1] = (r[2:] - r[:-2]) / 2
+                dr[-1] = 1 - (r[-2] + r[-1]) / 2
+            else:
+                dr = np.array([1.0])
 
-        # theta/vartheta
+        # theta
         if self.M is not None:
             if self.sym:
                 theta = 2 * (self.M + 1)
@@ -446,39 +447,48 @@ class LinearGrid(Grid):
                 theta = 2 * self.M + 1
         else:
             self._M = len(np.atleast_1d(theta))
-
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
             if self.sym:
                 t += t[1] / 2
+            dt = 2 * np.pi / t.size * np.ones_like(t)
         else:
             t = np.atleast_1d(theta)
-        dt = 2 * np.pi / t.size
-        if dt == 0:
-            dt = 2 * np.pi
+            dt = np.zeros_like(t)
+            if t.size > 1:
+                dt[0] = (t[0] + t[1]) / 2
+                dt[1:-1] = (t[2:] - t[:-2]) / 2
+                dt[-1] = 2 * np.pi - (t[-2] + t[-1]) / 2
+            else:
+                dt = np.array([2 * np.pi])
 
-        # zeta/phi
+        # zeta
         if self.N is not None:
             zeta = 2 * self.N + 1
         else:
             self._N = len(np.atleast_1d(zeta))
-
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
+            dz = 2 * np.pi / z.size * np.ones_like(z)
         else:
             z = np.atleast_1d(zeta)
-        dz = 2 * np.pi / z.size
-        if dz == 0:
-            dz = 2 * np.pi
+            dz = np.zeros_like(z)
+            if z.size > 1:
+                dz[0] = (z[0] + z[1]) / 2
+                dz[1:-1] = (z[2:] - z[:-2]) / 2
+                dz[-1] = 2 * np.pi - (z[-2] + z[-1]) / 2
+            else:
+                dz = np.array([2 * np.pi])
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
         t = t.flatten()
         z = z.flatten()
 
-        dr = dr * np.ones_like(r)
-        dt = dt * np.ones_like(t)
-        dz = dz * np.ones_like(z)
+        dr, dt, dz = np.meshgrid(dr, dt, dz, indexing="ij")
+        dr = dr.flatten()
+        dt = dt.flatten()
+        dz = dz.flatten()
 
         nodes = np.stack([r, t, z]).T
         spacing = np.stack([dr, dt, dz]).T
@@ -556,11 +566,11 @@ class QuadratureGrid(Grid):
         )
 
         # symmetry is never enforced for Quadrature Grid
-        self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._weights = self.spacing.prod(axis=1)  # Quad weights don't need scaling
+        # quadrature weights do not need scaling
+        self._weights = self.spacing.prod(axis=1)
 
     def _create_nodes(self, L=1, M=1, N=1, NFP=1):
         """Create grid nodes and weights.
@@ -595,6 +605,7 @@ class QuadratureGrid(Grid):
 
         # rho
         r, dr = special.js_roots(L, 2, 2)
+        dr /= r  # remove r weight function associated with the shifted Jacobi weights
 
         # theta/vartheta
         t = np.linspace(0, 2 * np.pi, M, endpoint=False)
@@ -613,7 +624,6 @@ class QuadratureGrid(Grid):
         dr = dr.flatten()
         dt = dt.flatten()
         dz = dz.flatten()
-        dr /= r  # remove r weight function associated with the shifted Jacobi weights
 
         nodes = np.stack([r, t, z]).T
         spacing = np.stack([dr, dt, dz]).T
@@ -792,13 +802,9 @@ class ConcentricGrid(Grid):
 
         drho = np.zeros_like(rho)
         if rho.size > 1:
-            for i in range(rho.size):
-                if i == 0:
-                    drho[i] = (rho[0] + rho[1]) / 2
-                elif i == rho.size - 1:
-                    drho[i] = 1 - (rho[-2] + rho[-1]) / 2
-                else:
-                    drho[i] = (rho[i + 1] - rho[i - 1]) / 2
+            drho[0] = (rho[0] + rho[1]) / 2
+            drho[1:-1] = (rho[2:] - rho[:-2]) / 2
+            drho[-1] = 1 - (rho[-2] + rho[-1]) / 2
         else:
             drho = np.array([1.0])
         r = []

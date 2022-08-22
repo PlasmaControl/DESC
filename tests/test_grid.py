@@ -2,7 +2,11 @@ import unittest
 import pytest
 import numpy as np
 from scipy import special
+<<<<<<< HEAD
 from desc.compute.utils import surface_averages, surface_integrals
+=======
+from desc.compute.utils import surface_averages
+>>>>>>> master
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
 
@@ -350,8 +354,11 @@ class TestGrid(unittest.TestCase):
         """
 
         def test(grid, err_msg):
+<<<<<<< HEAD
             area = surface_integrals(grid)
             np.testing.assert_allclose(area, 4 * np.pi ** 2, err_msg=err_msg)
+=======
+>>>>>>> master
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
             f = (
@@ -364,6 +371,7 @@ class TestGrid(unittest.TestCase):
             avg = surface_averages(grid, f)
             np.testing.assert_allclose(avg, 5, err_msg=err_msg)
 
+<<<<<<< HEAD
         g1 = LinearGrid(
             L=3,
             M=6,
@@ -385,6 +393,11 @@ class TestGrid(unittest.TestCase):
             sym=True,
             rotation="cos",
         )
+=======
+        g1 = LinearGrid(L=3, M=6, N=3, NFP=3, sym=True)
+        g2 = QuadratureGrid(L=3, M=6, N=3, NFP=3)
+        g3 = ConcentricGrid(L=3, M=6, N=3, NFP=3, sym=True, rotation="cos")
+>>>>>>> master
         grids = {g1: "LinearGrid", g2: "QuadratureGrid", g3: "ConcentricGrid"}
         for g, msg in grids.items():
             test(g, msg)

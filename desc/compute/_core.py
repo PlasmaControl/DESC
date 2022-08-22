@@ -1,53 +1,11 @@
 """Core compute functions, for profiles, geometry, and basis vectors/jacobians."""
 
-import numpy as np
 import pickle
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import data_index
-from desc.compute.utils import dot, cross, surface_averages
-
-
-def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
-    """Check if Transforms can compute required derivatives of R, Z, lambda.
-
-    Parameters
-    ----------
-    key : str
-        Key indicating a quantity from data_index.
-    R_transform : Transform, optional
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform, optional
-        Transforms Z_lmn coefficients to real space.
-    L_transform : Transform, optional
-        Transforms L_lmn coefficients to real space.
-
-    Returns
-    -------
-    flag : bool
-        True if the Transforms can compute requested derivatives, False otherwise.
-
-    """
-    if "R_derivs" not in data_index[key]:
-        R_flag = True
-        Z_flag = True
-    else:
-        R_flag = np.array(
-            [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
-        ).all()
-        Z_flag = np.array(
-            [d in Z_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
-        ).all()
-
-    if "L_derivs" not in data_index[key]:
-        L_flag = True
-    else:
-        L_flag = np.array(
-            [d in L_transform.derivatives.tolist() for d in data_index[key]["L_derivs"]]
-        ).all()
-
-    return R_flag and Z_flag and L_flag
+from .data_index import data_index
+from .utils import check_derivs, dot, cross, surface_averages, surface_integrals
 
 
 def compute_flux_coords(
@@ -869,6 +827,54 @@ def compute_contravariant_metric_coefficients(
     return data
 
 
+def compute_toroidal_flux_gradient(
+    R_lmn,
+    Z_lmn,
+    Psi,
+    R_transform,
+    Z_transform,
+    data=None,
+    **kwargs,
+):
+    """Compute reciprocal metric coefficients.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of toroidal flux gradient.
+
+    """
+    data = compute_toroidal_flux(Psi, R_transform.grid, data=data)
+    data = compute_contravariant_metric_coefficients(
+        R_lmn,
+        Z_lmn,
+        R_transform,
+        Z_transform,
+        data=data,
+    )
+
+    if check_derivs("grad(psi)", R_transform, Z_transform):
+        data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
+    if check_derivs("|grad(psi)|", R_transform, Z_transform):
+        data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
+        data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+
+    return data
+
+
 def compute_geometry(
     R_lmn,
     Z_lmn,
@@ -877,7 +883,7 @@ def compute_geometry(
     data=None,
     **kwargs,
 ):
-    """Compute plasma volume and other geometric quantities such as effective minor/major radius and aspect ratio.
+    """Compute geometric quantities such as plasma volume, aspect ratio, etc.
 
     Parameters
     ----------
@@ -893,26 +899,34 @@ def compute_geometry(
     Returns
     -------
     data : dict
-        Dictionary of ndarray, shape(num_nodes,) with volume key "V", cross-sectional area "A",
-        minor radius "a", major radius "R0", and aspect ration "R0/a".
+        Dictionary of ndarray, shape(num_nodes,) of geometric quantities with the keys
+        volume "V", enclosed volume "V(r)", cross-sectional area "A",
+        minor radius "a", major radius "R0", aspect ration "R0/a".
 
     """
+    grid = R_transform.grid
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
-    # Poincare cross-section weights
-    xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
-    # number of toroidal grid points
-    N = R_transform.grid.num_zeta
-
-    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
-    data["A"] = jnp.mean(
-        jnp.sum(  # sqrt(g) / R * weight = dArea
-            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * xs_weights, (N, -1)),
-            axis=1,
+    if check_derivs("V(r)", R_transform, Z_transform):
+        # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
+        data["V(r)"] = jnp.abs(
+            surface_integrals(
+                grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
+            )
         )
-    )
-    data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
-    data["a"] = jnp.sqrt(data["A"] / jnp.pi)
-    data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
+    if check_derivs("V_r(r)", R_transform, Z_transform):
+        # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
+        data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+        data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
+        data["A"] = jnp.mean(
+            surface_integrals(
+                grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
+            )
+        )
+        data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
+        data["a"] = jnp.sqrt(data["A"] / jnp.pi)
+        data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
+    if check_derivs("V_rr(r)", R_transform, Z_transform):
+        data["V_rr(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)_r"]))
 
     return data

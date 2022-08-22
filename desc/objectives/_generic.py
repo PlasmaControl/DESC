@@ -7,19 +7,9 @@ import desc.compute as compute_funs
 from desc.compute import (
     arg_order,
     data_index,
-    compute_contravariant_current_density,
-    compute_covariant_metric_coefficients,
-    compute_magnetic_field_magnitude,
     compute_quasisymmetry_error,
-    compute_DMerc,
-    compute_DShear,
-    compute_DCurr,
-    compute_DWell,
-    compute_DGeod,
-    compute_AltWell,
 )
-from desc.compute.utils import compress
-from desc.grid import QuadratureGrid, LinearGrid, ConcentricGrid
+from desc.grid import QuadratureGrid, LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
 from .objective_funs import _Objective
@@ -282,4 +272,7 @@ class ToroidalCurrent(_Objective):
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
         return self._shift_scale(I)
+<<<<<<< HEAD
 
+=======
+>>>>>>> master

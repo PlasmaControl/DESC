@@ -26,7 +26,7 @@ nfev = 100
 # solver methods
 optimizer         = scipy-trf
 objective         = force
-spectral_indexing = ansi
+spectral_indexing = fringe
 node_pattern      = cheb2
 
 # pressure and rotational transform profiles

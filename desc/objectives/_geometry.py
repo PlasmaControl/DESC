@@ -1,3 +1,6 @@
+from desc.utils import Timer
+from desc.grid import QuadratureGrid
+from desc.transform import Transform
 from desc.compute import (
     data_index,
     compute_geometry,

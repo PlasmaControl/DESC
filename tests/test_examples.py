@@ -13,8 +13,10 @@ from desc.objectives import (
     FixIota,
     FixPsi,
 )
-from desc.vmec import VMECIO
 from desc.vmec_utils import vmec_boundary_subspace
+from desc.optimize import Optimizer
+from .utils import area_difference_vmec
+import pytest
 
 
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
@@ -31,7 +33,7 @@ def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    rho_err, theta_err = VMECIO.area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-5)
@@ -41,7 +43,7 @@ def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE example gives the same result as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    rho_err, theta_err = VMECIO.area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=2e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-5)
@@ -51,7 +53,7 @@ def test_HELIOTRON_results(HELIOTRON):
     """Tests that the HELIOTRON example gives the same result as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
-    rho_err, theta_err = VMECIO.area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
@@ -87,7 +89,7 @@ def test_force_balance_grids():
 
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-
+    optimizer = Optimizer("lsq-exact")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
@@ -99,7 +101,8 @@ def test_1d_optimization(SOLOVEV):
         FixPsi(),
     )
     options = {"perturb_options": {"order": 1}}
-    eq.optimize(objective, constraints, options=options)
+    with pytest.warns(UserWarning):
+        eq.optimize(objective, constraints, options=options)  # , optimizer=optimizer)
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 

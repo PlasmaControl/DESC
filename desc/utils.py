@@ -143,7 +143,6 @@ class Timer:
             if timer ``'name'`` has not been started
 
         """
-
         try:  # has the timer been stopped?
             time = self._times[name]
         except KeyError:  # might still be running, let's check
@@ -376,3 +375,37 @@ def svd_inv_null(A):
     Ainv = np.matmul(vhk.T, np.multiply(s[..., np.newaxis], uk.T))
     Z = vh[num:, :].T.conj()
     return Ainv, Z
+
+
+def power_series_calculus(coeffs, powers, integrate=True, constant=0):
+    """Integrate or differentiate a power series given by f(x) = coeffs * x ^ powers.
+
+    Parameters
+    ----------
+    coeffs: array-like
+        Coefficients of the series.
+    powers : array-like
+        Mode numbers for the associated coefficients.
+    integrate : bool
+        Wheter to integrate (True) or differentiate (False) the series. Default = True.
+    constant : float
+        Constant integration term. Only used when integrate = True.
+
+    Returns
+    -------
+    coeffs_out: array-like
+        Coefficients of the integrated/differentiated series.
+    powers_out : array-like
+        Mode numbers for the associated coefficients of the output series.
+
+    """
+    coeffs = np.atleast_1d(coeffs)
+    powers = np.atleast_1d(powers)
+    if integrate:
+        powers_out = np.append(0, powers + 1)
+        coeffs_out = np.append(constant, coeffs / (powers + 1))
+    else:
+        idx = powers > 0
+        powers_out = powers[idx] - 1
+        coeffs_out = powers[idx] * coeffs[idx]
+    return coeffs_out, powers_out

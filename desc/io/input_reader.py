@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime
 from termcolor import colored
 from desc import set_device
+from desc.utils import power_series_calculus
 
 
 class InputReader:
@@ -174,7 +175,7 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
-            "current_r": np.atleast_2d((0, 0.0)),
+            "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
@@ -426,14 +427,14 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ][0]
-                prof_idx = np.where(inputs["current_r"][:, 0] == l)[0]
+                prof_idx = np.where(inputs["current"][:, 0] == l)[0]
                 if prof_idx.size == 0:
-                    prof_idx = np.atleast_1d(inputs["current_r"].shape[0])
-                    inputs["current_r"] = np.pad(
-                        inputs["current_r"], ((0, 1), (0, 0)), mode="constant"
+                    prof_idx = np.atleast_1d(inputs["current"].shape[0])
+                    inputs["current"] = np.pad(
+                        inputs["current"], ((0, 1), (0, 0)), mode="constant"
                     )
-                    inputs["current_r"][prof_idx[0], 0] = l
-                inputs["current_r"][prof_idx[0], 1] = c_l
+                    inputs["current"][prof_idx[0], 0] = l
+                inputs["current"][prof_idx[0], 1] = c_l
                 flag = True
 
             # boundary surface coefficients
@@ -528,9 +529,17 @@ class InputReader:
 
         # remove unused profile
         if iota_flag:
-            del inputs["current_r"]
+            del inputs["current"]
         else:
             del inputs["iota"]
+            # integrate current profile
+            inputs["current"] = np.fliplr(
+                np.vstack(
+                    power_series_calculus(
+                        inputs["current"][:, 1], inputs["current"][:, 0], integrate=True
+                    )
+                ).T
+            )
 
         # array inputs
         arrs = [
@@ -677,9 +686,17 @@ class InputReader:
         if "iota" in inputs[-1].keys():
             char = "i"
             profile = inputs[-1]["iota"]
-        elif "current_r" in inputs[-1].keys():
+        elif "current" in inputs[-1].keys():
             char = "c"
-            profile = inputs[-1]["current_r"]
+            profile = np.fliplr(
+                np.vstack(
+                    power_series_calculus(
+                        inputs[-1]["current"][:, 1],
+                        inputs[-1]["current"][:, 0],
+                        integrate=False,
+                    )
+                ).T
+            )
         ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
             idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
@@ -796,6 +813,8 @@ class InputReader:
             command = (line.strip() + " ")[0:comment]
 
             # global parameters
+            if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
+                warnings.warn(colored("Using free-boundary mode!", "yellow"))
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
                 warnings.warn(
                     colored("Using poloidal flux instead of toroidal flux!", "yellow")
@@ -803,9 +822,9 @@ class InputReader:
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
                 if re.search(r"T", match.group(0), re.IGNORECASE):
-                    inputs["sym"] = 0
+                    inputs["sym"] = False
                 else:
-                    inputs["sym"] = 1
+                    inputs["sym"] = True
             match = re.search(r"NFP\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [

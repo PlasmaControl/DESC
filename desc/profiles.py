@@ -10,7 +10,7 @@ from desc.grid import Grid
 from desc.interpolate import interp1d, _approx_df
 from desc.transform import Transform
 from desc.basis import PowerSeries
-from desc.utils import copy_coeffs
+from desc.utils import copy_coeffs, power_series_calculus
 
 
 class Profile(IOAble, ABC):
@@ -91,16 +91,17 @@ class PowerSeriesProfile(Profile):
     Parameters
     ----------
     params: array-like
-        coefficients of the series. If modes is not supplied, assumed to be in ascending order
-        with no missing values. If modes is given, coefficients can be in any order or indexing.
+        Coefficients of the series. If modes is not supplied, assumed to be in ascending
+        order with no missing values. If modes is given, coefficients can be in any
+        order or indexing.
     modes : array-like
-        mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
+        Mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid
-        default grid to use for computing values using transform method
+        Default grid to use for computing values using transform method.
     sym : bool
         Whether the basis should only contain even powers (True) or all powers (False).
     name : str
-        name of the profile
+        Name of the profile.
 
     """
 
@@ -259,8 +260,9 @@ class PowerSeriesProfile(Profile):
             Constant integration term.
 
         """
-        modes = np.pad(self.basis.modes[:, 0] + 1, (1, 0))
-        params = np.append(constant, self.params / (self.basis.modes[:, 0] + 1))
+        params, modes = power_series_calculus(
+            self.params, self.basis.modes[:, 0], constant=constant, integrate=True
+        )
         return PowerSeriesProfile(params, modes, self.grid, sym="auto", name=self.name)
 
     @classmethod

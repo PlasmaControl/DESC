@@ -104,10 +104,10 @@ class TestProfiles(unittest.TestCase):
     def test_integrate(self):
         c = 2
         p0 = PowerSeriesProfile(params=np.array([c, 1, -2, 0, 1]))
-        p1 = p0.integrate(constant=c, dr=3)
+        p1 = p0.integrate(constant=c)
 
         x = np.linspace(0, 1, 17)
         v0 = p0(x)
-        v1 = p1(x, dr=3)
+        v1 = p1(x, dr=1)
 
         np.testing.assert_allclose(v0, v1, atol=1e-7)

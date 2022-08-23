@@ -376,12 +376,6 @@ class _Configuration(IOAble, ABC):
         elif current_r is not None:
             raise TypeError("Got unknown current_r profile {}".format(current_r))
 
-        # remove unused profile from I/O attributes
-        if self.iota is None:
-            self._io_attrs_.remove("_iota")
-        else:
-            self._io_attrs_.remove("_current")
-
         # keep track of where it came from
         self._parent = None
         self._children = []

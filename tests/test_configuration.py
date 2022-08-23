@@ -25,7 +25,7 @@ class TestConstructor(unittest.TestCase):
         self.assertTrue(eq.surface.eq(FourierRZToroidalSurface()))
         self.assertIsInstance(eq.pressure, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
-        self.assertIsInstance(eq.iota, PowerSeriesProfile)
+        self.assertIsInstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.i_l, [0])
 
     def test_supplied_objects(self):

@@ -25,7 +25,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
     data = eq.compute("|J|")
 
-    np.testing.assert_allclose(eq.i_l, 0, atol=1e-16)
+    np.testing.assert_allclose(data["iota"], 0, atol=1e-6)
     np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
 
 

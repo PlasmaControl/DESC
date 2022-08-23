@@ -162,6 +162,7 @@ class InputReader:
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
             "pres_ratio": np.atleast_1d(1.0),
+            "curr_ratio": np.atleast_1d(1.0),
             "bdry_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
             "ftol": np.atleast_1d(1e-2),
@@ -306,6 +307,10 @@ class InputReader:
             match = re.search(r"pres_ratio", argument, re.IGNORECASE)
             if match:
                 inputs["pres_ratio"] = numbers.astype(float)
+                flag = True
+            match = re.search(r"curr_ratio", argument, re.IGNORECASE)
+            if match:
+                inputs["curr_ratio"] = numbers.astype(float)
                 flag = True
             match = re.search(r"bdry_ratio", argument, re.IGNORECASE)
             if match:
@@ -550,6 +555,7 @@ class InputReader:
             "M_grid",
             "N_grid",
             "pres_ratio",
+            "curr_ratio",
             "bdry_ratio",
             "pert_order",
             "ftol",
@@ -600,6 +606,9 @@ class InputReader:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
             inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
+            # apply current ratio
+            if "current" in inputs_ii:
+                inputs_ii["current"][:, 1] *= inputs_ii["curr_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
                 inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
@@ -656,7 +665,7 @@ class InputReader:
             )
 
         f.write("\n# continuation parameters\n")
-        for key in ["bdry_ratio", "pres_ratio", "pert_order"]:
+        for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
             f.write(
                 key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
             )
@@ -787,6 +796,7 @@ class InputReader:
             "M_grid": 0,
             "N_grid": 0,
             "pres_ratio": 1.0,
+            "curr_ratio": 1.0,
             "bdry_ratio": 1.0,
             "pert_order": 1,
             "ftol": 1e-2,
@@ -800,13 +810,14 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
-            "current_r": np.atleast_2d((0, 0.0)),
+            "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
 
         iota_flag = True
         pres_scale = 1.0
+        curr_tor = None
 
         for line in vmec_file:
             comment = line.find("!")
@@ -958,7 +969,14 @@ class InputReader:
             if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Current is not a power series!", "yellow"))
-            # TODO: add CURRTOR
+            match = re.search(r"CURTOR\s*=\s*" + num_form, command, re.IGNORECASE)
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                curr_tor = numbers[0]
             match = re.search(r"AC\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -968,14 +986,14 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if len(inputs["current_r"]) < l + 1:
-                        inputs["current_r"] = np.pad(
-                            inputs["current_r"],
-                            ((0, l + 1 - len(inputs["current_r"])), (0, 0)),
+                    if len(inputs["current"]) < l + 1:
+                        inputs["current"] = np.pad(
+                            inputs["current"],
+                            ((0, l + 1 - len(inputs["current"])), (0, 0)),
                             mode="constant",
                         )
-                    inputs["current_r"][l, 1] = numbers[k]
-                    inputs["current_r"][l, 0] = l
+                    inputs["current"][l, 1] = numbers[k]
+                    inputs["current"][l, 0] = l
 
             # magnetic axis
             match = re.search(
@@ -1232,10 +1250,24 @@ class InputReader:
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
 
+        # add radial mode numbers to surface array
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
+        # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
+        # integrate current profile
+        inputs["current"] = np.fliplr(
+            np.vstack(
+                power_series_calculus(
+                    inputs["current"][:, 1], inputs["current"][:, 0], integrate=True
+                )
+            ).T
+        )
+        # scale current profile
+        if curr_tor is not None:
+            inputs["current"][:, 1] *= curr_tor / np.sum(inputs["current"][:, 1])
+        # delete unused profile
         if iota_flag:
-            del inputs["current_r"]
+            del inputs["current"]
         else:
             del inputs["iota"]
 
@@ -1264,6 +1296,7 @@ class InputReader:
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
                 inputs_arr[i]["pres_ratio"] = 0
+                inputs_arr[i]["curr_ratio"] = 0
                 if bdry_steps != 0:
                     inputs_arr[i]["bdry_ratio"] = 0
                 else:
@@ -1272,6 +1305,7 @@ class InputReader:
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
                 inputs_arr[i]["pres_ratio"] = (i - res_steps + 1) * pres_step
+                inputs_arr[i]["curr_ratio"] = (i - res_steps + 1) * pres_step
                 inputs_arr[i]["pert_order"] = 2
                 if bdry_steps != 0:
                     inputs_arr[i]["bdry_ratio"] = 0

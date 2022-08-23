@@ -2745,11 +2745,39 @@ data_index["I"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
+data_index["current"] = {
+    "label": "\\frac{2\\pi}{\\mu_0} I",
+    "units": "A",
+    "units_long": "Amperes",
+    "description": "Net toroidal current",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
 data_index["I_r"] = {
     "label": "\\partial_{\\rho} I",
     "units": "T \\cdot m",
     "units_long": "Tesla * meters",
     "description": "Boozer toroidal current, derivative wrt radial coordinate",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
+}
+data_index["current_r"] = {
+    "label": "\\frac{2\\pi}{\\mu_0} \\partial_{\\rho} I",
+    "units": "A",
+    "units_long": "Amperes",
+    "description": "Net toroidal current, derivative wrt radial coordinate",
     "fun": "compute_boozer_magnetic_field",
     "dim": 1,
     "R_derivs": [

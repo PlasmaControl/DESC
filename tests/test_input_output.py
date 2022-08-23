@@ -74,7 +74,7 @@ class TestInputReader(unittest.TestCase):
         self.assertFalse(ir.args.version, "version is not default False")
         self.assertEqual(
             len(ir.inputs[0]),
-            27,
+            28,
             "number of inputs does not match number expected in MIN_INPUT",
         )
         # test equality of arguments

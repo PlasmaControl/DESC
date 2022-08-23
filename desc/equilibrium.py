@@ -796,9 +796,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 i_l[idx] = i
         if equil.current is not None:
             c_l = np.zeros_like(equil.current.params)
-            for l, i in inputs["current"]:
+            for l, c in inputs["current"]:
                 idx = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
-                c_l[idx] = i
+                c_l[idx] = c
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
             deltas["dRb"] = Rb_lmn - equil.Rb_lmn

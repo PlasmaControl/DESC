@@ -26,7 +26,7 @@ class TestConstructor(unittest.TestCase):
         self.assertIsInstance(eq.pressure, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
         self.assertIsInstance(eq.current, PowerSeriesProfile)
-        np.testing.assert_allclose(eq.i_l, [0])
+        np.testing.assert_allclose(eq.c_l, [0])
 
     def test_supplied_objects(self):
 

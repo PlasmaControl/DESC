@@ -711,35 +711,6 @@ data_index["iota_r"] = {
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
-data_index["iota_rr"] = {
-    "label": "\\partial_{\\rho\\rho} \\iota",
-    "units": "~",
-    "units_long": "None",
-    "description": "Rotational transform, second radial derivative",
-    "fun": "compute_rotational_transform",
-    "dim": 1,
-    "R_derivs": [
-        [0, 0, 0],
-        [1, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-        [2, 0, 0],
-        [1, 1, 0],
-        [1, 0, 1],
-        [3, 0, 0],
-        [2, 1, 0],
-        [2, 0, 1],
-    ],
-    "L_derivs": [
-        [0, 0, 0],
-        [0, 1, 0],
-        [0, 0, 1],
-        [1, 1, 0],
-        [1, 0, 1],
-        [2, 0, 1],
-        [2, 1, 0],
-    ],
-}
 
 # covariant basis
 data_index["e_rho"] = {
@@ -1267,6 +1238,24 @@ data_index["g_tz"] = {
     "fun": "compute_covariant_metric_coefficients",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["g_tt_r"] = {
+    "label": "\\partial_{\\rho} g_{\\theta\\theta}",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "Poloidal/Poloidal element of covariant metric tensor, derivative wrt rho",
+    "fun": "compute_covariant_metric_coefficients",
+    "dim": 1,
+    "R_derivs": [[0, 1, 0], [1, 1, 0]],
+}
+data_index["g_tz_r"] = {
+    "label": "\\partial_{\\rho} g_{\\theta\\zeta}",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "Poloidal/Toroidal element of covariant metric tensor, derivative wrt rho",
+    "fun": "compute_covariant_metric_coefficients",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
 
 # contravariant metric coefficients

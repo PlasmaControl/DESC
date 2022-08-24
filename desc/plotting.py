@@ -1476,7 +1476,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     ds = []
     B_mn = np.array([[]])
     linestyle = kwargs.pop("linestyle", "-")
-    linewidth = kwargs.pop("linewidth", "-")
+    linewidth = kwargs.pop("linewidth",2)
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))

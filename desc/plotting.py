@@ -1684,6 +1684,8 @@ def plot_qs_error(
         ls: list of strs of length 3, linestyles to use for the 3 different qs metrics (f_B, f_C, f_T)
         colors: list of strs of length 3, colors to use for the 3 different qs metrics (f_B, f_C, f_T)
         markers: list of strs of length 3, markerstyles to use for the 3 different qs metrics (f_B, f_C, f_T)
+        labels:  list of strs of length 3, labels to use for the 3 different qs metrics (f_B, f_C, f_T)
+        ylabel: str, ylabel to use for plot
         legend: bool, whether to display legend or not
         legend_kw: dict, any keyword arguments to be pased to ax.legend()
 
@@ -1715,6 +1717,7 @@ def plot_qs_error(
     ls = kwargs.pop("ls", ["-", "-", "-"])
     colors = kwargs.pop("colors", ["r", "b", "g"])
     markers = kwargs.pop("markers", ["o", "o", "o"])
+    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_B$"])
 
     data = eq.compute("R0")
     data = eq.compute("|B|", data=data)
@@ -1761,7 +1764,7 @@ def plot_qs_error(
                 ls=ls[0 % len(ls)],
                 c=colors[0 % len(colors)],
                 marker=markers[0 % len(markers)],
-                label=r"$\hat{f}_B$",
+                label=labels[0 % len(labels)],
             )
         if fC:
             ax.semilogy(
@@ -1770,7 +1773,7 @@ def plot_qs_error(
                 ls=ls[1 % len(ls)],
                 c=colors[1 % len(colors)],
                 marker=markers[1 % len(markers)],
-                label=r"$\hat{f}_C$",
+                label=labels[1 % len(labels)],
             )
         if fT:
             ax.semilogy(
@@ -1779,7 +1782,7 @@ def plot_qs_error(
                 ls=ls[2 % len(ls)],
                 c=colors[2 % len(colors)],
                 marker=markers[2 % len(markers)],
-                label=r"$\hat{f}_T$",
+                label=labels[2 % len(labels)],
             )
     else:
         if fB:
@@ -1789,7 +1792,7 @@ def plot_qs_error(
                 ls=ls[0 % len(ls)],
                 c=colors[0 % len(colors)],
                 marker=markers[0 % len(markers)],
-                label=r"$\hat{f}_B$",
+                label=labels[0 % len(labels)],
             )
         if fC:
             ax.plot(
@@ -1798,7 +1801,7 @@ def plot_qs_error(
                 ls=ls[1 % len(ls)],
                 c=colors[1 % len(colors)],
                 marker=markers[1 % len(markers)],
-                label=r"$\hat{f}_C$",
+                label=labels[1 % len(labels)],
             )
         if fT:
             ax.plot(
@@ -1807,12 +1810,12 @@ def plot_qs_error(
                 ls=ls[2 % len(ls)],
                 c=colors[2 % len(colors)],
                 marker=markers[2 % len(markers)],
-                label=r"$\hat{f}_T$",
+                label=labels[2 % len(labels)],
             )
 
     ax.set_xlabel(_axis_labels_rtz[0])
     if kwargs.pop("legend", True):
-        fig.legend(**kwargs.pop("legend_kwargs", {"loc": "center right"}))
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
     if len(kwargs):
         raise ValueError(
             f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"

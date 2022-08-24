@@ -3,12 +3,12 @@ import matplotlib
 import numpy as np
 import numbers
 import tkinter
-import re
 from termcolor import colored
 import warnings
 from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
+from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
 from desc.transform import Transform
@@ -91,7 +91,6 @@ rcParams["axes.prop_cycle"] = color_cycle
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.mplot3d import Axes3D
 
 
 _axis_labels_rtz = [r"$\rho$", r"$\theta$", r"$\zeta$"]
@@ -228,7 +227,7 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def _compute(eq, name, grid, component=None):
+def _compute(eq, name, grid, component=None, reshape=True):
     """Compute quantity specified by name on grid for Equilibrium eq.
 
     Parameters
@@ -279,7 +278,9 @@ def _compute(eq, name, grid, component=None):
                 label += r"\phi"
     label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
 
-    return data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F"), label
+    if reshape:
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    return data, label
 
 
 def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
@@ -711,7 +712,7 @@ def plot_fsa(
     M : int, optional
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
-        Toroidal grid resolution. Defualt is eq.N_grid.
+        Toroidal grid resolution. Default is eq.N_grid.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
 
@@ -733,7 +734,7 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.linspace(0, 1, rho + 1)[1:]  # offset to ignore axis
+        rho = np.linspace(1 / rho, 1, rho)
     else:
         rho = np.atleast_1d(rho)
     if M is None:
@@ -741,19 +742,13 @@ def plot_fsa(
     if N is None:
         N = eq.N_grid
 
-    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
-    component = kwargs.pop("component", None)
-    values = np.array([])
-    for i, r in enumerate(rho):
-        if r > 0:
-            grid = LinearGrid(M=M, N=N, NFP=1, rho=np.array(r))
-            g, _ = _compute(eq, "sqrt(g)", grid)
-            data, label = _compute(eq, name, grid, component)
-            values = np.append(values, np.mean(data * g) / np.mean(g))
-        elif r == 0:
-            grid = LinearGrid(M=0, N=0, NFP=1, rho=np.array(0.0))
-            data, label = _compute(eq, name, grid, component)
-            values = np.append(values, np.mean(data))
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+
+    grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
+    g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+    data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
+    values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
+
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(rho, values, label=kwargs.pop("label", None))
@@ -2527,11 +2522,11 @@ def _find_idx(rho0, theta0, phi0, grid):
     if theta0 < 0:
         theta0 = 2 * np.pi + theta0
     if theta0 > 2 * np.pi:
-        theta0 == np.mod(theta0, 2 * np.pi)
+        theta0 = np.mod(theta0, 2 * np.pi)
     if phi0 < 0:
         phi0 = 2 * np.pi + phi0
     if phi0 > 2 * np.pi:
-        phi0 == np.mod(phi0, 2 * np.pi)
+        phi0 = np.mod(phi0, 2 * np.pi)
 
     bool1 = np.logical_and(
         np.abs(rhos - rho0) == np.min(np.abs(rhos - rho0)),

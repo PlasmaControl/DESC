@@ -1,13 +1,17 @@
-from scipy.constants import mu_0
 from inspect import signature
+from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, LinearGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
 import desc.compute as compute_funs
-from desc.compute import arg_order, data_index, compute_quasisymmetry_error
+from desc.compute import (
+    arg_order,
+    data_index,
+    compute_quasisymmetry_error,
+)
+from desc.grid import QuadratureGrid, LinearGrid
+from desc.transform import Transform
+from desc.utils import Timer
 from .objective_funs import _Objective
 
 
@@ -141,7 +145,7 @@ class GenericObjective(_Objective):
 
 # TODO: move this class to a different file (not generic)
 class ToroidalCurrent(_Objective):
-    """Toroidal current encolsed by a surface.
+    """Toroidal current enclosed by a surface.
 
     Parameters
     ----------
@@ -248,4 +252,4 @@ class ToroidalCurrent(_Objective):
             self._iota,
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
-        return self._shift_scale(jnp.atleast_1d(I))
+        return self._shift_scale(I)

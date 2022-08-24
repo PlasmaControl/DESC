@@ -2,14 +2,13 @@ import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-
 from desc.backend import use_jax, jnp, jit
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute import arg_order
 
-# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
+# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -498,7 +497,7 @@ class _Objective(IOAble, ABC):
 
     def _shift_scale(self, x):
         """Apply target and weighting."""
-        return (x - self.target) * self.weight
+        return (jnp.atleast_1d(x) - self.target) * self.weight
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""

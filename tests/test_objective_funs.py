@@ -10,6 +10,8 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
+    MercierStability,
+    MagneticWell,
 )
 
 
@@ -36,7 +38,7 @@ class TestObjectiveFunction(unittest.TestCase):
         np.testing.assert_allclose(AR, 10)
 
     def test_energy(self):
-        eq = Equilibrium()
+        eq = Equilibrium(node_pattern="quad")
         obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
         W = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.p_l, eq.Psi)
         np.testing.assert_allclose(W, 10)
@@ -64,3 +66,19 @@ class TestObjectiveFunction(unittest.TestCase):
         obj = QuasisymmetryTripleProduct(eq=eq)
         ft = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.Psi)
         np.testing.assert_allclose(ft, 0)
+
+    def test_mercier_stability(self):
+        eq = Equilibrium()
+        obj = MercierStability(eq=eq)
+        DMerc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi)
+        np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
+        np.testing.assert_allclose(DMerc, 0)
+
+    def test_magnetic_well(self):
+        eq = Equilibrium()
+        obj = MagneticWell(eq=eq)
+        magnetic_well = obj.compute(
+            eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.Psi
+        )
+        np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
+        np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)

@@ -236,14 +236,14 @@ def test_plot_cov_basis(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_tension(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|(B*grad)B|")
+    fig, ax = plot_2d(eq, "|(B*grad)B|", figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0")
+    fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0", figsize=(4, 4))
     return fig
 
 

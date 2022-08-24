@@ -537,11 +537,13 @@ class InputReader:
             del inputs["current"]
         else:
             del inputs["iota"]
-            # integrate current profile
+            # integrate current profile wrt s=rho^2
             inputs["current"] = np.fliplr(
                 np.vstack(
                     power_series_calculus(
-                        inputs["current"][:, 1], inputs["current"][:, 0], integrate=True
+                        inputs["current"][:, 1] * 2,
+                        inputs["current"][:, 0] + 1,
+                        integrate=True,
                     )
                 ).T
             )
@@ -697,15 +699,13 @@ class InputReader:
             profile = inputs[-1]["iota"]
         elif "current" in inputs[-1].keys():
             char = "c"
-            profile = np.fliplr(
-                np.vstack(
-                    power_series_calculus(
-                        inputs[-1]["current"][:, 1],
-                        inputs[-1]["current"][:, 0],
-                        integrate=False,
-                    )
-                ).T
+            # differentiate current profile wrt s=rho^2
+            coeffs, powers = power_series_calculus(
+                inputs[-1]["current"][:, 1],
+                inputs[-1]["current"][:, 0],
+                integrate=False,
             )
+            profile = np.vstack((powers - 1, coeffs / 2)).T
         ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
             idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
@@ -1254,11 +1254,13 @@ class InputReader:
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
-        # integrate current profile
+        # integrate current profile wrt s=rho^2
         inputs["current"] = np.fliplr(
             np.vstack(
                 power_series_calculus(
-                    inputs["current"][:, 1], inputs["current"][:, 0], integrate=True
+                    inputs["current"][:, 1] * 2,
+                    inputs["current"][:, 0] + 1,
+                    integrate=True,
                 )
             ).T
         )

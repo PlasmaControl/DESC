@@ -331,6 +331,8 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
+        # TODO: add warnings about odd profiles
+
         # default profile
         if iota is None and current is None and current_r is None:
             warnings.warn(
@@ -365,7 +367,7 @@ class _Configuration(IOAble, ABC):
             self.current = current_r.integrate()
         elif isinstance(current, (np.ndarray, jnp.ndarray)):
             self._current = PowerSeriesProfile(
-                modes=current[:, 0], params=current[:, 1], sym=False, name="current"
+                modes=current[:, 0], params=current[:, 1], name="current"
             )
         elif isinstance(current_r, (np.ndarray, jnp.ndarray)):
             self._current = PowerSeriesProfile(

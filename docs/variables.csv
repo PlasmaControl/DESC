@@ -143,6 +143,7 @@ Name,Label,Units,Description,Compute function
 ``V(r)``,:math:`V(\rho)`,cubic meters,Volume enclosed by flux surfaces,``compute_geometry``
 ``V_r(r)``,:math:`\partial_{\rho} V(\rho)`,cubic meters,"Volume enclosed by flux surfaces, derivative wrt radial coordinate",``compute_geometry``
 ``V_rr(r)``,:math:`\partial_{\rho\rho} V(\rho)`,cubic meters,"Volume enclosed by flux surfaces, second derivative wrt radial coordinate",``compute_geometry``
+``S(r)``,:math:`S(\rho)`,square meters,Surface area of flux surfaces,``compute_geometry``
 ``B0``,:math:`\psi' / \sqrt{g}`,Tesla / meters,,``compute_contravariant_magnetic_field``
 ``B^rho``,:math:`B^{\rho}`,Tesla / meters,Contravariant radial component of magnetic field,``compute_contravariant_magnetic_field``
 ``B^theta``,:math:`B^{\theta}`,Tesla / meters,Contravariant poloidal component of magnetic field,``compute_contravariant_magnetic_field``

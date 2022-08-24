@@ -1371,7 +1371,7 @@ data_index["V(r)"] = {
     "units_long": "cubic meters",
     "description": "Volume enclosed by flux surfaces",
     "fun": "compute_geometry",
-    "dim": 0,
+    "dim": 1,
     "R_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["V_r(r)"] = {
@@ -1380,7 +1380,7 @@ data_index["V_r(r)"] = {
     "units_long": "cubic meters",
     "description": "Volume enclosed by flux surfaces, derivative wrt radial coordinate",
     "fun": "compute_geometry",
-    "dim": 0,
+    "dim": 1,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["V_rr(r)"] = {
@@ -1389,7 +1389,7 @@ data_index["V_rr(r)"] = {
     "units_long": "cubic meters",
     "description": "Volume enclosed by flux surfaces, second derivative wrt radial coordinate",
     "fun": "compute_geometry",
-    "dim": 0,
+    "dim": 1,
     "R_derivs": [
         [0, 0, 0],
         [1, 0, 0],
@@ -1399,6 +1399,15 @@ data_index["V_rr(r)"] = {
         [1, 1, 0],
         [1, 0, 1],
     ],
+}
+data_index["S(r)"] = {
+    "label": "S(\\rho)",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "Surface area of flux surfaces",
+    "fun": "compute_geometry",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 
 # contravariant magnetic field

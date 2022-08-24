@@ -298,6 +298,14 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
 
     Returns
     -------
@@ -385,6 +393,16 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
+        label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
 
     Examples
     --------
@@ -444,6 +462,18 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
+        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
+        levels: int or array-like, passed to contourf
+
 
     Returns
     -------
@@ -569,6 +599,16 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         Whether to plot full torus or one field period. Ignored if grid is specified.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
+        alpha: float btwn [0,1.0], the transparency of the plotted surface
 
     Returns
     -------
@@ -715,6 +755,16 @@ def plot_fsa(
         Toroidal grid resolution. Default is eq.N_grid.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
+        label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
 
     Returns
     -------
@@ -786,6 +836,18 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
+        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
+        levels: int or array-like, passed to contourf
+        nzeta: int, number of equispaced zeta planes to plot sections at (default 1 for axisymmetry and 6 for non-axisymmetry)
 
     Returns
     -------
@@ -938,6 +1000,30 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
+        NR: int, number of equispaced rho point to use in plotting the constant vartheta contours
+        NT: int, number of equispaced theta points to use in plotting the constant rho contours
+        theta_color: str or tuple, color to use for constant vartheta contours
+        theta_ls: str, linestyle to use for constant vartheta contours
+        theta_lw: float, linewidth to use for constant vartheta contours
+        rho_color: str or tuple, color to use for constant rho contours
+        rho_ls: str, linestyle to use for constant rho contours
+        rho_lw: float, linewidth to use for constant rho contours
+        lcfs_color: str or tuple, color to use for the LCFS constant rho contour
+        lcfs_ls: str, linestyle to use for the LCFS constant rho contour
+        lcfs_lw: float, linewidth to use for the LCFS constant rho contour
+        axis_color: str or tuple, color to use for the axis plotted point
+        axis_alpha: float, transparency of the axis plotted point
+        axis_marker: str, markerstyle to use for the axis plotted point
+        axis_size: float, markersize to use for the axis plotted point
 
     Returns
     -------
@@ -1138,6 +1224,16 @@ def plot_comparison(
         Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        legend: bool, whether to display legend or not
+        legend_kw: dict, any keyword arguments to be pased to ax.legend()
 
     Returns
     -------
@@ -1236,6 +1332,18 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
         Grid to use for evaluating geometry
     ax : matplotlib AxesSubplot, optional
         Axis to plot on
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        lw: float, linewidth of plotted coils
+        ls: str, linestyle of plotted coils
+        color: str, color of plotted coils
+        cmap: str, colormap to be passed to matplotlib.cm.get_cmap()
 
     Returns
     -------
@@ -1333,6 +1441,16 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        linewidth: float, linewidth
+        linestyle: str, linestyle
 
     Returns
     -------
@@ -1358,6 +1476,8 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     ds = []
     B_mn = np.array([[]])
     linestyle = kwargs.pop("linestyle", "-")
+    linewidth = kwargs.pop("linewidth", "-")
+
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         data = eq.compute("|B|_mn", grid)
@@ -1388,6 +1508,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
                 np.abs(B_mn[:, i]),
                 label="M={}, N={}".format(M, N),
                 linestyle=linestyle,
+                linewidth=linewidth,
             )
         else:
             ax.plot(
@@ -1396,6 +1517,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
                 "-",
                 label="M={}, N={}".format(M, N),
                 linestyle=linestyle,
+                linewidth=linewidth,
             )
 
     ax.set_xlabel(_axis_labels_rtz[0])
@@ -1425,6 +1547,16 @@ def plot_boozer_surface(
         Number of contours to plot.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
+        levels: int or array-like, passed to contourf
 
     Returns
     -------
@@ -1541,6 +1673,19 @@ def plot_qs_error(
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        ls: list of strs of length 3, linestyles to use for the 3 different qs metrics (f_B, f_C, f_T)
+        colors: list of strs of length 3, colors to use for the 3 different qs metrics (f_B, f_C, f_T)
+        markers: list of strs of length 3, markerstyles to use for the 3 different qs metrics (f_B, f_C, f_T)
+        legend: bool, whether to display legend or not
+        legend_kw: dict, any keyword arguments to be pased to ax.legend()
 
     Returns
     -------
@@ -1683,6 +1828,14 @@ def plot_grid(grid, **kwargs):
     ----------
     grid : Grid
         Grid to plot.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
 
     Returns
     -------
@@ -1772,6 +1925,18 @@ def plot_basis(basis, **kwargs):
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
         Axes used for plotting. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        cbar_ratio: float
+        title_ratio: float
+        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
+
 
     Examples
     --------
@@ -2170,7 +2335,9 @@ def plot_logo(savepath=None, **kwargs):
     return fig, ax
 
 
-def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **kwargs):
+def plot_field_lines_sfl(
+    eq, rho, seed_thetas=0, phi_start=0, phi_end=2 * np.pi, dphi=1e-2, ax=None, **kwargs
+):
     """Plots field lines on specified flux surface.
 
     Traces field lines at specified initial vartheta (:math:`\\vartheta`) seed
@@ -2194,11 +2361,22 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     seed_thetas : float or array-like of floats
         Poloidal positions at which to seed magnetic field lines.
         If array-like, will plot multiple field lines.
+    phi_start: float
+        Toroidal angle to integrate field line from, in radians. Default is 0.
     phi_end: float
         Toroidal angle to integrate field line until, in radians. Default is 2*pi.
+    phi_end: float
+        spacing in phi to sample field lines along, in radians. Default is 1e-2.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
 
+            plot_X(figsize=(4,6))
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
 
     Returns
     -------
@@ -2228,8 +2406,7 @@ def plot_field_lines_sfl(eq, rho, seed_thetas=0, phi_end=2 * np.pi, ax=None, **k
     else:
         n_lines = 1
 
-    phi0 = kwargs.get("phi0", 0)
-    dphi = kwargs.get("dphi", 1e-2)  # spacing between points in phi, in radians
+    phi0 = phi_start
     N_pts = int((phi_end - phi0) / dphi)
 
     grid_single_rho = Grid(

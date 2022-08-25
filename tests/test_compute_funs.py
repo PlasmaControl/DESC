@@ -61,7 +61,7 @@ def get_vmec_data(name, quantity):
     -------
     rho : ndarray
         Radial coordinate.
-    quantity : ndarray
+    q : ndarray
         Variable from VMEC output.
 
     """

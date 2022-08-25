@@ -693,7 +693,6 @@ class _Configuration(IOAble, ABC):
         if L_change and hasattr(self.iota, "change_resolution"):
             self.iota.change_resolution(L=max(L, self.iota.basis.L))
 
-        self.axis.change_resolution(self.N, NFP=self.NFP)
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)

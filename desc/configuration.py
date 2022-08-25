@@ -955,19 +955,21 @@ class _Configuration(IOAble, ABC):
         idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         # this reshaping assumes the FourierZernike bases are sorted
-        self._axis = FourierRZCurve(
-            R_n=np.sum(
-                sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
-                axis=0,
-            ),
-            Z_n=np.sum(
+        R_n = np.sum(
+            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
+            axis=0,
+        )
+        modes_R = self.R_basis.modes[idx00_R, 2]
+        if len(idx00_Z):
+            Z_n = np.sum(
                 sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
                 axis=0,
-            ),
-            modes_R=self.R_basis.modes[idx00_R, 2],
-            modes_Z=self.Z_basis.modes[idx00_Z, 2],
-            NFP=self.NFP,
-        )
+            )
+            modes_Z = self.Z_basis.modes[idx00_Z, 2]
+        else:  # catch cases such as axisymmetry with stellarator symmetry
+            Z_n = 0
+            modes_Z = 0
+        self._axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP)
         return self._axis
 
     @property

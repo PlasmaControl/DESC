@@ -116,6 +116,33 @@ def test_surface_areas():
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
+# TODO: remove or combine with above
+def test_surface_areas_2():
+    eq = Equilibrium()
+
+    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
+    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
+    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
+
+    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
+    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
+    data_z = eq.compute("|e_rho x e_theta|", grid_z)
+
+    Ar = np.sum(
+        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
+    )
+    At = np.sum(
+        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
+    )
+    Az = np.sum(
+        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
+    )
+
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
+    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
+    np.testing.assert_allclose(Az, np.pi)
+
+
 @pytest.mark.slow
 def test_magnetic_field_derivatives(DummyStellarator):
     """Test that the partial derivatives of B and |B| match with numerical derivatives
@@ -495,32 +522,6 @@ def test_boozer_transform(DSHAPE):
         rtol=1e-3,
         atol=1e-4,
     )
-
-
-def test_surface_areas():
-    eq = Equilibrium()
-
-    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
-    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
-    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
-
-    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
-    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
-    data_z = eq.compute("|e_rho x e_theta|", grid_z)
-
-    Ar = np.sum(
-        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
-    )
-    At = np.sum(
-        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
-    )
-    Az = np.sum(
-        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
-    )
-
-    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
-    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
-    np.testing.assert_allclose(Az, np.pi)
 
 
 def test_compute_grad_p_volume_avg():

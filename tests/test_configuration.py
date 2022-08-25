@@ -332,23 +332,23 @@ class TestInitialGuess(unittest.TestCase):
         np.testing.assert_allclose(eq.Z_lmn, eq2.Z_lmn, atol=1e-8)
         np.testing.assert_allclose(eq.L_lmn, eq2.L_lmn, atol=1e-8)
 
-    def test_NFP_agree_error(self):
-
-        surface = FourierRZToroidalSurface(NFP=3)
+    def test_NFP_error(self):
+        """Check for ValueError when eq, axis, and surface NFPs do not agree."""
         axis = FourierRZCurve([-1, 10, 1], [1, 0, -1], NFP=2)
+        surface2 = FourierRZToroidalSurface(NFP=2)
+        surface3 = FourierRZToroidalSurface(NFP=3)
+
         # test axis and eq NFP not agreeing
         with pytest.raises(ValueError):
-            eq = Equilibrium(surface=surface, axis=axis, NFP=3)
+            eq = Equilibrium(surface=surface3, axis=axis, NFP=3)
 
-        surface2 = FourierRZToroidalSurface(NFP=2)
         # test axis and surface NFP not agreeing
         with pytest.raises(ValueError):
-            eq2 = Equilibrium(surface=surface2, axis=axis, NFP=3)
+            eq = Equilibrium(surface=surface2, axis=axis, NFP=3)
 
-        surface3 = FourierRZToroidalSurface(NFP=3)
         # test surface and eq NFP not agreeing
         with pytest.raises(ValueError):
-            eq3 = Equilibrium(surface=surface3, axis=axis, NFP=2)
+            eq = Equilibrium(surface=surface3, axis=axis, NFP=2)
 
 
 def test_guess_from_file(SOLOVEV):
@@ -391,20 +391,7 @@ class TestSurfaces(unittest.TestCase):
 
 
 def test_magnetic_axis(HELIOTRON):
-    """Tests that Configuration.axis returns the true axis location."""
-    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
-    axis = eq.axis
-    grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
-
-    data = eq.compute("sqrt(g)", grid=grid)
-    coords = axis.compute_coordinates(grid=grid)
-
-    np.testing.assert_allclose(coords[:, 0], data["R"])
-    np.testing.assert_allclose(coords[:, 2], data["Z"])
-
-
-def test_NFP_warning(HELIOTRON):
-    """Tests that Configuration.axis returns the true axis location."""
+    """Test that Configuration.axis returns the true axis location."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
     axis = eq.axis
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))

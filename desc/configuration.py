@@ -329,9 +329,6 @@ class _Configuration(IOAble, ABC):
         eq_NFP = self.NFP
         surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
         axis_NFP = self._axis.NFP
-        print("eq:", eq_NFP)
-        print("surf:", surf_NFP)
-        print("axis:", axis_NFP)
 
         if not (eq_NFP == surf_NFP == axis_NFP):
             raise ValueError(

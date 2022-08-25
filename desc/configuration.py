@@ -207,7 +207,7 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self.spectral_indexing,
         )
 
-        # surface and axis
+        # surface
         if surface is None:
             self._surface = FourierRZToroidalSurface(NFP=self.NFP)
             self._bdry_mode = "lcfs"
@@ -246,6 +246,7 @@ class _Configuration(IOAble, ABC):
             raise TypeError("Got unknown surface type {}".format(surface))
         self._surface.change_resolution(self.L, self.M, self.N)
 
+        # magnetic axis
         if isinstance(axis, FourierRZCurve):
             self._axis = axis
         elif isinstance(axis, (np.ndarray, jnp.ndarray)):
@@ -276,6 +277,7 @@ class _Configuration(IOAble, ABC):
                     NFP=self.NFP,
                 )
             elif isinstance(self.surface, ZernikeRZToroidalSection):
+                # FIXME: include m=0 l!=0 modes
                 self._axis = FourierRZCurve(
                     R_n=self.surface.R_lmn[
                         np.where(
@@ -295,16 +297,6 @@ class _Configuration(IOAble, ABC):
                 )
         else:
             raise TypeError("Got unknown axis type {}".format(axis))
-
-        # make sure field periods agree
-        eqNFP = self.NFP
-        surfNFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
-        axNFP = self.axis.NFP
-        if not (eqNFP == surfNFP == axNFP):
-            raise ValueError(
-                "Unequal number of field periods for equilirium "
-                + f"{eqNFP}, surface {surfNFP}, and axis {axNFP}"
-            )
 
         # profiles
         if isinstance(pressure, Profile):
@@ -347,6 +339,16 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+
+        # ensure number of field periods agree
+        eq_NFP = self.NFP
+        surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
+        axis_NFP = self.axis.NFP
+        if not (eq_NFP == surf_NFP == axis_NFP):
+            raise ValueError(
+                "Unequal number of field periods for equilirium "
+                + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
+            )
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -413,8 +415,12 @@ class _Configuration(IOAble, ABC):
             if hasattr(self, "_surface"):
                 # use whatever surface is already assigned
                 if hasattr(self, "_axis"):
-                    axisR = np.array([self.axis.R_basis.modes[:, -1], self.axis.R_n]).T
-                    axisZ = np.array([self.axis.Z_basis.modes[:, -1], self.axis.Z_n]).T
+                    axisR = np.array(
+                        [self._axis.R_basis.modes[:, -1], self._axis.R_n]
+                    ).T
+                    axisZ = np.array(
+                        [self._axis.Z_basis.modes[:, -1], self._axis.Z_n]
+                    ).T
                 else:
                     axisR = None
                     axisZ = None
@@ -940,18 +946,29 @@ class _Configuration(IOAble, ABC):
     @property
     def axis(self):
         """Curve object representing the magnetic axis."""
-        # TODO: return the current axis by evaluating at rho=0
+        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
+        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
+        # indices where m=0
+        idx0_R = np.where((self.R_basis.modes[:, 1] == 0))[0]
+        idx0_Z = np.where((self.Z_basis.modes[:, 1] == 0))[0]
+        # indices where l=0 & m=0
+        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        # this reshaping assumes the FourierZernike bases are sorted
+        self._axis = FourierRZCurve(
+            R_n=np.sum(
+                sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
+                axis=0,
+            ),
+            Z_n=np.sum(
+                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
+                axis=0,
+            ),
+            modes_R=self.R_basis.modes[idx00_R, 2],
+            modes_Z=self.Z_basis.modes[idx00_Z, 2],
+            NFP=self.NFP,
+        )
         return self._axis
-
-    @axis.setter
-    def axis(self, new):
-        if isinstance(new, FourierRZCurve):
-            new.change_resolution(self.N)
-            self._axis = new
-        else:
-            raise TypeError(
-                f"axis should be of type FourierRZCurve or a subclass, got {new}"
-            )
 
     @property
     def pressure(self):

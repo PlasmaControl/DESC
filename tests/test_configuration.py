@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import unittest
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.geometry import (
     FourierRZCurve,
@@ -370,6 +370,19 @@ class TestSurfaces(unittest.TestCase):
             surf = eq.get_surface_at(rho=1, zeta=2)
         with pytest.raises(AssertionError):
             surf = eq.get_surface_at(rho=1.2)
+
+
+def test_magnetic_axis(HELIOTRON):
+    """Tests that Configuration.axis returns the true axis location."""
+    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
+    axis = eq.axis
+    grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
+
+    data = eq.compute("sqrt(g)", grid=grid)
+    coords = axis.compute_coordinates(grid=grid)
+
+    np.testing.assert_allclose(coords[:, 0], data["R"])
+    np.testing.assert_allclose(coords[:, 2], data["Z"])
 
 
 def test_is_nested():

@@ -537,16 +537,6 @@ class InputReader:
             del inputs["current"]
         else:
             del inputs["iota"]
-            # integrate current profile wrt s=rho^2
-            inputs["current"] = np.fliplr(
-                np.vstack(
-                    power_series_calculus(
-                        inputs["current"][:, 1] * 2,
-                        inputs["current"][:, 0] + 1,
-                        integrate=True,
-                    )
-                ).T
-            )
 
         # array inputs
         arrs = [
@@ -699,13 +689,7 @@ class InputReader:
             profile = inputs[-1]["iota"]
         elif "current" in inputs[-1].keys():
             char = "c"
-            # differentiate current profile wrt s=rho^2
-            coeffs, powers = power_series_calculus(
-                inputs[-1]["current"][:, 1],
-                inputs[-1]["current"][:, 0],
-                integrate=False,
-            )
-            profile = np.vstack((powers - 1, coeffs / 2)).T
+            profile = inputs[-1]["current"]
         ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
             idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
@@ -1255,14 +1239,14 @@ class InputReader:
         # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
         # integrate current profile wrt s=rho^2
-        inputs["current"] = np.fliplr(
+        inputs["current"] = np.pad(
             np.vstack(
-                power_series_calculus(
-                    inputs["current"][:, 1] * 2,
-                    inputs["current"][:, 0] + 1,
-                    integrate=True,
+                (
+                    inputs["current"][:, 0] + 2,
+                    inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
                 )
-            ).T
+            ).T,
+            ((1, 0), (0, 0)),
         )
         # scale current profile
         if curr_tor is not None:

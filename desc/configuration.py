@@ -330,8 +330,6 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
-        # TODO: add warnings about odd profiles
-
         # default profile
         if iota is None and current is None:
             warnings.warn(
@@ -366,6 +364,23 @@ class _Configuration(IOAble, ABC):
             )
         elif current is not None:
             raise TypeError("Got unknown current profile {}".format(current))
+
+        # warning about odd profiles
+        if isinstance(self.pressure, PowerSeriesProfile):
+            if self.pressure.sym != "even":
+                warnings.warn(
+                    colored("Pressure profile is not an even power series.", "yellow")
+                )
+        if isinstance(self.iota, PowerSeriesProfile):
+            if self.iota.sym != "even":
+                warnings.warn(
+                    colored("Iota profile is not an even power series.", "yellow")
+                )
+        if isinstance(self.current, PowerSeriesProfile):
+            if self.current.sym != "even":
+                warnings.warn(
+                    colored("Current profile is not an even power series.", "yellow")
+                )
 
         # keep track of where it came from
         self._parent = None

@@ -185,7 +185,7 @@ Pressure & Iota/Current Profiles
 - ``l`` (int): Radial polynomial order. 
 - ``p`` (float): Pressure profile coefficients :math:`p_{l}`. 
 - ``i`` (float): Rotational transform coefficients :math:`\iota_{l}`. 
-- ``c`` (float): Toroidal current derivative coefficients :math:`c_{l}`. 
+- ``c`` (float): Toroidal current coefficients :math:`c_{l}`. 
 
 The profiles are given as a power series in the flux surface label :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
 
@@ -193,7 +193,7 @@ The profiles are given as a power series in the flux surface label :math:`\rho \
    \begin{aligned}
    p(\rho) &= \sum p_{l} \rho^{l} \\
    \iota(\rho) &= \sum \iota_{l} \rho^{l} \\
-   \frac{2\pi}{\mu_0} \partial_{\rho} I(\rho) &= \sum c_{l} \rho^{l} \\.
+   \frac{2\pi}{\mu_0} I(\rho) &= \sum c_{l} \rho^{l} \\.
    \end{aligned}
 
 The coefficients :math:`p_{l}` are specified by the input variables ``p`` in Pascals. 
@@ -209,7 +209,7 @@ The profiles given in the example are:
    \iota(\rho) &= 1 + 1.5 \rho^2.
    \end{aligned}
 
-If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\frac{2\pi}{\mu_0} \partial_{\rho} I(\rho) = 0`. 
+If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\frac{2\pi}{\mu_0} I(\rho) = 0`. 
 Also, note that the rotational transform given is technically assumed to be
 
 .. math::

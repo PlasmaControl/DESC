@@ -1,6 +1,5 @@
 """Core compute functions, for profiles, geometry, and basis vectors/jacobians."""
 
-import pickle
 from scipy.constants import mu_0
 
 from desc.backend import jnp

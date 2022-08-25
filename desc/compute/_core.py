@@ -339,16 +339,13 @@ def compute_rotational_transform(
                 * current.compute(c_l, grid=grid, dr=0)
                 / data["psi_r"]
             )
-            num = surface_averages(
-                grid,
-                (
-                    data["lambda_z"] * data["g_tt"]
-                    - (1 + data["lambda_t"]) * data["g_tz"]
-                )
-                / data["sqrt(g)"],
-            )
-            den = surface_averages(grid, data["g_tt"] / data["sqrt(g)"])
-            data["iota"] = (current_term + num) / den
+            num = (
+                data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+            ) / data["sqrt(g)"]
+            den = data["g_tt"] / data["sqrt(g)"]
+            num_avg = surface_averages(grid, num)
+            den_avg = surface_averages(grid, den)
+            data["iota"] = (current_term + num_avg) / den_avg
 
         if check_derivs("iota_r", R_transform, Z_transform, L_transform):
             current_term_r = (
@@ -358,23 +355,21 @@ def compute_rotational_transform(
                 / data["psi_r"]
                 - current_term * data["psi_rr"] / data["psi_r"]
             )
-            num_r = surface_averages(
-                grid,
-                (
-                    data["lambda_rz"] * data["g_tt"]
-                    + data["lambda_z"] * data["g_tt_r"]
-                    - data["lambda_rt"] * data["g_tz"]
-                    - (1 + data["lambda_t"]) * data["g_tz_r"]
-                )
-                / data["sqrt(g)"]
-                - num * data["sqrt(g)_r"] / data["sqrt(g)"],
-            )
-            den_r = surface_averages(
-                grid,
+            num_r = (
+                data["lambda_rz"] * data["g_tt"]
+                + data["lambda_z"] * data["g_tt_r"]
+                - data["lambda_rt"] * data["g_tz"]
+                - (1 + data["lambda_t"]) * data["g_tz_r"]
+            ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
+            den_r = (
                 data["g_tt_r"] / data["sqrt(g)"]
-                - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2,
+                - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
             )
-            data["iota_r"] = (current_term_r + num_r - data["iota"] * den_r) / den
+            num_avg_r = surface_averages(grid, num_r)
+            den_avg_r = surface_averages(grid, den_r)
+            data["iota_r"] = (
+                current_term_r + num_avg_r - data["iota"] * den_avg_r
+            ) / den_avg
 
     return data
 

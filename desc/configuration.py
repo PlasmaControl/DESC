@@ -535,7 +535,7 @@ class _Configuration(IOAble, ABC):
     def _initial_guess_surface(
         self, x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None
     ):
-        """Create an initial guess from the boundary coefficients and magnetic axis guess.
+        """Create an initial guess from boundary coefficients and a magnetic axis guess.
 
         Parameters
         ----------

@@ -33,10 +33,15 @@ class TestConstructor(unittest.TestCase):
         pressure = SplineProfile([1, 2, 3])
         iota = SplineProfile([2, 3, 4])
         surface = FourierRZToroidalSurface(NFP=2, sym=False)
-        axis = FourierRZCurve([-1, 10, 1], [1, 0, -1], NFP=2, sym=False)
-
+        axis = FourierRZCurve([-0.2, 10, 0.3], [0.3, 0, -0.2], NFP=2, sym=False)
         eq = Equilibrium(
-            pressure=pressure, iota=iota, surface=surface, axis=axis, N=1, sym=False
+            M=2,
+            pressure=pressure,
+            iota=iota,
+            surface=surface,
+            axis=axis,
+            N=1,
+            sym=False,
         )
 
         self.assertTrue(eq.pressure.eq(pressure))
@@ -45,10 +50,8 @@ class TestConstructor(unittest.TestCase):
         self.assertEqual(eq.NFP, 2)
         self.assertEqual(eq.axis.NFP, 2)
 
-        Rax, Zax = axis.get_coeffs([1, 0, -1])
-        Req, Zeq = eq.axis.get_coeffs([1, 0, -1])
-        np.testing.assert_allclose(Rax, Req)
-        np.testing.assert_allclose(Zax, Zeq)
+        np.testing.assert_allclose(axis.R_n, eq.Ra_n)
+        np.testing.assert_allclose(axis.Z_n, eq.Za_n)
 
         surface2 = ZernikeRZToroidalSection(spectral_indexing="ansi")
         eq2 = Equilibrium(surface=surface2)

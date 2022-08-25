@@ -8,7 +8,6 @@ import numpy as np
 from datetime import datetime
 from termcolor import colored
 from desc import set_device
-from desc.utils import power_series_calculus
 
 
 class InputReader:

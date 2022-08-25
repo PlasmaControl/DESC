@@ -10,7 +10,7 @@ from desc.grid import Grid
 from desc.interpolate import interp1d, _approx_df
 from desc.transform import Transform
 from desc.basis import PowerSeries
-from desc.utils import copy_coeffs, power_series_calculus
+from desc.utils import copy_coeffs
 
 
 class Profile(IOAble, ABC):
@@ -65,10 +65,6 @@ class Profile(IOAble, ABC):
     @abstractmethod
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values on specified nodes, default to using self.params."""
-
-    @abstractmethod
-    def integrate(self, constant=0):
-        """Integrate the profile with respect to rho."""
 
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         return self.compute(params, grid, dr, dt, dz)
@@ -250,20 +246,6 @@ class PowerSeriesProfile(Profile):
             params = self.params
         transform = self._get_transform(grid)
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
-
-    def integrate(self, constant=0):
-        """Integrate the profile with respect to rho.
-
-        Parameters
-        ----------
-        constant : float
-            Constant integration term.
-
-        """
-        params, modes = power_series_calculus(
-            self.params, self.basis.modes[:, 0], constant=constant, integrate=True
-        )
-        return PowerSeriesProfile(params, modes, self.grid, sym="auto", name=self.name)
 
     @classmethod
     def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=""):
@@ -544,17 +526,6 @@ class SplineProfile(Profile):
         fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
         return fq
 
-    def integrate(self, constant=0):
-        """Integrate the profile with respect to rho.
-
-        Parameters
-        ----------
-        constant : float
-            Constant integration term.
-
-        """
-        raise NotImplementedError("SplineProfile.integrate() is not yet implemented.")
-
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
         """Convert this profile to a PowerSeriesProfile
 
@@ -834,17 +805,6 @@ class MTanhProfile(Profile):
 
         y = MTanhProfile._mtanh(xq, ped, offset, sym, width, core_poly, dx=dr)
         return y
-
-    def integrate(self, constant=0):
-        """Integrate the profile with respect to rho.
-
-        Parameters
-        ----------
-        constant : float
-            Constant integration term.
-
-        """
-        raise NotImplementedError("MTanhProfile.integrate() is not yet implemented.")
 
     @classmethod
     def from_values(

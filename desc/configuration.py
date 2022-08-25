@@ -325,6 +325,20 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown iota profile {}".format(iota))
 
+        # ensure number of field periods agree before setting guesses
+        eq_NFP = self.NFP
+        surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
+        axis_NFP = self._axis.NFP
+        print("eq:", eq_NFP)
+        print("surf:", surf_NFP)
+        print("axis:", axis_NFP)
+
+        if not (eq_NFP == surf_NFP == axis_NFP):
+            raise ValueError(
+                "Unequal number of field periods for equilirium "
+                + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
+            )
+
         # keep track of where it came from
         self._parent = None
         self._children = []
@@ -339,16 +353,6 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
-
-        # ensure number of field periods agree
-        eq_NFP = self.NFP
-        surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
-        axis_NFP = self.axis.NFP
-        if not (eq_NFP == surf_NFP == axis_NFP):
-            raise ValueError(
-                "Unequal number of field periods for equilirium "
-                + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
-            )
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?

@@ -40,7 +40,6 @@ class TestConstructor(unittest.TestCase):
         self.assertTrue(eq.pressure.eq(pressure))
         self.assertTrue(eq.iota.eq(iota))
         self.assertTrue(eq.surface.eq(surface))
-        self.assertTrue(eq.axis.eq(axis))
         self.assertEqual(eq.spectral_indexing, "ansi")
         self.assertEqual(eq.NFP, 2)
 

@@ -845,6 +845,7 @@ def compute_geometry(
     if check_derivs("V_r(r)", R_transform, Z_transform):
         # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
         data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+        data["S(r)"] = surface_integrals(grid, data["|e_theta x e_zeta|"])
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
         data["A"] = jnp.mean(
             surface_integrals(

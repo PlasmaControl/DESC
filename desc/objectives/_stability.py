@@ -11,7 +11,7 @@ class MercierStability(_Objective):
     """The Mercier criterion is a fast proxy for MHD stability.
 
     This makes it a useful figure of merit for stellarator operation.
-    Systems with DMerc > 0 are favorable for stability.
+    Systems with D_Mercier > 0 are favorable for stability.
 
     See equation 4.16 in
     Landreman, M., & Jorge, R. (2020). Magnetic well and Mercier stability of
@@ -28,7 +28,7 @@ class MercierStability(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
-    grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+    grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -135,7 +135,7 @@ class MercierStability(_Objective):
 
         Returns
         -------
-        DMerc : ndarray
+        D_Mercier : ndarray
             Mercier stability criterion.
 
         """
@@ -178,7 +178,7 @@ class MagneticWell(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
-    grid : LinearGrid, ConcentricGrid, QuadratureGrid, ndarray, optional
+    grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.

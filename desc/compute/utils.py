@@ -260,7 +260,8 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        Surface areas of the surfaces to compute averages over. Sign must match sqrt_g.
+        Volume enclosed by the surfaces, derivative wrt radial coordinate.
+        Sign must match sqrt_g.
         This can be supplied to avoid redundant computations.
 
     Returns

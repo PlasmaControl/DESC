@@ -81,7 +81,7 @@ def test_total_volume(DummyStellarator):
     )
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
-    lcfs_volume = eq.compute("V(r)", grid)["V(r)"][0]
+    lcfs_volume = eq.compute("V(r)", grid)["V(r)"].mean()
     total_volume = eq.compute("V")["V"]  # default quadrature grid
     np.testing.assert_allclose(lcfs_volume, total_volume)
 
@@ -91,15 +91,29 @@ def test_enclosed_volumes():
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("V_rr(r)", grid=grid)
     np.testing.assert_allclose(
-        20 * (np.pi * rho) ** 2, compress(grid, eq.compute("V(r)", grid)["V(r)"])
+        2 * data["R0"] * (np.pi * rho) ** 2,
+        compress(grid, data["V(r)"]),
     )
     np.testing.assert_allclose(
-        40 * np.pi ** 2 * rho, compress(grid, eq.compute("V_r(r)", grid)["V_r(r)"])
+        4 * data["R0"] * np.pi ** 2 * rho,
+        compress(grid, data["V_r(r)"]),
     )
     np.testing.assert_allclose(
-        40 * np.pi ** 2, compress(grid, eq.compute("V_rr(r)", grid)["V_rr(r)"])
+        4 * data["R0"] * np.pi ** 2,
+        compress(grid, data["V_rr(r)"]),
     )
+
+
+def test_surface_areas():
+    """Test that the flux surface areas match known analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("S(r)", grid=grid)
+    S = 4 * data["R0"] * np.pi ** 2 * rho
+    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
 @pytest.mark.slow

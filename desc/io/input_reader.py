@@ -637,7 +637,7 @@ class InputReader:
         f.write(header + "\n")
 
         # TODO: mobius stellarator has NFP = 0.5 and will not run
-        f.write("# global parameters \n")
+        f.write("# global parameters\n")
         f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
         f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
         f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
@@ -705,7 +705,7 @@ class InputReader:
                 "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
             )
 
-        f.write("\n# fixed-boundary surface shape \n")
+        f.write("\n# fixed-boundary surface shape\n")
         for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(

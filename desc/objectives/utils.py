@@ -57,9 +57,9 @@ def get_equilibrium_objective(mode="force"):
 
     Parameters
     ----------
-    mode : {"force", "force2", "energy", "vacuum"}
+    mode : {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
-        "force2" uses two different grids for radial and helical forces. "energy" is
+        "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
 
     Returns
@@ -72,7 +72,7 @@ def get_equilibrium_objective(mode="force"):
         objectives = Energy()
     elif mode == "force":
         objectives = ForceBalance()
-    elif mode == "force2":
+    elif mode == "forces":
         objectives = (RadialForceBalance(), HelicalForceBalance())
     elif mode == "vacuum":
         objectives = CurrentDensity()

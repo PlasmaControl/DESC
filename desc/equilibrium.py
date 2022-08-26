@@ -66,10 +66,6 @@ class Equilibrium(_Configuration, IOAble):
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
-    objective : str or ObjectiveFunction (optional)
-        function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
-        optimizer to use
     """
 
     _io_attrs_ = _Configuration._io_attrs_ + [
@@ -98,8 +94,6 @@ class Equilibrium(_Configuration, IOAble):
         axis=None,
         sym=None,
         spectral_indexing=None,
-        objective=None,
-        optimizer=None,
         **kwargs,
     ):
 
@@ -288,7 +282,7 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        objective : {"force", "force2", "energy"}
+        objective : {"force", "forces", "energy", "vacuum"}
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
@@ -819,6 +813,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         equil.resolution_summary()
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+        print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
         print("Objective: {}".format(self.inputs[ii]["objective"]))
         print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))

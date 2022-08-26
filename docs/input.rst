@@ -163,7 +163,7 @@ Solver Methods
    node_pattern      = jacobi
    bdry_mode         = lcfs
 
-- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``force`` (Default) or ``energy``. 
+- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``force`` (Default), ``forces``, ``energy``, or ``vacuum``. 
 - ``optimizer`` (string): Type of optimizer to use. Default = ``lsq-exact``. For more details and options see :py:class:`desc.optimize.Optimizer`.
 - ``spectral_indexing`` (string): Zernike polynomial index ordering. Options are ``ANSI`` or ``Fringe`` (Default). For more information see `Basis functions and collocation nodes`_.
 - ``node_pattern`` (string): Pattern of collocation nodes. Options are ``jacobi`` (Default), ``cheb1``, ``cheb2`` or ``quad``. For more information see `Basis functions and collocation nodes`_.

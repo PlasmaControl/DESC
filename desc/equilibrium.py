@@ -326,10 +326,12 @@ class Equilibrium(_Configuration, IOAble):
 
 
         """
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints(
+                profiles=objective != "vacuum", iota=self.iota is not None
+            )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer("lsq-exact")
 

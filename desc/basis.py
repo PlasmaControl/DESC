@@ -47,7 +47,9 @@ class Basis(IOAble, ABC):
             "sine",
             "cos",
             "cosine",
+            "even",
             False,
+            None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
@@ -55,6 +57,11 @@ class Basis(IOAble, ABC):
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
             non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym == "even":  # even powers of rho
+            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym is None:
+            self._sym = False
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
@@ -194,16 +201,19 @@ class PowerSeries(Basis):
     ----------
     L : int
         Maximum radial resolution.
+    sym : {"even", False}
+        Type of symmetry. "even" has only even powers of rho, for an analytic profile
+        on the disc. False uses the full (odd + even) powers.
 
     """
 
-    def __init__(self, L):
+    def __init__(self, L, sym="even"):
 
         self._L = L
         self._M = 0
         self._N = 0
         self._NFP = 1
-        self._sym = False
+        self._sym = sym
         self._spectral_indexing = "linear"
 
         self._modes = self._get_modes(L=self.L)
@@ -386,15 +396,18 @@ class FourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return toroidal
 
-    def change_resolution(self, N):
+    def change_resolution(self, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
         ----------
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
             self._N = N
             self._modes = self._get_modes(self.N)
@@ -518,7 +531,7 @@ class DoubleFourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return poloidal * toroidal
 
-    def change_resolution(self, M, N):
+    def change_resolution(self, M, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -527,12 +540,15 @@ class DoubleFourierSeries(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         Returns
         -------
         None
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N:
             self._M = M
             self._N = N
@@ -542,8 +558,6 @@ class DoubleFourierSeries(Basis):
 
 class ZernikePolynomial(Basis):
     """2D basis set for analytic functions in a unit disc.
-
-    Initializes a ZernikePolynomial
 
     Parameters
     ----------
@@ -756,8 +770,6 @@ class FourierZernikeBasis(Basis):
     Zernike polynomials in the radial & poloidal coordinates, and a Fourier
     series in the toroidal coordinate.
 
-    Initializes a FourierZernikeBasis
-
     Parameters
     ----------
     L : int
@@ -962,7 +974,7 @@ class FourierZernikeBasis(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L, M, N):
+    def change_resolution(self, L, M, N, NFP=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -973,8 +985,11 @@ class FourierZernikeBasis(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
 
         """
+        self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N:
             self._L = L
             self._M = M
@@ -1412,52 +1427,3 @@ def zernike_norm(l, m):
 
     """
     return np.sqrt((2 * (l + 1)) / (np.pi * (1 + int(m == 0))))
-
-
-def FourierZernike_to_PoincareZernikePolynomial(X_lmn_3D, basis_3D):
-    """Takes a 3D FourierZernike basis and its coefficients X_lmn and evaluates the coefficients at
-    the zeta=0 cross-section, returning a 2D ZernikePolynomial basis and its coefficeints X_lmn"""
-    # we only need lambda to be constrained at the zeta=0 surface
-    # this block here adds up all the L_lm(n>=0) modes
-    # so that lambda at the surface can be described with just lm modes
-    # and get rid of the toroidal modes
-    # (i.e. sort of like taking the XS of lambda at zeta=0 like we would
-    #  do with R and Z)
-    modes_2D = []
-    X_lmn_2D = (
-        []
-    )  # these are corresponding to the 2D modes of the ZernikePolynomial Basis
-    modes_3D = basis_3D.modes
-    for i, mode in enumerate(modes_3D):
-        if mode[-1] < 0:
-            pass  # we do not want the sin(zeta) modes as they = 0 at zeta=0
-        else:
-            if (mode[0], mode[1], 0) not in modes_2D:
-                modes_2D.append((mode[0], mode[1], 0))
-                l = mode[0]
-                m = mode[1]
-
-                inds = np.where(
-                    np.logical_and(
-                        (modes_3D[:, :2] == [l, m]).all(axis=1),
-                        modes_3D[:, 2] >= 0,
-                    )
-                )[0]
-
-                SUM = np.sum(X_lmn_3D[inds])
-                X_lmn_2D.append(SUM)
-
-    X_lmn_2D = np.asarray(X_lmn_2D)
-    modes_2D = np.asarray(modes_2D)
-
-    Lmax = np.max(abs(modes_2D[:, 0]))
-    Mmax = np.max(abs(modes_2D[:, 1]))
-    LM_max = max(Lmax, Mmax)
-    basis_2D = ZernikePolynomial(
-        L=LM_max,
-        M=LM_max,
-        spectral_indexing=basis_3D._spectral_indexing,
-        sym=basis_3D.sym,
-    )
-    X_lmn_2D = copy_coeffs(X_lmn_2D, modes_2D, basis_2D.modes)
-    return X_lmn_2D, basis_2D

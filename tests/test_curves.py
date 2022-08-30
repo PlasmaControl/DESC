@@ -33,7 +33,7 @@ class TestRZCurve(unittest.TestCase):
 
     def test_frenet(self):
         c = FourierRZCurve()
-        c.grid = 1
+        c.grid = 0
         T, N, B = c.compute_frenet_frame(basis="rpz")
         np.testing.assert_allclose(T, np.array([[0, 1, 0]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
@@ -63,7 +63,7 @@ class TestRZCurve(unittest.TestCase):
 
     def test_misc(self):
         c = FourierRZCurve()
-        grid = LinearGrid(L=1, M=4, N=4)
+        grid = LinearGrid(M=2, N=2)
         c.grid = grid
         assert grid.eq(c.grid)
 
@@ -102,6 +102,11 @@ class TestRZCurve(unittest.TestCase):
         assert "FourierRZCurve" in str(c)
         assert c.sym
 
+        c.NFP = 3
+        assert c.NFP == 3
+        assert c.R_basis.NFP == 3
+        assert c.Z_basis.NFP == 3
+
     def test_asserts(self):
         with pytest.raises(ValueError):
             c = FourierRZCurve(R_n=[])
@@ -139,7 +144,7 @@ class TestXYZCurve(unittest.TestCase):
 
     def test_frenet(self):
         c = FourierXYZCurve()
-        c.grid = 1
+        c.grid = 0
         T, N, B = c.compute_frenet_frame(basis="rpz")
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
@@ -169,7 +174,7 @@ class TestXYZCurve(unittest.TestCase):
 
     def test_misc(self):
         c = FourierXYZCurve()
-        grid = LinearGrid(L=1, M=4, N=4)
+        grid = LinearGrid(M=2, N=2)
         c.grid = grid
         assert grid.eq(c.grid)
 
@@ -229,7 +234,7 @@ class TestPlanarCurve(unittest.TestCase):
 
     def test_frenet(self):
         c = FourierPlanarCurve()
-        c.grid = 1
+        c.grid = 0
         T, N, B = c.compute_frenet_frame(basis="xyz")
         np.testing.assert_allclose(T, np.array([[0, 0, -1]]), atol=1e-12)
         np.testing.assert_allclose(N, np.array([[-1, 0, 0]]), atol=1e-12)
@@ -265,7 +270,7 @@ class TestPlanarCurve(unittest.TestCase):
 
     def test_misc(self):
         c = FourierPlanarCurve()
-        grid = LinearGrid(L=1, M=4, N=4)
+        grid = LinearGrid(M=2, N=2)
         c.grid = grid
         assert grid.eq(c.grid)
 

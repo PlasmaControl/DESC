@@ -1,12 +1,11 @@
 import numpy as np
-from termcolor import colored
 from abc import ABC, abstractmethod
 import warnings
 import scipy.optimize
 
-from desc.backend import jnp, put, jit
+from desc.backend import jnp, jit
 from desc.io import IOAble
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import Grid
 from desc.interpolate import interp1d, _approx_df
 from desc.transform import Transform
 from desc.basis import PowerSeries
@@ -63,7 +62,7 @@ class Profile(IOAble, ABC):
         """Set default params for computation"""
 
     @abstractmethod
-    def compute(params=None, grid=None, dr=0, dt=0, dz=0):
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """compute values on specified nodes, default to using self.params"""
 
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
@@ -93,6 +92,8 @@ class PowerSeriesProfile(Profile):
         mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid
         default grid to use for computing values using transform method
+    sym : bool
+        Whether the basis should only contain even powers (True) or all powers (False).
     name : str
         name of the profile
 
@@ -100,15 +101,31 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, name=None):
+    def __init__(self, params, modes=None, grid=None, sym="auto", name=""):
 
         self._name = name
         params = np.atleast_1d(params)
+
+        if (
+            sym == "auto"
+        ):  # check if all odd terms are zero, if so return even. Print something when does so?
+            if modes is None:
+                modes = np.arange(params.size)
+            else:
+                modes = np.atleast_1d(modes)
+            if np.all(params[modes % 2 != 0] == 0):
+                sym = "even"
+            else:
+                sym = False
+        self.sym = "even" if sym else False
         if modes is None:
-            modes = np.arange(params.size)
+            if sym:
+                modes = np.arange(2 * params.size, step=2)
+            else:
+                modes = np.arange(params.size)
         else:
             modes = np.atleast_1d(modes)
-        self._basis = PowerSeries(L=int(np.max(abs(modes))))
+        self._basis = PowerSeries(L=int(np.max(abs(modes))), sym=self.sym)
         self._params = np.zeros(self.basis.num_modes, dtype=float)
         for m, c in zip(modes, params):
             idx = np.where(self.basis.modes[:, 0] == int(m))[0]
@@ -234,7 +251,7 @@ class PowerSeriesProfile(Profile):
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
-    def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=None):
+    def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=""):
         """Fit a PowerSeriesProfile from point data
 
         Parameters
@@ -401,7 +418,7 @@ class SplineProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
 
-    def __init__(self, values, knots=None, grid=None, method="cubic2", name=None):
+    def __init__(self, values, knots=None, grid=None, method="cubic2", name=""):
 
         values = np.atleast_1d(values)
         if knots is None:
@@ -641,7 +658,7 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params, grid=None, name=None):
+    def __init__(self, params, grid=None, name=""):
 
         self._name = name
         self._params = params
@@ -803,7 +820,7 @@ class MTanhProfile(Profile):
         pmax=None,
         pmin=None,
         grid=None,
-        name=None,
+        name="",
         **kwargs,
     ):
         """Fit a MTanhProfile from point data

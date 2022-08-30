@@ -4,6 +4,7 @@ import pytest
 from desc.io import InputReader
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
+from .utils import compute_coords, area_difference
 
 
 class TestProfiles(unittest.TestCase):
@@ -13,19 +14,28 @@ class TestProfiles(unittest.TestCase):
         ir = InputReader(input_path)
 
         eq1 = Equilibrium(**ir.inputs[-1])
+        print(eq1.pressure)
         eq2 = eq1.copy()
         eq2.pressure = eq1.pressure.to_spline()
         eq2.iota = eq1.iota.to_spline()
 
         eq1.solve()
-        # eq2.solve()  # FIXME: spline profiles not supported yet
+        eq2.solve()
 
-        assert True  # TODO: add test to check that spline profiles give same result
+        Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1, check_all_zeta=True)
+        Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2, check_all_zeta=True)
+        rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+        np.testing.assert_allclose(rho_err, 0, atol=1e-7)
+        np.testing.assert_allclose(theta_err, 0, atol=2e-11)
+
+        assert True
 
     @pytest.mark.slow
     def test_close_values(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
         sp = pp.to_spline()
         with pytest.warns(UserWarning):
             mp = pp.to_mtanh(order=4, ftol=1e-12, xtol=1e-12)
@@ -61,7 +71,9 @@ class TestProfiles(unittest.TestCase):
 
     def test_get_set(self):
 
-        pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )
 
         assert pp.get_params(2) == -2
         assert pp.get_idx(4) == 4
@@ -76,3 +88,15 @@ class TestProfiles(unittest.TestCase):
         sp.values = sp.params
 
         np.testing.assert_allclose(sp.values, 1 + pp(sp._knots))
+
+    def test_auto_sym(self):
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
+        )
+        assert pp.sym == "even"
+        assert pp.basis.num_modes == 3
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 1, -2, 1]), sym="auto"
+        )
+        assert pp.sym == False
+        assert pp.basis.num_modes == 5

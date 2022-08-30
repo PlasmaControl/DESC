@@ -10,8 +10,12 @@ on:
       - master
     paths-ignore:
       - 'docs/**'
+      - 'devtools/**'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -30,13 +34,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r tests/requirements.txt
+          pip install -r devtools/dev-requirements.txt
       - name: Test with pytest
         run: |
           pwd
           lscpu
-          python -m pytest --durations=0 --cov-report xml:cov.xml --cov=desc/ --mpl
+          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl
       - name: save coverage file
         uses: actions/upload-artifact@v2
         with:
@@ -49,3 +52,4 @@ jobs:
           files: ./cov.xml
           fail_ci_if_error: true # optional (default = false)
           verbose: true # optional (default = false)
+

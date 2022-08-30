@@ -1,28 +1,19 @@
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
-    LCFSBoundaryR,
-    LCFSBoundaryZ,
-    PoincareBoundaryR,
-    PoincareBoundaryZ,
-    LambdaGauge,
-    PoincareLambda,
-    FixedPressure,
-    FixedIota,
-    FixedPsi,
-    TargetIota,
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixLambdaGauge,
+    FixPressure,
+    FixIota,
+    FixPsi,
 )
-from ._generic import (
-    GenericObjective,
-    ToroidalCurrent,
-    RadialCurrentDensity,
-    PoloidalCurrentDensity,
-    ToroidalCurrentDensity,
-)
+from ._generic import GenericObjective, ToroidalCurrent
 from ._equilibrium import (
     Energy,
     ForceBalance,
     RadialForceBalance,
     HelicalForceBalance,
+    CurrentDensity,
 )
 from ._geometry import Volume, AspectRatio
 from ._qs import (
@@ -30,44 +21,9 @@ from ._qs import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
 )
+from ._stability import MercierStability, MagneticWell
 from .utils import (
     get_fixed_boundary_constraints,
-    get_force_balance_objective,
-    get_force_balance_poincare_objective,
-    get_energy_poincare_objective,
-    get_energy_objective,
+    get_equilibrium_objective,
 )
-
-
-__all__ = [
-    "ObjectiveFunction",
-    "LCFSBoundaryR",
-    "LCFSBoundaryZ",
-    "PoincareBoundaryR",
-    "PoincareBoundaryZ",
-    "PoincareLambda",
-    "LambdaGauge",
-    "FixedPressure",
-    "FixedIota",
-    "FixedPsi",
-    "TargetIota",
-    "GenericObjective",
-    "Volume",
-    "AspectRatio",
-    "Energy",
-    "ToroidalCurrent",
-    "RadialForceBalance",
-    "HelicalForceBalance",
-    "ForceBalance",
-    "RadialCurrentDensity",
-    "PoloidalCurrentDensity",
-    "ToroidalCurrentDensity",
-    "QuasisymmetryBoozer",
-    "QuasisymmetryTwoTerm",
-    "QuasisymmetryTripleProduct",
-    "get_fixed_boundary_constraints",
-    "get_force_balance_objective",
-    "get_force_balance_poincare_objective",
-    "get_energy_poincare_objective",
-    "get_energy_objective",
-]
+from ._wrappers import WrappedEquilibriumObjective

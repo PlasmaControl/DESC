@@ -1,17 +1,23 @@
 import os
+import warnings
 import numpy as np
 import matplotlib.pyplot as plt
 from netCDF4 import Dataset, stringtochar
 from scipy import optimize, interpolate, integrate
 
 from desc.backend import sign
-from desc.utils import Timer, area_difference
+from desc.utils import Timer
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium
-from desc.objectives import ObjectiveFunction, LCFSBoundaryR, LCFSBoundaryZ, Volume
+from desc.objectives import (
+    ObjectiveFunction,
+    FixBoundaryR,
+    FixBoundaryZ,
+)
+from desc.objectives.utils import factorize_linear_constraints
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
@@ -25,7 +31,7 @@ class VMECIO:
 
     @classmethod
     def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
-        """Load a VMEC netCDF file as a Equilibrium.
+        """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
         ----------
@@ -48,6 +54,14 @@ class VMECIO:
         """
         file = Dataset(path, mode="r")
         inputs = {}
+
+        version = file.variables["version_"][0]
+        if version < 9:
+            warnings.warn(
+                "VMEC output appears to be from version {}, while DESC is only designed for compatibility with VMEC version 9. Some data may not be loaded correctly.".format(
+                    str(version)
+                )
+            )
 
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])
@@ -88,7 +102,7 @@ class VMECIO:
         inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
         inputs["iota"][:, 1] = file.variables["ai"][:]
 
-        file.close
+        file.close()
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
@@ -111,8 +125,12 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        objective = ObjectiveFunction(Volume(), (LCFSBoundaryR(), LCFSBoundaryZ()), eq)
-        args = objective.unpack_state(objective.make_feasible(objective.x(eq)))
+        constraints = (FixBoundaryR(), FixBoundaryZ())
+        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, extra_args=objective.args
+        )
+        args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():
             setattr(eq, key, value)
 
@@ -489,7 +507,7 @@ class VMECIO:
 
         # derived quantities (approximate conversion)
 
-        grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=1)
+        grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
         coords = eq.compute("R", grid)
         if eq.sym:
             sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
@@ -522,7 +540,7 @@ class VMECIO:
         zmax_surf[:] = np.amax(np.abs(coords["Z"]))
 
         # half grid quantities
-        half_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_half)
+        half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute("|B|", half_grid)
         data_half_grid = eq.compute("J", half_grid, data=data_half_grid)
         # Jacobian
@@ -543,9 +561,11 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
             data_half_grid["sqrt(g)"]
-            .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
+            .reshape(
+                half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((half_grid.L, -1))
+            .reshape((half_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -579,9 +599,11 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
             data_half_grid["|B|"]
-            .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
+            .reshape(
+                half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((half_grid.L, -1))
+            .reshape((half_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -619,9 +641,11 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
             data_half_grid["B^theta"]
-            .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
+            .reshape(
+                half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((half_grid.L, -1))
+            .reshape((half_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -659,9 +683,11 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
             data_half_grid["B^zeta"]
-            .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
+            .reshape(
+                half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((half_grid.L, -1))
+            .reshape((half_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -678,7 +704,7 @@ class VMECIO:
             timer.disp("B^zeta")
 
         # full grid quantities
-        full_grid = LinearGrid(M=2 * M_nyq + 1, N=2 * N_nyq + 1, NFP=NFP, rho=r_full)
+        full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
         data_full_grid = eq.compute("J", full_grid)
 
         # B_psi
@@ -702,8 +728,10 @@ class VMECIO:
             n = full_basis.modes[:, 2]
         x_mn = np.zeros((surfs, m.size))
         data = data_full_grid["B_rho"].reshape(
-            full_grid.M, full_grid.L, full_grid.N, order="F"
-        ).transpose((1, 0, 2)).reshape((full_grid.L, -1)) / (2 * r_full[:, np.newaxis])
+            full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta, order="F"
+        ).transpose((1, 0, 2)).reshape((full_grid.num_rho, -1)) / (
+            2 * r_full[:, np.newaxis]
+        )
         # B_rho -> B_psi conversion: d(rho)/d(s) = 1/(2*rho)
         if eq.sym:
             x_mn[:, :] = sin_transform.fit(data.T).T
@@ -746,9 +774,11 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
             data_half_grid["B_theta"]
-            .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
+            .reshape(
+                half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((half_grid.L, -1))
+            .reshape((half_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -786,9 +816,11 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         data = (
             data_half_grid["B_zeta"]
-            .reshape(half_grid.M, half_grid.L, half_grid.N, order="F")
+            .reshape(
+                half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((half_grid.L, -1))
+            .reshape((half_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -828,9 +860,11 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         data = (
             (data_full_grid["J^theta"] * data_full_grid["sqrt(g)"])
-            .reshape(full_grid.M, full_grid.L, full_grid.N, order="F")
+            .reshape(
+                full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((full_grid.L, -1))
+            .reshape((full_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -875,9 +909,11 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         data = (
             (data_full_grid["J^zeta"] * data_full_grid["sqrt(g)"])
-            .reshape(full_grid.M, full_grid.L, full_grid.N, order="F")
+            .reshape(
+                full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta, order="F"
+            )
             .transpose((1, 0, 2))
-            .reshape((full_grid.L, -1))
+            .reshape((full_grid.num_rho, -1))
         )
         if eq.sym:
             x_mn[:, :] = cos_transform.fit(data.T).T
@@ -898,7 +934,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^zeta")
 
-        file.close
+        file.close()
         timer.stop("Total time")
         if verbose > 1:
             timer.disp("Total time")
@@ -1059,54 +1095,6 @@ class VMECIO:
         return out.x
 
     @classmethod
-    def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Compute average normalized area difference between VMEC and DESC equilibria.
-
-        Parameters
-        ----------
-        equil : Equilibrium
-            desc equilibrium to compare
-        vmec_data : dict
-            dictionary of vmec outputs
-        Nr : int, optional
-            number of radial surfaces to average over
-        Nt : int, optional
-            number of vartheta contours to compare
-
-        Returns
-        -------
-        area_rho : ndarray, shape(Nr, Nz)
-            normalized area difference of rho contours, computed as the symmetric
-            difference divided by the intersection
-        area_theta : ndarray, shape(Nt, Nz)
-            normalized area difference between vartheta contours, computed as the area
-            of the polygon created by closing the two vartheta contours divided by the
-            perimeter squared
-
-        """
-        # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
-        if isinstance(vmec_data, (str, os.PathLike)):
-            vmec_data = cls.read_vmec_output(vmec_data)
-
-        if equil.N == 0:
-            Nz = 1
-        else:
-            Nz = 6
-
-        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
-
-        Rr1 = coords["Rr_desc"]
-        Zr1 = coords["Zr_desc"]
-        Rv1 = coords["Rv_desc"]
-        Zv1 = coords["Zv_desc"]
-        Rr2 = coords["Rr_vmec"]
-        Zr2 = coords["Zr_vmec"]
-        Rv2 = coords["Rv_vmec"]
-        Zv2 = coords["Zv_vmec"]
-        area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-        return area_rho, area_theta
-
-    @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
         """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC
 
@@ -1164,12 +1152,20 @@ class VMECIO:
         v_coords_desc = equil.compute("R", v_grid)
 
         # rho contours
-        Rr_desc = r_coords_desc["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-        Zr_desc = r_coords_desc["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
+        Rr_desc = r_coords_desc["R"].reshape(
+            (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+        )
+        Zr_desc = r_coords_desc["Z"].reshape(
+            (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+        )
 
         # vartheta contours
-        Rv_desc = v_coords_desc["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-        Zv_desc = v_coords_desc["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+        Rv_desc = v_coords_desc["R"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
+        Zv_desc = v_coords_desc["Z"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
 
         # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
         # the DESC radial coordiante rho = sqrt(s)
@@ -1216,10 +1212,18 @@ class VMECIO:
             "Zr_desc": Zr_desc,
             "Rv_desc": Rv_desc,
             "Zv_desc": Zv_desc,
-            "Rr_vmec": Rr_vmec.reshape((r_grid.M, r_grid.L, r_grid.N), order="F"),
-            "Zr_vmec": Zr_vmec.reshape((r_grid.M, r_grid.L, r_grid.N), order="F"),
-            "Rv_vmec": Rv_vmec.reshape((t_grid.M, t_grid.L, t_grid.N), order="F"),
-            "Zv_vmec": Zv_vmec.reshape((t_grid.M, t_grid.L, t_grid.N), order="F"),
+            "Rr_vmec": Rr_vmec.reshape(
+                (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+            ),
+            "Zr_vmec": Zr_vmec.reshape(
+                (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+            ),
+            "Rv_vmec": Rv_vmec.reshape(
+                (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+            ),
+            "Zv_vmec": Zv_vmec.reshape(
+                (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+            ),
         }
         coords = {key: np.swapaxes(val, 0, 1) for key, val in coords.items()}
         return coords

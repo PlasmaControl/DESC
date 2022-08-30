@@ -278,7 +278,7 @@ class hdf5Writer(hdf5IO, Writer):
         ----------
         obj : python object instance
             object must have _io_attrs_ attribute to have attributes read and loaded
-        where : None or file insance
+        where : None or file instance
             specifies where to write obj to
 
         """

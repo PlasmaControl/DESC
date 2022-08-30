@@ -5,10 +5,10 @@ import numbers
 import tkinter
 from termcolor import colored
 import warnings
-from scipy.constants import mu_0
 from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
+from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid
 from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
 from desc.transform import Transform
@@ -19,14 +19,17 @@ __all__ = [
     "plot_1d",
     "plot_2d",
     "plot_3d",
-    "plot_surfaces",
-    "plot_section",
-    "plot_comparison",
-    "plot_current",
+    "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_coefficients",
+    "plot_comparison",
+    "plot_fsa",
     "plot_grid",
-    "plot_basis",
+    "plot_logo",
+    "plot_qs_error",
+    "plot_section",
+    "plot_surfaces",
 ]
 
 
@@ -88,7 +91,6 @@ rcParams["axes.prop_cycle"] = color_cycle
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from mpl_toolkits.mplot3d import Axes3D
 
 
 _axis_labels_rtz = [r"$\rho$", r"$\theta$", r"$\zeta$"]
@@ -181,16 +183,16 @@ def _get_grid(**kwargs):
 
     """
     grid_args = {
-        "L": 1,
-        "M": 1,
-        "N": 1,
+        "L": None,
+        "M": None,
+        "N": None,
         "NFP": 1,
         "sym": False,
         "axis": True,
         "endpoint": True,
-        "rho": None,
-        "theta": None,
-        "zeta": None,
+        "rho": np.array([1.0]),
+        "theta": np.array([0.0]),
+        "zeta": np.array([0.0]),
     }
     for key in kwargs.keys():
         if key in grid_args.keys():
@@ -225,7 +227,7 @@ def _get_plot_axes(grid):
     return tuple(plot_axes)
 
 
-def _compute(eq, name, grid, component=None):
+def _compute(eq, name, grid, component=None, reshape=True):
     """Compute quantity specified by name on grid for Equilibrium eq.
 
     Parameters
@@ -276,7 +278,9 @@ def _compute(eq, name, grid, component=None):
                 label += r"\phi"
     label = r"$" + label + "~(" + data_index[name]["units"] + ")$"
 
-    return data.reshape((grid.M, grid.L, grid.N), order="F"), label
+    if reshape:
+        data = data.reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    return data, label
 
 
 def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
@@ -287,11 +291,11 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
     eq : Equilibrium
         Object from which to plot.
     L : bool
-        Wheter to include radial mode numbers in the x-axis or not.
+        Whether to include radial mode numbers in the x-axis or not.
     M : bool
-        Wheter to include poloidal mode numbers in the x-axis or not.
+        Whether to include poloidal mode numbers in the x-axis or not.
     N : bool
-        Wheter to include toroidal mode numbers in the x-axis or not.
+        Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
 
@@ -301,6 +305,16 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_coefficients.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_coefficients
+        fig, ax = plot_coefficients(eq)
 
     """
     lmn = np.array([], dtype=int)
@@ -366,6 +380,16 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_1d.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_1d
+        plot_1d(eq, 'p')
+
     """
     if grid is None:
         grid_kwargs = {"L": 100, "NFP": eq.NFP}
@@ -381,8 +405,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     data = data.flatten()
 
     if log:
+        data = np.abs(data)  # ensure data is positive for log plot
         ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
-        data = np.abs(data)  # ensure its positive for log plot
     else:
         ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.get("label", None))
 
@@ -418,6 +442,16 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_2d.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_2d
+        plot_2d(eq, 'sqrt(g)')
 
     """
     if grid is None:
@@ -455,7 +489,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
 
     contourf_kwargs = {}
     if log:
-        data = np.abs(data)  # ensure its positive for log plot
+        data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
@@ -477,12 +511,12 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
 
     xx = (
         grid.nodes[:, plot_axes[1]]
-        .reshape((grid.M, grid.L, grid.N), order="F")
+        .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
     yy = (
         grid.nodes[:, plot_axes[0]]
-        .reshape((grid.M, grid.L, grid.N), order="F")
+        .reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
         .squeeze()
     )
 
@@ -531,6 +565,23 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_3d.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_3d
+        from desc.grid import LinearGrid
+        grid = LinearGrid(
+                rho=0.5,
+                theta=np.linspace(0, 2 * np.pi, 100),
+                zeta=np.linspace(0, 2 * np.pi, 100),
+                axis=True,
+            )
+        fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
+
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
@@ -545,9 +596,9 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute("X", grid)
-    X = coords["X"].reshape((grid.M, grid.L, grid.N), order="F")
-    Y = coords["Y"].reshape((grid.M, grid.L, grid.N), order="F")
-    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+    X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
     if 0 in plot_axes:
         if 1 in plot_axes:  # rho & theta
@@ -567,7 +618,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         Z = Z[:, 0, :].T
 
     if log:
-        data = np.abs(data)  # ensure its positive for log plot
+        data = np.abs(data)  # ensure data is positive for log plot
         minn, maxx = data.min().min(), data.max().max()
         norm = matplotlib.colors.LogNorm(vmin=minn, vmax=maxx)
     else:
@@ -620,6 +671,84 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     return fig, ax
 
 
+def plot_fsa(
+    eq,
+    name,
+    log=False,
+    rho=20,
+    M=None,
+    N=None,
+    ax=None,
+    **kwargs,
+):
+    """Plot flux surface averaged quantities.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    name : str
+        Name of variable to plot.
+    log : bool, optional
+        Whether to use a log scale.
+    rho : int or array-like
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
+    M : int, optional
+        Poloidal grid resolution. Default is eq.M_grid.
+    N : int, optional
+        Toroidal grid resolution. Default is eq.N_grid.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_fsa.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_fsa
+        fig, ax = plot_fsa(eq, "B_theta")
+
+    """
+    if np.isscalar(rho) and (int(rho) == rho):
+        rho = np.linspace(1 / rho, 1, rho)
+    else:
+        rho = np.atleast_1d(rho)
+    if M is None:
+        M = eq.M_grid
+    if N is None:
+        N = eq.N_grid
+
+    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+
+    grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
+    g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+    data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
+    values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
+
+    if log:
+        values = np.abs(values)  # ensure data is positive for log plot
+        ax.semilogy(rho, values, label=kwargs.get("label", None))
+    else:
+        ax.plot(rho, values, label=kwargs.get("label", None))
+
+    label = label.split("~")
+    label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+
+    ax.set_xlabel(_axis_labels_rtz[0])
+    ax.set_ylabel(label)
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
 def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     """Plot Poincare sections.
 
@@ -646,6 +775,16 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_section.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_section
+        fig, ax = plot_section(eq, "J^rho")
 
     """
     if grid is None:
@@ -696,12 +835,12 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     ax = np.atleast_1d(ax).flatten()
 
     coords = eq.compute("R", grid)
-    R = coords["R"].reshape((grid.M, grid.L, grid.N), order="F")
-    Z = coords["Z"].reshape((grid.M, grid.L, grid.N), order="F")
+    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
     contourf_kwargs = {}
     if log:
-        data = np.abs(data)  # ensure its positive for log plot
+        data = np.abs(data)  # ensure data is positive for log plot
         contourf_kwargs["norm"] = matplotlib.colors.LogNorm()
         if norm_F:
             contourf_kwargs["levels"] = kwargs.get("levels", np.logspace(-6, 0, 7))
@@ -784,6 +923,16 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_surfaces.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_surfaces
+        fig, ax = plot_surfaces(eq)
+
     """
     NR = kwargs.pop("NR", 50)
     NT = kwargs.pop("NT", 180)
@@ -807,6 +956,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
         )
 
+    plot_theta = bool(theta)
     nfp = eq.NFP
     if isinstance(rho, numbers.Integral):
         rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
@@ -840,24 +990,31 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         "theta": theta,
         "zeta": zeta,
     }
-    t_grid = _get_grid(**grid_kwargs)
-
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line anlge in
-    # PEST-like flux coordinates
-
-    v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
+    if plot_theta:
+        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # anlge in PEST-like flux coordinates
+        t_grid = _get_grid(**grid_kwargs)
+        v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
     r_coords = eq.compute("R", r_grid)
-    Rr = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-    Zr = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-
-    # vartheta contours
-    v_coords = eq.compute("R", v_grid)
-    Rv = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Zv = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
+    Rr = r_coords["R"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
+    Zr = r_coords["Z"].reshape(
+        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
+    )
+    if plot_theta:
+        # vartheta contours
+        v_coords = eq.compute("R", v_grid)
+        Rv = v_coords["R"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
+        Zv = v_coords["Z"].reshape(
+            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
+        )
 
     figw = 4 * cols
     figh = 5 * rows
@@ -873,13 +1030,14 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nzeta):
-        ax[i].plot(
-            Rv[:, :, i].T,
-            Zv[:, :, i].T,
-            color=theta_color,
-            linestyle=theta_ls,
-            lw=theta_lw,
-        )
+        if plot_theta:
+            ax[i].plot(
+                Rv[:, :, i].T,
+                Zv[:, :, i].T,
+                color=theta_color,
+                linestyle=theta_ls,
+                lw=theta_lw,
+            )
         ax[i].plot(
             Rr[:, :, i],
             Zr[:, :, i],
@@ -965,8 +1123,19 @@ def plot_comparison(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_comparison.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_comparison
+        fig, ax = plot_comparison(eqs=[eqf[0],eqf[1],eqf[2]],labels=['Axisymmetric w/o pressure','Axisymmetric w/ pressure','Nonaxisymmetric w/ pressure'])
+
     """
     figsize = kwargs.pop("figsize", None)
+    plot_theta = kwargs.pop("plot_theta", True)
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
@@ -1118,85 +1287,6 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
     return fig, ax
 
 
-# TODO: replace this with a capability of plot_1d
-def plot_current(
-    eq,
-    toroidal=True,
-    poloidal=True,
-    log=False,
-    L=20,
-    M=None,
-    N=None,
-    rho=None,
-    ax=None,
-    **kwargs,
-):
-    """Plot current density profiles.
-
-    Parameters
-    ----------
-    eq : Equilibrium
-        Object from which to plot.
-    toroidal : bool, optional
-        Whether to plot the toroidal current.
-    poloidal : bool, optional
-        Whether to plot the poloidal current.
-    log : bool, optional
-        Whether to use a log scale.
-    L : int, optional
-        Number of flux surfaces to evaluate at. Only used if rho=None.
-    M : int, optional
-        Number of poloidal nodes used in flux surface average. Default is 2*eq.M_grid+1.
-    N : int, optional
-        Number of toroidal nodes used in flux surface average. Default is 2*eq.N_grid+1.
-    rho : ndarray, optional
-        Radial coordinates of the flux surfaces to evaluate at.
-    ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Figure being plotted to.
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to.
-
-    """
-    if rho is None:
-        rho = np.linspace(1, 0, num=L, endpoint=False)
-    if M is None:
-        M = 2 * eq.M_grid + 1
-    if N is None:
-        N = 2 * eq.N_grid + 1
-
-    I = np.array([])
-    G = np.array([])
-    for i, r in enumerate(rho):
-        grid = LinearGrid(M=M, N=N, NFP=1, rho=r)
-        data = eq.compute("I", grid)
-        I = np.append(I, data["I"])
-        G = np.append(G, data["G"])
-
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
-
-    if log:
-        if toroidal:
-            ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(I), label="toroidal")
-        if poloidal:
-            ax.semilogy(rho, 2 * np.pi / mu_0 * np.abs(G), label="poloidal")
-    else:
-        if toroidal:
-            ax.plot(rho, 2 * np.pi / mu_0 * I, label="toroidal")
-        if poloidal:
-            ax.plot(rho, 2 * np.pi / mu_0 * G, label="poloidal")
-
-    ax.set_xlabel(_axis_labels_rtz[0])
-    ax.set_ylabel(r"current $(A)$")
-    fig.legend(loc="center right")
-    fig.set_tight_layout(True)
-    return fig, ax
-
-
 def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **kwargs):
     """Plot Fourier harmonics of :math:`|B|` in Boozer coordinates.
 
@@ -1223,6 +1313,15 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_boozer_modes.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_modes
+        fig, ax = plot_boozer_modes(eq)
+
     """
     if rho is None:
         rho = np.linspace(1, 0, num=20, endpoint=False)
@@ -1232,7 +1331,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     B_mn = np.array([[]])
     linestyle = kwargs.get("linestyle", "-")
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         data = eq.compute("|B|_mn", grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
@@ -1302,6 +1401,16 @@ def plot_boozer_surface(
     ax : matplotlib.axes.Axes or ndarray of Axes
         axes being plotted to
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_boozer_surface.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boozer_surface
+        fig, ax = plot_boozer_surface(eq)
+
     """
     if grid_compute is None:
         grid_kwargs = {
@@ -1321,7 +1430,7 @@ def plot_boozer_surface(
         DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
     )
     data = B_transform.transform(data["|B|_mn"])
-    data = data.reshape((grid_plot.M, grid_plot.N), order="F")
+    data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
     divider = make_axes_locatable(ax)
@@ -1336,8 +1445,16 @@ def plot_boozer_surface(
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    xx = grid_plot.nodes[:, 2].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
-    yy = grid_plot.nodes[:, 1].reshape((grid_plot.M, grid_plot.N), order="F").squeeze()
+    xx = (
+        grid_plot.nodes[:, 2]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
+    yy = (
+        grid_plot.nodes[:, 1]
+        .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
+        .squeeze()
+    )
 
     if fill:
         im = ax.contourf(xx, yy, data, **contourf_kwargs)
@@ -1395,6 +1512,16 @@ def plot_qs_error(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_qs_error.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_qs_error
+        fig, ax = plot_qs_error(eq, helicity=(1, eq.NFP), log=True)
+
     """
     if rho is None:
         rho = np.linspace(1, 0, num=20, endpoint=False)
@@ -1402,6 +1529,10 @@ def plot_qs_error(
         rho = np.linspace(1, 0, num=rho, endpoint=False)
 
     fig, ax = _format_ax(ax)
+
+    ls = kwargs.get("ls", ["-", "-", "-"])
+    colors = kwargs.get("colors", ["r", "b", "g"])
+    markers = kwargs.get("markers", ["o", "o", "o"])
 
     data = eq.compute("R0")
     data = eq.compute("|B|", data=data)
@@ -1413,7 +1544,7 @@ def plot_qs_error(
     f_C = np.array([])
     f_T = np.array([])
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=r)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["B modes"]
@@ -1442,21 +1573,64 @@ def plot_qs_error(
 
     if log is True:
         if fB:
-            ax.semilogy(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+            ax.semilogy(
+                rho,
+                f_B,
+                ls=ls[0 % len(ls)],
+                c=colors[0 % len(colors)],
+                marker=markers[0 % len(markers)],
+                label=r"$\hat{f}_B$",
+            )
         if fC:
-            ax.semilogy(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+            ax.semilogy(
+                rho,
+                f_C,
+                ls=ls[1 % len(ls)],
+                c=colors[1 % len(colors)],
+                marker=markers[1 % len(markers)],
+                label=r"$\hat{f}_C$",
+            )
         if fT:
-            ax.semilogy(rho, f_T, "go-", label=r"$\hat{f}_T$")
+            ax.semilogy(
+                rho,
+                f_T,
+                ls=ls[2 % len(ls)],
+                c=colors[2 % len(colors)],
+                marker=markers[2 % len(markers)],
+                label=r"$\hat{f}_T$",
+            )
     else:
         if fB:
-            ax.plot(rho, f_B, "ro-", label=r"$\hat{f}_B$")
+            ax.plot(
+                rho,
+                f_B,
+                ls=ls[0 % len(ls)],
+                c=colors[0 % len(colors)],
+                marker=markers[0 % len(markers)],
+                label=r"$\hat{f}_B$",
+            )
         if fC:
-            ax.plot(rho, f_C, "bo-", label=r"$\hat{f}_C$")
+            ax.plot(
+                rho,
+                f_C,
+                ls=ls[1 % len(ls)],
+                c=colors[1 % len(colors)],
+                marker=markers[1 % len(markers)],
+                label=r"$\hat{f}_C$",
+            )
         if fT:
-            ax.plot(rho, f_T, "go-", label=r"$\hat{f}_T$")
+            ax.plot(
+                rho,
+                f_T,
+                ls=ls[2 % len(ls)],
+                c=colors[2 % len(colors)],
+                marker=markers[2 % len(markers)],
+                label=r"$\hat{f}_T$",
+            )
 
     ax.set_xlabel(_axis_labels_rtz[0])
-    fig.legend(loc="center right")
+    if kwargs.get("legend", True):
+        fig.legend(**kwargs.get("legend_kwargs", {"loc": "center right"}))
 
     fig.set_tight_layout(True)
     return fig, ax
@@ -1476,6 +1650,18 @@ def plot_grid(grid, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_grid.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_grid
+        from desc.grid import ConcentricGrid
+        grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
+        fig, ax = plot_grid(grid)
 
     """
     fig = plt.figure(figsize=kwargs.get("figsize", (4, 4)))
@@ -1504,9 +1690,9 @@ def plot_grid(grid, **kwargs):
             r"$\frac{\pi}{2}$",
             r"$\frac{3\pi}{4}$",
             r"$\pi$",
-            r"$\frac{4\pi}{4}$",
+            r"$\frac{5\pi}{4}$",
             r"$\frac{3\pi}{2}$",
-            r"$2\pi$",
+            r"$\frac{7\pi}{4}$",
         ]
     )
     ax.set_yticklabels([])
@@ -1546,10 +1732,22 @@ def plot_basis(basis, **kwargs):
         Axes used for plotting. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.
 
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_basis.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_basis
+        from desc.basis import DoubleFourierSeries
+        basis = DoubleFourierSeries(M=3, N=2)
+        fig, ax = plot_basis(basis)
+
     """
     if basis.__class__.__name__ == "PowerSeries":
         lmax = abs(basis.modes[:, 0]).max()
-        grid = LinearGrid(100, 1, 1, endpoint=True)
+        grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -1567,7 +1765,7 @@ def plot_basis(basis, **kwargs):
 
     elif basis.__class__.__name__ == "FourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
-        grid = LinearGrid(1, 1, 100, NFP=basis.NFP, endpoint=True)
+        grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
@@ -1589,9 +1787,9 @@ def plot_basis(basis, **kwargs):
     elif basis.__class__.__name__ == "DoubleFourierSeries":
         nmax = abs(basis.modes[:, 2]).max()
         mmax = abs(basis.modes[:, 1]).max()
-        grid = LinearGrid(1, 100, 100, NFP=basis.NFP, endpoint=True)
-        t = grid.nodes[:, 1].reshape((100, 100))
-        z = grid.nodes[:, 2].reshape((100, 100))
+        grid = LinearGrid(theta=100, zeta=100, NFP=basis.NFP, endpoint=True)
+        t = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta))
+        z = grid.nodes[:, 2].reshape((grid.num_theta, grid.num_zeta))
         fig = plt.figure(
             # 2 * mmax + 1,
             # 2 * nmax + 1,
@@ -1625,7 +1823,7 @@ def plot_basis(basis, **kwargs):
             im = ax[mmax + m, nmax + n].contourf(
                 z,
                 t,
-                fi.reshape((100, 100)),
+                fi.reshape((grid.num_theta, grid.num_zeta)),
                 levels=100,
                 vmin=-1,
                 vmax=1,
@@ -1658,7 +1856,7 @@ def plot_basis(basis, **kwargs):
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
-        grid = LinearGrid(100, 100, 1, endpoint=True)
+        grid = LinearGrid(rho=100, theta=100, endpoint=True)
         r = np.unique(grid.nodes[:, 0])
         v = np.unique(grid.nodes[:, 1])
 
@@ -1676,7 +1874,7 @@ def plot_basis(basis, **kwargs):
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
         ):
-            Z = Zs[:, i].reshape((100, 100))
+            Z = Zs[:, i].reshape((grid.num_rho, grid.num_theta))
             ax[l][m] = plt.subplot(
                 gs[l + 1, m + mmax : m + mmax + 2], projection="polar"
             )
@@ -1723,6 +1921,16 @@ def plot_logo(savepath=None, **kwargs):
         handle to the figure used for plotting
     ax : matplotlib.axes.Axes
         handle to the axis used for plotting
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_logo.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_logo
+        plot_logo(savepath='../_static/images/plotting/plot_logo.png')
 
     """
     eq = np.array(
@@ -2273,11 +2481,11 @@ def _find_idx(rho0, theta0, phi0, grid):
     if theta0 < 0:
         theta0 = 2 * np.pi + theta0
     if theta0 > 2 * np.pi:
-        theta0 == np.mod(theta0, 2 * np.pi)
+        theta0 = np.mod(theta0, 2 * np.pi)
     if phi0 < 0:
         phi0 = 2 * np.pi + phi0
     if phi0 > 2 * np.pi:
-        phi0 == np.mod(phi0, 2 * np.pi)
+        phi0 = np.mod(phi0, 2 * np.pi)
 
     bool1 = np.logical_and(
         np.abs(rhos - rho0) == np.min(np.abs(rhos - rho0)),

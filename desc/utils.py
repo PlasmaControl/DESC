@@ -1,7 +1,6 @@
 import numpy as np
 import warnings
 from termcolor import colored
-from shapely.geometry import Polygon
 
 
 # Helper Classes -----------------------------------------------------------------------
@@ -219,72 +218,6 @@ def unpack_state(x, nR, nZ):
     Z_lmn = x[nR : nR + nZ]
     L_lmn = x[nR + nZ :]
     return R_lmn, Z_lmn, L_lmn
-
-
-def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
-    """Compute area difference between coordinate curves
-
-    Parameters
-    ----------
-    args : ndarray
-        R and Z coordinates of constant rho (r) or vartheta (v) contours.
-        Arrays should be indexed as [rho,theta,zeta]
-
-    Returns
-    -------
-    area_rho : ndarray, shape(Nr, Nz)
-        normalized area difference of rho contours, computed as the symmetric
-        difference divided by the intersection
-    area_theta : ndarray, shape(Nt, Nz)
-        normalized area difference between vartheta contours, computed as the area
-        of the polygon created by closing the two vartheta contours divided by the
-        perimeter squared
-    """
-    assert Rr1.shape == Rr2.shape == Zr1.shape == Zr2.shape
-    assert Rv1.shape == Rv2.shape == Zv1.shape == Zv2.shape
-
-    poly_r1 = np.array(
-        [
-            [Polygon(np.array([R, Z]).T) for R, Z in zip(Rr1[:, :, i], Zr1[:, :, i])]
-            for i in range(Rr1.shape[2])
-        ]
-    )
-    poly_r2 = np.array(
-        [
-            [Polygon(np.array([R, Z]).T) for R, Z in zip(Rr2[:, :, i], Zr2[:, :, i])]
-            for i in range(Rr2.shape[2])
-        ]
-    )
-    poly_v = np.array(
-        [
-            [
-                Polygon(np.array([R, Z]).T)
-                for R, Z in zip(
-                    np.hstack([Rv1[:, :, i].T, Rv2[::-1, :, i].T]),
-                    np.hstack([Zv1[:, :, i].T, Zv2[::-1, :, i].T]),
-                )
-            ]
-            for i in range(Rv1.shape[2])
-        ]
-    )
-
-    diff_rho = np.array(
-        [
-            poly1.symmetric_difference(poly2).area
-            for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
-        ]
-    ).reshape((Rr1.shape[2], Rr1.shape[0]))
-    intersect_rho = np.array(
-        [
-            poly1.intersection(poly2).area
-            for poly1, poly2 in zip(poly_r1.flat, poly_r2.flat)
-        ]
-    ).reshape((Rr1.shape[2], Rr1.shape[0]))
-    area_rho = np.where(diff_rho > 0, diff_rho / intersect_rho, 0)
-    area_theta = np.array(
-        [poly.area / (poly.length) ** 2 for poly in poly_v.flat]
-    ).reshape((Rv1.shape[1], Rv1.shape[2]))
-    return area_rho, area_theta
 
 
 def equals(a, b):

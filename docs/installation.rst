@@ -2,7 +2,9 @@
 Installation
 ============
 
-Follow these instructions to install DESC and its dependencies.
+Follow these instructions to install DESC and its dependencies. 
+Note that the default installation instructions here (except for the IBM Power architecture instructions) do not install JAX with GPU support.
+To install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
 
 On Your Local Machine
 *********************
@@ -12,7 +14,7 @@ Install from Pypi:
 .. code-block:: bash
 
     pip install desc-opt
-    
+
 Or from github (for development builds)
 
 .. code-block:: bash
@@ -20,65 +22,97 @@ Or from github (for development builds)
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
     pip install -r requirements.txt
-    pip install -r tests/requirements.txt
+    pip install -r devtools/dev-requirements.txt
 
-
-On Princeton's Adroit Cluster
-*****************************
-Other linux based clusters should follow a similar process but may differ. 
+On Most Linux Computing Clusters
+********************************
 
 Install from Pypi:
 
 .. code-block:: bash
 
     pip install desc-opt
-    
+
 Or from github (for development builds)
 
 .. code-block:: bash
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
-    module load anaconda
-    conda create --prefix ./env
-    conda init <shell>
-    conda activate ./env
-    conda install anaconda
+    module load anaconda # load your python module
+    conda create --name desc-env # create a new conda virtual environment
+    conda activate desc-env # activate the environment
     conda install pip
-    pip install -r requirements.txt
-    pip install -r tests/requirements.txt
+    pip install -r requirements.txt # install dependencies
+    pip install -r devtools/dev-requirements.txt # optional, if you want to run DESC/tests
 
+On Clusters with IBM Power Architecture
+***************************************
 
-On Traverse
-***********
-(or other IBM Power based architecture where pre-built JAX binaries are not available) you will first need to build JAX from source.
+If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-For Traverse, first get the latest stable release and load the necessary modules:
+The following are instrctions tested to work on the Traverse supercomputer at Princeton:
 
 .. code-block:: bash
 
-    git clone https://github.com/PlasmaControl/DESC.git   
-    wget https://github.com/google/jax/archive/jaxlib-v0.1.55.tar.gz
-    tar zxf jaxlib-v0.1.55.tar.gz # this puts it in the current directory, you can put it anywhere that is convenient
-    module load anaconda3 cudatoolkit cudnn/cuda-11.0/8.0.1
+    git clone https://github.com/PlasmaControl/DESC.git
+    cd DESC
+    module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
+
 
 Then install python dependencies:
 
 .. code-block:: bash
 
-   conda create --name jax python=3.7 # suggested you make a new environment
-   conda activate jax
-   conda install numpy scipy cython six # python packages JAX needs
-   conda install h5py netcdf4 matplotlib # other DESC dependencies that JAX doesn't require
-   conda install pytest pytest-cov codecov #if you also want to run the DESC tests
+   conda create --name desc-env python=3.8 # create a new conda virtual environment
+   conda activate desc-env
+   # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
+    conda install colorama "h5py>=3.0.0" "matplotlib>=3.0.0,<=3.4.2" "mpmath>=1.0.0" "numpy>=1.2.0" "netcdf4>=1.5.4" psutil "scipy>=1.5.0" shapely termcolor
+    pip install nvgpu
 
 Finally, build and install JAX:
 
 .. code-block:: bash
 
-   cd jax-jaxlib-v0.1.55 # or wherever else you put the contents of the tarball		
-   python build/build.py --enable_cuda --cudnn_path /usr/local/cudnn/cuda-11.0/8.0.1 --noenable_march_native --noenable_mkl_dnn --cuda_compute_capabilities 7.0 --bazel_path /usr/bin/bazel
-   pip install -e build 
-   pip install -e . 
+    cd ..
+    # git clone JAX repo
+
+    git clone https://github.com/google/jax.git
+    cd jax
+   
+    # last commit of JAX that we got to work with Traverse
+    git checkout 6c08702489b33f6c51d5cf0ccadc45e997ab406e
+
+    python build/build.py --enable_cuda --cuda_path /usr/local/cuda-11.1 --cuda_version=11.1 --cudnn_version=8.0.4 --cudnn_path /usr/local/cudnn/cuda-11.1/8.0.4 --noenable_mkl_dnn --bazel_path /usr/bin/bazel --target_cpu=ppc
+    pip install dist/*.whl
+    pip install .
+
+Optionally, if you want to be able to use pytest and other development tools:
+
+.. code-block:: bash
+
+    cd ../DESC
+    pip install -r devtools/dev-requirements.txt
+
+Checking your Installation
+**************************
+
+To check that you have properly installed DESC and its dependencies, try the following:
+
+.. code-block:: bash
+
+    python
+    >>> from desc import set_device # only needed if running on a GPU
+    >>> set_device('gpu')  # only needed if running on a GPU
+    >>> import desc.equilibrium
+
+
+You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
+
+You can also try running an example input file:
+
+.. code-block:: bash
+
+   python -m desc -vvv examples/DESC/SOLOVEV
 

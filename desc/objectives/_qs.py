@@ -58,7 +58,7 @@ class QuasisymmetryBoozer(_Objective):
         self.N_booz = N_booz
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T)"
-        self._callback_fmt = (
+        self._print_value_fmt = (
             "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
             )
@@ -204,9 +204,9 @@ class QuasisymmetryBoozer(_Objective):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
-        if hasattr(self, "_callback_fmt"):
+        if hasattr(self, "_print_value_fmt"):
             units = "(T)"
-            self._callback_fmt = (
+            self._print_value_fmt = (
                 "Quasi-symmetry ({},{}) Boozer error: ".format(
                     self.helicity[0], self.helicity[1]
                 )
@@ -254,7 +254,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self.helicity = helicity
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T^3)"
-        self._callback_fmt = (
+        self._print_value_fmt = (
             "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
             + "{:10.3e} "
             + units
@@ -356,9 +356,9 @@ class QuasisymmetryTwoTerm(_Objective):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
-        if hasattr(self, "_callback_fmt"):
+        if hasattr(self, "_print_value_fmt"):
             units = "(T^3)"
-            self._callback_fmt = (
+            self._print_value_fmt = (
                 "Quasi-symmetry ({},{}) error: ".format(
                     self.helicity[0], self.helicity[1]
                 )
@@ -402,7 +402,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T^4/m^2)"
-        self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units
+        self._print_value_fmt = "Quasi-symmetry error: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

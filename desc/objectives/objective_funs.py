@@ -157,7 +157,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute(x) ** 2) / 2
         return f
 
-    def callback(self, x):
+    def print_value(self, x):
         """Print the value(s) of the objective.
 
         Parameters
@@ -170,7 +170,7 @@ class ObjectiveFunction(IOAble):
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
-            obj.callback(**kwargs)
+            obj.print_value(**kwargs)
         return None
 
     def unpack_state(self, x):
@@ -490,10 +490,10 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
         return f
 
-    def callback(self, *args, **kwargs):
+    def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._callback_fmt.format(jnp.linalg.norm(x)))
+        print(self._print_value_fmt.format(jnp.linalg.norm(x)))
 
     def _shift_scale(self, x):
         """Apply target and weighting."""

@@ -252,7 +252,7 @@ class hdf5Reader(hdf5IO, Reader):
                             RuntimeWarning,
                         )
                         continue
-                i += 1
+            i += 1
 
         return thelist
 

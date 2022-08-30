@@ -170,7 +170,28 @@ def test_writer_write_dict(writer_test_file):
     for key in thedict.keys():
         assert key in f.keys()
         assert key in g.keys()
+        assert f[key][()] == thedict[key]
+        assert g[key][()] == thedict[key]
     f.close()
+    reader = hdf5Reader(writer_test_file)
+
+    thedict1 = thedict.copy()
+    thedict1["subgroup"] = thedict
+    dict1 = reader.read_dict()
+    assert dict1 == thedict1
+
+
+def test_writer_write_list(writer_test_file):
+    thelist = ["1", 1, "2", 2, "3", 3]
+    writer = hdf5Writer(writer_test_file, "w")
+    writer.write_list(thelist)
+    with pytest.raises(SyntaxError):
+        writer.write_list(thelist, where="not a writable type")
+    writer.close()
+    reader = hdf5Reader(writer_test_file)
+
+    list1 = reader.read_list()
+    assert list1 == thelist
 
 
 def test_writer_write_obj(writer_test_file):

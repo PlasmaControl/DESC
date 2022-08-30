@@ -307,6 +307,9 @@ class _Configuration(IOAble, ABC):
             raise TypeError("Got unknown axis type {}".format(axis))
 
         # profiles
+        self._pressure = None
+        self._iota = None
+        self._current = None
 
         # pressure
         if isinstance(pressure, Profile):
@@ -1049,10 +1052,7 @@ class _Configuration(IOAble, ABC):
     @property
     def iota(self):
         """Rotational transform (iota) profile."""
-        try:
-            return self._iota
-        except AttributeError:
-            return None
+        return self._iota
 
     @iota.setter
     def iota(self, new):
@@ -1081,10 +1081,7 @@ class _Configuration(IOAble, ABC):
     @property
     def current(self):
         """Toroidal current (I) profile."""
-        try:
-            return self._current
-        except AttributeError:
-            return None
+        return self._current
 
     @current.setter
     def current(self, new):

@@ -91,6 +91,22 @@ class hdf5Reader(hdf5IO, Reader):
         self.file_mode = "r"
         super().__init__()
 
+    def _decode_attr(self, loc, attr):
+
+        if (
+            isinstance(loc[attr][()], bytes)
+            and attr != "__class__"
+            and loc[attr][()].decode("utf-8") != "__class__"
+        ):
+            s = loc[attr][()].decode("utf-8")
+        elif not isinstance(loc[attr][()], bytes):
+            s = loc[attr][()]
+
+        # isinstance check to avoid comparing strings with numpy arrays
+        if isinstance(s, str) and s == "None":
+            return None
+        return s
+
     def read_obj(self, obj, where=None):
         """Read object from file in group specified by where argument.
 
@@ -110,10 +126,7 @@ class hdf5Reader(hdf5IO, Reader):
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):
-                if isinstance(loc[attr][()], bytes):
-                    setattr(obj, attr, loc[attr][()].decode("utf-8"))
-                else:
-                    setattr(obj, attr, loc[attr][()])
+                setattr(obj, attr, self._decode_attr(loc, attr))
             elif isinstance(loc[attr], h5py.Group):
                 if "__class__" not in loc[attr].keys():
                     warnings.warn(
@@ -161,10 +174,7 @@ class hdf5Reader(hdf5IO, Reader):
         loc = self.resolve_where(where)
         for key in loc.keys():
             if isinstance(loc[key], h5py.Dataset):
-                if isinstance(loc[key][()], bytes) and key != "__class__":
-                    thedict[key] = loc[key][()].decode("utf-8")
-                elif not isinstance(loc[key][()], bytes):
-                    thedict[key] = loc[key][()]
+                thedict[key] = self._decode_attr(loc, key)
 
             elif isinstance(loc[key], h5py.Group):
                 if "__class__" not in loc[key].keys():
@@ -211,13 +221,7 @@ class hdf5Reader(hdf5IO, Reader):
         i = 0
         while str(i) in loc.keys():
             if isinstance(loc[str(i)], h5py.Dataset):
-                if (
-                    isinstance(loc[str(i)][()], bytes)
-                    and loc[str(i)][()].decode("utf-8") != "__class__"
-                ):
-                    thelist.append(loc[str(i)][()].decode("utf-8"))
-                elif not isinstance(loc[str(i)][()], bytes):
-                    thelist.append(loc[str(i)][()])
+                thelist.append(self._decode_attr(loc, str(i)))
             elif isinstance(loc[str(i)], h5py.Group):
                 if "__class__" not in loc[str(i)].keys():
                     warnings.warn(
@@ -292,6 +296,8 @@ class hdf5Writer(hdf5IO, Writer):
         for attr in obj._io_attrs_:
             try:
                 data = getattr(obj, attr)
+                if data is None:
+                    data = "None"
                 compression = (
                     "gzip"
                     if isinstance(data, np.ndarray) and np.asarray(data).size > 1

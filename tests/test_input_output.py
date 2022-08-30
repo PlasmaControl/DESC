@@ -13,6 +13,7 @@ from desc.utils import equals
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
+from desc.equilibrium import Equilibrium
 
 
 def test_vmec_input(tmpdir_factory):
@@ -273,3 +274,12 @@ def test_copy():
         rtol=1e-10,
         atol=1e-10,
     )
+
+
+def test_save_none(tmpdir_factory):
+    tmpdir = tmpdir_factory.mktemp("none_test")
+    eq = Equilibrium()
+    eq._iota = None
+    eq.save(tmpdir + "none_test.h5")
+    eq1 = load(tmpdir + "none_test.h5")
+    assert eq1.iota is None

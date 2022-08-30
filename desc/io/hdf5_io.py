@@ -93,13 +93,9 @@ class hdf5Reader(hdf5IO, Reader):
 
     def _decode_attr(self, loc, attr):
 
-        if (
-            isinstance(loc[attr][()], bytes)
-            and attr != "__class__"
-            and loc[attr][()].decode("utf-8") != "__class__"
-        ):
+        if isinstance(loc[attr][()], bytes):
             s = loc[attr][()].decode("utf-8")
-        elif not isinstance(loc[attr][()], bytes):
+        else:
             s = loc[attr][()]
 
         # isinstance check to avoid comparing strings with numpy arrays
@@ -126,7 +122,9 @@ class hdf5Reader(hdf5IO, Reader):
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):
-                setattr(obj, attr, self._decode_attr(loc, attr))
+                s = self._decode_attr(loc, attr)
+                if not isinstance(s, str) or s != "__class__":
+                    setattr(obj, attr, s)
             elif isinstance(loc[attr], h5py.Group):
                 if "__class__" not in loc[attr].keys():
                     warnings.warn(
@@ -173,8 +171,9 @@ class hdf5Reader(hdf5IO, Reader):
         thedict = {}
         loc = self.resolve_where(where)
         for key in loc.keys():
-            if isinstance(loc[key], h5py.Dataset):
-                thedict[key] = self._decode_attr(loc, key)
+            if isinstance(loc[key], h5py.Dataset) and key != "__class__":
+                s = self._decode_attr(loc, key)
+                thedict[key] = s
 
             elif isinstance(loc[key], h5py.Group):
                 if "__class__" not in loc[key].keys():
@@ -221,7 +220,9 @@ class hdf5Reader(hdf5IO, Reader):
         i = 0
         while str(i) in loc.keys():
             if isinstance(loc[str(i)], h5py.Dataset):
-                thelist.append(self._decode_attr(loc, str(i)))
+                s = self._decode_attr(loc, str(i))
+                if not isinstance(s, str) or s != "__class__":
+                    thelist.append(s)
             elif isinstance(loc[str(i)], h5py.Group):
                 if "__class__" not in loc[str(i)].keys():
                     warnings.warn(

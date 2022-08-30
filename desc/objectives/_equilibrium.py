@@ -78,7 +78,6 @@ class ForceBalance(_Objective):
                     NFP=eq.NFP,
                     sym=eq.sym,
                     axis=False,
-                    rotation=None,
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
@@ -238,7 +237,6 @@ class RadialForceBalance(_Objective):
                     NFP=eq.NFP,
                     sym=eq.sym,
                     axis=False,
-                    rotation="cos",
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
@@ -395,7 +393,6 @@ class HelicalForceBalance(_Objective):
                     NFP=eq.NFP,
                     sym=eq.sym,
                     axis=False,
-                    rotation="sin",
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
@@ -561,7 +558,6 @@ class Energy(_Objective):
                     NFP=eq.NFP,
                     sym=eq.sym,
                     axis=False,
-                    rotation=None,
                     node_pattern=eq.node_pattern,
                 )
 
@@ -724,7 +720,6 @@ class CurrentDensity(_Objective):
                 NFP=eq.NFP,
                 sym=eq.sym,
                 axis=False,
-                rotation=None,
                 node_pattern="jacobi",
             )
 

@@ -680,10 +680,6 @@ class ConcentricGrid(Grid):
         True for stellarator symmetry, False otherwise (Default = False)
     axis : bool
         True to include the magnetic axis, False otherwise (Default = False)
-    rotation : {``'cos'``, ``'sin'``, False}
-        * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
-        * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
-        * ``None`` for no symmetry (Default), rotates halfway between other options
     node_pattern : {``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``linear``}
         pattern for radial coordinates
 
@@ -697,17 +693,7 @@ class ConcentricGrid(Grid):
 
     """
 
-    def __init__(
-        self,
-        L,
-        M,
-        N,
-        NFP=1,
-        sym=False,
-        axis=False,
-        rotation=None,
-        node_pattern="jacobi",
-    ):
+    def __init__(self, L, M, N, NFP=1, sym=False, axis=False, node_pattern="jacobi"):
 
         self._L = L
         self._M = M
@@ -715,7 +701,6 @@ class ConcentricGrid(Grid):
         self._NFP = NFP
         self._sym = sym
         self._axis = axis
-        self._rotation = rotation
         self._node_pattern = node_pattern
 
         self._nodes, self._spacing = self._create_nodes(
@@ -724,7 +709,6 @@ class ConcentricGrid(Grid):
             N=self.N,
             NFP=self.NFP,
             axis=self.axis,
-            rotation=self._rotation,
             node_pattern=self.node_pattern,
         )
 
@@ -734,9 +718,7 @@ class ConcentricGrid(Grid):
         self._count_nodes()
         self._scale_weights(dtheta_scale)
 
-    def _create_nodes(
-        self, L, M, N, NFP=1, axis=False, rotation=None, node_pattern="jacobi"
-    ):
+    def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
         """Create grid nodes and weights.
 
         Parameters
@@ -751,10 +733,6 @@ class ConcentricGrid(Grid):
             number of field periods (Default = 1)
         axis : bool
             True to include the magnetic axis, False otherwise (Default = False)
-        rotation : {``'cos'``, ``'sin'``, False}
-            * ``'cos'`` for cos(m*t-n*z) symmetry, gives nodes at theta=0
-            * ``'sin'`` for sin(m*t-n*z) symmetry, gives nodes at theta=pi/2
-            * ``None`` for no symmetry (Default), rotates halfway between other options
         node_pattern : {``'linear'``, ``'cheb1'``, ``'cheb2'``, ``'jacobi'``, ``None``}
             pattern for radial coordinates
                 * ``linear`` : linear spacing in r=[0,1]
@@ -814,23 +792,12 @@ class ConcentricGrid(Grid):
 
         for iring in range(L // 2 + 1, 0, -1):
             ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
+            if self.sym:
+                ntheta += 1
             dtheta = 2 * np.pi / ntheta
             theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
-            if rotation in {None, False}:
-                if self.sym:
-                    # this is empirically chosen, could be something different, just
-                    # need to avoid symmetry at theta=0, pi
-                    offset = dtheta / 3
-                else:
-                    offset = 0
-            elif rotation in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
-                offset = 0
-            elif rotation in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
-                offset = dtheta / 4
-            else:
-                raise ValueError(f"Unknown rotation type {rotation}")
-
-            theta = (theta + offset) % (2 * np.pi)
+            if self.sym:
+                theta = (theta + dtheta / 2) % (2 * np.pi)
             for tk in theta:
                 r.append(rho[-iring])
                 t.append(tk)

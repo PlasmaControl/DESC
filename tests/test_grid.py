@@ -2,9 +2,12 @@ import unittest
 import pytest
 import numpy as np
 from scipy import special
-from desc.compute.utils import surface_averages
+
+from desc.basis import FourierZernikeBasis
+from desc.compute.utils import surface_averages, compress
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
+from desc.transform import Transform
 
 
 class TestGrid(unittest.TestCase):
@@ -286,13 +289,8 @@ class TestGrid(unittest.TestCase):
         assert cg.M == 4
         assert cg.N == 5
 
+    # FIXME: required rotation="cos" for the concentric grid to pass
     def test_symmetry(self):
-        """
-        Test if symmetric grids alter dtheta spacing correctly.
-        This is a necessary but not sufficient test.
-        Should make sure that all test_compute_utils functions must also pass.
-        """
-
         def test(grid, err_msg):
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
@@ -308,7 +306,48 @@ class TestGrid(unittest.TestCase):
 
         g1 = LinearGrid(L=3, M=6, N=3, NFP=3, sym=True)
         g2 = QuadratureGrid(L=3, M=6, N=3, NFP=3)
-        g3 = ConcentricGrid(L=3, M=6, N=3, NFP=3, sym=True, rotation="cos")
+        g3 = ConcentricGrid(L=3, M=6, N=3, NFP=3, sym=True)
         grids = {g1: "LinearGrid", g2: "QuadratureGrid", g3: "ConcentricGrid"}
         for g, msg in grids.items():
             test(g, msg)
+
+    # TODO: combine with above test once above test is fixed
+    def test_symmetry_2(self):
+        def test(grid, basis, err_msg, true_avg=1):
+            transform = Transform(grid, basis)
+
+            # random data with specified average on each surface
+            coeffs = np.random.rand(basis.num_modes)
+            coeffs[np.where((basis.modes[:, 1:] == [0, 0]).all(axis=1))[0]] = 0
+            coeffs[np.where((basis.modes == [0, 0, 0]).all(axis=1))[0]] = true_avg
+
+            # compute average for each surface in grid
+            values = transform.transform(coeffs)
+            numerical_avg = compress(grid, surface_averages(grid, values))
+            if isinstance(grid, ConcentricGrid):
+                # values closest to axis are never accurate enough
+                numerical_avg = numerical_avg[1:]
+            np.testing.assert_allclose(numerical_avg, true_avg, err_msg=err_msg)
+
+        M = 10
+        M_grid = 23
+        test(
+            QuadratureGrid(L=M_grid, M=M_grid, N=0),
+            FourierZernikeBasis(L=M, M=M, N=0),
+            "quadrature grid",
+        )
+        test(
+            LinearGrid(L=M_grid, M=M_grid, N=0, sym=True),
+            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
+            "linear grid with symmetry",
+        )
+        test(
+            ConcentricGrid(L=M_grid, M=M_grid, N=0),
+            FourierZernikeBasis(L=M, M=M, N=0),
+            "concentric grid without symmetry",
+        )
+        test(
+            ConcentricGrid(L=M_grid, M=M_grid, N=0, sym=True),
+            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
+            "concentric grid with symmetry",
+        )

@@ -60,7 +60,7 @@ class Equilibrium(_Configuration, IOAble):
         minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
-        of mode numbers and spectral coefficints of the form [n, R, Z].
+        of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
@@ -401,7 +401,7 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to optimize.
-        constraint : Objective or tuple of Objective
+        constraints : Objective or tuple of Objective
             Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : Optimizer
             Optimization algorithm. Default = lsq-exact.
@@ -516,7 +516,7 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            Optimized equilibrum.
+            Optimized equilibrium.
 
         """
         import inspect

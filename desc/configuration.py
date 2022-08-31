@@ -61,7 +61,7 @@ class _Configuration(IOAble, ABC):
         minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
-        of mode numbers and spectral coefficints of the form [n, R, Z].
+        of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
@@ -556,7 +556,7 @@ class _Configuration(IOAble, ABC):
                             + "please make sure it is a valid DESC or VMEC equilibrium."
                         )
                 if not isinstance(eq, _Configuration):
-                    if hasattr(eq, "equilibria"):  # its a family!
+                    if hasattr(eq, "equilibria"):  # it's a family!
                         eq = eq[-1]
                     else:
                         raise TypeError(
@@ -605,7 +605,7 @@ class _Configuration(IOAble, ABC):
             Whether the boundary condition is specified by the last closed flux surface
             (rho=1) or the Poincare section (zeta=0).
         coord : float or None
-            Surface label (ie, rho, zeta etc) for supplied surface.
+            Surface label (ie, rho, zeta, etc.) for supplied surface.
 
         Returns
         -------
@@ -615,7 +615,7 @@ class _Configuration(IOAble, ABC):
         """
         x_lmn = np.zeros((x_basis.num_modes,))
         if mode is None:
-            # auto detect based on mode numbers
+            # auto-detect based on mode numbers
             if np.all(b_basis.modes[:, 0] == 0):
                 mode = "lcfs"
             elif np.all(b_basis.modes[:, 2] == 0):
@@ -1189,13 +1189,13 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
-                if self.iota is not None:
+                if getattr(self, "_iota", None) is not None:
                     inputs[arg] = self.iota.copy()
                     inputs[arg].grid = grid
                 else:
                     inputs[arg] = None
             elif arg == "current":
-                if self.current is not None:
+                if getattr(self, "_current", None) is not None:
                     inputs[arg] = self.current.copy()
                     inputs[arg].grid = grid
                 else:
@@ -1394,7 +1394,7 @@ class _Configuration(IOAble, ABC):
         Returns
         -------
         is_nested : bool
-            whether or not the surfaces are nested
+            whether the surfaces are nested
 
         """
         if R_lmn is None:

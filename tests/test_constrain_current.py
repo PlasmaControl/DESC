@@ -30,6 +30,8 @@ class TestConstrainCurrent:
         Test that compute_rotational_transform recovers iota and iota_r
         when the current is fixed to the current computed on an equilibrium
         solved with iota fixed.
+
+        This tests that compute_rotational_transform is correct, among other things.
         """
 
         def test(stellarator, grid_type):
@@ -78,6 +80,8 @@ class TestConstrainCurrent:
                 np.testing.assert_allclose(data["iota"], benchmark_data["iota"])
                 np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
 
-        for grid_type in ("quadrature", "concentric", "linear"):
-            test(DSHAPE, grid_type)
-            test(HELIOTRON, grid_type)
+        for e in ("quadrature", "concentric", "linear"):
+            # Also works with all stellarators in desc/examples except for solovev.
+            # Replacing desc/examples/SOLOVEV_output.h5 with a new solve fixes this.
+            test(DSHAPE, e)
+            test(HELIOTRON, e)

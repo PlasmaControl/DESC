@@ -475,11 +475,6 @@ class _Objective(IOAble, ABC):
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
-        kwargs = dict(
-            [(arg, np.zeros((self.dimensions[arg],))) for arg in self.dimensions.keys()]
-        )
-
-        # constant derivatives are pre-computed, otherwise set up Derivative instance
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
                 self._derivatives["jac"][arg] = Derivative(
@@ -550,7 +545,10 @@ class _Objective(IOAble, ABC):
 
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
-        f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
+        if self.scalar:
+            f = self.compute(*args, **kwargs)
+        else:
+            f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
     def callback(self, *args, **kwargs):

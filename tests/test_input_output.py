@@ -13,6 +13,7 @@ from desc.utils import equals
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
+from desc.equilibrium import Equilibrium
 
 
 def test_vmec_input(tmpdir_factory):
@@ -160,16 +161,33 @@ def test_writer_write_dict(writer_test_file):
     thedict = {"1": 1, "2": 2, "3": 3}
     writer = hdf5Writer(writer_test_file, "w")
     writer.write_dict(thedict)
-    writer.write_dict(thedict, where=writer.sub("subgroup"))
     with pytest.raises(SyntaxError):
         writer.write_dict(thedict, where="not a writable type")
     writer.close()
     f = h5py.File(writer_test_file, "r")
-    g = f["subgroup"]
     for key in thedict.keys():
         assert key in f.keys()
-        assert key in g.keys()
+        assert f[key][()] == thedict[key]
     f.close()
+    reader = hdf5Reader(writer_test_file)
+
+    dict1 = reader.read_dict()
+    assert dict1 == thedict
+    reader.close()
+
+
+def test_writer_write_list(writer_test_file):
+    thelist = ["1", 1, "2", 2, "3", 3]
+    writer = hdf5Writer(writer_test_file, "w")
+    writer.write_list(thelist)
+    with pytest.raises(SyntaxError):
+        writer.write_list(thelist, where="not a writable type")
+    writer.close()
+    reader = hdf5Reader(writer_test_file)
+
+    list1 = reader.read_list()
+    assert list1 == thelist
+    reader.close()
 
 
 def test_writer_write_obj(writer_test_file):
@@ -273,3 +291,12 @@ def test_copy():
         rtol=1e-10,
         atol=1e-10,
     )
+
+
+def test_save_none(tmpdir_factory):
+    tmpdir = tmpdir_factory.mktemp("none_test")
+    eq = Equilibrium()
+    eq._iota = None
+    eq.save(tmpdir + "none_test.h5")
+    eq1 = load(tmpdir + "none_test.h5")
+    assert eq1.iota is None

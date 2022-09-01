@@ -275,7 +275,7 @@ class BoundaryErrorBS(_Objective):
         Bn = jnp.sum(B_out * neval, axis=-1) * dVeval
         Kerr = B_out - (B_in + mu_0 * jnp.cross(neval, Ke, axis=1))
         Kerr = jnp.linalg.norm(Kerr, axis=-1)
-        return jnp.concatenate([Bsq_diff, Bn, Kerr.flatten()])
+        return jnp.concatenate([Bsq_diff, Bn])
 
 
 f = Dataset("wout_test_beta.vmec.nc")
@@ -371,13 +371,13 @@ out = eq1.optimize(
     verbose=3,
     options={
         "perturb_options": {"order": 2},
-        "initial_trust_radius": 1e-3,
+        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
 
-eq1.save("freeb_test_out1.h5")
-with open("freeb_beta_out1.pkl", "wb+") as f:
+eq1.save("run_surface_currents_out1.h5")
+with open("run_surface_currents_out1.pkl", "wb+") as f:
     pickle.dump(out, f)
 
 
@@ -409,14 +409,14 @@ out = eq2.optimize(
     verbose=3,
     options={
         "perturb_options": {"order": 2},
-        "initial_trust_radius": 1e-3,
+        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
 
 
-eq2.save("freeb_test_out2.h5")
-with open("freeb_beta_out2.pkl", "wb+") as f:
+eq2.save("run_surface_currents_out2.h5")
+with open("run_surface_currents_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
 
 
@@ -427,11 +427,11 @@ out = veq.optimize(
     verbose=3,
     options={
         "perturb_options": {"order": 2},
-        "initial_trust_radius": 1e-3,
+        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
 
-veq.save("freeb_test_outv.h5")
-with open("freeb_beta_outv.pkl", "wb+") as f:
+veq.save("run_surface_currents_outv.h5")
+with open("run_surface_currents_outv.pkl", "wb+") as f:
     pickle.dump(out, f)

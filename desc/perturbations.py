@@ -437,7 +437,9 @@ def optimal_perturb(
         deltas["Zb_lmn"] = dZb
     if type(dIGphi) is bool or dIGphi is None:
         if dIGphi is True:
-            deltas["IGphi_mn"] = np.ones((objective_f.dimensions["IGphi_mn"],), dtype=bool)
+            deltas["IGphi_mn"] = np.ones(
+                (objective_f.dimensions["IGphi_mn"],), dtype=bool
+            )
     elif np.any(dIGphi):
         deltas["IGphi_mn"] = dIGphi
 
@@ -479,7 +481,7 @@ def optimal_perturb(
     for constraint in constraints:
         if not constraint.built:
             constraint.build(eq, verbose=verbose)
-            
+
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective_f.args + ["IGphi_mn"]
     )
@@ -510,7 +512,11 @@ def optimal_perturb(
         ]
     ):
         x_idx = np.concatenate(
-            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys() and arg not in ("Rb_lmn", "Zb_lmn")]
+            [
+                objective_f.x_idx[arg]
+                for arg in arg_order
+                if arg in deltas.keys() and arg not in ("Rb_lmn", "Zb_lmn")
+            ]
         )
         x_idx.sort(kind="mergesort")
         dxdc = np.eye(objective_f.dim_x)[:, x_idx]

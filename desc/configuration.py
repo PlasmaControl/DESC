@@ -211,10 +211,9 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self.spectral_indexing,
         )
 
-
         self.K_basis = DoubleFourierSeries(self.M, self.N, self.NFP, sym=self._Z_sym)
-        self.IGphi_mn = jnp.zeros(self.K_basis.num_modes+2)
-        
+        self.IGphi_mn = jnp.zeros(self.K_basis.num_modes + 2)
+
         # surface and axis
         if surface is None:
             self._surface = FourierRZToroidalSurface(NFP=self.NFP)
@@ -686,7 +685,7 @@ class _Configuration(IOAble, ABC):
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
         old_modes_K = self.K_basis.modes
-        
+
         self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
@@ -703,8 +702,13 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
-        self.IGphi_mn = np.concatenate([self.IGphi_mn[:2], copy_coeffs(self.IGphi_mn[2:], old_modes_K, self.K_basis.modes)])
-        
+        self.IGphi_mn = np.concatenate(
+            [
+                self.IGphi_mn[:2],
+                copy_coeffs(self.IGphi_mn[2:], old_modes_K, self.K_basis.modes),
+            ]
+        )
+
         self._make_labels()
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):

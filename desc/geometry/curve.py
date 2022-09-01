@@ -984,7 +984,7 @@ class FourierPlanarCurve(Curve):
         transform = self._get_transforms(grid)
         r = transform.transform(r_n, dz=0)
         t = transform.grid.nodes[:, -1]
-        Z = np.zeros_like(r)
+        Z = jnp.zeros_like(r)
 
         if dt == 0:
             X = r * jnp.cos(t)

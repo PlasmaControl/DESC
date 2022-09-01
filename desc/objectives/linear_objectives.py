@@ -938,7 +938,6 @@ class FixSurfaceCurrent(_Objective):
             if None in self.target or self.target.size != self.dim_f:
                 self.target = eq.IGphi_mn[self._idx]
 
-
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)

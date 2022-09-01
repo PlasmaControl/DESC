@@ -343,10 +343,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
 
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
 
-    if len(kwargs):
-        raise ValueError(
-            f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
-        )
+    assert (
+        len(kwargs) == 0
+    ), f"plot_coefficients got unexpected keyword argument: {kwargs.keys()}"
 
     ax[0, 0].semilogy(
         np.sum(np.abs(eq.R_basis.modes[:, lmn]), axis=1), np.abs(eq.R_lmn), "bo"
@@ -434,8 +433,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     else:
         ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
 
-    if len(kwargs):
-        raise ValueError(f"plot_1d got unexpected keyword argument: {kwargs.keys()}")
+    assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
     ax.set_ylabel(label)
@@ -546,8 +544,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
 
-    if len(kwargs):
-        raise ValueError(f"plot_2d got unexpected keyword argument: {kwargs.keys()}")
+    assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -680,8 +677,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     m.set_array([])
     alpha = kwargs.pop("alpha", 1)
 
-    if len(kwargs):
-        raise ValueError(f"plot_3d got unexpected keyword argument: {kwargs.keys()}")
+    assert len(kwargs) == 0, f"plot_3d got unexpected keyword argument: {kwargs.keys()}"
 
     ax.plot_surface(
         X,
@@ -805,8 +801,9 @@ def plot_fsa(
     else:
         ax.plot(rho, values, label=kwargs.pop("label", None))
 
-    if len(kwargs):
-        raise ValueError(f"plot_fsa got unexpected keyword argument: {kwargs.keys()}")
+    assert (
+        len(kwargs) == 0
+    ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
 
     label = label.split("~")
     label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
@@ -938,10 +935,9 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
 
-    if len(kwargs):
-        raise ValueError(
-            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
-        )
+    assert (
+        len(kwargs) == 0
+    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -1060,10 +1056,10 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
     label = kwargs.pop("label", "")
-    if len(kwargs):
-        raise ValueError(
-            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
-        )
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
 
     plot_theta = bool(theta)
     nfp = eq.NFP
@@ -1314,10 +1310,11 @@ def plot_comparison(
         )
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))
-    if len(kwargs):
-        raise ValueError(
-            f"plot_comparison got unexpected keyword argument: {kwargs.keys()}"
-        )
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_comparison got unexpected keyword argument: {kwargs.keys()}"
+
     return fig, ax
 
 
@@ -1366,8 +1363,9 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
         norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         color = [cmap(norm(cur)) for cur in currents]
-    if len(kwargs):
-        raise ValueError(f"plot_coils got unexpected keyword argument: {kwargs.keys()}")
+    assert (
+        len(kwargs) == 0
+    ), f"plot_coils got unexpected keyword argument: {kwargs.keys()}"
     if not isinstance(lw, (list, tuple)):
         lw = [lw]
     if not isinstance(ls, (list, tuple)):
@@ -1493,10 +1491,11 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     modes = data["B modes"][idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
-    if len(kwargs):
-        raise ValueError(
-            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
-        )
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+
     for i in range(modes.shape[0]):
         M = modes[i, 1]
         N = modes[i, 2]
@@ -1607,10 +1606,9 @@ def plot_boozer_surface(
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
 
-    if len(kwargs):
-        raise ValueError(
-            f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
-        )
+    assert (
+        len(kwargs) == 0
+    ), f"plot_boozer_surface got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -1816,10 +1814,11 @@ def plot_qs_error(
     ax.set_xlabel(_axis_labels_rtz[0])
     if kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
-    if len(kwargs):
-        raise ValueError(
-            f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
-        )
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -1862,8 +1861,11 @@ def plot_grid(grid, **kwargs):
     """
     fig = plt.figure(figsize=kwargs.pop("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
-    if len(kwargs):
-        raise ValueError(f"plot_grid got unexpected keyword argument: {kwargs.keys()}")
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot_grid got unexpected keyword argument: {kwargs.keys()}"
+
     # node locations
     nodes = grid.nodes[np.where(grid.nodes[:, 2] == 0)]
     ax.scatter(nodes[:, 1], nodes[:, 0], s=4)

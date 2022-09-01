@@ -27,13 +27,13 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierZernikeBasis,
 )
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.coils import FourierXYZCoil, CoilSet
 
 
-def test_kwarg_warning(SOLOVEV):
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    with pytest.raises(ValueError):
+def test_kwarg_warning(DummyStellarator):
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    with pytest.raises(AssertionError):
         fig, ax = plot_1d(eq, "p", not_a_kwarg=True)
     return None
 

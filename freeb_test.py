@@ -131,15 +131,15 @@ class BoundaryErrorBS(_Objective):
 
     def build(self, eq, use_jit=True, verbose=1):
 
-        ntheta = int(1.5 * eq.M_grid)
-        nzeta = int(1.5 * eq.N_grid)
+        ntheta = eq.M_grid
+        nzeta = eq.N_grid
         if self.egrid is None:
             self.egrid = LinearGrid(M=ntheta, N=nzeta, rho=1, NFP=eq.NFP)
             self.egrid.nodes += np.array([0, np.pi / ntheta, np.pi / nzeta / eq.NFP])
         if self.sgrid is None:
             self.sgrid = LinearGrid(M=ntheta, N=nzeta, rho=1, NFP=eq.NFP)
 
-        self._dim_f = 5 * self.egrid.num_nodes
+        self._dim_f = 3 * self.egrid.num_nodes
         self.NFP = eq.NFP
 
         self.orientation = eq.orientation
@@ -274,6 +274,7 @@ class BoundaryErrorBS(_Objective):
         Bsq_diff = (Bsq_in - Bsq_out) * dVeval
         Bn = jnp.sum(B_out * neval, axis=-1) * dVeval
         Kerr = B_out - (B_in + mu_0 * jnp.cross(neval, Ke, axis=1))
+        Kerr = jnp.linalg.norm(Kerr, axis=-1)
         return jnp.concatenate([Bsq_diff, Bn, Kerr.flatten()])
 
 

@@ -969,17 +969,19 @@ def compute_vacuum_magnetic_field(
     Bpot_zeta = jnp.fft.ifft(n_potvac, axis=0) * ntheta
     Bpot_zeta = -(jnp.fft.fft(Bpot_zeta, axis=1).real[:ntheta_sym, :] * NFP).flatten()
 
+    Btot = {}
+    Btot["Bpot_theta"] = Bpot_theta
+    Btot["Bpot_zeta"] = Bpot_zeta
     # compute covariant magnetic field components: B_u, B_v
-    Bex_theta = coords["R_t"] * B_field["BR"] + coords["Z_t"] * B_field["BZ"]
-    Bex_zeta = (
+    Btot["Bex_theta"] = coords["R_t"] * B_field["BR"] + coords["Z_t"] * B_field["BZ"]
+    Btot["Bex_zeta"] = (
         coords["R_z"] * B_field["BR"]
         + coords["R"] * B_field["Bphi"]
         + coords["Z_z"] * B_field["BZ"]
     )
 
-    Btot = {}
-    Btot["B_theta"] = Bpot_theta + Bex_theta
-    Btot["B_zeta"] = Bpot_zeta + Bex_zeta
+    Btot["B_theta"] = Btot["Bpot_theta"] + Btot["Bex_theta"]
+    Btot["B_zeta"] = Btot["Bpot_zeta"] + Btot["Bex_zeta"]
 
     # TODO: for now, simply copied over from NESTOR code; have to understand what is actually done here!
     h_tz = NFP * jacobian["g_tz"]
@@ -990,6 +992,20 @@ def compute_vacuum_magnetic_field(
     Btot["B^zeta"] = (-h_tz * Btot["B_theta"] + jacobian["g_tt"] * Btot["B_zeta"]) * det
     Btot["|B|^2"] = (
         Btot["B_theta"] * Btot["B^theta"] + Btot["B_zeta"] * Btot["B^zeta"]
+    ) / 2.0
+    Btot["Bex^theta"] = (h_zz * Btot["Bex_theta"] - h_tz * Btot["Bex_zeta"]) * det
+    Btot["Bex^zeta"] = (
+        -h_tz * Btot["Bex_theta"] + jacobian["g_tt"] * Btot["Bex_zeta"]
+    ) * det
+    Btot["|Bex|^2"] = (
+        Btot["Bex_theta"] * Btot["Bex^theta"] + Btot["Bex_zeta"] * Btot["Bex^zeta"]
+    ) / 2.0
+    Btot["Bpot^theta"] = (h_zz * Btot["Bpot_theta"] - h_tz * Btot["Bpot_zeta"]) * det
+    Btot["Bpot^zeta"] = (
+        -h_tz * Btot["Bpot_theta"] + jacobian["g_tt"] * Btot["Bpot_zeta"]
+    ) * det
+    Btot["|Bpot|^2"] = (
+        Btot["Bpot_theta"] * Btot["Bpot^theta"] + Btot["Bpot_zeta"] * Btot["Bpot^zeta"]
     ) / 2.0
 
     # compute cylindrical components B^R, B^\phi, B^Z
@@ -1071,7 +1087,7 @@ class Nestor:
             nzeta = 2 * N + 6
 
         self.ext_field = ext_field
-        self.signgs = np.sign(np.mean(equil.compute_jacobian()["g"]))
+        self.signgs = np.sign(np.mean(equil.compute("sqrt(g)")["sqrt(g)"]))
         self.M = M
         self.N = N
         self.ntheta = ntheta
@@ -1083,8 +1099,18 @@ class Nestor:
         else:
             ntheta_sym = self.ntheta
 
-        bdry_grid = LinearGrid(rho=1, M=ntheta, N=nzeta, NFP=self.NFP)
-        axis_grid = LinearGrid(rho=0, theta=0, N=nzeta, NFP=self.NFP)
+        bdry_grid = LinearGrid(
+            rho=np.array([1]),
+            theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=False),
+            zeta=np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False),
+            NFP=self.NFP,
+        )
+        axis_grid = LinearGrid(
+            rho=np.array([0]),
+            theta=np.array([0]),
+            zeta=np.linspace(0, 2 * np.pi / self.NFP, nzeta),
+            NFP=self.NFP,
+        )
         self._Ra_transform = Transform(axis_grid, equil.R_basis)
         self._Za_transform = Transform(axis_grid, equil.Z_basis)
         self._Rb_transform = Transform(bdry_grid, equil.R_basis, derivs=2)

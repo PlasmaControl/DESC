@@ -34,10 +34,10 @@ def biot_savart(eval_pts, coil_pts, current):
     dvec = jnp.diff(coil_pts, axis=0)
     L = jnp.linalg.norm(dvec, axis=-1)
 
-    Ri_vec = eval_pts[:, jnp.newaxis, :] - coil_pts[:-1, jnp.newaxis, :]
+    Ri_vec = eval_pts[jnp.newaxis, :, :] - coil_pts[:-1, jnp.newaxis, :]
     Ri = jnp.linalg.norm(Ri_vec, axis=-1)
     Rf = jnp.linalg.norm(
-        eval_pts[:, jnp.newaxis, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
+        eval_pts[jnp.newaxis, :, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
     )
     Ri_p_Rf = Ri + Rf
 

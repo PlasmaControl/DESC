@@ -306,6 +306,8 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         Valid keyword arguments are:
 
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        title_font_size: integer, font size of the title
+
 
     Returns
     -------
@@ -342,6 +344,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         xlabel += "|n|"
 
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
+    title_font_size = kwargs.pop("title_font_size", None)
 
     assert (
         len(kwargs) == 0
@@ -361,9 +364,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     ax[0, 1].set_xlabel(xlabel)
     ax[0, 2].set_xlabel(xlabel)
 
-    ax[0, 0].set_title("$|R_{lmn}|$")
-    ax[0, 1].set_title("$|Z_{lmn}|$")
-    ax[0, 2].set_title("$|\\lambda_{lmn}|$")
+    ax[0, 0].set_title("$|R_{lmn}|$", fontsize=title_font_size)
+    ax[0, 1].set_title("$|Z_{lmn}|$", fontsize=title_font_size)
+    ax[0, 2].set_title("$|\\lambda_{lmn}|$", fontsize=title_font_size)
 
     fig.set_tight_layout(True)
 
@@ -468,6 +471,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         Valid keyword arguments are:
 
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        title_font_size: integer, font size of the title
         component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
         cmap: str, matplotib colormap scheme to use, passed to ax.contourf
         levels: int or array-like, passed to contourf
@@ -543,7 +547,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         )
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
-
+    title_font_size = kwargs.pop("title_font_size", None)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -566,7 +570,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
 
     ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
     ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
-    ax.set_title(label)
+    ax.set_title(label, fontsize=title_font_size)
     if norm_F:
         ax.set_title(
             "%s / %s"
@@ -606,6 +610,10 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
         alpha: float btwn [0,1.0], the transparency of the plotted surface
+        title_font_size: integer, font size of the title
+        elev: float, elevation orientation angle of 3D plot (in the z plane)
+        azim: float, azimuthal orientation angle of 3D plot (in the x,y plane)
+        dist: float, distance from the camera to the center point of the plot
 
     Returns
     -------
@@ -676,6 +684,11 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     m = plt.cm.ScalarMappable(cmap=plt.cm.jet, norm=norm)
     m.set_array([])
     alpha = kwargs.pop("alpha", 1)
+    title_font_size = kwargs.pop("title_font_size", None)
+
+    elev = kwargs.pop("elev", None)
+    azim = kwargs.pop("azim", None)
+    dist = kwargs.pop("dist", None)
 
     assert len(kwargs) == 0, f"plot_3d got unexpected keyword argument: {kwargs.keys()}"
 
@@ -696,7 +709,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     ax.set_xlabel(_axis_labels_XYZ[0])
     ax.set_ylabel(_axis_labels_XYZ[1])
     ax.set_zlabel(_axis_labels_XYZ[2])
-    ax.set_title(label)
+    ax.set_title(label, fontsize=title_font_size)
     fig.set_tight_layout(True)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
@@ -710,6 +723,11 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     y_middle = np.mean(y_limits)
     z_range = abs(z_limits[1] - z_limits[0])
     z_middle = np.mean(z_limits)
+
+    if elev is not None or azim is not None:
+        ax.view_init(elev=elev, azim=azim)
+    if dist is not None:
+        ax.dist = dist
 
     # The plot bounding box is a sphere in the sense of the infinity
     # norm, hence I call half the max range the plot radius.
@@ -845,6 +863,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         cmap: str, matplotib colormap scheme to use, passed to ax.contourf
         levels: int or array-like, passed to contourf
         nzeta: int, number of equispaced zeta planes to plot sections at (default 1 for axisymmetry and 6 for non-axisymmetry)
+        title_font_size: integer, font size of the title
 
     Returns
     -------
@@ -934,6 +953,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         )
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
+    title_font_size = kwargs.pop("title_font_size", None)
 
     assert (
         len(kwargs) == 0
@@ -971,7 +991,8 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
                     "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
                         eq.NFP * zeta[i] / (2 * np.pi)
                     ),
-                )
+                ),
+                fontsize=title_font_size,
             )
     fig.set_tight_layout(True)
     return fig, ax
@@ -1020,6 +1041,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         axis_alpha: float, transparency of the axis plotted point
         axis_marker: str, markerstyle to use for the axis plotted point
         axis_size: float, markersize to use for the axis plotted point
+        title_font_size: integer, font size of the title
 
     Returns
     -------
@@ -1056,6 +1078,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     axis_marker = kwargs.pop("axis_marker", "o")
     axis_size = kwargs.pop("axis_size", 36)
     label = kwargs.pop("label", "")
+    title_font_size = kwargs.pop("title_font_size", None)
 
     assert (
         len(kwargs) == 0
@@ -1172,7 +1195,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         ax[i].set_ylabel(_axis_labels_RPZ[2])
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi))
+            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi)),
+            fontsize=title_font_size,
         )
     fig.set_tight_layout(True)
     return fig, ax
@@ -1230,6 +1254,7 @@ def plot_comparison(
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         legend: bool, whether to display legend or not
         legend_kw: dict, any keyword arguments to be pased to ax.legend()
+        title_font_size: integer, font size of the title
 
     Returns
     -------
@@ -1250,6 +1275,8 @@ def plot_comparison(
 
     """
     figsize = kwargs.pop("figsize", None)
+    title_font_size = kwargs.pop("title_font_size", None)
+
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
@@ -1307,6 +1334,7 @@ def plot_comparison(
             axis_marker="o",
             axis_size=0,
             label=labels[i % len(labels)],
+            title_font_size=title_font_size,
         )
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))
@@ -1556,6 +1584,7 @@ def plot_boozer_surface(
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         cmap: str, matplotib colormap scheme to use, passed to ax.contourf
         levels: int or array-like, passed to contourf
+        title_font_size: integer, font size of the title
 
     Returns
     -------
@@ -1586,6 +1615,7 @@ def plot_boozer_surface(
     if grid_plot is None:
         grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True}
         grid_plot = _get_grid(**grid_kwargs)
+    title_font_size = kwargs.pop("title_font_size", None)
 
     data = eq.compute("|B|_mn", grid_compute)
     B_transform = Transform(
@@ -1633,7 +1663,7 @@ def plot_boozer_surface(
 
     ax.set_xlabel(r"$\zeta_{Boozer}$")
     ax.set_ylabel(r"$\theta_{Boozer}$")
-    ax.set_title(r"$|\mathbf{B}|~(T)$")
+    ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_font_size)
 
     fig.set_tight_layout(True)
     return fig, ax
@@ -1838,6 +1868,7 @@ def plot_grid(grid, **kwargs):
         Valid keyword arguments are:
 
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        title_font_size: integer, font size of the title
 
     Returns
     -------
@@ -1861,6 +1892,7 @@ def plot_grid(grid, **kwargs):
     """
     fig = plt.figure(figsize=kwargs.pop("figsize", (4, 4)))
     ax = plt.subplot(projection="polar")
+    title_font_size = kwargs.pop("title_font_size", None)
 
     assert (
         len(kwargs) == 0
@@ -1910,6 +1942,7 @@ def plot_grid(grid, **kwargs):
                 grid.node_pattern,
             ),
             pad=20,
+            fontsize=title_font_size,
         )
     fig.set_tight_layout(True)
     return fig, ax
@@ -1941,6 +1974,7 @@ def plot_basis(basis, **kwargs):
         cbar_ratio: float
         title_ratio: float
         cmap: str, matplotib colormap scheme to use, passed to ax.contourf
+        title_font_size: integer, font size of the title
 
 
     Examples
@@ -1956,6 +1990,8 @@ def plot_basis(basis, **kwargs):
         fig, ax = plot_basis(basis)
 
     """
+    title_font_size = kwargs.pop("title_font_size", None)
+
     if basis.__class__.__name__ == "PowerSeries":
         lmax = abs(basis.modes[:, 0]).max()
         grid = LinearGrid(rho=100, endpoint=True)
@@ -1970,7 +2006,10 @@ def plot_basis(basis, **kwargs):
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
         ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
         ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
-        ax.set_title("{}, $L={}$".format(basis.__class__.__name__, basis.L))
+        ax.set_title(
+            "{}, $L={}$".format(basis.__class__.__name__, basis.L),
+            fontsize=title_font_size,
+        )
         fig.set_tight_layout(True)
         return fig, ax
 
@@ -1991,6 +2030,7 @@ def plot_basis(basis, **kwargs):
         ax.set_yticks([-1, -0.5, 0, 0.5, 1])
         ax.set_title(
             "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
+            fontsize=title_font_size,
         )
         fig.set_tight_layout(True)
         return fig, ax
@@ -2060,6 +2100,7 @@ def plot_basis(basis, **kwargs):
                 basis.__class__.__name__, basis.M, basis.N, basis.NFP
             ),
             y=0.98,
+            fontsize=title_font_size,
         )
         return fig, ax
 
@@ -2108,6 +2149,7 @@ def plot_basis(basis, **kwargs):
                 basis.__class__.__name__, basis.L, basis.M, basis.spectral_indexing
             ),
             y=0.98,
+            fontsize=title_font_size,
         )
         fig.set_tight_layout(True)
         return fig, ax

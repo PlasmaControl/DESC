@@ -316,3 +316,21 @@ class TestJVP(unittest.TestCase):
         np.testing.assert_allclose(
             df, np.array([-33858.0, -55584.0, -77310.0, -99036.0]), rtol=1e-4
         )
+
+
+def test_jac_looped():
+
+    from numpy.random import default_rng
+
+    rng = default_rng(seed=0)
+    A = rng.random((10, 20))
+    x = rng.random(20)
+
+    def fun(x):
+        y = A @ x
+        y = y ** 2
+        return A @ jnp.concatenate([y, y])
+
+    J1 = AutoDiffDerivative(fun, mode="fwd")(x)
+    J2 = AutoDiffDerivative(fun, mode="looped")(x)
+    np.testing.assert_allclose(J1, J2)

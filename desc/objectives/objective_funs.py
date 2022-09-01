@@ -71,9 +71,11 @@ class ObjectiveFunction(IOAble):
             mode="hess",
             use_jit=use_jit,
         )
+        obj_names = [obj.__class__.__name__ for obj in self.objectives]
+        looped = any(["BoundaryError" in s for s in obj_names])
         self._jac = Derivative(
             self.compute,
-            mode="fwd",
+            mode="looped" if looped else "fwd",
             use_jit=use_jit,
         )
 

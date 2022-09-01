@@ -131,8 +131,8 @@ class BoundaryErrorBS(_Objective):
 
     def build(self, eq, use_jit=True, verbose=1):
 
-        ntheta = 4 * eq.M_grid + 1
-        nzeta = 4 * eq.N_grid + 1
+        ntheta = int(1.5 * eq.M_grid)
+        nzeta = int(1.5 * eq.N_grid)
         if self.egrid is None:
             self.egrid = LinearGrid(M=ntheta, N=nzeta, rho=1, NFP=eq.NFP)
             self.egrid.nodes += np.array([0, np.pi / ntheta, np.pi / nzeta / eq.NFP])

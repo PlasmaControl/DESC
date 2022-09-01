@@ -513,6 +513,68 @@ def compute_contravariant_basis(
     if check_derivs("e^zeta", R_transform, Z_transform):
         data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]]).T
 
+    if check_derivs("e^rho_r", R_transform, Z_transform):
+        data["e^rho_r"] = (
+            cross(data["e_theta_r"], data["e_zeta"]).T / data["sqrt(g)"]
+            + cross(data["e_theta"], data["e_zeta_r"]).T / data["sqrt(g)"]
+            + cross(data["e_theta"], data["e_zeta"]).T
+            / data["sqrt(g)"] ** 2
+            * data["sqrt(g)_r"]
+        ).T
+    if check_derivs("e^rho_t", R_transform, Z_transform):
+        data["e^rho_t"] = (
+            cross(data["e_theta_t"], data["e_zeta"]).T / data["sqrt(g)"]
+            + cross(data["e_theta"], data["e_zeta_t"]).T / data["sqrt(g)"]
+            + cross(data["e_theta"], data["e_zeta"]).T
+            / data["sqrt(g)"] ** 2
+            * data["sqrt(g)_t"]
+        ).T
+    if check_derivs("e^rho_z", R_transform, Z_transform):
+        data["e^rho_z"] = (
+            cross(data["e_theta_z"], data["e_zeta"]).T / data["sqrt(g)"]
+            + cross(data["e_theta"], data["e_zeta_z"]).T / data["sqrt(g)"]
+            + cross(data["e_theta"], data["e_zeta"]).T
+            / data["sqrt(g)"] ** 2
+            * data["sqrt(g)_z"]
+        ).T
+
+    if check_derivs("e^theta_r", R_transform, Z_transform):
+        data["e^theta_r"] = (
+            cross(data["e_zeta_r"], data["e_rho"]).T / data["sqrt(g)"]
+            + cross(data["e_zeta"], data["e_rho_r"]).T / data["sqrt(g)"]
+            + cross(data["e_zeta"], data["e_rho"]).T
+            / data["sqrt(g)"] ** 2
+            * data["sqrt(g)_r"]
+        ).T
+    if check_derivs("e^theta_t", R_transform, Z_transform):
+        data["e^theta_t"] = (
+            cross(data["e_zeta_t"], data["e_rho"]).T / data["sqrt(g)"]
+            + cross(data["e_zeta"], data["e_rho_t"]).T / data["sqrt(g)"]
+            + cross(data["e_zeta"], data["e_rho"]).T
+            / data["sqrt(g)"] ** 2
+            * data["sqrt(g)_t"]
+        ).T
+    if check_derivs("e^theta_z", R_transform, Z_transform):
+        data["e^theta_z"] = (
+            cross(data["e_zeta_z"], data["e_rho"]).T / data["sqrt(g)"]
+            + cross(data["e_zeta"], data["e_rho_z"]).T / data["sqrt(g)"]
+            + cross(data["e_zeta"], data["e_rho"]).T
+            / data["sqrt(g)"] ** 2
+            * data["sqrt(g)_z"]
+        ).T
+    if check_derivs("e^zeta_r", R_transform, Z_transform):
+        data["e^zeta_r"] = jnp.array(
+            [data["0"], -data["R_r"] / data["R"] ** 2, data["0"]]
+        ).T
+    if check_derivs("e^zeta_t", R_transform, Z_transform):
+        data["e^zeta_t"] = jnp.array(
+            [data["0"], -data["R_t"] / data["R"] ** 2, data["0"]]
+        ).T
+    if check_derivs("e^zeta_z", R_transform, Z_transform):
+        data["e^zeta_z"] = jnp.array(
+            [data["0"], -data["R_z"] / data["R"] ** 2, data["0"]]
+        ).T
+
     return data
 
 
@@ -732,6 +794,78 @@ def compute_contravariant_metric_coefficients(
     if check_derivs("g^tz", R_transform, Z_transform):
         data["g^tz"] = dot(data["e^theta"], data["e^zeta"])
 
+    if check_derivs("g^rr_r", R_transform, Z_transform):
+        data["g^rr_r"] = dot(data["e^rho_r"], data["e^rho"]) + dot(
+            data["e^rho"], data["e^rho_r"]
+        )
+    if check_derivs("g^tt_r", R_transform, Z_transform):
+        data["g^tt_r"] = dot(data["e^theta_r"], data["e^theta"]) + dot(
+            data["e^theta"], data["e^theta_r"]
+        )
+    if check_derivs("g^zz_r", R_transform, Z_transform):
+        data["g^zz_r"] = dot(data["e^zeta_r"], data["e^zeta"]) + dot(
+            data["e^zeta"], data["e^zeta_r"]
+        )
+    if check_derivs("g^rt_r", R_transform, Z_transform):
+        data["g^rt_r"] = dot(data["e^rho_r"], data["e^theta"]) + dot(
+            data["e^rho"], data["e^theta_r"]
+        )
+    if check_derivs("g^rz_r", R_transform, Z_transform):
+        data["g^rz_r"] = dot(data["e^rho_r"], data["e^zeta"]) + dot(
+            data["e^rho"], data["e^zeta_r"]
+        )
+    if check_derivs("g^tz_r", R_transform, Z_transform):
+        data["g^tz_r"] = dot(data["e^theta_r"], data["e^zeta"]) + dot(
+            data["e^theta"], data["e^zeta_r"]
+        )
+    if check_derivs("g^rr_t", R_transform, Z_transform):
+        data["g^rr_t"] = dot(data["e^rho_t"], data["e^rho"]) + dot(
+            data["e^rho"], data["e^rho_t"]
+        )
+    if check_derivs("g^tt_t", R_transform, Z_transform):
+        data["g^tt_t"] = dot(data["e^theta_t"], data["e^theta"]) + dot(
+            data["e^theta"], data["e^theta_t"]
+        )
+    if check_derivs("g^zz_t", R_transform, Z_transform):
+        data["g^zz_t"] = dot(data["e^zeta_t"], data["e^zeta"]) + dot(
+            data["e^zeta"], data["e^zeta_t"]
+        )
+    if check_derivs("g^rt_t", R_transform, Z_transform):
+        data["g^rt_t"] = dot(data["e^rho_t"], data["e^theta"]) + dot(
+            data["e^rho"], data["e^theta_t"]
+        )
+    if check_derivs("g^rz_t", R_transform, Z_transform):
+        data["g^rz_t"] = dot(data["e^rho_t"], data["e^zeta"]) + dot(
+            data["e^rho"], data["e^zeta_t"]
+        )
+    if check_derivs("g^tz_t", R_transform, Z_transform):
+        data["g^tz_t"] = dot(data["e^theta_t"], data["e^zeta"]) + dot(
+            data["e^theta"], data["e^zeta_t"]
+        )
+    if check_derivs("g^rr_z", R_transform, Z_transform):
+        data["g^rr_z"] = dot(data["e^rho_z"], data["e^rho"]) + dot(
+            data["e^rho"], data["e^rho_z"]
+        )
+    if check_derivs("g^tt_z", R_transform, Z_transform):
+        data["g^tt_z"] = dot(data["e^theta_z"], data["e^theta"]) + dot(
+            data["e^theta"], data["e^theta_z"]
+        )
+    if check_derivs("g^zz_z", R_transform, Z_transform):
+        data["g^zz_z"] = dot(data["e^zeta_z"], data["e^zeta"]) + dot(
+            data["e^zeta"], data["e^zeta_z"]
+        )
+    if check_derivs("g^rt_z", R_transform, Z_transform):
+        data["g^rt_z"] = dot(data["e^rho_z"], data["e^theta"]) + dot(
+            data["e^rho"], data["e^theta_z"]
+        )
+    if check_derivs("g^rz_z", R_transform, Z_transform):
+        data["g^rz_z"] = dot(data["e^rho_z"], data["e^zeta"]) + dot(
+            data["e^rho"], data["e^zeta_z"]
+        )
+    if check_derivs("g^tz_z", R_transform, Z_transform):
+        data["g^tz_z"] = dot(data["e^theta_z"], data["e^zeta"]) + dot(
+            data["e^theta"], data["e^zeta_z"]
+        )
     if check_derivs("|grad(rho)|", R_transform, Z_transform):
         data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
     if check_derivs("|grad(theta)|", R_transform, Z_transform):

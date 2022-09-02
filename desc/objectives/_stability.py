@@ -43,7 +43,7 @@ class MercierStability(_Objective):
     ):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Mercier Stability: {:10.3e}"
+        self._print_value_fmt = "Mercier Stability: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -181,7 +181,7 @@ class MagneticWell(_Objective):
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="Magnetic Well"):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Magnetic Well: {:10.3e}"
+        self._print_value_fmt = "Magnetic Well: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

@@ -45,7 +45,9 @@ class GenericObjective(_Objective):
         self.f = f
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
+        self._print_value_fmt = (
+            "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -180,7 +182,7 @@ class ToroidalCurrent(_Objective):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Toroidal current: {:10.3e} (A)"
+        self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

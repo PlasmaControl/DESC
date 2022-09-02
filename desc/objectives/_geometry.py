@@ -35,7 +35,7 @@ class Volume(_Objective):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Plasma volume: {:10.3e} (m^3)"
+        self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -125,7 +125,7 @@ class AspectRatio(_Objective):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+        self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

@@ -48,7 +48,7 @@ class ForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Total force: {:10.3e} " + units
+        self._print_value_fmt = "Total force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -207,7 +207,7 @@ class RadialForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Radial force: {:10.3e} " + units
+        self._print_value_fmt = "Radial force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -363,7 +363,7 @@ class HelicalForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Helical force: {:10.3e}, " + units
+        self._print_value_fmt = "Helical force: {:10.3e}, " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -520,7 +520,7 @@ class Energy(_Objective):
         self.grid = grid
         self.gamma = gamma
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Total MHD energy: {:10.3e} (J)"
+        self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -697,7 +697,7 @@ class CurrentDensity(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(A/m^2)"
-        self._callback_fmt = "Total current density: {:10.3e} " + units
+        self._print_value_fmt = "Total current density: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

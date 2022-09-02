@@ -158,12 +158,12 @@ class PowerSeriesProfile(Profile):
 
     @property
     def basis(self):
-        """Spectral basis for power series"""
+        """Spectral basis for power series."""
         return self._basis
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Default grid for computation."""
         return self._grid
 
     @grid.setter
@@ -181,7 +181,7 @@ class PowerSeriesProfile(Profile):
 
     @property
     def params(self):
-        """Parameter values"""
+        """Parameter values."""
         return self._params
 
     @params.setter
@@ -190,11 +190,12 @@ class PowerSeriesProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                f"params should have the same size as the basis, "
+                + "got {len(new)} for basis with {self._basis.num_modes} modes"
             )
 
     def get_params(self, l):
-        """Get power series coefficients for given mode number(s)"""
+        """Get power series coefficients for given mode number(s)."""
         l = np.atleast_1d(l).astype(int)
         a = np.zeros_like(l).astype(float)
 
@@ -204,7 +205,7 @@ class PowerSeriesProfile(Profile):
         return a
 
     def set_params(self, l, a=None):
-        """set specific power series coefficients"""
+        """Set specific power series coefficients."""
         l, a = np.atleast_1d(l), np.atleast_1d(a)
         a = np.broadcast_to(a, l.shape)
         for ll, aa in zip(l, a):
@@ -213,11 +214,11 @@ class PowerSeriesProfile(Profile):
                 self.params[idx] = aa
 
     def get_idx(self, l):
-        """get index into params array for given mode number(s)"""
+        """Get index into params array for given mode number(s)."""
         return self.basis.get_idx(L=l)
 
     def change_resolution(self, L):
-        """set a new maximum mode number"""
+        """Set a new maximum mode number."""
         modes_old = self.basis.modes
         self.basis.change_resolution(L)
         self._transform = self._get_transform(self.grid)
@@ -248,7 +249,9 @@ class PowerSeriesProfile(Profile):
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
-    def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=""):
+    def from_values(
+        cls, x, y, order=6, rcond=None, w=None, grid=None, sym="auto", name=""
+    ):
         """Fit a PowerSeriesProfile from point data.
 
         Parameters
@@ -269,6 +272,8 @@ class PowerSeriesProfile(Profile):
             uncertainties, use 1/sigma (not 1/sigma**2).
         grid : Grid
             default grid to use for computing values using transform method
+        sym : bool
+            Whether the basis should only contain even powers (T) or all powers (F).
         name : str
             name of the profile
 
@@ -279,10 +284,10 @@ class PowerSeriesProfile(Profile):
 
         """
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
-        return cls(params, grid=grid, name=name)
+        return cls(params, grid=grid, sym=sym, name=name)
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
-        """Convert this profile to a PowerSeriesProfile
+        """Convert this profile to a PowerSeriesProfile.
 
         Parameters
         ----------
@@ -317,7 +322,7 @@ class PowerSeriesProfile(Profile):
         return PowerSeriesProfile(params, modes, self.grid, self.name)
 
     def to_spline(self, knots=20, method="cubic2"):
-        """Convert this profile to a SplineProfile
+        """Convert this profile to a SplineProfile.
 
         Parameters
         ----------
@@ -389,7 +394,7 @@ class PowerSeriesProfile(Profile):
 
 
 class SplineProfile(Profile):
-    """Profile represented by a piecewise cubic spline
+    """Profile represented by a piecewise cubic spline.
 
 
     Parameters
@@ -442,7 +447,7 @@ class SplineProfile(Profile):
 
     @property
     def grid(self):
-        """Default grid for computation"""
+        """Default grid for computation."""
         return self._grid
 
     @grid.setter
@@ -467,7 +472,8 @@ class SplineProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the knots, got {len(new)} values for {len(self._knots)} knots"
+                f"params should have the same size as the knots, "
+                + "got {len(new)} values for {len(self._knots)} knots"
             )
 
     @property
@@ -481,7 +487,8 @@ class SplineProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the knots, got {len(new)} values for {len(self._knots)} knots"
+                f"params should have the same size as the knots, "
+                + "got {len(new)} values for {len(self._knots)} knots"
             )
 
     def _get_xq(self, grid):
@@ -497,7 +504,7 @@ class SplineProfile(Profile):
         return grid[:, 0]
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
-        """Compute values of profile at specified nodes
+        """Compute values of profile at specified nodes.
 
         Parameters
         ----------
@@ -527,7 +534,7 @@ class SplineProfile(Profile):
         return fq
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
-        """Convert this profile to a PowerSeriesProfile
+        """Convert this profile to a PowerSeriesProfile.
 
         Parameters
         ----------
@@ -560,7 +567,7 @@ class SplineProfile(Profile):
         return p
 
     def to_spline(self, knots=20, method="cubic2"):
-        """Convert this profile to a SplineProfile
+        """Convert this profile to a SplineProfile.
 
         Parameters
         ----------

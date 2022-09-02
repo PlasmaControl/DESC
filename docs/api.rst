@@ -112,6 +112,8 @@ Objective Functions
     desc.objectives.get_fixed_boundary_constraints
     desc.objectives.get_equilibrium_objective
     desc.objectives.HelicalForceBalance
+    desc.objectives.MagneticWell
+    desc.objectives.MercierStability
     desc.objectives.ObjectiveFunction   
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm

@@ -2,14 +2,13 @@ import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-
 from desc.backend import use_jax, jnp, jit
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
 from desc.compute import arg_order
 
-# XXX: could use `indicies` instead of `arg_order` in ObjectiveFunction loops
+# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -158,7 +157,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute(x) ** 2) / 2
         return f
 
-    def callback(self, x):
+    def print_value(self, x):
         """Print the value(s) of the objective.
 
         Parameters
@@ -167,11 +166,14 @@ class ObjectiveFunction(IOAble):
             State vector.
 
         """
-        f = self.compute_scalar(x)
+        if self.compiled and self._compile_mode in {"scalar", "all"}:
+            f = self.compute_scalar(x)
+        else:
+            f = jnp.sum(self.compute(x) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
-            obj.callback(**kwargs)
+            obj.print_value(**kwargs)
         return None
 
     def unpack_state(self, x):
@@ -269,7 +271,7 @@ class ObjectiveFunction(IOAble):
             mode = "scalar"
         elif mode == "auto":
             mode = "lsq"
-
+        self._compile_mode = mode
         # variable values are irrelevant for compilation
         x = np.zeros((self.dim_x,))
 
@@ -491,14 +493,14 @@ class _Objective(IOAble, ABC):
             f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
         return f
 
-    def callback(self, *args, **kwargs):
+    def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._callback_fmt.format(jnp.linalg.norm(x)))
+        print(self._print_value_fmt.format(jnp.linalg.norm(x)))
 
     def _shift_scale(self, x):
         """Apply target and weighting."""
-        return (x - self.target) * self.weight
+        return (jnp.atleast_1d(x) - self.target) * self.weight
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""

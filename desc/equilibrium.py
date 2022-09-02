@@ -346,10 +346,10 @@ class Equilibrium(_Configuration, IOAble):
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
-                    + "less than the corresponding collocation grid resolution! "
+                    + "greater than the corresponding collocation grid resolution! "
                     + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher,( i.e. like eq.N_grid=2*eq.N ) "
-                    + "To avoid this warning. "
+                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
+                    + "to avoid this warning.",
                     "yellow",
                 )
             )
@@ -373,12 +373,12 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -470,12 +470,12 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -547,7 +547,7 @@ class Equilibrium(_Configuration, IOAble):
         )
 
         if verbose > 0:
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
 
         result = None
 
@@ -596,7 +596,7 @@ class Equilibrium(_Configuration, IOAble):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.callback(objective.x(eq_new))
+                objective.print_value(objective.x(eq_new))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:

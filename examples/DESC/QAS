@@ -1,7 +1,4 @@
-# This DESC input file was auto generated from the VMEC input file
-# /home/kaya/Documents/edu/pton/plasma/DESC/current/examples/VMEC/input.QAS
-# on 09/02/2022 at 03:57:10.
-# For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
+# This DESC input file is for QAS with a fixed toroidal current profile
 
 # global parameters
 sym = 1 

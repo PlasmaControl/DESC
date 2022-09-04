@@ -32,6 +32,8 @@ class TestObjectiveFunction(unittest.TestCase):
         obj = Volume(target=10 * np.pi ** 2, weight=1 / np.pi ** 2, eq=eq)
         V = obj.compute(eq.R_lmn, eq.Z_lmn)
         np.testing.assert_allclose(V, 10)
+        V_compute_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
+        np.testing.assert_allclose(V_compute_scalar, 10)
 
     def test_aspect_ratio(self):
         eq = Equilibrium()

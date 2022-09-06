@@ -139,7 +139,7 @@ def factorize_linear_constraints(constraints, extra_args=[]):
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
-            A_ = obj.derivatives[arg]
+            A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             b_ = obj.target
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)

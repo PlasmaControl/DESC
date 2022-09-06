@@ -9,6 +9,8 @@ from desc.compute import (
     compute_contravariant_current_density,
 )
 from .objective_funs import _Objective
+import warnings
+from termcolor import colored
 
 
 class ForceBalance(_Objective):
@@ -46,7 +48,7 @@ class ForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Total force: {:10.3e} " + units
+        self._print_value_fmt = "Total force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -62,16 +64,30 @@ class ForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation=None,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation=None,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 2 * self.grid.num_nodes
 
@@ -182,7 +198,7 @@ class RadialForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Radial force: {:10.3e} " + units
+        self._print_value_fmt = "Radial force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -198,16 +214,30 @@ class RadialForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="cos",
-                node_pattern=eq.node_pattern,
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation="cos",
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = self.grid.num_nodes
 
@@ -315,7 +345,7 @@ class HelicalForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Helical force: {:10.3e}, " + units
+        self._print_value_fmt = "Helical force: {:10.3e}, " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -331,16 +361,30 @@ class HelicalForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="sin",
-                node_pattern=eq.node_pattern,
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation="sin",
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = self.grid.num_nodes
 
@@ -432,7 +476,7 @@ class Energy(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
+        Collocation grid containing the nodes to evaluate at. This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str
@@ -449,7 +493,7 @@ class Energy(_Objective):
         self.grid = grid
         self.gamma = gamma
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Total MHD energy: {:10.3e} (J)"
+        self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -465,9 +509,39 @@ class Energy(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+            if eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                warnings.warn(
+                    colored(
+                        "Energy objective built using grid "
+                        + "that is not the quadrature grid! "
+                        + "This is not recommended and may result in poor convergence. "
+                        "yellow",
+                    )
+                )
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    rotation=None,
+                    node_pattern=eq.node_pattern,
+                )
+
+            else:
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 1
 
@@ -538,7 +612,7 @@ class Energy(_Objective):
             self._pressure,
             self._gamma,
         )
-        return self._shift_scale(jnp.atleast_1d(data["W"]))
+        return self._shift_scale(data["W"])
 
     @property
     def gamma(self):
@@ -587,7 +661,7 @@ class CurrentDensity(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(A/m^2)"
-        self._callback_fmt = "Total current density: {:10.3e} " + units
+        self._print_value_fmt = "Total current density: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

@@ -48,7 +48,7 @@ def test_1d_dpdr(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_iota(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(rho=0.5, theta=np.linspace(0, 2 * np.pi, 100), zeta=0, axis=True)
+    grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
     fig, ax = plot_1d(eq, "iota", grid=grid)
     return fig
 
@@ -60,15 +60,11 @@ def test_1d_logpsi(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=72)
 def test_2d_logF(SOLOVEV):
+    # plot test is inconsistent
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=np.linspace(0, 1, 100),
-        theta=np.linspace(0, 2 * np.pi, 100),
-        zeta=0,
-        axis=True,
-    )
+    grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig, ax = plot_2d(eq, "|F|", log=True, grid=grid)
     return fig
 
@@ -76,12 +72,7 @@ def test_2d_logF(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_tz(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=0.5,
-        theta=np.linspace(0, 2 * np.pi, 100),
-        zeta=np.linspace(0, 2 * np.pi, 100),
-        axis=True,
-    )
+    grid = LinearGrid(rho=0.5, theta=100, zeta=100)
     fig, ax = plot_2d(eq, "sqrt(g)", grid=grid)
     return fig
 
@@ -89,12 +80,7 @@ def test_2d_g_tz(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_rz(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=np.linspace(0, 1, 100),
-        theta=0,
-        zeta=np.linspace(0, 2 * np.pi, 100),
-        axis=True,
-    )
+    grid = LinearGrid(rho=100, theta=0.0, zeta=100)
     fig, ax = plot_2d(eq, "sqrt(g)", grid=grid)
     return fig
 
@@ -116,12 +102,7 @@ def test_3d_B(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_J(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=1,
-        theta=np.linspace(0, 2 * np.pi, 100),
-        zeta=np.linspace(0, 2 * np.pi, 100),
-        axis=True,
-    )
+    grid = LinearGrid(rho=1.0, theta=100, zeta=100)
     fig, ax = plot_3d(eq, "J^theta", grid=grid)
     return fig
 
@@ -129,12 +110,7 @@ def test_3d_J(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_tz(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=0.5,
-        theta=np.linspace(0, 2 * np.pi, 100),
-        zeta=np.linspace(0, 2 * np.pi, 100),
-        axis=True,
-    )
+    grid = LinearGrid(rho=0.5, theta=100, zeta=100)
     fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
     return fig
 
@@ -142,12 +118,7 @@ def test_3d_tz(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rz(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=np.linspace(0, 1, 100),
-        theta=0,
-        zeta=np.linspace(0, 2 * np.pi, 100),
-        axis=True,
-    )
+    grid = LinearGrid(rho=100, theta=0.0, zeta=100)
     fig, ax = plot_3d(eq, "p", grid=grid)
     return fig
 
@@ -155,9 +126,7 @@ def test_3d_rz(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rt(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    grid = LinearGrid(
-        rho=np.linspace(0, 1, 100), theta=np.linspace(0, 2 * np.pi, 100), zeta=0
-    )
+    grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig, ax = plot_3d(eq, "psi", grid=grid)
     return fig
 
@@ -278,7 +247,7 @@ def test_plot_gradpsi(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=55)
 def test_plot_normF_2d(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|F|", norm_F=True)
@@ -308,7 +277,7 @@ def test_plot_logo():
 class TestPlotGrid(unittest.TestCase):
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_linear(self):
-        grid = LinearGrid(L=10, M=10, N=1)
+        grid = LinearGrid(rho=10, theta=10, zeta=1)
         fig, ax = plot_grid(grid)
         return fig
 
@@ -374,7 +343,7 @@ class TestPlotBasis(unittest.TestCase):
 class TestPlotFieldLines(unittest.TestCase):
     def test_find_idx(self):
         # pick the first grid node point, add epsilon to it, check it returns idx of 0
-        grid = LinearGrid(L=2, M=2, N=2, axis=False)
+        grid = LinearGrid(L=1, M=2, N=2, axis=False)
         epsilon = np.finfo(float).eps
         test_point = grid.nodes[0, :] + epsilon
         idx = _find_idx(*test_point, grid=grid)

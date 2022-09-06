@@ -1,12 +1,11 @@
 import numpy as np
-from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import (
     data_index,
-    compute_boozer_coords,
+    compute_boozer_coordinates,
     compute_quasisymmetry_error,
 )
 from .objective_funs import _Objective
@@ -59,7 +58,7 @@ class QuasisymmetryBoozer(_Objective):
         self.N_booz = N_booz
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T)"
-        self._callback_fmt = (
+        self._print_value_fmt = (
             "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
             )
@@ -86,12 +85,7 @@ class QuasisymmetryBoozer(_Objective):
             self.N_booz = 2 * eq.N
         if self.grid is None:
             self.grid = LinearGrid(
-                L=1,
-                M=3 * self.M_booz + 1,
-                N=3 * self.N_booz + 1,
-                NFP=eq.NFP,
-                sym=False,
-                rho=1,
+                M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
             )
 
         timer = Timer()
@@ -179,7 +173,7 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        data = compute_boozer_coords(
+        data = compute_boozer_coordinates(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -210,9 +204,9 @@ class QuasisymmetryBoozer(_Objective):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
-        if hasattr(self, "_callback_fmt"):
+        if hasattr(self, "_print_value_fmt"):
             units = "(T)"
-            self._callback_fmt = (
+            self._print_value_fmt = (
                 "Quasi-symmetry ({},{}) Boozer error: ".format(
                     self.helicity[0], self.helicity[1]
                 )
@@ -260,7 +254,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self.helicity = helicity
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T^3)"
-        self._callback_fmt = (
+        self._print_value_fmt = (
             "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
             + "{:10.3e} "
             + units
@@ -280,14 +274,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(
-                L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=1,
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
 
@@ -369,9 +356,9 @@ class QuasisymmetryTwoTerm(_Objective):
             and (int(helicity[1]) == helicity[1])
         )
         self._helicity = helicity
-        if hasattr(self, "_callback_fmt"):
+        if hasattr(self, "_print_value_fmt"):
             units = "(T^3)"
-            self._callback_fmt = (
+            self._print_value_fmt = (
                 "Quasi-symmetry ({},{}) error: ".format(
                     self.helicity[0], self.helicity[1]
                 )
@@ -415,7 +402,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T^4/m^2)"
-        self._callback_fmt = "Quasi-symmetry error: {:10.3e} " + units
+        self._print_value_fmt = "Quasi-symmetry error: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -431,14 +418,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(
-                L=1,
-                M=2 * eq.M_grid + 1,
-                N=2 * eq.N_grid + 1,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                rho=1,
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
 

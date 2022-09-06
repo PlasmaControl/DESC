@@ -76,7 +76,7 @@ class Profile(IOAble, ABC):
         """Set default params for computation."""
 
     @abstractmethod
-    def compute(params=None, grid=None, dr=0, dt=0, dz=0):
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values on specified nodes, default to using self.params."""
 
     def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
@@ -215,6 +215,7 @@ class Profile(IOAble, ABC):
             name=self.name,
             **kwargs,
         )
+
 
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
@@ -632,7 +633,8 @@ class PowerSeriesProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                f"params should have the same size as the basis, got {new.size} for basis with {self._basis.num_modes} modes"
+                f"params should have the same size as the basis, "
+                + "got {len(new)} for basis with {self._basis.num_modes} modes"
             )
 
     def get_params(self, l):
@@ -686,8 +688,10 @@ class PowerSeriesProfile(Profile):
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod
-    def from_values(cls, x, y, order=6, rcond=None, w=None, grid=None, name=""):
-        """Fit a PowerSeriesProfile from point data
+    def from_values(
+        cls, x, y, order=6, rcond=None, w=None, grid=None, sym="auto", name=""
+    ):
+        """Fit a PowerSeriesProfile from point data.
 
         Parameters
         ----------
@@ -707,6 +711,8 @@ class PowerSeriesProfile(Profile):
             uncertainties, use 1/sigma (not 1/sigma**2).
         grid : Grid
             default grid to use for computing values using transform method
+        sym : bool
+            Whether the basis should only contain even powers (T) or all powers (F).
         name : str
             name of the profile
 
@@ -717,7 +723,7 @@ class PowerSeriesProfile(Profile):
 
         """
         params = np.polyfit(x, y, order, rcond=rcond, w=w, full=False)[::-1]
-        return cls(params, grid=grid, name=name)
+        return cls(params, grid=grid, sym=sym, name=name)
 
 
 class SplineProfile(Profile):
@@ -761,6 +767,150 @@ class SplineProfile(Profile):
         self._Dx = _approx_df(
             self._knots, np.eye(self._knots.size), self._method, axis=0
         )
+
+    def __repr__(self):
+        s = super().__repr__()
+        s = s[:-1]
+        s += ", method={}, num_knots={})".format(self._method, len(self._knots))
+        return s
+
+    @property
+    def grid(self):
+        """Default grid for computation."""
+        return self._grid
+
+    @grid.setter
+    def grid(self, new):
+        if isinstance(new, Grid):
+            self._grid = new
+        elif isinstance(new, (np.ndarray, jnp.ndarray)):
+            self._grid = Grid(new, sort=False)
+        else:
+            raise TypeError(
+                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+            )
+
+    @property
+    def params(self):
+        """Alias for values"""
+        return self._params
+
+    @params.setter
+    def params(self, new):
+        if len(new) == len(self._knots):
+            self._params = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"params should have the same size as the knots, "
+                + "got {len(new)} values for {len(self._knots)} knots"
+            )
+
+    @property
+    def values(self):
+        """Value of the function at knots"""
+        return self._params
+
+    @values.setter
+    def values(self, new):
+        if len(new) == len(self._knots):
+            self._params = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"params should have the same size as the knots, "
+                + "got {len(new)} values for {len(self._knots)} knots"
+            )
+
+    def _get_xq(self, grid):
+        if grid is None:
+            return self.grid.nodes[:, 0]
+        if isinstance(grid, Grid):
+            return grid.nodes[:, 0]
+        if np.isscalar(grid):
+            return np.linspace(0, 1, grid)
+        grid = np.atleast_1d(grid)
+        if grid.ndim == 1:
+            return grid
+        return grid[:, 0]
+
+    def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
+        """Compute values of profile at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray, shape(k,) or (k,3)
+            locations to compute values at
+        params : array-like
+            spline values to use. If not given, uses the
+            values given by the params attribute
+        dr, dt, dz : int
+            derivative order in rho, theta, zeta
+
+        Returns
+        -------
+        values : ndarray
+            values of the profile or its derivative at the points specified
+
+        """
+        if params is None:
+            params = self.params
+        xq = self._get_xq(grid)
+        if dt != 0 or dz != 0:
+            return jnp.zeros_like(xq)
+        x = self._knots
+        f = params
+        df = self._Dx @ f
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
+        return fq
+
+    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
+        """Convert this profile to a PowerSeriesProfile.
+
+        Parameters
+        ----------
+        order : int
+            polynomial order
+        xs : int or ndarray
+            x locations to use for fit. If an integer, uses that many points linearly
+            spaced between 0,1
+        rcond : float
+            Relative condition number of the fit. Singular values smaller than this
+            relative to the largest singular value will be ignored. The default value
+            is len(x)*eps, where eps is the relative precision of the float type, about
+            2e-16 in most cases.
+        w : array-like, shape(M,)
+            Weights to apply to the y-coordinates of the sample points. For gaussian
+            uncertainties, use 1/sigma (not 1/sigma**2).
+
+        Returns
+        -------
+        profile : PowerSeriesProfile
+            profile in power series form.
+
+        """
+        if np.isscalar(xs):
+            xs = np.linspace(0, 1, xs)
+        fs = self.compute(grid=xs)
+        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
+        p.grid = self.grid
+        p.name = self.name
+        return p
+
+    def to_spline(self, knots=20, method="cubic2"):
+        """Convert this profile to a SplineProfile.
+
+        Parameters
+        ----------
+        knots : int or ndarray
+            x locations to use for spline. If an integer, uses that many points linearly
+            spaced between 0,1
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+>>>>>>> master
 
     def __repr__(self):
         """String form of the object."""

@@ -3,13 +3,8 @@ from termcolor import colored
 import warnings
 
 from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import LinearGrid
-from desc.basis import (
-    zernike_radial_coeffs,
-)
+from desc.basis import zernike_radial_coeffs
 from desc.profiles import PowerSeriesProfile, SplineProfile
-from desc.compute import compute_rotational_transform
 from .objective_funs import _Objective
 
 
@@ -63,7 +58,7 @@ class FixBoundaryR(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "R boundary error: {:10.3e} (m)"
+        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
 
         if self._fixed_boundary:
             self.compute = self._compute_R
@@ -193,7 +188,7 @@ class FixBoundaryZ(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Z boundary error: {:10.3e} (m)"
+        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
 
         if self._fixed_boundary:
             self.compute = self._compute_Z
@@ -306,7 +301,7 @@ class FixLambdaGauge(_Objective):
     def __init__(self, eq=None, target=0, weight=1, name="lambda gauge"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "lambda gauge error: {:10.3e} (m)"
+        self._print_value_fmt = "lambda gauge error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -453,7 +448,7 @@ class FixPressure(_Objective):
         self._profile = profile
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
+        self._print_value_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -635,7 +630,7 @@ class FixIota(_Objective):
         self._profile = profile
         self._modes = modes
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Fixed-iota profile error: {:10.3e}"
+        self._print_value_fmt = "Fixed-iota profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -799,7 +794,7 @@ class FixPsi(_Objective):
     def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
+        self._print_value_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

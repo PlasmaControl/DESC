@@ -188,21 +188,24 @@ class TestGrid(unittest.TestCase):
                 ),
                 np.array(
                     [
-                        2 / 3 * np.pi,
-                        2 / 3 * np.pi / 3,
-                        2 * np.pi / 3 + 2 / 3 * np.pi / 3,
-                        2 / 3 * np.pi / 5,
-                        2 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        4 * np.pi / 5 + 2 / 3 * np.pi / 5,
+                        np.pi / 2,
+                        np.pi / 4,
+                        3 * np.pi / 4,
+                        np.pi / 6,
+                        np.pi / 2,
+                        5 * np.pi / 6,
                     ]
                 ),
                 np.zeros((6,)),
             ]
         ).T
 
-        np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, atol=1e-8)
-        np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
-
+        np.testing.assert_allclose(
+            grid_ansi.nodes, ansi_nodes, atol=1e-8, err_msg="ansi"
+        )
+        np.testing.assert_allclose(
+            grid_fringe.nodes, fringe_nodes, atol=1e-8, err_msg="fringe"
+        )
         self.assertAlmostEqual(np.sum(grid_ansi.weights), (2 * np.pi) ** 2 / NFP)
 
     def test_quadrature_grid(self):
@@ -289,29 +292,25 @@ class TestGrid(unittest.TestCase):
         assert cg.M == 4
         assert cg.N == 5
 
-    # FIXME: required rotation="cos" for the concentric grid to pass
-    def test_symmetry(self):
+    def test_symmetry_1(self):
         def test(grid, err_msg):
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
+            true_avg = 5
             f = (
-                5
+                true_avg
                 + np.cos(t)
                 - 0.5 * np.cos(z)
                 + 3 * np.cos(t) * np.cos(z)
                 - 2 * np.sin(z) * np.sin(t)
             )
-            avg = surface_averages(grid, f)
-            np.testing.assert_allclose(avg, 5, err_msg=err_msg)
+            numerical_avg = surface_averages(grid, f)
+            np.testing.assert_allclose(numerical_avg, true_avg, err_msg=err_msg)
 
-        g1 = LinearGrid(L=3, M=6, N=3, NFP=3, sym=True)
-        g2 = QuadratureGrid(L=3, M=6, N=3, NFP=3)
-        g3 = ConcentricGrid(L=3, M=6, N=3, NFP=3, sym=True)
-        grids = {g1: "LinearGrid", g2: "QuadratureGrid", g3: "ConcentricGrid"}
-        for g, msg in grids.items():
-            test(g, msg)
+        test(LinearGrid(L=6, M=6, N=3, NFP=5, sym=True), "LinearGrid")
+        test(QuadratureGrid(L=6, M=6, N=3, NFP=5), "QuadratureGrid")
+        test(ConcentricGrid(L=6, M=6, N=3, NFP=5, sym=True), "ConcentricGrid")
 
-    # TODO: combine with above test once above test is fixed
     def test_symmetry_2(self):
         def test(grid, basis, err_msg, true_avg=1):
             transform = Transform(grid, basis)
@@ -334,20 +333,20 @@ class TestGrid(unittest.TestCase):
         test(
             QuadratureGrid(L=M_grid, M=M_grid, N=0),
             FourierZernikeBasis(L=M, M=M, N=0),
-            "quadrature grid",
+            "QuadratureGrid",
         )
         test(
             LinearGrid(L=M_grid, M=M_grid, N=0, sym=True),
             FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
-            "linear grid with symmetry",
+            "LinearGrid with symmetry",
         )
         test(
             ConcentricGrid(L=M_grid, M=M_grid, N=0),
             FourierZernikeBasis(L=M, M=M, N=0),
-            "concentric grid without symmetry",
+            "ConcentricGrid without symmetry",
         )
         test(
             ConcentricGrid(L=M_grid, M=M_grid, N=0, sym=True),
             FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
-            "concentric grid with symmetry",
+            "ConcentricGrid with symmetry",
         )

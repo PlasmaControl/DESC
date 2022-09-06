@@ -416,11 +416,6 @@ class LinearGrid(Grid):
             node spacing, based on local volume around the node
 
         """
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
-
         # rho
         if self.L is not None:
             rho = self.L + 1
@@ -594,11 +589,6 @@ class QuadratureGrid(Grid):
             node spacing, based on local volume around the node
 
         """
-        self._L = L
-        self._M = M
-        self._N = N
-        self._NFP = NFP
-
         L = self.L + 1
         M = 2 * self.M + 1
         N = 2 * self.N + 1

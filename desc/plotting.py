@@ -405,6 +405,8 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
         label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
 
     Examples
     --------
@@ -435,11 +437,13 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
     else:
         ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
 
-    ax.set_xlabel(_axis_labels_rtz[plot_axes[0]])
-    ax.set_ylabel(label)
+    ax.set_xlabel(_axis_labels_rtz[plot_axes[0]], fontsize=xlabel_fontsize)
+    ax.set_ylabel(label, fontsize=ylabel_fontsize)
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -475,7 +479,8 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
         cmap: str, matplotib colormap scheme to use, passed to ax.contourf
         levels: int or array-like, passed to contourf
-
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
 
     Returns
     -------
@@ -548,6 +553,8 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
     title_font_size = kwargs.pop("title_font_size", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert len(kwargs) == 0, f"plot_2d got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
@@ -568,8 +575,8 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
 
-    ax.set_xlabel(_axis_labels_rtz[plot_axes[1]])
-    ax.set_ylabel(_axis_labels_rtz[plot_axes[0]])
+    ax.set_xlabel(_axis_labels_rtz[plot_axes[1]], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_axis_labels_rtz[plot_axes[0]], fontsize=ylabel_fontsize)
     ax.set_title(label, fontsize=title_font_size)
     if norm_F:
         ax.set_title(
@@ -614,6 +621,9 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         elev: float, elevation orientation angle of 3D plot (in the z plane)
         azim: float, azimuthal orientation angle of 3D plot (in the x,y plane)
         dist: float, distance from the camera to the center point of the plot
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
+        zlabel_fontsize: float, fontsize of the zlabel
 
     Returns
     -------
@@ -690,6 +700,10 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     azim = kwargs.pop("azim", None)
     dist = kwargs.pop("dist", None)
 
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+    zlabel_fontsize = kwargs.pop("zlabel_fontsize", None)
+
     assert len(kwargs) == 0, f"plot_3d got unexpected keyword argument: {kwargs.keys()}"
 
     ax.plot_surface(
@@ -706,9 +720,9 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     )
     fig.colorbar(m)
 
-    ax.set_xlabel(_axis_labels_XYZ[0])
-    ax.set_ylabel(_axis_labels_XYZ[1])
-    ax.set_zlabel(_axis_labels_XYZ[2])
+    ax.set_xlabel(_axis_labels_XYZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_axis_labels_XYZ[1], fontsize=ylabel_fontsize)
+    ax.set_zlabel(_axis_labels_XYZ[2], fontsize=zlabel_fontsize)
     ax.set_title(label, fontsize=title_font_size)
     fig.set_tight_layout(True)
 
@@ -779,6 +793,8 @@ def plot_fsa(
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which element to plot. Default is the norm of the vector.
         label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
 
     Returns
     -------
@@ -818,7 +834,8 @@ def plot_fsa(
         ax.semilogy(rho, values, label=kwargs.pop("label", None))
     else:
         ax.plot(rho, values, label=kwargs.pop("label", None))
-
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
         len(kwargs) == 0
     ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
@@ -826,8 +843,8 @@ def plot_fsa(
     label = label.split("~")
     label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
 
-    ax.set_xlabel(_axis_labels_rtz[0])
-    ax.set_ylabel(label)
+    ax.set_xlabel(_axis_labels_rtz[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(label, fontsize=ylabel_fontsize)
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -864,6 +881,8 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         levels: int or array-like, passed to contourf
         nzeta: int, number of equispaced zeta planes to plot sections at (default 1 for axisymmetry and 6 for non-axisymmetry)
         title_font_size: integer, font size of the title
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
 
     Returns
     -------
@@ -954,7 +973,8 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
     contourf_kwargs["extend"] = "both"
     title_font_size = kwargs.pop("title_font_size", None)
-
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
         len(kwargs) == 0
     ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
@@ -969,8 +989,8 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         cbar = fig.colorbar(cntr, cax=cax)
         cbar.update_ticks()
 
-        ax[i].set_xlabel(_axis_labels_RPZ[0])
-        ax[i].set_ylabel(_axis_labels_RPZ[2])
+        ax[i].set_xlabel(_axis_labels_RPZ[0], fontsize=xlabel_fontsize)
+        ax[i].set_ylabel(_axis_labels_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             "$"
@@ -1042,6 +1062,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         axis_marker: str, markerstyle to use for the axis plotted point
         axis_size: float, markersize to use for the axis plotted point
         title_font_size: integer, font size of the title
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1079,6 +1101,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     axis_size = kwargs.pop("axis_size", 36)
     label = kwargs.pop("label", "")
     title_font_size = kwargs.pop("title_font_size", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     assert (
         len(kwargs) == 0
@@ -1191,8 +1215,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
                 s=axis_size,
             )
 
-        ax[i].set_xlabel(_axis_labels_RPZ[0])
-        ax[i].set_ylabel(_axis_labels_RPZ[2])
+        ax[i].set_xlabel(_axis_labels_RPZ[0], fontsize=xlabel_fontsize)
+        ax[i].set_ylabel(_axis_labels_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
             "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi)),
@@ -1255,6 +1279,8 @@ def plot_comparison(
         legend: bool, whether to display legend or not
         legend_kw: dict, any keyword arguments to be pased to ax.legend()
         title_font_size: integer, font size of the title
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1276,7 +1302,8 @@ def plot_comparison(
     """
     figsize = kwargs.pop("figsize", None)
     title_font_size = kwargs.pop("title_font_size", None)
-
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     neq = len(eqs)
     if colors is None:
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
@@ -1335,6 +1362,8 @@ def plot_comparison(
             axis_size=0,
             label=labels[i % len(labels)],
             title_font_size=title_font_size,
+            xlabel_fontsize=xlabel_fontsize,
+            ylabel_fontsize=ylabel_fontsize
         )
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))

@@ -322,7 +322,7 @@ class VMECIO:
         am[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         am[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.pressure(r_full), order=10
+            s_full, eq.pressure(r_full), order=10, sym=False
         ).params
 
         ai = file.createVariable("ai", np.float64, ("preset",))
@@ -330,7 +330,7 @@ class VMECIO:
         ai[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         ai[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.iota(r_full), order=10
+            s_full, eq.iota(r_full), order=10, sym=False
         ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
@@ -441,7 +441,7 @@ class VMECIO:
         if not eq.sym:
             zaxis_cc = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
             zaxis_cc.long_name = "cos(n*p) component of magnetic axis Z coordinate"
-            zaxis_cc[1:] = Z0_n[N:]
+            zaxis_cc[:] = Z0_n[N:]
 
         # R
         timer.start("R")
@@ -509,9 +509,10 @@ class VMECIO:
 
         grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
         coords = eq.compute("R", grid)
+        sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
+        cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
+        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
         if eq.sym:
-            sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
-            cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
             sin_transform = Transform(
                 grid=grid, basis=sin_basis, build=False, build_pinv=True
             )
@@ -519,7 +520,6 @@ class VMECIO:
                 grid=grid, basis=cos_basis, build=False, build_pinv=True
             )
         else:
-            full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
             full_transform = Transform(
                 grid=grid, basis=full_basis, build=False, build_pinv=True
             )

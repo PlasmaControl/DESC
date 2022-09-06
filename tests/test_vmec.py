@@ -168,6 +168,14 @@ def test_load_then_save(TmpDir):
     file2.close()
 
 
+def test_vmec_save_asym(TmpDir):
+    """Tests that saving a non-symmetric equilibrium runs without errors."""
+
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(L=2, M=2, N=2, NFP=3, pressure=np.array([[2, 0]]), sym=False)
+    VMECIO.save(eq, output_path)
+
+
 @pytest.mark.slow
 def test_vmec_save(DSHAPE, TmpDir):
     """Tests that saving in NetCDF format agrees with VMEC."""

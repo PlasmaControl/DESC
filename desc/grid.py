@@ -1,4 +1,6 @@
 import numpy as np
+import warnings
+from termcolor import colored
 
 from desc.io import IOAble
 from scipy import special
@@ -742,6 +744,14 @@ class ConcentricGrid(Grid):
             node spacing, based on local volume around the node
 
         """
+        if not (L == M or L == 2 * M):
+            warnings.warn(
+                colored(
+                    "Not using either ANSI (L=M) or Fringe (L=2*M) "
+                    + "concentric grid node patterns.",
+                    "yellow",
+                )
+            )
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”

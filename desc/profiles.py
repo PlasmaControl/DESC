@@ -216,7 +216,6 @@ class Profile(IOAble, ABC):
             **kwargs,
         )
 
-
     def __call__(self, grid=None, params=None, dr=0, dt=0, dz=0):
         """Evaluate the profile at a given set of points."""
         return self.compute(params, grid, dr, dt, dz)

@@ -45,8 +45,8 @@ jobs:
         with:
           name: my-artifact
           path: |
-          ./cov.xml
-          ./mpl_results.html
+            ./cov.xml
+            ./mpl_results.html
       - name: Upload coverage
         uses: codecov/codecov-action@v2
         with:

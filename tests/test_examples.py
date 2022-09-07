@@ -136,7 +136,7 @@ def test_example_get_eqf():
 
 
 def test_example_get_boundary():
-    surf = desc.examples.get("heliotron", "boundary")
+    surf = desc.examples.get("HELIOTRON", "boundary")
     np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
 
@@ -146,14 +146,34 @@ def test_example_get_pressure():
 
 
 def test_example_get_iota():
-    iota = desc.examples.get("ESTELL", "iota")
+    iota = desc.examples.get("NCSX", "iota")
     np.testing.assert_allclose(
         iota.params[:5],
         [
-            2.04073045e-01,
-            4.18054555e-02,
-            -2.42407677e-01,
-            7.78946528e-01,
-            -1.14166816e00,
+            3.49197642e-01,
+            6.81105159e-01,
+            -1.29781695e00,
+            2.07888586e00,
+            -1.15800135e00,
+        ],
+    )
+
+
+def test_example_get_current():
+    iota = desc.examples.get("QAS", "current")
+    np.testing.assert_allclose(
+        iota.params[:11],
+        [
+            0.00000000e00,
+            -5.30230329e03,
+            -4.65196499e05,
+            2.31960013e06,
+            -1.20570566e07,
+            4.17520547e07,
+            -9.51373229e07,
+            1.38268651e08,
+            -1.23703891e08,
+            6.24782996e07,
+            -1.36284423e07,
         ],
     )

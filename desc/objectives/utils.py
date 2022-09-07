@@ -12,11 +12,12 @@ from .linear_objectives import (
     FixPressure,
     FixIota,
     FixPsi,
+    PoincareLambda,
 )
 from ._equilibrium import ForceBalance, RadialForceBalance, HelicalForceBalance, Energy
 
 
-def get_fixed_boundary_constraints():
+def get_fixed_boundary_constraints(poincare=False):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Returns
@@ -25,14 +26,24 @@ def get_fixed_boundary_constraints():
         A list of the linear constraints used in fixed-boundary problems.
 
     """
-    constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
-        LambdaGauge(),
-        FixPressure(),
-        FixIota(),
-        FixPsi(),
-    )
+    if not poincare:
+        constraints = (
+            FixBoundaryR(fixed_boundary=True),
+            FixBoundaryZ(fixed_boundary=True),
+            LambdaGauge(),
+            FixPressure(),
+            FixIota(),
+            FixPsi(),
+        )
+    else:
+        constraints = (
+            FixBoundaryR(fixed_boundary=True),
+            FixBoundaryZ(fixed_boundary=True),
+            PoincareLambda(),
+            FixPressure(),
+            FixIota(),
+            FixPsi(),
+        )
     return constraints
 
 

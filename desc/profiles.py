@@ -780,14 +780,7 @@ class SplineProfile(Profile):
 
     @grid.setter
     def grid(self, new):
-        if isinstance(new, Grid):
-            self._grid = new
-        elif isinstance(new, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(new, sort=False)
-        else:
-            raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
-            )
+        Profile.grid.fset(self, new)
 
     @property
     def params(self):

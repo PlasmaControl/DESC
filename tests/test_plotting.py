@@ -291,7 +291,7 @@ class TestPlotGrid(unittest.TestCase):
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_quad(self):
         grid = QuadratureGrid(L=10, M=10, N=1)
-        fig, ax = plot_grid(grid)
+        fig, ax = plot_grid(grid, figsize=(6, 6))
         return fig
 
     @pytest.mark.mpl_image_compare(tolerance=50)

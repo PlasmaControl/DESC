@@ -1,4 +1,3 @@
-from turtle import color
 from matplotlib import rcParams, cycler
 import matplotlib
 import numpy as np
@@ -448,7 +447,14 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
             lw=lw,
         )
     else:
-        ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
+        ax.plot(
+            grid.nodes[:, plot_axes[0]],
+            data,
+            label=kwargs.pop("label", None),
+            color=linecolor,
+            ls=ls,
+            lw=lw,
+        )
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 

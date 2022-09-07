@@ -1,3 +1,4 @@
+from turtle import color
 from matplotlib import rcParams, cycler
 import matplotlib
 import numpy as np
@@ -407,7 +408,9 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
         xlabel_fontsize: float, fontsize of the xlabel
         ylabel_fontsize: float, fontsize of the ylabel
-
+        linecolor: str or tuple, color to use for plot line
+        ls: str, linestyle to use for plot line
+        lw: float, linewidth to use for plot line
     Examples
     --------
 
@@ -431,10 +434,19 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
 
     # reshape data to 1D
     data = data.flatten()
-
+    linecolor = kwargs.pop("linecolor", colorblind_colors[0])
+    ls = kwargs.pop("ls", "-")
+    lw = kwargs.pop("lw", 1)
     if log:
         data = np.abs(data)  # ensure data is positive for log plot
-        ax.semilogy(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
+        ax.semilogy(
+            grid.nodes[:, plot_axes[0]],
+            data,
+            label=kwargs.pop("label", None),
+            color=linecolor,
+            ls=ls,
+            lw=lw,
+        )
     else:
         ax.plot(grid.nodes[:, plot_axes[0]], data, label=kwargs.pop("label", None))
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
@@ -795,6 +807,9 @@ def plot_fsa(
         label: str, label of the plotted line (e.g. to be shown with plt.legend() or ax.legend())
         xlabel_fontsize: float, fontsize of the xlabel
         ylabel_fontsize: float, fontsize of the ylabel
+        linecolor: str or tuple, color to use for plot line
+        ls: str, linestyle to use for plot line
+        lw: float, linewidth to use for plot line
 
     Returns
     -------
@@ -821,7 +836,9 @@ def plot_fsa(
         M = eq.M_grid
     if N is None:
         N = eq.N_grid
-
+    linecolor = kwargs.pop("linecolor", colorblind_colors[0])
+    ls = kwargs.pop("ls", "-")
+    lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
@@ -831,9 +848,13 @@ def plot_fsa(
 
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
-        ax.semilogy(rho, values, label=kwargs.pop("label", None))
+        ax.semilogy(
+            rho, values, label=kwargs.pop("label", None), color=linecolor, ls=ls, lw=lw
+        )
     else:
-        ax.plot(rho, values, label=kwargs.pop("label", None))
+        ax.plot(
+            rho, values, label=kwargs.pop("label", None), color=linecolor, ls=ls, lw=lw
+        )
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
@@ -1363,7 +1384,7 @@ def plot_comparison(
             label=labels[i % len(labels)],
             title_font_size=title_font_size,
             xlabel_fontsize=xlabel_fontsize,
-            ylabel_fontsize=ylabel_fontsize
+            ylabel_fontsize=ylabel_fontsize,
         )
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))

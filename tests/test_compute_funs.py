@@ -545,8 +545,8 @@ def test_compute_dmerc(DSHAPE, HELIOTRON):
 
     test(DSHAPE, "DSHAPE", (0.175, 0.785))
     test(DSHAPE, "DSHAPE", (0.785, 1), atol=53e-3)
-    test(HELIOTRON, "HELIOTRON", (0.1, 0.275), rtol=135e-3)
-    test(HELIOTRON, "HELIOTRON", (0.3, 0.95), rtol=5e-2)
+    test(HELIOTRON, "HELIOTRON", (0.1, 0.325), rtol=135e-3)
+    test(HELIOTRON, "HELIOTRON", (0.325, 0.95), rtol=5e-2)
 
 
 def test_compute_dshear(DSHAPE, HELIOTRON):

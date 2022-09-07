@@ -39,7 +39,7 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html
+          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html
       - name: save coverage file and plot comparison results
         uses: actions/upload-artifact@v2
         with:

@@ -2468,7 +2468,7 @@ def plot_field_lines_sfl(
         Toroidal angle to integrate field line from, in radians. Default is 0.
     phi_end: float
         Toroidal angle to integrate field line until, in radians. Default is 2*pi.
-    phi_end: float
+    dphi: float
         spacing in phi to sample field lines along, in radians. Default is 1e-2.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.

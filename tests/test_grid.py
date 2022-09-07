@@ -2,6 +2,7 @@ import unittest
 import pytest
 import numpy as np
 from scipy import special
+from desc.compute.utils import surface_averages
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
 
@@ -340,3 +341,30 @@ class TestGrid(unittest.TestCase):
                 rotation="tan",
                 node_pattern="linear",
             )
+
+    def test_symmetry(self):
+        """
+        Test if symmetric grids alter dtheta spacing correctly.
+        This is a necessary but not sufficient test.
+        Should make sure that all test_compute_utils functions must also pass.
+        """
+
+        def test(grid, err_msg):
+            t = grid.nodes[:, 1]
+            z = grid.nodes[:, 2] * grid.NFP
+            f = (
+                5
+                + np.cos(t)
+                - 0.5 * np.cos(z)
+                + 3 * np.cos(t) * np.cos(z)
+                - 2 * np.sin(z) * np.sin(t)
+            )
+            avg = surface_averages(grid, f)
+            np.testing.assert_allclose(avg, 5, err_msg=err_msg)
+
+        g1 = LinearGrid(L=3, M=6, N=3, NFP=3, sym=True)
+        g2 = QuadratureGrid(L=3, M=6, N=3, NFP=3)
+        g3 = ConcentricGrid(L=3, M=6, N=3, NFP=3, sym=True, rotation="cos")
+        grids = {g1: "LinearGrid", g2: "QuadratureGrid", g3: "ConcentricGrid"}
+        for g, msg in grids.items():
+            test(g, msg)

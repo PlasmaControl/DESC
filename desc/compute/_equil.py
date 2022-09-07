@@ -1,10 +1,10 @@
 """Compute functions for equilibrium objectives, ie Force and MHD energy."""
 
-from desc.backend import jnp
 from scipy.constants import mu_0
 
+from desc.backend import jnp
+from .utils import check_derivs
 from ._core import (
-    check_derivs,
     compute_pressure,
     compute_contravariant_metric_coefficients,
     compute_geometry,
@@ -108,7 +108,7 @@ def compute_force_error(
             + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
             + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
         )
-        data["div_J_perp"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
+        data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
 
     if check_derivs("|grad(p)|", R_transform, Z_transform, L_transform):
         data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]

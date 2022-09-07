@@ -7,10 +7,7 @@ from .linear_objectives import (
     FixIota,
     FixPsi,
 )
-from ._generic import (
-    GenericObjective,
-    ToroidalCurrent,
-)
+from ._generic import GenericObjective, ToroidalCurrent
 from ._equilibrium import (
     Energy,
     ForceBalance,
@@ -24,6 +21,7 @@ from ._qs import (
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
 )
+from ._stability import MercierStability, MagneticWell
 from .utils import (
     get_fixed_boundary_constraints,
     get_equilibrium_objective,

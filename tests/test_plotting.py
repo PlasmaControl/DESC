@@ -60,8 +60,9 @@ def test_1d_logpsi(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=72)
 def test_2d_logF(SOLOVEV):
+    # plot test is inconsistent
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig, ax = plot_2d(eq, "|F|", log=True, grid=grid)
@@ -246,7 +247,7 @@ def test_plot_gradpsi(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=55)
 def test_plot_normF_2d(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|F|", norm_F=True)

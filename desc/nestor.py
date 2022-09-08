@@ -1099,18 +1099,8 @@ class Nestor:
         else:
             ntheta_sym = self.ntheta
 
-        bdry_grid = LinearGrid(
-            rho=np.array([1]),
-            theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=False),
-            zeta=np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False),
-            NFP=self.NFP,
-        )
-        axis_grid = LinearGrid(
-            rho=np.array([0]),
-            theta=np.array([0]),
-            zeta=np.linspace(0, 2 * np.pi / self.NFP, nzeta),
-            NFP=self.NFP,
-        )
+        bdry_grid = LinearGrid(rho=1, theta=ntheta, zeta=nzeta, NFP=self.NFP)
+        axis_grid = LinearGrid(rho=0, theta=0, zeta=nzeta, NFP=self.NFP)
         self._Ra_transform = Transform(axis_grid, equil.R_basis)
         self._Za_transform = Transform(axis_grid, equil.Z_basis)
         self._Rb_transform = Transform(bdry_grid, equil.R_basis, derivs=2)

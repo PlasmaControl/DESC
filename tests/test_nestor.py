@@ -96,7 +96,7 @@ def nestor_to_eq(vacin):
     rmnc = vacin["rmnc"][()]
     zmns = vacin["zmns"][()]
 
-    bdry_grid = LinearGrid(rho=1, M=ntheta, N=nzeta, NFP=NFP)
+    bdry_grid = LinearGrid(rho=1, theta=ntheta, zeta=nzeta, NFP=NFP)
     mr, nr, Rb_mn = ptolemy_identity_fwd(xm, xn // NFP, np.zeros_like(rmnc), rmnc)
     mz, nz, Zb_mn = ptolemy_identity_fwd(xm, xn // NFP, zmns, np.zeros_like(zmns))
     M = max(np.max(abs(mr)), np.max(abs(mz)))
@@ -107,7 +107,7 @@ def nestor_to_eq(vacin):
     modes_Zb = np.array([np.zeros_like(mz), mz, nz]).T
 
     a_basis = FourierSeries(N=N, NFP=NFP, sym=False)
-    axis_grid = LinearGrid(rho=0, theta=0, N=nzeta, NFP=NFP)
+    axis_grid = LinearGrid(rho=0, theta=0, zeta=nzeta, NFP=NFP)
     a_transform = Transform(axis_grid, a_basis)
     a_transform.build_pinv()
     Ra_n = a_transform.fit(raxis)

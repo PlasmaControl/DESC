@@ -16,17 +16,10 @@ from ._equilibrium import (
     CurrentDensity,
 )
 from ._geometry import Volume, AspectRatio
-from ._qs import (
-    QuasisymmetryBoozer,
-    QuasisymmetryTwoTerm,
-    QuasisymmetryTripleProduct,
-)
+from ._qs import QuasisymmetryBoozer, QuasisymmetryTwoTerm, QuasisymmetryTripleProduct
 from ._stability import MercierStability, MagneticWell
-from .utils import (
-    get_fixed_boundary_constraints,
-    get_equilibrium_objective,
-)
-from ._wrappers import (
-    WrappedEquilibriumObjective,
-    GXWrapper
-)
+from .utils import get_fixed_boundary_constraints, get_equilibrium_objective
+from ._wrappers import WrappedEquilibriumObjective
+
+# from ._gx import GXWrapper
+# from ._neo import NEOWrapper

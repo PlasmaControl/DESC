@@ -114,8 +114,8 @@ class BoundaryErrorNESTOR(_Objective):
         
         self.mf = eq.M+1 if self.mf is None else self.mf
         self.nf = eq.N if self.nf is None else self.nf
-        self.ntheta = 2*eq.M+1 if self.ntheta is None else self.ntheta
-        self.nzeta = 2*eq.N+1 if self.nzeta is None else self.nzeta
+        self.ntheta = 4*eq.M+1 if self.ntheta is None else self.ntheta
+        self.nzeta = 4*eq.N+1 if self.nzeta is None else self.nzeta
         
         eq._sym = False
         self.nest = Nestor(eq, ext_field, self.mf, self.nf, self.ntheta, self.nzeta)

@@ -40,7 +40,7 @@ class TestObjectiveFunction(unittest.TestCase):
     def test_energy(self):
         eq = Equilibrium(node_pattern="quad")
         obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
-        W = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.p_l, eq.Psi)
+        W = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi)
         np.testing.assert_allclose(W, 10)
 
     def test_toroidal_current(self):

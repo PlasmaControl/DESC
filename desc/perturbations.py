@@ -310,7 +310,9 @@ def perturb(
             value = put(  # parameter values below threshold are set to 0
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
-            setattr(eq_new, key, value)
+            # don't set nonexistent profile
+            if key != "c_l" and key != "i_l" or value.size:
+                setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
     if verbose > 0:
@@ -698,7 +700,9 @@ def optimal_perturb(
             value = put(  # parameter values below threshold are set to 0
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
-            setattr(eq_new, key, value)
+            # don't set nonexistent profile
+            if key != "c_l" and key != "i_l" or value.size:
+                setattr(eq_new, key, value)
 
     predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
 

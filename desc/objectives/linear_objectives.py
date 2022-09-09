@@ -161,7 +161,7 @@ class FixBoundaryZ(_Objective):
         len(weight) must be equal to Objective.dim_f
     fixed_boundary : bool, optional
         True to enforce the boundary condition on flux surfaces,
-        or Falseto fix the boundary surface coefficients (default).
+        or False to fix the boundary surface coefficients (default).
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).

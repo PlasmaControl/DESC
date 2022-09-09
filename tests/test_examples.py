@@ -160,9 +160,9 @@ def test_example_get_iota():
 
 
 def test_example_get_current():
-    iota = desc.examples.get("QAS", "current")
+    current = desc.examples.get("QAS", "current")
     np.testing.assert_allclose(
-        iota.params[:11],
+        current.params[:11],
         [
             0.00000000e00,
             -5.30230329e03,

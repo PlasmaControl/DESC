@@ -1,29 +1,28 @@
-import numpy as np
-import os
 import copy
 import numbers
+import os
 import warnings
-
 from abc import ABC
 from inspect import signature
 
+import numpy as np
 from termcolor import colored
 
+import desc.compute as compute_funs
 from desc.backend import jnp, jit, put, while_loop
-from desc.io import IOAble, load
-from desc.utils import copy_coeffs, Index
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.transform import Transform
-from desc.profiles import Profile, PowerSeriesProfile
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
+from desc.compute import arg_order, data_index, compute_jacobian
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
     Surface,
 )
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-import desc.compute as compute_funs
-from desc.compute import arg_order, data_index, compute_jacobian
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.io import IOAble, load
+from desc.profiles import Profile, PowerSeriesProfile
+from desc.transform import Transform
+from desc.utils import copy_coeffs, Index
 
 
 class _Configuration(IOAble, ABC):
@@ -1066,17 +1065,15 @@ class _Configuration(IOAble, ABC):
     @property
     def i_l(self):
         """Coefficients of iota profile (ndarray)."""
-        try:
-            return self.iota.params
-        except AttributeError:
-            return None
+        return np.empty(0) if self.iota is None else self.iota.params
 
     @i_l.setter
     def i_l(self, i_l):
-        try:
-            self.iota.params = i_l
-        except AttributeError:
-            pass
+        if self.iota is None:
+            raise ValueError(
+                "Attempt to set rotational transform for a fixed toroidal current equilibrium"
+            )
+        self.iota.params = i_l
 
     @property
     def current(self):
@@ -1095,17 +1092,15 @@ class _Configuration(IOAble, ABC):
     @property
     def c_l(self):
         """Coefficients of current profile (ndarray)."""
-        try:
-            return self.current.params
-        except AttributeError:
-            return None
+        return np.empty(0) if self.current is None else self.current.params
 
     @c_l.setter
     def c_l(self, c_l):
-        try:
-            self.current.params = c_l
-        except AttributeError:
-            pass
+        if self.current is None:
+            raise ValueError(
+                "Attempt to set toroidal current for a fixed rotational transform equilibrium"
+            )
+        self.current.params = c_l
 
     @property
     def R_basis(self):
@@ -1189,13 +1184,13 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
-                if getattr(self, "_iota", None) is not None:
+                if self.iota is not None:
                     inputs[arg] = self.iota.copy()
                     inputs[arg].grid = grid
                 else:
                     inputs[arg] = None
             elif arg == "current":
-                if getattr(self, "_current", None) is not None:
+                if self.current is not None:
                     inputs[arg] = self.current.copy()
                     inputs[arg].grid = grid
                 else:

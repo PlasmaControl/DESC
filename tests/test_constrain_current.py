@@ -81,7 +81,6 @@ class TestConstrainCurrent:
                 np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
 
         for e in ("quadrature", "concentric", "linear"):
-            # Also works with all stellarators in desc/examples except for solovev.
-            # Replacing desc/examples/SOLOVEV_output.h5 with a new solve fixes this.
+            # works with any stellarators in desc/examples
             test(DSHAPE, e)
             test(HELIOTRON, e)

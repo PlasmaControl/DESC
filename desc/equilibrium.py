@@ -376,7 +376,10 @@ class Equilibrium(_Configuration, IOAble):
             print("Start of solver")
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
+            # don't set nonexistent profile
+            if key != "c_l" and key != "i_l" or value[-1].size:
+                setattr(eq, key, value[-1])
+
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))
@@ -473,7 +476,9 @@ class Equilibrium(_Configuration, IOAble):
             print("Start of solver")
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
+            # don't set nonexistent profile
+            if key != "c_l" and key != "i_l" or value[-1].size:
+                setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))
@@ -818,7 +823,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         equil.resolution_summary()
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
-        print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
+        if "current" in self.inputs[ii]:
+            print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
         print("Objective: {}".format(self.inputs[ii]["objective"]))
         print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))

@@ -113,7 +113,7 @@ class Profile(IOAble, ABC):
         return p
 
     def to_fourierzernike(self, L=6, M=0, N=0, NFP=1, xs=100, w=None):
-        """Convert this profile to a PowerSeriesProfile.
+        """Convert this profile to a FourierZernikeProfile.
 
         Parameters
         ----------
@@ -130,7 +130,7 @@ class Profile(IOAble, ABC):
 
         Returns
         -------
-        profile : PowerSeriesProfile
+        profile : FourierZernikeProfile
             profile in power series form.
 
         """
@@ -1113,8 +1113,9 @@ class FourierZernikeProfile(Profile):
     Parameters
     ----------
     params: array-like, shape(k,)
-        coefficients of the series. If modes is not supplied, assumed to be in ascending order
-        with no missing values. If modes is given, coefficients can be in any order or indexing.
+        coefficients of the series. If modes is not supplied, assumed to be only radial
+        modes in ascending order with no missing values. If modes is given, coefficients
+        can be in any order or indexing.
     modes : array-like, shape(k,3)
         mode numbers for the associated coefficients. eg a[modes[i]] = params[i].
         If None, assumes params are only the m=0 n=0 modes
@@ -1189,7 +1190,7 @@ class FourierZernikeProfile(Profile):
 
     @property
     def basis(self):
-        """Spectral basis for power series."""
+        """Spectral basis for Fourier-Zernike series."""
         return self._basis
 
     @property
@@ -1220,7 +1221,7 @@ class FourierZernikeProfile(Profile):
             )
 
     def get_params(self, l, m, n):
-        """Get power series coefficients for given mode number(s)."""
+        """Get Fourier-Zernike coefficients for given mode number(s)."""
         l = np.atleast_1d(l).astype(int)
         m = np.atleast_1d(m).astype(int)
         n = np.atleast_1d(n).astype(int)
@@ -1232,7 +1233,7 @@ class FourierZernikeProfile(Profile):
         return a
 
     def set_params(self, l, m, n, a=None):
-        """Set specific power series coefficients."""
+        """Set specific Fourier-Zernike coefficients."""
         l, m, n, a = map(np.atleast_1d, (l, m, n, a))
         a = np.broadcast_to(a, l.shape)
         for ll, mm, nn, aa in zip(l, m, n, a):
@@ -1256,7 +1257,7 @@ class FourierZernikeProfile(Profile):
         Parameters
         ----------
         params : array-like
-            polynomial coefficients to use, in ascending order. If not given, uses the
+            Fourier-Zernike coefficients to use, in ascending order. If not given, uses the
             values given by the params attribute
         grid : Grid or array-like
             locations to compute values at. Defaults to self.grid
@@ -1303,9 +1304,13 @@ class FourierZernikeProfile(Profile):
 
         """
         nodes = np.vstack([r, t, z]).T
-        fitgrid = Grid(nodes)
-        fitgrid.weights = w if w is not None else np.ones_like(f)
         basis = FourierZernikeBasis(L, M, N, NFP)
-        transform = Transform(fitgrid, basis, build_pinv=True)
-        params = transform.fit(f)
-        return cls(params, modes=basis.modes, NFP=NFP, grid=grid, name=name)
+        A = basis.evaluate(nodes)
+        if w is not None:
+            A *= w[:, np.newaxis]
+            f *= w
+        scale = np.sqrt((A * A).sum(axis=0))
+        A /= scale
+        c, resids, rank, s = np.linalg.lstsq(A, f, rcond=None)
+        c = (c.T / scale).T  # broadcast scale coefficients
+        return cls(c, modes=basis.modes, NFP=NFP, grid=grid, name=name)

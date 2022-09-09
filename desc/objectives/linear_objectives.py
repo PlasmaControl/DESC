@@ -3,7 +3,7 @@ from termcolor import colored
 import warnings
 
 from desc.backend import jnp
-from desc.basis import zernike_radial_coeffs
+from desc.basis import zernike_radial_coeffs, zernike_radial
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from .objective_funs import _Objective
 
@@ -36,6 +36,8 @@ class FixBoundaryR(_Objective):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
         Name of the objective function.
 
@@ -52,11 +54,13 @@ class FixBoundaryR(_Objective):
         weight=1,
         fixed_boundary=False,
         modes=True,
+        surface_label=None,
         name="lcfs R",
     ):
 
         self._fixed_boundary = fixed_boundary
         self._modes = modes
+        self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "R boundary error: {:10.3e} (m)"
 
@@ -111,7 +115,13 @@ class FixBoundaryR(_Objective):
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                self._A[j, i] = 1
+                    surf = (
+                        eq.surface.rho
+                        if self._surface_label is None
+                        else self._surface_label
+                    )
+                    self._A[j, i] = zernike_radial(surf, l, m)
+
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
@@ -166,6 +176,8 @@ class FixBoundaryZ(_Objective):
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the profile modes.
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
         Name of the objective function.
 
@@ -182,11 +194,13 @@ class FixBoundaryZ(_Objective):
         weight=1,
         fixed_boundary=False,
         modes=True,
+        surface_label=None,
         name="lcfs Z",
     ):
 
         self._fixed_boundary = fixed_boundary
         self._modes = modes
+        self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
 
@@ -241,7 +255,12 @@ class FixBoundaryZ(_Objective):
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-                self._A[j, i] = 1
+                    surf = (
+                        eq.surface.rho
+                        if self._surface_label is None
+                        else self._surface_label
+                    )
+                    self._A[j, i] = zernike_radial(surf, l, m)
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 

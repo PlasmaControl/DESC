@@ -744,14 +744,6 @@ class ConcentricGrid(Grid):
             node spacing, based on local volume around the node
 
         """
-        if not (L == M or L == 2 * M):
-            warnings.warn(
-                colored(
-                    "Not using either ANSI (L=M) or Fringe (L=2*M) "
-                    + "concentric grid node patterns.",
-                    "yellow",
-                )
-            )
 
         def ocs(L):
             # Ramos-Lopez, et al. “Optimal Sampling Patterns for Zernike Polynomials.”
@@ -792,7 +784,12 @@ class ConcentricGrid(Grid):
 
         for iring in range(L // 2 + 1, 0, -1):
             ntheta = 2 * M + np.ceil((M / L) * (5 - 4 * iring)).astype(int)
+            if ntheta % 2 == 0:
+                # ensure an odd number of nodes on each surface
+                ntheta += 1
             if self.sym:
+                # for symmetry we want M+1 nodes on outer surface, so (2M+1+1)
+                # for now, cut in half in _enforce_symmetry
                 ntheta += 1
             dtheta = 2 * np.pi / ntheta
             theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)

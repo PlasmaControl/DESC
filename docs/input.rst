@@ -4,7 +4,7 @@
 Input File
 ==========
 
-The following is an example DESC input file, which containts all of the available input arguments. 
+The following is an example DESC input file, which contains all of the available input arguments. 
 This example is only intended to demonstrate the input file format, and may not necessarily converge well. 
 More realistic input examples are included in the repository. 
 DESC can also accept VMEC input files, which are converted to DESC inputs as explained below (however not all desc solver options have VMEC analogs, see below). 
@@ -109,7 +109,7 @@ When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal
 Convergence is typically superior when the number of nodes exceeds the number of spectral coefficients, but this adds compuational cost. 
 
 These arguments can be passed as arrays, where each element denotes the value to use at that iteration. 
-Array elements are deliminated by either a space `` ``, comma ``,``, or semi-colon ``;``. 
+Array elements are delimited by either a space `` ``, comma ``,``, or semicolon ``;``. 
 Arrays can also be created using the shorthand notation ``start:interval:end`` and ``(value)x(repititions)``. 
 For example, the input line for ``M_pol`` shown above is equivalent to ``M_pol = 6, 8, 10, 10, 11, 11, 12``. 
 In this example there will be 7 iterations; any array with fewer than 7 elements will use its final value for the remaining iterations. 
@@ -382,7 +382,7 @@ You can see that the main elements of the input file are present here.
 However, no DESC solver options are listed, as currently DESC can not automatically decide on the continuation method parameters.
 As it is, this input file will run but likely not give an excellent solution. 
 Once a conversion from a VMEC input file to a DESC input file is made, it is recommended to add solver options for the continuation method and add arrays to the spectral resolution to allow for better convergence.
-See the example DESC input files on the github repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
+See the example DESC input files on the GitHub repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
 
 Some general considerations
 

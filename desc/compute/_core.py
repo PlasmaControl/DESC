@@ -319,8 +319,8 @@ def compute_rotational_transform(
 
     grid = R_transform.grid
     if iota is not None:
-        data["iota"] = iota.compute(i_l, grid, dr=0)
-        data["iota_r"] = iota.compute(i_l, grid, dr=1)
+        data["iota"] = iota.compute(i_l, dr=0)
+        data["iota_r"] = iota.compute(i_l, dr=1)
 
     elif current is not None:
         data = compute_toroidal_flux(Psi, grid, data=data)
@@ -333,7 +333,7 @@ def compute_rotational_transform(
         if check_derivs("iota", R_transform, Z_transform, L_transform):
             # current_term = 2*pi * I / Psi_r = mu_0 / 2*pi * current / psi_r
             current_term = (
-                mu_0 / (2 * jnp.pi) * current.compute(c_l, grid, dr=0) / data["psi_r"]
+                mu_0 / (2 * jnp.pi) * current.compute(c_l, dr=0) / data["psi_r"]
             )
             num = (
                 data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
@@ -345,7 +345,7 @@ def compute_rotational_transform(
 
         if check_derivs("iota_r", R_transform, Z_transform, L_transform):
             current_term_r = (
-                mu_0 / (2 * jnp.pi) * current.compute(c_l, grid, dr=1) / data["psi_r"]
+                mu_0 / (2 * jnp.pi) * current.compute(c_l, dr=1) / data["psi_r"]
                 - current_term * data["psi_rr"] / data["psi_r"]
             )
             num_r = (

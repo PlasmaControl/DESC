@@ -123,7 +123,6 @@ def perturb(
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    # FIXME: linting/editor picks up that not enough values are unpacked here
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective.args
     )
@@ -296,7 +295,6 @@ def perturb(
         setattr(eq_new, key, getattr(eq_new, key) + value)
     for constraint in constraints:
         constraint.update_target(eq_new)
-    # FIXME: linting/editor picks up that not enough values are unpacked here
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective.args
     )
@@ -311,7 +309,7 @@ def perturb(
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
             # don't set nonexistent profile
-            if key != "c_l" and key != "i_l" or value.size:
+            if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
@@ -479,7 +477,6 @@ def optimal_perturb(
     for constraint in constraints:
         if not constraint.built:
             constraint.build(eq, verbose=verbose)
-    # FIXME: linting/editor picks up that not enough values are unpacked here
     (
         xp,
         A,
@@ -686,7 +683,6 @@ def optimal_perturb(
         idx0 += len(value)
     for constraint in constraints:
         constraint.update_target(eq_new)
-    # FIXME: linting/editor picks up that not enough values are unpacked here
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, extra_args=objective_f.args
     )
@@ -701,7 +697,7 @@ def optimal_perturb(
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
             # don't set nonexistent profile
-            if key != "c_l" and key != "i_l" or value.size:
+            if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
     predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)

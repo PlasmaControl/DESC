@@ -221,6 +221,21 @@ class TestGrid(unittest.TestCase):
         test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
         test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
 
+        L, M, N, NFP, sym = 3, 6, 3, 3, True
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
+        L, M, N, NFP, sym = 5, 5, 3, 5, False
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
+        L, M, N, NFP, sym = 3, 7, 3, 3, False
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
     def test_symmetry_2(self):
         def test(grid, basis, err_msg, true_avg=1):
             transform = Transform(grid, basis)

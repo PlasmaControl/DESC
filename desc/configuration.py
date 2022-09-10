@@ -467,11 +467,22 @@ class _Configuration(IOAble, ABC):
                 else:
                     axisR = None
                     axisZ = None
+                coord = self.surface.rho if hasattr(self.surface, "rho") else None
                 self.R_lmn = self._initial_guess_surface(
-                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axisR
+                    self.R_basis,
+                    self.Rb_lmn,
+                    self.surface.R_basis,
+                    axisR,
+                    "lcfs",
+                    coord,
                 )
                 self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axisZ
+                    self.Z_basis,
+                    self.Zb_lmn,
+                    self.surface.Z_basis,
+                    axisZ,
+                    "lcfs",
+                    coord,
                 )
             else:
                 raise ValueError(

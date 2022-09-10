@@ -335,7 +335,7 @@ class PowerSeriesProfile(Profile):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------
@@ -410,7 +410,7 @@ class SplineProfile(Profile):
         - `'linear'`: linear interpolation
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
     grid : Grid
         default grid to use for computing values using transform method
     name : str
@@ -580,7 +580,7 @@ class SplineProfile(Profile):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------
@@ -952,7 +952,7 @@ class MTanhProfile(Profile):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------

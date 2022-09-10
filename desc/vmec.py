@@ -6,6 +6,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy import optimize, interpolate, integrate
 
 from desc.backend import sign
+from desc.compute.utils import compress
 from desc.utils import Timer
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
@@ -364,17 +365,18 @@ class VMECIO:
         if eq.iota is not None:
             iotaf[:] = eq.iota(r_full)
         else:
-            # FIXME: compute iota from current
-            iotaf[:] = np.zeros((file.dimensions["radius"].size,))
+            # value closest to axis will be nan
+            grid = LinearGrid(M=12, N=12, rho=r_full)
+            iotaf[:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
+        iotas[0] = 0
         if eq.iota is not None:
-            iotas[0] = 0
             iotas[1:] = eq.iota(r_half)
         else:
-            # FIXME: compute iota from current
-            iotas[:] = np.zeros((file.dimensions["radius"].size,))
+            grid = LinearGrid(M=12, N=12, rho=r_half)
+            iotas[1:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"

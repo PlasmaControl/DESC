@@ -31,7 +31,7 @@ class FixBoundaryR(_Objective):
         len(weight) must be equal to Objective.dim_f
     fixed_boundary : bool, optional
         True to enforce the boundary condition on flux surfaces,
-        or Falseto fix the boundary surface coefficients (default).
+        or False to fix the boundary surface coefficients (default).
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -646,6 +646,10 @@ class FixIota(_Objective):
 
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
+            if eq.iota is None:
+                raise RuntimeError(
+                    "Attempt to fix rotational transform on an equilibrium with fixed toroidal current"
+                )
             self._profile = eq.iota
 
         if isinstance(self._profile, PowerSeriesProfile):
@@ -828,6 +832,10 @@ class FixCurrent(_Objective):
 
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
+            if eq.current is None:
+                raise RuntimeError(
+                    "Attempt to fix toroidal current on an equilibrium with fixed rotational transform"
+                )
             self._profile = eq.current
 
         if isinstance(self._profile, PowerSeriesProfile):

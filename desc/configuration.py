@@ -49,15 +49,13 @@ class _Configuration(IOAble, ABC):
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero rotational transform
     current : Profile or ndarray shape(k,2) (optional)
         Toroidal current profile or array of mode numbers and spectral coefficients
         Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and
-        minor radius 1
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
         of mode numbers and spectral coefficients of the form [n, R, Z].
@@ -326,13 +324,6 @@ class _Configuration(IOAble, ABC):
 
         # default profile
         if iota is None and current is None:
-            warnings.warn(
-                colored(
-                    "Must specify either iota or current. "
-                    + "Using default profile of current=0.",
-                    "yellow",
-                )
-            )
             self._current = PowerSeriesProfile(
                 modes=np.array([0]), params=np.array([0]), name="current"
             )
@@ -1071,7 +1062,7 @@ class _Configuration(IOAble, ABC):
     def i_l(self, i_l):
         if self.iota is None:
             raise ValueError(
-                "Attempt to set rotational transform for a fixed toroidal current equilibrium"
+                "Attempt to set rotational transform on an equilibrium with fixed toroidal current"
             )
         self.iota.params = i_l
 
@@ -1098,7 +1089,7 @@ class _Configuration(IOAble, ABC):
     def c_l(self, c_l):
         if self.current is None:
             raise ValueError(
-                "Attempt to set toroidal current for a fixed rotational transform equilibrium"
+                "Attempt to set toroidal current on an equilibrium with fixed rotational transform"
             )
         self.current.params = c_l
 

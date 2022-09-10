@@ -52,15 +52,13 @@ class Equilibrium(_Configuration, IOAble):
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero rotational transform
     current : Profile or ndarray shape(k,2) (optional)
         Toroidal current profile or array of mode numbers and spectral coefficients
         Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and
-        minor radius 1
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
         of mode numbers and spectral coefficients of the form [n, R, Z].

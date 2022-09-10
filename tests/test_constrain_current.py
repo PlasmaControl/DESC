@@ -11,15 +11,15 @@ from desc.transform import Transform
 class _ExactValueProfile:
     """Monkey patches the compute method of desc.Profile for testing."""
 
-    def __init__(self, eq):
+    def __init__(self, eq, grid):
         self.eq = eq
+        self.grid = grid
 
-    def compute(self, params=None, grid=None, dr=0, *args):
-        # unused arguments required to override profile.compute
+    def compute(self, params, dr, *args, **kwargs):
         if dr == 0:
-            return self.eq.compute("current", grid)["current"]
+            return self.eq.compute("current", self.grid)["current"]
         if dr == 1:
-            return self.eq.compute("current_r", grid)["current_r"]
+            return self.eq.compute("current_r", self.grid)["current_r"]
 
 
 class TestConstrainCurrent:
@@ -62,7 +62,7 @@ class TestConstrainCurrent:
                 Z_transform=Z_transform,
                 L_transform=L_transform,
                 iota=None,
-                current=_ExactValueProfile(eq),
+                current=_ExactValueProfile(eq, grid),
             )
             benchmark_data = eq.compute("iota_r", grid)
 

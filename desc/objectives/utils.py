@@ -30,6 +30,8 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
     ----------
     profiles : bool
         Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
 
     Returns
     -------

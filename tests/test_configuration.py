@@ -181,6 +181,22 @@ class TestConstructor(unittest.TestCase):
             eq = Equilibrium(pressure="abc")
         with pytest.raises(TypeError):
             eq = Equilibrium(iota="def")
+        with pytest.raises(TypeError):
+            eq = Equilibrium(current="def")
+        with pytest.raises(ValueError):  # change to typeeror if allow both
+            eq = Equilibrium(iota="def", current="def")
+        with pytest.raises(ValueError):
+            eq = Equilibrium(iota=None)
+            eq.i_l = None
+        with pytest.raises(ValueError):
+            eq = Equilibrium(iota=PowerSeriesProfile(params=[1, 3], modes=[0, 2]))
+            eq.c_l = None
+        with pytest.raises(TypeError):
+            eq = Equilibrium()
+            eq.current = None
+        with pytest.raises(TypeError):
+            eq = Equilibrium()
+            eq.iota = None
 
     def test_supplied_coeffs(self):
 
@@ -247,7 +263,7 @@ class TestInitialGuess(unittest.TestCase):
 
         eq = Equilibrium()
         surface = FourierRZToroidalSurface()
-        # turn the circular cross section into an elipse w AR=2
+        # turn the circular cross-section into an ellipse w AR=2
         surface.set_coeffs(m=-1, n=0, R=None, Z=2)
         # move z axis up to 0.5 for no good reason
         axis = FourierRZCurve([0, 10, 0], [0, 0.5, 0])

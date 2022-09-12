@@ -28,6 +28,12 @@ class NEOWrapper(_Objective):
         self.path = "/u/ddudt/DESC/"
 
         # equilibrium parameters
+        self.sym = eq.sym
+        self.L = eq.L
+        self.M = eq.M
+        self.N = eq.N
+        self.NFP = eq.NFP
+        self.spectral_indexing = eq.spectral_indexing
         self.pressure = eq.pressure
         self.iota = eq.iota
 
@@ -61,13 +67,21 @@ class NEOWrapper(_Objective):
         self.pressure.params = p_l
         self.iota.params = i_l
         eq = Equilibrium(
+            sym=self.sym,
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            spectral_indexing=self.spectral_indexing,
             R_lmn=R_lmn,
             Z_lmn=Z_lmn,
             L_lmn=L_lmn,
             pressure=self.pressure,
             iota=self.iota,
-            Psi=Psi,
+            Psi=float(Psi),
         )
+        eq.surface = eq.get_surface_at(rho=1)
+        eq.solved = True
 
         print("Saving VMEC wout file")
         VMECIO.save(eq, self.path + "wout_desc.nc", surfs=self.ns, verbose=0)
@@ -79,7 +93,7 @@ class NEOWrapper(_Objective):
         self.run_neo()
 
         eps_eff_32 = self.read_neo()
-        return self._shift_scale(jnp.atleast_1d(max(eps_eff_32)))
+        return self._shift_scale(jnp.atleast_1d(eps_eff_32))
 
     def compute_neo_jvp(self, values, tangents):
         R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi = values
@@ -117,25 +131,25 @@ class NEOWrapper(_Objective):
         """Write BOOZ_XFORM input file."""
         print("Writing BOOZ_XFORM input file")
         f = open(self.path + "in_booz.desc", "w")
-        f.write("{} {}".format(self.M_booz, self.N_booz))
-        f.write("'DESC'")
-        f.write("{}".format(self.ns))
+        f.write("{} {}\n".format(self.M_booz, self.N_booz))
+        f.write("'desc'\n")
+        f.write("{}\n".format(self.ns))
         f.close()
 
     def write_neo(self):
         """Write NEO input file."""
         print("Writing NEO input file")
         f = open(self.path + "neo_in.desc", "w")
-        f.write("'#'\n'#'\n'#'")
-        f.write("boozmn_desc.nc")
-        f.write("neo_out.desc")
-        f.write(" 1\n {}".format(self.ns))
-        f.write(" 200\n 200\n 0\n 0\n 50\n 1\n 0.01\n 100\n 50\n 500\n 5000")
-        f.write(" 0\n 1\n 0\n 0\n 2\n 0\n 0\n 0\n 0\n 0")
-        f.write("'#'\n'#'\n'#'")
+        f.write("'#'\n'#'\n'#'\n")
+        f.write("boozmn_desc.nc\n")
+        f.write("neo_out.desc\n")
+        f.write(" 1\n {}\n".format(self.ns))
+        f.write(" 200\n 200\n 0\n 0\n 50\n 1\n 0.01\n 100\n 50\n 500\n 5000\n")
+        f.write(" 0\n 1\n 0\n 0\n 2\n 0\n 0\n 0\n 0\n 0\n")
+        f.write("'#'\n'#'\n'#'\n")
         f.write(" 0\n")
-        f.write("neo_cur_desc")
-        f.write(" 200\n 2\n 0")
+        f.write("neo_cur_desc\n")
+        f.write(" 200\n 2\n 0\n")
         f.close()
 
     def read_neo(self):
@@ -144,7 +158,8 @@ class NEOWrapper(_Objective):
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
         f = open(self.path + "neo_out.desc", "r")
         f.seek(0)
-        nums = [float(x) for x in re.findall(num_form, f[0]) if re.search(r"\d", x)]
+        line = f.readline()
+        nums = [float(x) for x in re.findall(num_form, line) if re.search(r"\d", x)]
         f.close()
         # nums = [SURFACE_LABEL, EPSTOT, REFF, IOTA, B_REF, R_REF]
         return nums[1]

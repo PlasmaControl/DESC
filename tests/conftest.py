@@ -80,7 +80,7 @@ def SOLOVEV(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def DSHAPE(tmpdir_factory):
-    """Run DSHAPE example."""
+    """Run DSHAPE fixed rotational transform example."""
     input_path = ".//tests//inputs//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
@@ -92,7 +92,7 @@ def DSHAPE(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running DSHAPE test.")
+    print("Running DSHAPE fixed rotational transform test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -107,6 +107,38 @@ def DSHAPE(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return DSHAPE_out
+
+
+@pytest.fixture(scope="session")
+def DSHAPE_current(tmpdir_factory):
+    """Run DSHAPE fixed toroidal current example."""
+    input_path = ".//tests//inputs//DSHAPE_current"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("DSHAPE_current_out.h5")
+    desc_nc_path = output_dir.join("DSHAPE_current_out.nc")
+    # TODO: change these paths too?
+    vmec_nc_path = ".//tests//inputs//wout_DSHAPE.nc"
+    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running DSHAPE fixed toroidal current test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    DSHAPE_current_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return DSHAPE_current_out
 
 
 @pytest.fixture(scope="session")

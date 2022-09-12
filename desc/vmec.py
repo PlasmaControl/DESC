@@ -17,6 +17,7 @@ from desc.objectives import (
     FixBoundaryR,
     FixBoundaryZ,
 )
+from desc.compute.utils import compress
 from desc.objectives.utils import factorize_linear_constraints
 from desc.vmec_utils import (
     ptolemy_identity_fwd,
@@ -933,6 +934,159 @@ class VMECIO:
         timer.stop("J^zeta")
         if verbose > 1:
             timer.disp("J^zeta")
+
+        grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=False, rho=r_full)
+        data = eq.compute("D_Mercier", grid=grid)
+
+        # Boozer currents
+        buco = file.createVariable("buco", np.float64, ("radius",))
+        buco.long_name = "Boozer toroidal current I"
+        buco.units = "T*m"
+        buco[:] = compress(grid, data["I"])
+        buco[0] = 0
+
+        bvco = file.createVariable("bvco", np.float64, ("radius",))
+        bvco.long_name = "Boozer poloidal current G"
+        bvco.units = "T*m"
+        bvco[:] = compress(grid, data["G"])
+        bvco[0] = 0
+
+        # Mercier stability
+        DShear = file.createVariable("DShear", np.float64, ("radius",))
+        DShear.long_name = "Mercier stability criterion magnetic shear term"
+        DShear[:] = compress(grid, data["D_shear"])
+
+        DCurr = file.createVariable("DCurr", np.float64, ("radius",))
+        DCurr.long_name = "Mercier stability criterion toroidal current term"
+        DCurr[:] = compress(grid, data["D_current"])
+
+        DWell = file.createVariable("DWell", np.float64, ("radius",))
+        DWell.long_name = "Mercier stability criterion magnetic well term"
+        DWell[:] = compress(grid, data["D_well"])
+
+        DGeod = file.createVariable("DGeod", np.float64, ("radius",))
+        DGeod.long_name = "Mercier stability criterion geodesic curvature term"
+        DGeod[:] = compress(grid, data["D_geodesic"])
+
+        DMerc = file.createVariable("DMerc", np.float64, ("radius",))
+        DMerc.long_name = "Mercier stability criterion"
+        DMerc[:] = compress(grid, data["D_Mercier"])
+
+        # FIXME
+
+        IonLarmor = file.createVariable("IonLarmor", np.float64)
+        IonLarmor[:] = 0.0
+
+        ac_aux_f = file.createVariable("ac_aux_f", np.float64, ("ndfmax",))
+        ac_aux_f[:] = np.ones((file.dimensions["ndfmax"].size,)) * np.nan
+
+        ac_aux_s = file.createVariable("ac_aux_s", np.float64, ("ndfmax",))
+        ac_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
+
+        ai_aux_f = file.createVariable("ai_aux_f", np.float64, ("ndfmax",))
+        ai_aux_f[:] = np.ones((file.dimensions["ndfmax"].size,)) * np.nan
+
+        ai_aux_s = file.createVariable("ai_aux_s", np.float64, ("ndfmax",))
+        ai_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
+
+        am_aux_f = file.createVariable("am_aux_f", np.float64, ("ndfmax",))
+        am_aux_f[:] = np.ones((file.dimensions["ndfmax"].size,)) * np.nan
+
+        am_aux_s = file.createVariable("am_aux_s", np.float64, ("ndfmax",))
+        am_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
+
+        b0 = file.createVariable("b0", np.float64)
+        b0[:] = 1.0
+
+        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
+        bdotb[:] = np.zeros((file.dimensions["radius"].size,))
+
+        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
+        bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
+
+        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
+        beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+
+        betapol = file.createVariable("betapol", np.float64)
+        betapol[:] = 0.0
+
+        betator = file.createVariable("betator", np.float64)
+        betator[:] = 0.0
+
+        betatotal = file.createVariable("betatotal", np.float64)
+        betatotal[:] = 0.0
+
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis[:] = 0.0
+
+        ctor = file.createVariable("ctor", np.float64)
+        ctor[:] = 0.0
+
+        extcur = file.createVariable("extcur", np.float64)
+        extcur[:] = 0.0
+
+        fsql = file.createVariable("fsql", np.float64)
+        fsql[:] = 1e-16
+
+        fsqr = file.createVariable("fsqr", np.float64)
+        fsqr[:] = 1e-16
+
+        fsqt = file.createVariable("fsqt", np.float64)
+        fsqt[:] = 1e-16
+
+        fsqz = file.createVariable("fsqz", np.float64)
+        fsqz[:] = 1e-16
+
+        ftolv = file.createVariable("ftolv", np.float64)
+        ftolv[:] = 1e-16
+
+        itfsq = file.createVariable("itfsq", np.int32)
+        itfsq[:] = 1
+
+        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
+        jcuru[:] = np.zeros((file.dimensions["radius"].size,))
+
+        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
+        jcurv[:] = np.zeros((file.dimensions["radius"].size,))
+
+        jdotb = file.createVariable("jdotb", np.float64, ("radius",))
+        jdotb[:] = np.zeros((file.dimensions["radius"].size,))
+
+        nextcur = file.createVariable("nextcur", np.int32)
+        nextcur[:] = 0
+
+        niter = file.createVariable("niter", np.int32)
+        niter[:] = 1
+
+        over_r = file.createVariable("over_r", np.float64, ("radius",))
+        over_r[:] = np.zeros((file.dimensions["radius"].size,))
+
+        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
+        q_factor[:] = np.zeros((file.dimensions["radius"].size,))
+
+        rbtor = file.createVariable("rbtor", np.float64)
+        rbtor[:] = 0.0
+
+        rbtor0 = file.createVariable("rbtor0", np.float64)
+        rbtor0[:] = 0.0
+
+        specw = file.createVariable("specw", np.float64, ("radius",))
+        specw[:] = np.zeros((file.dimensions["radius"].size,))
+
+        volavgB = file.createVariable("volavgB", np.float64)
+        volavgB[:] = 0.0
+
+        vp = file.createVariable("vp", np.float64, ("radius",))
+        vp[:] = np.zeros((file.dimensions["radius"].size,))
+
+        wb = file.createVariable("wb", np.float64)
+        wb[:] = 0.0
+
+        wdot = file.createVariable("wdot", np.float64, ("time",))
+        wdot[:] = np.zeros((file.dimensions["time"].size,))
+
+        wp = file.createVariable("wp", np.float64)
+        wp[:] = 0.0
 
         file.close()
         timer.stop("Total time")

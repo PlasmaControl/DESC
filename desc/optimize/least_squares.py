@@ -317,7 +317,7 @@ def lsqtr(
             actual_reduction = 0
 
         iteration += 1
-        print("ITERATION IS " + str(iteration))
+
     message = None
     result = OptimizeResult(
         x=x,

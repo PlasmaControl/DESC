@@ -935,7 +935,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^zeta")
 
-        grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=False, rho=r_full)
+        grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
         data = eq.compute("D_Mercier", grid=grid)
 
         # Boozer currents

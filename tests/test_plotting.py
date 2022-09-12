@@ -41,7 +41,7 @@ def test_kwarg_warning(DummyStellarator):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_p(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "p", figsize=(4, 4))
+    fig, ax = plot_1d(eq, "|B|", figsize=(4, 4))
     return fig
 
 

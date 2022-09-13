@@ -70,13 +70,13 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(
             os.environ["DESC_BACKEND"],
             "jax",
-            "numpy environment " "variable incorrect with default argument",
+            "numpy environment variable incorrect with default argument",
         )
         self.assertFalse(ir.args.version, "version is not default False")
         self.assertEqual(
             len(ir.inputs[0]),
-            27,
-            "number of inputs does not match " "number expected in MIN_INPUT",
+            28,
+            "number of inputs does not match number expected in MIN_INPUT",
         )
         # test equality of arguments
 
@@ -86,7 +86,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(
             os.environ["DESC_BACKEND"],
             "numpy",
-            "numpy " "environment variable incorrect on use",
+            "numpy environment variable incorrect on use",
         )
 
     def test_quiet_verbose(self):
@@ -94,28 +94,28 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(
             ir.inputs[0]["verbose"],
             1,
-            "value of inputs['verbose'] " "incorrect on no arguments",
+            "value of inputs['verbose'] incorrect on no arguments",
         )
         argv = self.argv2 + ["-v"]
         ir = InputReader(argv)
         self.assertEqual(
             ir.inputs[0]["verbose"],
             2,
-            "value of inputs['verbose'] " "incorrect on verbose argument",
+            "value of inputs['verbose'] incorrect on verbose argument",
         )
         argv = self.argv2 + ["-vv"]
         ir = InputReader(argv)
         self.assertEqual(
             ir.inputs[0]["verbose"],
             3,
-            "value of inputs['verbose'] " "incorrect on double verbose argument",
+            "value of inputs['verbose'] incorrect on double verbose argument",
         )
         argv = self.argv2 + ["-q"]
         ir = InputReader(argv)
         self.assertEqual(
             ir.inputs[0]["verbose"],
             0,
-            "value of inputs['verbose'] " "incorrect on quiet argument",
+            "value of inputs['verbose'] incorrect on quiet argument",
         )
 
     def test_vmec_to_desc_input(self):

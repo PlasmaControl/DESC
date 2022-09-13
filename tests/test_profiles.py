@@ -98,5 +98,5 @@ class TestProfiles(unittest.TestCase):
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 1, -2, 1]), sym="auto"
         )
-        assert pp.sym == False
+        assert pp.sym is False
         assert pp.basis.num_modes == 5

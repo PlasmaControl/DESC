@@ -132,7 +132,7 @@ with the radial function
 The Fourier-Zernike coefficients :math:`R_{mn}` and :math:`Z_{mn}` are
 given by the variables ``cR`` and ``cZ``, respectively, in the section
 of the output file with the heading ``NRZ`` (which gives the total number
-of values). The indicies :math:`l`, :math:`m`, and :math:`n` that identify
+of values). The indices :math:`l`, :math:`m`, and :math:`n` that identify
 each coefficient are given by the variables ``l``, ``m``, and ``n`` on
 the same line of the output file as ``cR`` and ``cZ``.
 When stellarator symmetry is enforced,

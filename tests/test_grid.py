@@ -2,9 +2,12 @@ import unittest
 import pytest
 import numpy as np
 from scipy import special
-from desc.compute.utils import surface_averages
+
+from desc.basis import FourierZernikeBasis
+from desc.compute.utils import surface_averages, compress
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
+from desc.transform import Transform
 
 
 class TestGrid(unittest.TestCase):
@@ -28,119 +31,39 @@ class TestGrid(unittest.TestCase):
         w = 4 * np.pi ** 2 / (grid.num_nodes - 1)
         weights_ref = np.array([w, w, w / 2, w / 2, w, w])
 
-        np.testing.assert_allclose(weights, weights_ref, atol=1e-12)
+        np.testing.assert_allclose(weights, weights_ref)
         self.assertAlmostEqual(np.sum(grid.weights), (2 * np.pi) ** 2)
 
     def test_linear_grid(self):
 
-        L = 2
-        M = 1
-        N = 1
-        NFP = 1
+        L, M, N, NFP, axis, endpoint = 8, 5, 3, 2, True, False
+        g = LinearGrid(L, M, N, NFP, sym=False, axis=axis, endpoint=endpoint)
 
-        grid = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, axis=True, endpoint=False)
+        np.testing.assert_equal(g.num_rho, L + 1)
+        np.testing.assert_equal(g.num_theta, 2 * M + 1)
+        np.testing.assert_equal(g.num_zeta, 2 * N + 1)
 
         nodes = np.stack(
             [
-                np.array(
-                    [
-                        0,
-                        0,
-                        0,
-                        0.5,
-                        0.5,
-                        0.5,
-                        1,
-                        1,
-                        1,
-                        0,
-                        0,
-                        0,
-                        0.5,
-                        0.5,
-                        0.5,
-                        1,
-                        1,
-                        1,
-                        0,
-                        0,
-                        0,
-                        0.5,
-                        0.5,
-                        0.5,
-                        1,
-                        1,
-                        1,
-                    ]
+                np.tile(
+                    np.repeat(np.linspace(1, 0, g.num_rho, axis)[::-1], g.num_theta),
+                    g.num_zeta,
                 ),
-                np.array(
-                    [
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        0,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                    ]
+                np.tile(
+                    np.linspace(0, 2 * np.pi, g.num_theta, endpoint),
+                    g.num_rho * g.num_zeta,
                 ),
-                np.array(
-                    [
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        2 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                        4 * np.pi / 3,
-                    ]
+                np.repeat(
+                    np.linspace(0, 2 * np.pi / NFP, g.num_zeta, endpoint),
+                    g.num_rho * g.num_theta,
                 ),
             ]
         ).T
 
-        np.testing.assert_allclose(grid.nodes, nodes, atol=1e-8)
-
-        self.assertAlmostEqual(np.sum(grid.weights), (2 * np.pi) ** 2 / NFP)
+        np.testing.assert_allclose(g.nodes, nodes)
+        # spacing.prod == weights for linear grids (not true for concentric)
+        np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
+        self.assertAlmostEqual(g.weights.sum(), (2 * np.pi) ** 2)
 
     def test_concentric_grid(self):
 
@@ -173,34 +96,24 @@ class TestGrid(unittest.TestCase):
         ).T
         fringe_nodes = np.stack(
             [
+                np.array([0, 0.5, 0.5, 1, 1, 1]),
                 np.array(
                     [
-                        0,
-                        0.5,
-                        0.5,
-                        1,
-                        1,
-                        1,
-                    ]
-                ),
-                np.array(
-                    [
-                        2 / 3 * np.pi,
-                        2 / 3 * np.pi / 3,
-                        2 * np.pi / 3 + 2 / 3 * np.pi / 3,
-                        2 / 3 * np.pi / 5,
-                        2 * np.pi / 5 + 2 / 3 * np.pi / 5,
-                        4 * np.pi / 5 + 2 / 3 * np.pi / 5,
+                        np.pi / 2,
+                        np.pi / 4,
+                        3 * np.pi / 4,
+                        np.pi / 6,
+                        np.pi / 2,
+                        5 * np.pi / 6,
                     ]
                 ),
                 np.zeros((6,)),
             ]
         ).T
 
-        np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, atol=1e-8)
-        np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, atol=1e-8)
-
-        self.assertAlmostEqual(np.sum(grid_ansi.weights), (2 * np.pi) ** 2 / NFP)
+        np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, err_msg="ansi")
+        np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, err_msg="fringe")
+        self.assertAlmostEqual(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
 
     def test_quadrature_grid(self):
 
@@ -223,7 +136,9 @@ class TestGrid(unittest.TestCase):
             ]
         ).T
 
-        np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes, atol=1e-8)
+        # spacing.prod == weights for quad grids (not true for concentric)
+        np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
+        np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
 
     def test_concentric_grid_high_res(self):
         # need to make sure this builds without crashing, as in GH issue #207
@@ -286,85 +201,77 @@ class TestGrid(unittest.TestCase):
         assert cg.M == 4
         assert cg.N == 5
 
-    def test_rotation(self):
-        M = 2
-        N = 0
-        NFP = 1
-        cos_grid = ConcentricGrid(
-            M, M, N, NFP, sym=False, axis=True, rotation="cos", node_pattern="linear"
-        )
-        sin_grid = ConcentricGrid(
-            M, M, N, NFP, sym=False, axis=True, rotation="sin", node_pattern="linear"
-        )
-        cos_nodes = np.stack(
-            [
-                np.array([0, 1, 1, 1, 1, 1]),
-                np.array(
-                    [
-                        0,
-                        0,
-                        2 * np.pi / 5,
-                        4 * np.pi / 5,
-                        6 * np.pi / 5,
-                        8 * np.pi / 5,
-                    ]
-                ),
-                np.zeros((int((M + 1) * (M + 2) / 2),)),
-            ]
-        ).T
-        sin_nodes = np.stack(
-            [
-                np.array([0, 1, 1, 1, 1, 1]),
-                np.array(
-                    [
-                        0 + np.pi / 2,
-                        0 + np.pi / 10,
-                        2 * np.pi / 5 + np.pi / 10,
-                        4 * np.pi / 5 + np.pi / 10,
-                        6 * np.pi / 5 + np.pi / 10,
-                        8 * np.pi / 5 + np.pi / 10,
-                    ]
-                ),
-                np.zeros((int((M + 1) * (M + 2) / 2),)),
-            ]
-        ).T
-        np.testing.assert_allclose(cos_grid.nodes, cos_nodes, atol=1e-8)
-        np.testing.assert_allclose(sin_grid.nodes, sin_nodes, atol=1e-8)
-        with pytest.raises(ValueError):
-            tan_grid = ConcentricGrid(
-                M,
-                M,
-                N,
-                NFP,
-                sym=False,
-                axis=True,
-                rotation="tan",
-                node_pattern="linear",
-            )
-
-    def test_symmetry(self):
-        """
-        Test if symmetric grids alter dtheta spacing correctly.
-        This is a necessary but not sufficient test.
-        Should make sure that all test_compute_utils functions must also pass.
-        """
-
+    def test_symmetry_1(self):
         def test(grid, err_msg):
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
+            true_avg = 5
             f = (
-                5
+                true_avg
                 + np.cos(t)
                 - 0.5 * np.cos(z)
                 + 3 * np.cos(t) * np.cos(z)
                 - 2 * np.sin(z) * np.sin(t)
             )
-            avg = surface_averages(grid, f)
-            np.testing.assert_allclose(avg, 5, err_msg=err_msg)
+            numerical_avg = surface_averages(grid, f)
+            np.testing.assert_allclose(numerical_avg, true_avg, err_msg=err_msg)
 
-        g1 = LinearGrid(L=3, M=6, N=3, NFP=3, sym=True)
-        g2 = QuadratureGrid(L=3, M=6, N=3, NFP=3)
-        g3 = ConcentricGrid(L=3, M=6, N=3, NFP=3, sym=True, rotation="cos")
-        grids = {g1: "LinearGrid", g2: "QuadratureGrid", g3: "ConcentricGrid"}
-        for g, msg in grids.items():
-            test(g, msg)
+        L, M, N, NFP, sym = 6, 6, 3, 5, True
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
+        L, M, N, NFP, sym = 3, 6, 3, 3, True
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
+        L, M, N, NFP, sym = 5, 5, 3, 5, False
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
+        L, M, N, NFP, sym = 3, 7, 3, 3, False
+        test(LinearGrid(L, M, N, NFP, sym), "LinearGrid")
+        test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
+        test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
+
+    def test_symmetry_2(self):
+        def test(grid, basis, err_msg, true_avg=1):
+            transform = Transform(grid, basis)
+
+            # random data with specified average on each surface
+            coeffs = np.random.rand(basis.num_modes)
+            coeffs[np.where((basis.modes[:, 1:] == [0, 0]).all(axis=1))[0]] = 0
+            coeffs[np.where((basis.modes == [0, 0, 0]).all(axis=1))[0]] = true_avg
+
+            # compute average for each surface in grid
+            values = transform.transform(coeffs)
+            numerical_avg = compress(grid, surface_averages(grid, values))
+            if isinstance(grid, ConcentricGrid):
+                # values closest to axis are never accurate enough
+                numerical_avg = numerical_avg[1:]
+            np.testing.assert_allclose(numerical_avg, true_avg, err_msg=err_msg)
+
+        M = 10
+        M_grid = 23
+        test(
+            QuadratureGrid(L=M_grid, M=M_grid, N=0),
+            FourierZernikeBasis(L=M, M=M, N=0),
+            "QuadratureGrid",
+        )
+        test(
+            LinearGrid(L=M_grid, M=M_grid, N=0, sym=True),
+            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
+            "LinearGrid with symmetry",
+        )
+        test(
+            ConcentricGrid(L=M_grid, M=M_grid, N=0),
+            FourierZernikeBasis(L=M, M=M, N=0),
+            "ConcentricGrid without symmetry",
+        )
+        test(
+            ConcentricGrid(L=M_grid, M=M_grid, N=0, sym=True),
+            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
+            "ConcentricGrid with symmetry",
+        )

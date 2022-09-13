@@ -53,7 +53,7 @@ class ObjectiveFunction(IOAble):
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def _set_state_vector(self):
-        """Set state vector components, dimensions, and indicies."""
+        """Set state vector components, dimensions, and indices."""
         self._args = np.concatenate([obj.args for obj in self.objectives])
         self._args = [arg for arg in arg_order if arg in self._args]
 
@@ -152,7 +152,7 @@ class ObjectiveFunction(IOAble):
         """
         self._use_jit = use_jit
         timer = Timer()
-        timer.start("Objecive build")
+        timer.start("Objective build")
 
         # build objectives
         self._dim_f = 0
@@ -173,9 +173,9 @@ class ObjectiveFunction(IOAble):
         self._set_derivatives(self.use_jit)
 
         self._built = True
-        timer.stop("Objecive build")
+        timer.stop("Objective build")
         if verbose > 1:
-            timer.disp("Objecive build")
+            timer.disp("Objective build")
 
     def compute(self, x):
         """Compute the objective function.
@@ -412,7 +412,7 @@ class ObjectiveFunction(IOAble):
 
     @property
     def x_idx(self):
-        """dict: Indicies of the components of the state vector."""
+        """dict: Indices of the components of the state vector."""
         return self._x_idx
 
     @property
@@ -468,7 +468,12 @@ class _Objective(IOAble, ABC):
         self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
         self._dimensions["L_lmn"] = eq.L_basis.num_modes
         self._dimensions["p_l"] = eq.pressure.params.size
-        self._dimensions["i_l"] = eq.iota.params.size
+        try:
+            self._dimensions["i_l"] = eq.iota.params.size
+            self._dimensions["c_l"] = 0
+        except AttributeError:
+            self._dimensions["i_l"] = 0
+            self._dimensions["c_l"] = eq.current.params.size
         self._dimensions["Psi"] = 1
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes

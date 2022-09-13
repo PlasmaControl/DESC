@@ -593,7 +593,7 @@ class FiniteDiffDerivative(_Derivative):
 
     @classmethod
     def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
-        """Compute a jvp wrt to a single argument."""
+        """Compute a jvp wrt a single argument."""
         rel_step = kwargs.get("rel_step", 1e-3)
         normv = jnp.linalg.norm(v)
         #print("V IS " + str(v))

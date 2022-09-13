@@ -1,6 +1,7 @@
 import numpy as np
-from abc import ABC, abstractmethod
 import warnings
+from abc import ABC, abstractmethod
+from scipy.special import factorial
 import scipy.optimize
 
 from desc.backend import jnp, jit
@@ -23,10 +24,10 @@ class Profile(IOAble, ABC):
     This allows the profile to be used in solving and optimizing an equilibrium.
 
     The compute method should take an array of nodes and an optional array of parameters
-    and compute the value or derivative of the profile at the specified nodes. If the
-    parameters are not given, the ones assigned to the profile should be used.
+    and compute the value or derivative of the profile at the specified nodes.
+    If the parameters are not given, the ones assigned to the profile should be used.
 
-    Subclasses must also implement getter and setting methods for name, grid, and params
+    Subclasses must also implement getter and setter methods for name, grid, and params.
 
     """
 
@@ -86,16 +87,17 @@ class PowerSeriesProfile(Profile):
     Parameters
     ----------
     params: array-like
-        coefficients of the series. If modes is not supplied, assumed to be in ascending order
-        with no missing values. If modes is given, coefficients can be in any order or indexing.
+        Coefficients of the series. If modes is not supplied, assumed to be in ascending
+        order with no missing values. If modes is given, coefficients can be in any
+        order or indexing.
     modes : array-like
-        mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
+        Mode numbers for the associated coefficients. eg a[modes[i]] = params[i]
     grid : Grid
-        default grid to use for computing values using transform method
+        Default grid to use for computing values using transform method.
     sym : bool
         Whether the basis should only contain even powers (True) or all powers (False).
     name : str
-        name of the profile
+        Name of the profile.
 
     """
 
@@ -106,17 +108,12 @@ class PowerSeriesProfile(Profile):
         self._name = name
         params = np.atleast_1d(params)
 
-        if (
-            sym == "auto"
-        ):  # check if all odd terms are zero, if so return even. Print something when does so?
+        if sym == "auto":  # sym = "even" if all odd modes are zero, else sym = False
             if modes is None:
                 modes = np.arange(params.size)
             else:
                 modes = np.atleast_1d(modes)
-            if np.all(params[modes % 2 != 0] == 0):
-                sym = "even"
-            else:
-                sym = False
+            sym = np.all(params[modes % 2 != 0] == 0)
         self.sym = "even" if sym else False
         if modes is None:
             if sym:
@@ -338,7 +335,7 @@ class PowerSeriesProfile(Profile):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------
@@ -413,7 +410,7 @@ class SplineProfile(Profile):
         - `'linear'`: linear interpolation
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
     grid : Grid
         default grid to use for computing values using transform method
     name : str
@@ -583,7 +580,7 @@ class SplineProfile(Profile):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------
@@ -955,7 +952,7 @@ class MTanhProfile(Profile):
             - `'linear'`: linear interpolation
             - `'cubic'`: C1 cubic splines (aka local splines)
             - `'cubic2'`: C2 cubic splines (aka natural splines)
-            - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
 
         Returns
         -------

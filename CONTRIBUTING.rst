@@ -182,7 +182,7 @@ JIT compiling and automatic differentiation. JAX has a submodule,
 ``jax.numpy``, commonly abbreviated as ``jnp`` which offers an API
 almost identical to ``numpy``.
 
--  If the function will ever be used for optimization (ie, called as
+-  If the function will ever be used for optimization (i.e., called as
    part of an objective function), use ``jnp``.
 -  Similarly, if the function will need to be called multiple times and
    could benefit from JIT compiling, use ``jnp`` and ``jit``. However,
@@ -191,7 +191,7 @@ almost identical to ``numpy``.
 -  If the function will ever need to be differentiated through, use
    ``jnp`` and ``jacfwd``, ``jacrev``, or ``grad``.
 -  If you are certain it will only ever be used during initialization or
-   post processing (ie plotting), feel free to use ``np``, as it can be
+   post processing (i.e. plotting), feel free to use ``np``, as it can be
    slightly faster without JIT compilation, and has fewer tricks
    necessary to make it work as expected.
 -  If in doubt, ``jnp`` is usually a safe bet.

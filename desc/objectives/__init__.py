@@ -5,6 +5,7 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixIota,
+    FixCurrent,
     FixPsi,
 )
 from ._generic import GenericObjective, ToroidalCurrent

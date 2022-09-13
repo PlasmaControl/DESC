@@ -1,26 +1,28 @@
-import numpy as np
-import os
 import copy
 import numbers
-
+import os
+import warnings
 from abc import ABC
 from inspect import signature
 
+import numpy as np
+from termcolor import colored
+
+import desc.compute as compute_funs
 from desc.backend import jnp, jit, put, while_loop
-from desc.io import IOAble, load
-from desc.utils import copy_coeffs, Index
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.transform import Transform
-from desc.profiles import Profile, PowerSeriesProfile
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
+from desc.compute import arg_order, data_index, compute_jacobian
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
     Surface,
 )
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-import desc.compute as compute_funs
-from desc.compute import arg_order, data_index, compute_jacobian
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.io import IOAble, load
+from desc.profiles import Profile, PowerSeriesProfile
+from desc.transform import Transform
+from desc.utils import copy_coeffs, Index
 
 
 class _Configuration(IOAble, ABC):
@@ -47,15 +49,16 @@ class _Configuration(IOAble, ABC):
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero rotational transform
+    current : Profile or ndarray shape(k,2) (optional)
+        Toroidal current profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and
-        minor radius 1
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
-        of mode numbers and spectral coefficints of the form [n, R, Z].
+        of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
@@ -83,6 +86,7 @@ class _Configuration(IOAble, ABC):
         "_axis",
         "_pressure",
         "_iota",
+        "_current",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -96,6 +100,7 @@ class _Configuration(IOAble, ABC):
         N=None,
         pressure=None,
         iota=None,
+        current=None,
         surface=None,
         axis=None,
         sym=None,
@@ -299,6 +304,11 @@ class _Configuration(IOAble, ABC):
             raise TypeError("Got unknown axis type {}".format(axis))
 
         # profiles
+        self._pressure = None
+        self._iota = None
+        self._current = None
+
+        # pressure
         if isinstance(pressure, Profile):
             self._pressure = pressure
         elif isinstance(pressure, (np.ndarray, jnp.ndarray)):
@@ -312,18 +322,50 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
+        # default profile
+        if iota is None and current is None:
+            self._current = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="current"
+            )
+        elif iota is not None and current is not None:
+            raise ValueError("Cannot specify both iota and current profiles.")
+
+        # iota
         if isinstance(iota, Profile):
             self.iota = iota
         elif isinstance(iota, (np.ndarray, jnp.ndarray)):
             self._iota = PowerSeriesProfile(
                 modes=iota[:, 0], params=iota[:, 1], name="iota"
             )
-        elif iota is None:
-            self._iota = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="iota"
-            )
-        else:
+        elif iota is not None:
             raise TypeError("Got unknown iota profile {}".format(iota))
+
+        # current
+        if isinstance(current, Profile):
+            self.current = current
+        elif isinstance(current, (np.ndarray, jnp.ndarray)):
+            self._current = PowerSeriesProfile(
+                modes=current[:, 0], params=current[:, 1], name="current"
+            )
+        elif current is not None:
+            raise TypeError("Got unknown current profile {}".format(current))
+
+        # warning about odd profiles
+        if isinstance(self.pressure, PowerSeriesProfile):
+            if self.pressure.sym != "even":
+                warnings.warn(
+                    colored("Pressure profile is not an even power series.", "yellow")
+                )
+        if isinstance(self.iota, PowerSeriesProfile):
+            if self.iota.sym != "even":
+                warnings.warn(
+                    colored("Iota profile is not an even power series.", "yellow")
+                )
+        if isinstance(self.current, PowerSeriesProfile):
+            if self.current.sym != "even":
+                warnings.warn(
+                    colored("Current profile is not an even power series.", "yellow")
+                )
 
         # ensure number of field periods agree before setting guesses
         eq_NFP = self.NFP
@@ -425,11 +467,22 @@ class _Configuration(IOAble, ABC):
                 else:
                     axisR = None
                     axisZ = None
+                coord = self.surface.rho if hasattr(self.surface, "rho") else None
                 self.R_lmn = self._initial_guess_surface(
-                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axisR
+                    self.R_basis,
+                    self.Rb_lmn,
+                    self.surface.R_basis,
+                    axisR,
+                    "lcfs",
+                    coord,
                 )
                 self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axisZ
+                    self.Z_basis,
+                    self.Zb_lmn,
+                    self.surface.Z_basis,
+                    axisZ,
+                    "lcfs",
+                    coord,
                 )
             else:
                 raise ValueError(
@@ -504,7 +557,7 @@ class _Configuration(IOAble, ABC):
                             + "please make sure it is a valid DESC or VMEC equilibrium."
                         )
                 if not isinstance(eq, _Configuration):
-                    if hasattr(eq, "equilibria"):  # its a family!
+                    if hasattr(eq, "equilibria"):  # it's a family!
                         eq = eq[-1]
                     else:
                         raise TypeError(
@@ -553,7 +606,7 @@ class _Configuration(IOAble, ABC):
             Whether the boundary condition is specified by the last closed flux surface
             (rho=1) or the Poincare section (zeta=0).
         coord : float or None
-            Surface label (ie, rho, zeta etc) for supplied surface.
+            Surface label (ie, rho, zeta, etc.) for supplied surface.
 
         Returns
         -------
@@ -563,7 +616,7 @@ class _Configuration(IOAble, ABC):
         """
         x_lmn = np.zeros((x_basis.num_modes,))
         if mode is None:
-            # auto detect based on mode numbers
+            # auto-detect based on mode numbers
             if np.all(b_basis.modes[:, 0] == 0):
                 mode = "lcfs"
             elif np.all(b_basis.modes[:, 2] == 0):
@@ -693,6 +746,8 @@ class _Configuration(IOAble, ABC):
             self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
         if L_change and hasattr(self.iota, "change_resolution"):
             self.iota.change_resolution(L=max(L, self.iota.basis.L))
+        if L_change and hasattr(self.current, "change_resolution"):
+            self.current.change_resolution(L=max(L, self.current.basis.L))
 
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
 
@@ -1012,11 +1067,42 @@ class _Configuration(IOAble, ABC):
     @property
     def i_l(self):
         """Coefficients of iota profile (ndarray)."""
-        return self.iota.params
+        return np.empty(0) if self.iota is None else self.iota.params
 
     @i_l.setter
     def i_l(self, i_l):
+        if self.iota is None:
+            raise ValueError(
+                "Attempt to set rotational transform on an equilibrium with fixed toroidal current"
+            )
         self.iota.params = i_l
+
+    @property
+    def current(self):
+        """Toroidal current (I) profile."""
+        return self._current
+
+    @current.setter
+    def current(self, new):
+        if isinstance(new, Profile):
+            self._current = new
+        else:
+            raise TypeError(
+                f"current profile should be of type Profile or a subclass, got {new} "
+            )
+
+    @property
+    def c_l(self):
+        """Coefficients of current profile (ndarray)."""
+        return np.empty(0) if self.current is None else self.current.params
+
+    @c_l.setter
+    def c_l(self, c_l):
+        if self.current is None:
+            raise ValueError(
+                "Attempt to set toroidal current on an equilibrium with fixed rotational transform"
+            )
+        self.current.params = c_l
 
     @property
     def R_basis(self):
@@ -1100,8 +1186,19 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
-                inputs[arg] = self.iota.copy()
-                inputs[arg].grid = grid
+                if self.iota is not None:
+                    inputs[arg] = self.iota.copy()
+                    inputs[arg].grid = grid
+                else:
+                    inputs[arg] = None
+            elif arg == "current":
+                if self.current is not None:
+                    inputs[arg] = self.current.copy()
+                    inputs[arg].grid = grid
+                else:
+                    inputs[arg] = None
+            elif arg == "grid":
+                inputs[arg] = grid
 
         return fun(**inputs, **kwargs)
 
@@ -1294,7 +1391,7 @@ class _Configuration(IOAble, ABC):
         Returns
         -------
         is_nested : bool
-            whether or not the surfaces are nested
+            whether the surfaces are nested
 
         """
         if R_lmn is None:

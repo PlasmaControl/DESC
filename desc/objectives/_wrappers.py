@@ -69,7 +69,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
-            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity),
+            iota=eq.iota is not None,
         )
 
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
@@ -85,7 +86,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._scalar = False
 
         # set_state_vector
-        self._args = ["p_l", "i_l", "Psi", "Rb_lmn", "Zb_lmn"]
+        self._args = ["p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn"]
         if isinstance(self._eq_objective.objectives[0], CurrentDensity):
             self._args.remove("p_l")
         self._dimensions = self._objective.dimensions

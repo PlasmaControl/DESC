@@ -262,7 +262,7 @@ for i in range(30):
     cutoff=1e-6,
     verbose=3,
     copy=True,
-        )
+        )[0]
     eq1s.append(eq_temp)
     eq1s[-1].solve(maxiter=50)    
     print_error_summary(eq1s)
@@ -303,7 +303,7 @@ for i in range(30):
     cutoff=1e-6,
     verbose=3,
     copy=True,
-        )
+        )[0]
     eq2s.append(eq_temp)
     eq2s[-1].solve(maxiter=50)    
     print_error_summary(eq2s)

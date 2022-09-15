@@ -249,26 +249,26 @@ def print_error_summary(eqis):
 
 eq1s = [eq1]
 
-for i in range(30):
-    eq_temp = optimal_perturb(
-    eq1s[-1],
-    fb_objective,
-    bc_objective,
-    dRb=True,
-    dZb=True,
-    subspace=None,
-    order=2,
-    tr_ratio=[0.01, 0.1],
-    cutoff=1e-6,
-    verbose=3,
-    copy=True,
-        )[0]
-    eq1s.append(eq_temp)
-    eq1s[-1].solve(maxiter=50)    
-    print_error_summary(eq1s)
+# for i in range(30):
+#     eq_temp = optimal_perturb(
+#     eq1s[-1],
+#     fb_objective,
+#     bc_objective,
+#     dRb=True,
+#     dZb=True,
+#     subspace=None,
+#     order=2,
+#     tr_ratio=[0.01, 0.1],
+#     cutoff=1e-6,
+#     verbose=3,
+#     copy=True,
+#         )[0]
+#     eq1s.append(eq_temp)
+#     eq1s[-1].solve(maxiter=50)    
+#     print_error_summary(eq1s)
 
-with open("run___nestor_out1.pkl", "wb+") as f:
-    pickle.dump(eq1s, f)
+# with open("run___nestor_out1.pkl", "wb+") as f:
+#     pickle.dump(eq1s, f)
 
 eq2 = eq1s[-1].copy()
 
@@ -278,8 +278,8 @@ eq2.solve(ftol=1e-2, verbose=3)
 bc_objective = ObjectiveFunction(BoundaryErrorNESTOR(ext_field))
 fb_objective = ObjectiveFunction(ForceBalance())
 
-fb_objective.build(eq1)
-bc_objective.build(eq1)
+fb_objective.build(eq2)
+bc_objective.build(eq2)
 
 def print_error_summary(eqis):
     for eqi in eqis:

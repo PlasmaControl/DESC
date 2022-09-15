@@ -251,8 +251,8 @@ bc_objective.build(eq)
 
 eq1 = eq.copy()
 out = eq1._optimize(
-    bc_objective,
-    fb_objective,
+    ObjectiveFunction(bc_objective),
+    ObjectiveFunction(fb_objective),
     maxiter=60,
     verbose=3,
     perturb_options={"order":2, "dZb":True, "dRb":True, "tr_ratio":[0.01, 0.01]}
@@ -285,8 +285,8 @@ bc_objective.build(eq2)
 
 
 out = eq2._optimize(
-    bc_objective,
-    fb_objective,
+    ObjectiveFunction(bc_objective),
+    ObjectiveFunction(fb_objective),
     maxiter=60,
     verbose=3,
     perturb_options={"order":2, "dZb":True, "dRb":True, "tr_ratio":[0.01, 0.01]}
@@ -299,8 +299,8 @@ with open("run__nestor_vac_out2.pkl", "wb+") as f:
 
 
 out = veq._optimize(
-    bc_objective,
-    fb_objective,
+    ObjectiveFunction(bc_objective),
+    ObjectiveFunction(fb_objective),
     maxiter=60,
     verbose=3,
     perturb_options={"order":2, "dZb":True, "dRb":True, "tr_ratio":[0.01, 0.01]}

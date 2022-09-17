@@ -265,7 +265,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     data = eq.compute(name, grid)[name]
-    if data_index[name]["dim"] != 1:
+    if data_index[name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"
@@ -537,9 +537,10 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
                 norm_name = "|grad(|B|^2)|/2mu0"
+                norm_data, _ = _compute(eq, norm_name, grid)
             else:  # normalize force balance with pressure by gradient of pressure
-                norm_name = "|grad(p)|"
-            norm_data, _ = _compute(eq, norm_name, grid)
+                norm_name = "<|grad(p)|>_vol"
+                norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -779,6 +780,7 @@ def plot_fsa(
     rho=20,
     M=None,
     N=None,
+    norm_F=False,
     ax=None,
     **kwargs,
 ):
@@ -799,6 +801,10 @@ def plot_fsa(
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
         Toroidal grid resolution. Default is eq.N_grid.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the volume average of the gradient of magnetic pressure,
+        while finite beta equilibria are normalized by the volume average of the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     **kwargs : fig,ax and plotting properties
@@ -851,7 +857,19 @@ def plot_fsa(
     g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
     data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
-
+    if norm_F:
+        if name != "|F|":
+            return ValueError(colored("Can only normalize |F|.", "red"))
+        else:
+            if (
+                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+            ):  # normalize vacuum force by B pressure gradient
+                norm_name = "|grad(|B|^2)|/2mu0"
+                norm_data, _ = _compute(eq, norm_name, grid)
+            else:  # normalize force balance with pressure by gradient of pressure
+                norm_name = "<|grad(p)|>_vol"
+                norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+            values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(
@@ -872,6 +890,15 @@ def plot_fsa(
 
     ax.set_xlabel(_axis_labels_rtz[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
+    if norm_F:
+        ax.set_ylabel(
+            "%s / %s"
+            % (
+                "$" + data_index[name]["label"] + "$",
+                "$" + data_index[norm_name]["label"] + "$",
+            ),
+            fontsize=ylabel_fontsize,
+        )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -960,9 +987,10 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
                 np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
             ):  # normalize vacuum force by B pressure gradient
                 norm_name = "|grad(|B|^2)|/2mu0"
+                norm_data, _ = _compute(eq, norm_name, grid)
             else:  # normalize force balance with pressure by gradient of pressure
-                norm_name = "|grad(p)|"
-            norm_data, _ = _compute(eq, norm_name, grid)
+                norm_name = "<|grad(p)|>_vol"
+                norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols

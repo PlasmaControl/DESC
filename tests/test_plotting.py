@@ -152,6 +152,13 @@ def test_fsa_G(SOLOVEV):
     return fig
 
 
+@pytest.mark.mpl_image_compare(tolerance=50)
+def test_fsa_F_normalized(SOLOVEV):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    return fig
+
+
 @pytest.mark.mpl_image_compare(tolerance=60)
 def test_section_J(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]

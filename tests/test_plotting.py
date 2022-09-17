@@ -30,6 +30,8 @@ from desc.basis import (
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.coils import FourierXYZCoil, CoilSet
 
+tol_1d = 1
+
 
 def test_kwarg_warning(DummyStellarator):
     eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
@@ -38,21 +40,21 @@ def test_kwarg_warning(DummyStellarator):
     return None
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_1d_p(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "|B|", figsize=(4, 4))
+    fig, ax = plot_1d(eq, "p", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_1d_dpdr(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "p_r", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_1d_iota(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
@@ -60,7 +62,7 @@ def test_1d_iota(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_1d_logpsi(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "psi", log=True, figsize=(4, 4))
@@ -138,21 +140,21 @@ def test_3d_rt(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_fsa_I(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "B_theta")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_fsa_G(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "B_zeta", log=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
 def test_fsa_F_normalized(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
@@ -282,7 +284,7 @@ def test_plot_coefficients(SOLOVEV):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=10)
 def test_plot_logo():
     fig, ax = plot_logo()
     return fig

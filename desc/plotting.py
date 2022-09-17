@@ -9,7 +9,7 @@ from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
 from desc.compute.utils import compress, surface_averages
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import data_index
@@ -539,8 +539,9 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
                 norm_name = "|grad(|B|^2)|/2mu0"
                 norm_data, _ = _compute(eq, norm_name, grid)
             else:  # normalize force balance with pressure by gradient of pressure
+                compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
                 norm_name = "<|grad(p)|>_vol"
-                norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+                norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -867,8 +868,9 @@ def plot_fsa(
                 norm_name = "|grad(|B|^2)|/2mu0"
                 norm_data, _ = _compute(eq, norm_name, grid)
             else:  # normalize force balance with pressure by gradient of pressure
+                compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
                 norm_name = "<|grad(p)|>_vol"
-                norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+                norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
             values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
@@ -989,8 +991,9 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
                 norm_name = "|grad(|B|^2)|/2mu0"
                 norm_data, _ = _compute(eq, norm_name, grid)
             else:  # normalize force balance with pressure by gradient of pressure
+                compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
                 norm_name = "<|grad(p)|>_vol"
-                norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+                norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
             data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols

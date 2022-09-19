@@ -247,16 +247,10 @@ def test_vmec_save(DSHAPE, TmpDir):
             False,
         )
     )
-    np.testing.assert_allclose(
-        vmec.variables["am"][:], desc.variables["am"][:], atol=1e-1
-    )
-    np.testing.assert_allclose(
-        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-4
-    )
+    np.testing.assert_allclose(vmec.variables["am"][:], desc.variables["am"][:])
+    np.testing.assert_allclose(vmec.variables["ai"][:], desc.variables["ai"][:])
     np.testing.assert_allclose(vmec.variables["ac"][:], desc.variables["ac"][:])
-    np.testing.assert_allclose(
-        vmec.variables["presf"][:], desc.variables["presf"][:], rtol=5e-2, atol=5e-2
-    )
+    np.testing.assert_allclose(vmec.variables["presf"][:], desc.variables["presf"][:])
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
     np.testing.assert_allclose(vmec.variables["iotaf"][:], desc.variables["iotaf"][:])
@@ -264,9 +258,7 @@ def test_vmec_save(DSHAPE, TmpDir):
     np.testing.assert_allclose(vmec.variables["phi"][:], desc.variables["phi"][:])
     np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
     np.testing.assert_allclose(vmec.variables["phips"][:], desc.variables["phips"][:])
-    np.testing.assert_allclose(
-        vmec.variables["chi"][:], desc.variables["chi"][:], rtol=1e-3, atol=1e-5
-    )
+    np.testing.assert_allclose(vmec.variables["chi"][:], desc.variables["chi"][:])
     np.testing.assert_allclose(vmec.variables["chipf"][:], desc.variables["chipf"][:])
     np.testing.assert_allclose(
         vmec.variables["Rmajor_p"][:], desc.variables["Rmajor_p"][:]
@@ -280,14 +272,21 @@ def test_vmec_save(DSHAPE, TmpDir):
     )
     # raxis_cc & zaxis_cs excluded b/c VMEC saves initial guess, not final solution
     np.testing.assert_allclose(
-        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
+        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:]
     )
     np.testing.assert_allclose(
-        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:], rtol=5e-3
+        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:]
     )
     np.testing.assert_allclose(
-        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
+        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:]
     )
+    np.testing.assert_allclose(vmec.variables["buco"][:], desc.variables["buco"][:])
+    np.testing.assert_allclose(vmec.variables["bvco"][:], desc.variables["bvco"][:])
+    np.testing.assert_allclose(vmec.variables["DShear"][:], desc.variables["DShear"][:])
+    np.testing.assert_allclose(vmec.variables["DCurr"][:], desc.variables["DCurr"][:])
+    np.testing.assert_allclose(vmec.variables["DWell"][:], desc.variables["DWell"][:])
+    np.testing.assert_allclose(vmec.variables["DGeod"][:], desc.variables["DGeod"][:])
+    np.testing.assert_allclose(vmec.variables["DMerc"][:], desc.variables["DMerc"][:])
 
     # straight field-line grid to compare quantities
     grid = LinearGrid(L=15, M=2, N=2, NFP=eq.NFP)
@@ -329,10 +328,54 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=True,
     )
-    np.testing.assert_allclose(R_vmec, R_desc, rtol=2e-3)
-    np.testing.assert_allclose(Z_vmec, Z_desc, rtol=2e-3)
+    np.testing.assert_allclose(R_vmec, R_desc)
+    np.testing.assert_allclose(Z_vmec, Z_desc)
 
-    # TODO: not testing Jacobian because VMEC & DESC coordinate systems are different
+    # lambda
+    L_vmec = VMECIO.vmec_interpolate(
+        np.zeros_like(vmec.variables["lmns"][:]),
+        vmec.variables["lmns"][:],
+        vmec.variables["xm"][:],
+        vmec.variables["xn"][:],
+        theta=vartheta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    L_desc = VMECIO.vmec_interpolate(
+        np.zeros_like(desc.variables["lmns"][:]),
+        desc.variables["lmns"][:],
+        desc.variables["xm"][:],
+        desc.variables["xn"][:],
+        theta=vartheta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(L_vmec, L_desc)
+
+    # Jacobian
+    g_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["gmnc"][:],
+        np.zeros_like(vmec.variables["gmnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=vartheta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    g_desc = VMECIO.vmec_interpolate(
+        desc.variables["gmnc"][:],
+        np.zeros_like(desc.variables["gmnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=vartheta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(g_vmec, g_desc, rtol=1e-3)
 
     # |B|
     b_vmec = VMECIO.vmec_interpolate(
@@ -378,8 +421,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
-    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=2e-2)
+    np.testing.assert_allclose(bsupu_vmec, bsupu_desc)
 
     # B^zeta
     bsupv_vmec = VMECIO.vmec_interpolate(
@@ -402,9 +444,30 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsupv_vmec, bsupv_desc, rtol=1e-3, atol=1e-3)
+    np.testing.assert_allclose(bsupv_vmec, bsupv_desc)
 
-    # TODO: not testing B_psi because VMEC radial derivatives are inaccurate
+    # B_psi
+    bsubs_vmec = VMECIO.vmec_interpolate(
+        np.zeros_like(vmec.variables["bsubsmns"][:]),
+        vmec.variables["bsubsmns"][:],
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=vartheta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    bsubs_desc = VMECIO.vmec_interpolate(
+        np.zeros_like(desc.variables["bsubsmns"][:]),
+        desc.variables["bsubsmns"][:],
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=vartheta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(bsubs_vmec, bsubs_desc)
 
     # B_theta
     bsubu_vmec = VMECIO.vmec_interpolate(
@@ -427,8 +490,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
-    np.testing.assert_allclose(bsubu_vmec, bsubu_desc, rtol=5e-2, atol=6e-3)
+    np.testing.assert_allclose(bsubu_vmec, bsubu_desc)
 
     # B_zeta
     bsubv_vmec = VMECIO.vmec_interpolate(
@@ -451,9 +513,53 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsubv_vmec, bsubv_desc, rtol=1e-3)
+    np.testing.assert_allclose(bsubv_vmec, bsubv_desc)
 
-    # TODO: not testing J^theta & J^zeta because VMEC radial derivatives are inaccurate
+    # J^theta * sqrt(g)
+    currumnc_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["currumnc"][:],
+        np.zeros_like(vmec.variables["currumnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=vartheta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    currumnc_desc = VMECIO.vmec_interpolate(
+        desc.variables["currumnc"][:],
+        np.zeros_like(desc.variables["currumnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=vartheta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(currumnc_vmec, currumnc_desc)
+
+    # J^zeta * sqrt(g)
+    currvmnc_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["currvmnc"][:],
+        np.zeros_like(vmec.variables["currvmnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=vartheta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    currvmnc_desc = VMECIO.vmec_interpolate(
+        desc.variables["currvmnc"][:],
+        np.zeros_like(desc.variables["currvmnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=vartheta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(currvmnc_vmec, currvmnc_desc)
 
     vmec.close()
     desc.close()

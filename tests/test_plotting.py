@@ -170,7 +170,7 @@ def test_section_J(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(tolerance=24)
 def test_section_Z(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "Z")

@@ -428,9 +428,7 @@ class FixLambdaGauge(_Objective):
         return self._shift_scale(f)
 
 
-class _FixProfile(
-    _Objective,
-):  # should it be an ABC?
+class _FixProfile(_Objective, ABC):
     """Fixes profile coefficients (or values, for SplineProfile).
 
     Parameters
@@ -475,13 +473,15 @@ class _FixProfile(
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = None
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, profile=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
         ----------
-        eq : Equilibrium, optional
+        eq : Equilibrium
             Equilibrium that will be optimized to satisfy the Objective.
+        profile : Profile, optional
+            profile to fix
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
@@ -491,33 +491,19 @@ class _FixProfile(
         # what do I wanna do here... crud
         # put this line in the subclass?
         if self._profile is None or self._profile.params.size != eq.L + 1:
-            if self.name == "fixed-pressure":
-                self._profile = eq.pressure
-            elif self.name == "fixed-iota":
-                self._profile = eq.iota
-            # elif self.name == "fixed-current":
-            #     self._profile = eq.current
-            else:
-                raise NotImplementedError(
-                    f"Fixing profile for {self.name} is not implemented."
-                )
+            self._profile = profile
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
-            indices = np.array([[]], dtype=int)
             self._idx = np.array([], dtype=int)
+            indices = np.array([[]], dtype=int)
             idx = self._idx
         elif self._indices is True:  # all indices of Profile.params
             self._idx = np.arange(np.size(self._profile.params))
-            print(self._idx)
-            print(self._profile)
-            print(self._profile.params)
             indices = self._idx
             idx = self._idx
         else:  # specified indices
-            self._idx = np.atleast_1d(
-                self._indices
-            )  # should _idx be 1d or 2d? I think 1D
+            self._idx = np.atleast_1d(self._indices)
             idx = self._idx
 
         self._dim_f = self._idx.size
@@ -535,27 +521,10 @@ class _FixProfile(
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, params, **kwargs):
-        """Compute fixed profile errors.
-
-        Parameters
-        ----------
-        params : ndarray
-            parameters of the Profile.param.
-
-        Returns
-        -------
-        f : ndarray
-            Fixed profile errors.
-
-        """
-        fixed_params = params[self._idx]
-        return self._shift_scale(fixed_params)
-
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return None  # or do ABC
+        return ""
 
 
 class FixPressure(_FixProfile):
@@ -605,6 +574,39 @@ class FixPressure(_FixProfile):
             name=name,
         )
         self._print_value_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        profile = eq.pressure
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, p_l, **kwargs):
+        """Compute fixed pressure profile errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            parameters of the pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        fixed_params = p_l[self._idx]
+        return self._shift_scale(fixed_params)
 
     @property
     def target_arg(self):
@@ -659,6 +661,39 @@ class FixIota(_FixProfile):
             name=name,
         )
         self._print_value_fmt = "Fixed-iota profile error: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        profile = eq.iota
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, i_l, **kwargs):
+        """Compute fixed iota errors.
+
+        Parameters
+        ----------
+        p_l : ndarray
+            parameters of the iota profile.
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        fixed_params = i_l[self._idx]
+        return self._shift_scale(fixed_params)
 
     @property
     def target_arg(self):

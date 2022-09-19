@@ -610,8 +610,9 @@ class VMECIO:
             gmns.units = "m"
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
+        # d(rho)/d(s) = 1/(2*rho)
         data = (
-            data_half_grid["sqrt(g)"]
+            (data_half_grid["sqrt(g)"] / (2 * data_half_grid["rho"]))
             .reshape(
                 (half_grid.num_theta, half_grid.num_rho, half_grid.num_zeta), order="F"
             )

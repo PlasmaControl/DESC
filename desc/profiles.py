@@ -55,7 +55,6 @@ class Profile(IOAble, ABC):
             return
         if np.isscalar(grid):
             grid = np.linspace(0, 1, grid)
-            grid = np.atleast_1d(grid)
         if isinstance(grid, (np.ndarray, jnp.ndarray)):
             if grid.ndim == 1:
                 grid = np.pad(grid[:, np.newaxis], ((0, 0), (0, 2)))
@@ -305,7 +304,7 @@ class ScaledProfile(Profile):
 
     @params.setter
     def params(self, x):
-        if isinstance(x, tuple) and len(x) == 2:
+        if isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             scale = x[0]
         elif np.isscalar(x):
@@ -392,7 +391,7 @@ class SumProfile(Profile):
 
     @params.setter
     def params(self, x):
-        if isinstance(x, tuple) and len(x) == len(self._profiles):
+        if isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
             for i, profile in enumerate(self._profiles):
                 profile.params = x[i] if x[i] is not None else profile.params
         else:
@@ -481,7 +480,7 @@ class ProductProfile(Profile):
 
     @params.setter
     def params(self, x):
-        if isinstance(x, tuple) and len(x) == len(self._profiles):
+        if isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
             for i, profile in enumerate(self._profiles):
                 profile.params = x[i] if x[i] is not None else profile.params
         else:
@@ -602,6 +601,11 @@ class PowerSeriesProfile(Profile):
         s = s[:-1]
         s += ", basis={})".format(self.basis)
         return s
+
+    @property
+    def sym(self):
+        """Symmetry type of the power series."""
+        return self.basis.sym
 
     @property
     def basis(self):

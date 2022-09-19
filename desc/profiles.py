@@ -562,7 +562,7 @@ class PowerSeriesProfile(Profile):
                 sym = "even"
             else:
                 sym = False
-        self.sym = "even" if sym else False
+        sym = "even" if sym else False
         if modes is None:
             if sym:
                 modes = np.arange(2 * params.size, step=2)
@@ -570,7 +570,7 @@ class PowerSeriesProfile(Profile):
                 modes = np.arange(params.size)
         else:
             modes = np.atleast_1d(modes)
-        self._basis = PowerSeries(L=int(np.max(abs(modes))), sym=self.sym)
+        self._basis = PowerSeries(L=int(np.max(abs(modes))), sym=sym)
         self._params = np.zeros(self.basis.num_modes, dtype=float)
         for m, c in zip(modes, params):
             idx = np.where(self.basis.modes[:, 0] == int(m))[0]

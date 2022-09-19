@@ -488,8 +488,6 @@ class _FixProfile(_Objective, ABC):
             Level of output.
 
         """
-        # what do I wanna do here... crud
-        # put this line in the subclass?
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = profile
 

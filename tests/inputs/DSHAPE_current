@@ -14,7 +14,9 @@ N_grid =  0
 
 # continuation parameters
 bdry_ratio = 1
-pres_ratio = 1  # skip vacuum to avoid zero beta with fixed current
+# skip vacuum to avoid zero beta with fixed current
+pres_ratio = 0.5 1 1
+curr_ratio = 0.5 1 1
 pert_order = 2
 
 # solver tolerances

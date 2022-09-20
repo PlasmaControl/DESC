@@ -86,7 +86,7 @@ def test_SOLOVEV_run(tmpdir_factory, benchmark):
 @pytest.mark.slow
 @pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
 def test_DSHAPE_run(tmpdir_factory, benchmark):
-    """Benchmark the DSHAPE example."""
+    """Benchmark the DSHAPE fixed rotational transform example."""
     input_path = ".//tests//benchmarks//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
@@ -94,7 +94,27 @@ def test_DSHAPE_run(tmpdir_factory, benchmark):
     exec_dir = os.path.join(cwd, "../..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running DSHAPE test.")
+    print("Running DSHAPE fixed rotational transform test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    benchmark(main, args)
+    return None
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
+def test_DSHAPE_current_run(tmpdir_factory, benchmark):
+    """Benchmark the DSHAPE fixed toroidal current example."""
+    input_path = ".//tests//benchmarks//DSHAPE_current"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("DSHAPE_current_out.h5")
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "../..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running DSHAPE fixed toroidal current test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -106,7 +126,7 @@ def test_DSHAPE_run(tmpdir_factory, benchmark):
 @pytest.mark.slow
 @pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
 def test_HELIOTRON_run(tmpdir_factory, benchmark):
-    """Benchmark the HELIOTRON example."""
+    """Benchmark the HELIOTRON fixed rotational transform example."""
     input_path = ".//tests//benchmarks//HELIOTRON"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_out.h5")
@@ -114,7 +134,27 @@ def test_HELIOTRON_run(tmpdir_factory, benchmark):
     exec_dir = os.path.join(cwd, "../..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running HELIOTRON test.")
+    print("Running HELIOTRON fixed rotational transform test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    benchmark(main, args)
+    return None
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark(min_rounds=1, max_time=300, disable_gc=True, warmup=False)
+def test_HELIOTRON_vacuum_run(tmpdir_factory, benchmark):
+    """Benchmark the HELIOTRON vacuum (fixed current) example."""
+    input_path = ".//tests//benchmarks//HELIOTRON_vacuum"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_vacuum_out.h5")
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "../..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON vacuum (fixed current) test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 

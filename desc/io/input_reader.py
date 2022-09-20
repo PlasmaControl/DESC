@@ -361,7 +361,7 @@ class InputReader:
                 flag = True
                 # TODO: set bdry_mode automatically based on bdry coeffs
 
-            # coefficient indicies
+            # coefficient indices
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
             if match:
                 l = [
@@ -636,7 +636,6 @@ class InputReader:
 
         f.write(header + "\n")
 
-        # TODO: mobius stellarator has NFP = 0.5 and will not run
         f.write("# global parameters\n")
         f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
         f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))

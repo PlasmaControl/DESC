@@ -4,7 +4,7 @@ import numpy as np
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import surface_averages, compress
+from desc.compute.utils import compress, surface_averages, surface_integrals
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
 from desc.transform import Transform
@@ -201,7 +201,24 @@ class TestGrid(unittest.TestCase):
         assert cg.M == 4
         assert cg.N == 5
 
+    def test_enforce_symmetry(self):
+        """Tests that enforce_symmetry spaces theta nodes correctly."""
+
+        def test(grid):
+            # check if theta nodes cover the circumference of the theta curve
+            dtheta_sums = surface_integrals(grid, q=1 / grid.spacing[:, 2])
+            np.testing.assert_allclose(dtheta_sums, 2 * np.pi * grid.num_zeta)
+
+        # Before enforcing symmetry,
+        # this grid has 2 surfaces near axis lacking theta > pi nodes.
+        # These edge cases should be handled correctly.
+        # Otherwise, a dimension mismatch / broadcast error should be raised.
+        test(ConcentricGrid(L=20, M=3, N=3, sym=True))
+        test(LinearGrid(L=20, M=3, N=3, sym=True))
+
     def test_symmetry_1(self):
+        """Tests that surface averages of a smooth function are correct."""
+
         def test(grid, err_msg):
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
@@ -237,6 +254,8 @@ class TestGrid(unittest.TestCase):
         test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
 
     def test_symmetry_2(self):
+        """Tests that surface averages are correct using specified basis."""
+
         def test(grid, basis, err_msg, true_avg=1):
             transform = Transform(grid, basis)
 

@@ -3,7 +3,6 @@ import numpy as np
 from desc.equilibrium import Equilibrium
 from desc.objectives import (
     ObjectiveFunction,
-    ForceBalance,
     GenericObjective,
     Energy,
     Volume,
@@ -22,14 +21,21 @@ class TestObjectiveFunction(unittest.TestCase):
     """Test ObjectiveFunction class."""
 
     def test_generic(self):
-        def test(eq):
-            obj = GenericObjective("sqrt(g)", eq=eq)
-            kwargs = {"R_lmn": eq.R_lmn, "Z_lmn": eq.Z_lmn}
-            B = obj.compute(**kwargs)
-            np.testing.assert_allclose(B, eq.compute("sqrt(g)")["sqrt(g)"])
+        def test(f, eq):
+            obj = GenericObjective(f, eq=eq)
+            kwargs = {
+                "R_lmn": eq.R_lmn,
+                "Z_lmn": eq.Z_lmn,
+                "L_lmn": eq.L_lmn,
+                "i_l": eq.i_l,
+                "c_l": eq.c_l,
+                "Psi": eq.Psi,
+            }
+            np.testing.assert_allclose(obj.compute(**kwargs), eq.compute(f)[f])
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        test("sqrt(g)", Equilibrium())
+        test("current", Equilibrium(iota=PowerSeriesProfile(0)))
+        test("iota", Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_volume(self):
         def test(eq):

@@ -13,8 +13,8 @@ from desc.objectives import (
     FixIota,
     FixPsi,
 )
+from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
-from desc.optimize import Optimizer
 from .utils import area_difference_vmec
 import pytest
 
@@ -63,37 +63,45 @@ def test_HELIOTRON_results(HELIOTRON):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
+# TODO: confirm this function does what we want; are different grids used as the comment implied?
+#   then I can add test with helical and radial ForceBalance(node_pattern=quad) for codecov coverage
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
 
-    res = 3
+    def test(iota=False):
+        if iota:
+            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
+            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
+        else:
+            eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
+            eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
 
-    eq1 = Equilibrium(sym=True)
-    eq1.change_resolution(L=res, M=res)
-    eq1.L_grid = res
-    eq1.M_grid = res
+        res = 3
+        eq1.change_resolution(L=res, M=res)
+        eq1.L_grid = res
+        eq1.M_grid = res
+        eq2.change_resolution(L=res, M=res)
+        eq2.L_grid = res
+        eq2.M_grid = res
 
-    eq2 = Equilibrium(sym=True)
-    eq2.change_resolution(L=res, M=res)
-    eq2.L_grid = res
-    eq2.M_grid = res
+        # force balances on the same grids
+        obj1 = ObjectiveFunction(ForceBalance())
+        eq1.solve(objective=obj1)
 
-    # force balances on the same grids
-    obj1 = ObjectiveFunction(ForceBalance())
-    eq1.solve(objective=obj1)
+        # force balances on different grids
+        obj2 = ObjectiveFunction((RadialForceBalance(), HelicalForceBalance()))
+        eq2.solve(objective=obj2)
 
-    # force balances on different grids
-    obj2 = ObjectiveFunction((RadialForceBalance(), HelicalForceBalance()))
-    eq2.solve(objective=obj2)
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
+        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
 
-    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
-    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
-    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
+    test(iota=True)
+    test(iota=False)
 
 
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-    optimizer = Optimizer("lsq-exact")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (

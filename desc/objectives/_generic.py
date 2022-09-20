@@ -21,7 +21,7 @@ class GenericObjective(_Objective):
     Parameters
     ----------
     f : str
-        Name of the quatity to compute.
+        Name of the quantity to compute.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional

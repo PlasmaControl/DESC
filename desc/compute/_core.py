@@ -823,7 +823,7 @@ def compute_geometry(
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of geometric quantities with the keys
         volume "V", enclosed volume "V(r)", cross-sectional area "A",
-        minor radius "a", major radius "R0", aspect ration "R0/a".
+        minor radius "a", major radius "R0", aspect ratio "R0/a".
 
     """
     grid = R_transform.grid

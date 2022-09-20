@@ -119,6 +119,8 @@ class TestInputReader(unittest.TestCase):
         )
 
     def test_vmec_to_desc_input(self):
+        # FIXME: maybe just store a file we know is converted correctly,
+        #  and checksum compare a live conversion to it
         pass
 
 

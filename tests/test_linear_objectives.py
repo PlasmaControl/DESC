@@ -91,4 +91,4 @@ def test_constrain_asserts():
     # toroidal current and rotational transform can't be constrained simultaneously
     eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(ValueError):
-        eq.solve(constraints=(FixCurrent, FixIota))
+        eq.solve(constraints=(FixCurrent(), FixIota()))

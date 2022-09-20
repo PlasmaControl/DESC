@@ -40,12 +40,11 @@ def test_SOLOVEV_results(SOLOVEV):
 
 
 def test_DSHAPE_results(DSHAPE, DSHAPE_current):
-    """Tests that the DSHAPE example gives the same result as VMEC."""
+    """Tests that the DSHAPE examples gives the same results as VMEC."""
 
     def test(stellarator):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho_err, theta_err = area_difference_vmec(eq, stellarator["vmec_nc_path"])
-
         np.testing.assert_allclose(rho_err, 0, atol=2e-3)
         np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
@@ -53,21 +52,23 @@ def test_DSHAPE_results(DSHAPE, DSHAPE_current):
     test(DSHAPE_current)
 
 
-def test_HELIOTRON_results(HELIOTRON):
-    """Tests that the HELIOTRON example gives the same result as VMEC."""
+def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
+    """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
-    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
-    rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
+    def test(stellarator):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho_err, theta_err = area_difference_vmec(eq, stellarator["vmec_nc_path"])
+        np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+        np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
-    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
+    test(HELIOTRON)
+    test(HELIOTRON_vacuum)
 
 
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option,
-    # RadialForceBalance defaulted to a concentric grid with "cos" rotation,
-    # while the HelicalForceBalance defaulted to "sin" rotation.
+    # Radial, HelicalForceBalance defaulted to cos, sin rotation, respectively
     # This test has been kept to increase code coverage.
 
     def test(iota=False):

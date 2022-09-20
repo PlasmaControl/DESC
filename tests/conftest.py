@@ -116,7 +116,7 @@ def DSHAPE_current(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_current_out.h5")
     desc_nc_path = output_dir.join("DSHAPE_current_out.nc")
-    # TODO: change these paths too?
+    # TODO: change these paths too? (note that DSHAPE_current converges to DSHAPE)
     vmec_nc_path = ".//tests//inputs//wout_DSHAPE.nc"
     booz_nc_path = output_dir.join("DSHAPE_bx.nc")
 
@@ -143,7 +143,7 @@ def DSHAPE_current(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def HELIOTRON(tmpdir_factory):
-    """Run HELIOTRON example."""
+    """Run HELIOTRON fixed rotational transform example."""
     input_path = ".//tests//inputs//HELIOTRON"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_out.h5")
@@ -155,7 +155,7 @@ def HELIOTRON(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running HELIOTRON test.")
+    print("Running HELIOTRON fixed rotational transform test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -170,6 +170,37 @@ def HELIOTRON(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return HELIOTRON_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_vacuum(tmpdir_factory):
+    """Run HELIOTRON vacuum (fixed current) example."""
+    input_path = ".//tests//inputs//HELIOTRON_vacuum"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_vacuum_out.h5")
+    desc_nc_path = output_dir.join("HELIOTRON_vacuum_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_vacuum_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON vacuum (fixed current) test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    HELIOTRON_vacuum_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_vacuum_out
 
 
 @pytest.fixture(scope="session")

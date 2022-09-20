@@ -672,7 +672,7 @@ class FixIota(_FixProfile):
         """
         if eq.iota is None:
             raise RuntimeError(
-                "Attempt to fix rotational transform on an equilibrium with no profile assigned"
+                "Attempt to fix rotational transform on an equilibrium with no rotational transform profile assigned"
             )
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)

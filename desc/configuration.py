@@ -1084,7 +1084,7 @@ class _Configuration(IOAble, ABC):
 
     @iota.setter
     def iota(self, new):
-        if isinstance(new, Profile):
+        if isinstance(new, Profile) or (new is None):
             self._iota = new
         else:
             raise TypeError(
@@ -1111,7 +1111,7 @@ class _Configuration(IOAble, ABC):
 
     @current.setter
     def current(self, new):
-        if isinstance(new, Profile):
+        if isinstance(new, Profile) or (new is None):
             self._current = new
         else:
             raise TypeError(

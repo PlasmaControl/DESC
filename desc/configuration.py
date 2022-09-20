@@ -12,6 +12,7 @@ import desc.compute as compute_funs
 from desc.backend import jnp, jit, put, while_loop
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import arg_order, data_index, compute_jacobian
+from desc.compute.utils import compress
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
@@ -20,7 +21,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble, load
-from desc.profiles import Profile, PowerSeriesProfile
+from desc.profiles import Profile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import copy_coeffs, Index
 
@@ -855,6 +856,32 @@ class _Configuration(IOAble, ABC):
                     rho, theta, zeta
                 )
             )
+
+    def get_profile(self, name, grid=None, **kwargs):
+        """Return a SplineProfile of the desired quantity
+
+        Parameters
+        ----------
+        name : str
+            Name of the quantity to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+            Note profile will only be a function of the radial coordinate.
+
+        Returns
+        -------
+        profile : SplineProfile
+            Radial profile of the desired quantity.
+
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        data = self.compute(name, grid, **kwargs)
+        x = data[name]
+        x = compress(grid, x, surface_label="rho")
+        return SplineProfile(
+            x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
+        )
 
     @property
     def surface(self):

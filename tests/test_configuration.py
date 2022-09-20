@@ -444,3 +444,19 @@ def test_is_nested():
     eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
 
     assert eq.is_nested(grid=grid) == False
+
+
+def test_get_profile(DSHAPE):
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    iota0 = eq.iota
+    iota1 = eq.get_profile("iota")
+    current1 = eq.get_profile("current")
+    eq._iota = None
+    eq._current = current1
+    iota2 = eq.get_profile("iota")
+    current2 = eq.get_profile("current")
+
+    np.testing.assert_allclose(iota1.params, iota2.params)
+    np.testing.assert_allclose(current1.params, current2.params)
+    x = np.linspace(0, 1, 20)
+    np.testing.assert_allclose(iota2(x), iota0(x))

@@ -264,7 +264,8 @@ def test_ascii_io(SOLOVEV, tmpdir_factory):
     tmp_path = tmpdir.join("solovev_test.txt")
     eq1 = load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     write_ascii(tmp_path, eq1)
-    eq2 = read_ascii(tmp_path)
+    with pytest.warns(UserWarning):
+        eq2 = read_ascii(tmp_path)
     assert np.allclose(eq1.R_lmn, eq2.R_lmn)
     assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
     assert np.allclose(eq1.L_lmn, eq2.L_lmn)

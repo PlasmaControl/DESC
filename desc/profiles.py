@@ -557,7 +557,7 @@ class PowerSeriesProfile(Profile):
             else:
                 modes = np.atleast_1d(modes)
             sym = np.all(params[modes % 2 != 0] == 0)
-        self.sym = "even" if sym else False
+        sym = "even" if sym else False
         if modes is None:
             if sym:
                 modes = np.arange(2 * params.size, step=2)

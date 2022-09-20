@@ -63,15 +63,18 @@ def test_HELIOTRON_results(HELIOTRON):
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
-# TODO: confirm this function does what we want; are different grids used as the comment implied?
-#   then I can add test with helical and radial ForceBalance(node_pattern=quad) for codecov coverage
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
+    # When ConcentricGrid had a rotation option,
+    # RadialForceBalance defaulted to a concentric grid with "cos" rotation,
+    # while the HelicalForceBalance defaulted to "sin" rotation.
+    # This test has been kept to increase code coverage.
 
     def test(iota=False):
         if iota:
-            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
-            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True)
+            # pick quad here just to increase code coverage
+            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
+            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
         else:
             eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
             eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)

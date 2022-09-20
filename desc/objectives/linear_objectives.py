@@ -465,7 +465,7 @@ class _FixProfile(_Objective, ABC):
         weight=1,
         profile=None,
         indices=True,
-        name=None,  # maybe make none? and the other ones use it
+        name="",
     ):
 
         self._profile = profile
@@ -519,11 +519,6 @@ class _FixProfile(_Objective, ABC):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return ""
-
 
 class FixPressure(_FixProfile):
     """Fixes pressure coefficients.
@@ -540,10 +535,11 @@ class FixPressure(_FixProfile):
         len(target) = len(weight) = len(modes)
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
-    modes : ndarray, optional
-        Basis modes numbers [l,m,n] of boundary modes to fix.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
         len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the profile modes.
+        If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
 
@@ -627,10 +623,11 @@ class FixIota(_FixProfile):
         len(target) = len(weight) = len(modes)
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
-    modes : ndarray, optional
-        Basis modes numbers [l,m,n] of boundary modes to fix.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
         len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the profile modes.
+        If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
 
@@ -681,7 +678,7 @@ class FixIota(_FixProfile):
 
         Parameters
         ----------
-        p_l : ndarray
+        i_l : ndarray
             parameters of the iota profile.
 
         Returns

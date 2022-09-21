@@ -46,7 +46,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    node_pattern      = jacobi
    bdry_mode         = lcfs
    
-   # pressure and rotational transform profiles
+   # pressure and rotational transform/current profiles
    l:   0   p =  1.80000000E+04   i =  1.0
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04

@@ -191,12 +191,6 @@ class TestConstructor(unittest.TestCase):
         with pytest.raises(ValueError):
             eq = Equilibrium(iota=PowerSeriesProfile(params=[1, 3], modes=[0, 2]))
             eq.c_l = None
-        with pytest.raises(TypeError):
-            eq = Equilibrium()
-            eq.current = None
-        with pytest.raises(TypeError):
-            eq = Equilibrium()
-            eq.iota = None
 
     def test_supplied_coeffs(self):
 

@@ -44,7 +44,7 @@ def all_close(
 
     """
     minimum, maximum = rho_range
-    interval = np.where((minimum < rho) & (rho < maximum))
+    interval = np.where((minimum < rho) & (rho < maximum))[0]
     np.testing.assert_allclose(y1[interval], y2[interval], rtol=rtol, atol=atol)
 
 
@@ -635,7 +635,7 @@ def test_compute_magnetic_well(DSHAPE, HELIOTRON):
             grid, eq.compute("magnetic well", grid=grid)["magnetic well"]
         )
         # sign should match for finite non-zero pressure cases
-        assert len(np.where(np.sign(magnetic_well) != np.sign(vmec))) <= 1
+        assert len(np.where(np.sign(magnetic_well) != np.sign(vmec))[0]) <= 6
 
     test(DSHAPE, "DSHAPE")
     test(HELIOTRON, "HELIOTRON")

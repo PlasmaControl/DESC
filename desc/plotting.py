@@ -530,7 +530,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        assert name != "|F|", "Can only normalize |F|."
+        assert name == "|F|", "Can only normalize |F|."
         if (
             np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
         ):  # normalize vacuum force by B pressure gradient
@@ -857,7 +857,7 @@ def plot_fsa(
     data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
     if norm_F:
-        assert name != "|F|", "Can only normalize |F|."
+        assert name == "|F|", "Can only normalize |F|."
         if (
             np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
         ):  # normalize vacuum force by B pressure gradient
@@ -978,7 +978,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
-        assert name != "|F|", "Can only normalize |F|."
+        assert name == "|F|", "Can only normalize |F|."
         if (
             np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
         ):  # normalize vacuum force by B pressure gradient

@@ -333,23 +333,23 @@ class InputReader:
             # solver methods
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
-                inputs["objective"] = words[0]
+                inputs["objective"] = words[0].lower()
                 flag = True
             match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
-                inputs["optimizer"] = words[0]
+                inputs["optimizer"] = words[0].lower()
                 flag = True
             match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:
-                inputs["spectral_indexing"] = words[0]
+                inputs["spectral_indexing"] = words[0].lower()
                 flag = True
             match = re.search(r"node_pattern", argument, re.IGNORECASE)
             if match:
-                inputs["node_pattern"] = words[0]
+                inputs["node_pattern"] = words[0].lower()
                 flag = True
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
-                inputs["bdry_mode"] = words[0]
+                inputs["bdry_mode"] = words[0].lower()
                 flag = True
                 # TODO: set bdry_mode automatically based on bdry coeffs
 

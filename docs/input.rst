@@ -343,39 +343,63 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
 
    # This DESC input file was auto generated from the VMEC input file
    # /home/dpanici/DESC/examples/VMEC/input.HELIOTRON
-   # on 06/26/2022 at 15:25:54.
+   # on 09/20/2022 at 21:30:42.
+   # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
-   sym = 1
-   NFP =  19
-   Psi =   1.00000000E+00
-   M_pol =   6
-   N_tor =   3
+   # global parameters 
+   sym = 1 
+   NFP =  19 
+   Psi = 1.00000000 
 
-   # pressure and rotational transform profiles
-   l:   0  p =   1.80000000E+04  i =   1.00000000E+00
-   l:   1  p =   0.00000000E+00  i =   0.00000000E+00
-   l:   2  p =  -3.60000000E+04  i =   1.50000000E+00
-   l:   3  p =   0.00000000E+00  i =   0.00000000E+00
-   l:   4  p =   1.80000000E+04  i =   0.00000000E+00
+   # spectral resolution 
+   L_rad = 6, 6, 6, 6, 6, 6, 6 
+   M_pol = 6, 6, 6, 6, 6, 6, 6 
+   N_tor = 0, 0, 0, 3, 3, 3, 3 
+   L_grid = 12, 12, 12, 12, 12, 12, 12 
+   M_grid = 12, 12, 12, 12, 12, 12, 12 
+   N_grid = 0, 0, 0, 6, 6, 6, 6 
 
-   # magnetic axis initial guess
-   n:   0  R0 =   1.00000000E+01  Z0 =   0.00000000E+00
+   # continuation parameters 
+   bdry_ratio = 0, 0, 0, 0.25, 0.5, 0.75, 1.0 
+   pres_ratio = 0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0 
+   pert_order = 1, 2, 2, 2, 2, 2, 2 
 
-   # fixed-boundary surface shape
-   m:   0  n:   0  R1 =   1.00000000E+01  Z1 =   0.00000000E+00
-   m:   1  n:   0  R1 =  -1.00000000E+00  Z1 =   0.00000000E+00
-   m:   0  n:   1  R1 =   0.00000000E+00  Z1 =   0.00000000E+00
-   m:   1  n:   1  R1 =  -3.00000000E-01  Z1 =   0.00000000E+00
-   m:  -1  n:  -1  R1 =   3.00000000E-01  Z1 =   0.00000000E+00
-   m:  -1  n:   0  R1 =   0.00000000E+00  Z1 =   1.00000000E+00
-   m:   0  n:  -1  R1 =   0.00000000E+00  Z1 =   0.00000000E+00
-   m:  -1  n:   1  R1 =   0.00000000E+00  Z1 =  -3.00000000E-01
-   m:   1  n:  -1  R1 =   0.00000000E+00  Z1 =  -3.00000000E-01
+   # solver tolerances 
+   ftol = 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01 
+   xtol = 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06 
+   gtol = 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06 
+   nfev = 50, 50, 50, 50, 50, 50, 50 
+
+   # solver methods 
+   optimizer = lsq-exact 
+   objective = force 
+   bdry_mode = lcfs 
+   spectral_indexing = ansi 
+   node_pattern = jacobi 
+
+   # pressure and rotational transform profiles 
+   l:   0	p =   1.80000000E+04	i =   1.00000000E+00
+   l:   2	p =  -3.60000000E+04	i =   1.50000000E+00
+   l:   4	p =   1.80000000E+04	i =   0.00000000E+00
+
+   # fixed-boundary surface shape 
+   l:   0	m:   0	n:   0	R1 =   1.00000000E+01	Z1 =   0.00000000E+00
+   l:   0	m:   1	n:   0	R1 =  -1.00000000E+00	Z1 =   0.00000000E+00
+   l:   0	m:   0	n:   1	R1 =   0.00000000E+00	Z1 =   0.00000000E+00
+   l:   0	m:   1	n:   1	R1 =  -3.00000000E-01	Z1 =   0.00000000E+00
+   l:   0	m:  -1	n:  -1	R1 =   3.00000000E-01	Z1 =   0.00000000E+00
+   l:   0	m:  -1	n:   0	R1 =   0.00000000E+00	Z1 =   1.00000000E+00
+   l:   0	m:   0	n:  -1	R1 =   0.00000000E+00	Z1 =   0.00000000E+00
+   l:   0	m:  -1	n:   1	R1 =   0.00000000E+00	Z1 =  -3.00000000E-01
+   l:   0	m:   1	n:  -1	R1 =   0.00000000E+00	Z1 =  -3.00000000E-01
+
+   # magnetic axis initial guess 
+   n:   0	R0 =   1.00000000E+01	Z0 =   0.00000000E+00
+
 
 You can see that the main elements of the input file are present here. 
-However, no DESC solver options are listed, as currently DESC can not automatically decide on the continuation method parameters.
-As it is, this input file will run but likely not give an excellent solution. 
-Once a conversion from a VMEC input file to a DESC input file is made, it is recommended to add solver options for the continuation method and add arrays to the spectral resolution to allow for better convergence.
+DESC automatically adds default continuation parameters to a converted VMEC solution which are conservative, to robustly solve strongly shaped equilibria.
+These options may be tweaked to get better performance. 
 See the example DESC input files on the github repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
 
 Some general considerations

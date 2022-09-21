@@ -30,9 +30,9 @@ from desc.basis import (
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.coils import FourierXYZCoil, CoilSet
 
-tol_1d = 1
-tol_2d = 1
-tol_3d = 5
+tol_1d = 5
+tol_2d = 15
+tol_3d = 15
 
 
 def test_kwarg_warning(DummyStellarator):

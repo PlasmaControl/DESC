@@ -850,11 +850,11 @@ def plot_fsa(
     linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
     g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-    data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
     if norm_F:
         assert name == "|F|", "Can only normalize |F|."

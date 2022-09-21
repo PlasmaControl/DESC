@@ -118,13 +118,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self.history = {}
         for arg in self._full_args:
-            self.history[arg] = list(np.atleast_1d(getattr(self._eq, arg)))
+            self.history[arg] = [np.atleast_1d(getattr(self._eq, arg))]
 
         self._built = True
 
     def _update_equilibrium(self, x):
         """Update the internal equilibrium with new boundary, profile etc."""
-        if jnp.all(x == self._x_old):
+        if jnp.allclose(x, self._x_old, rtol=1e-14, atol=1e-14):
             pass
         else:
             x_dict = self.unpack_state(x)

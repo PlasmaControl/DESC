@@ -222,7 +222,11 @@ def precise_QH(tmpdir_factory):
     args = ["-o", str(initial_h5_path), input_filename, "-vv"]
     main(args)
 
-    precise_QH_out = {"input_path": input_path, "initial_h5_path": initial_h5_path}
+    precise_QH_out = {
+        "input_path": input_path,
+        "initial_h5_path": initial_h5_path,
+        "optimal_h5_path": optimal_h5_path,
+    }
     return precise_QH_out
 
 

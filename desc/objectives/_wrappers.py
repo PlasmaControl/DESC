@@ -180,7 +180,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         x_idx = np.concatenate(
             [
                 self._eq_objective.x_idx[arg]
-                for arg in ["p_l", "i_l", "Psi"]
+                for arg in ["p_l", "i_l", "c_l", "Psi"]
                 if arg in self._eq_objective.args
             ]
         )

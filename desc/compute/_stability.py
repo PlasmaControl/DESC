@@ -23,12 +23,14 @@ def compute_mercier_stability(
     L_lmn,
     p_l,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     pressure,
     iota,
+    current,
     data=None,
 ):
     """Compute the Mercier stability criterion.
@@ -50,6 +52,8 @@ def compute_mercier_stability(
         Spectral coefficients of p(rho) -- pressure profile.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
@@ -62,6 +66,8 @@ def compute_mercier_stability(
         Transforms p_l coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -81,11 +87,13 @@ def compute_mercier_stability(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
     data = compute_boozer_magnetic_field(
@@ -93,11 +101,13 @@ def compute_mercier_stability(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data,
     )
     data = compute_contravariant_current_density(
@@ -105,11 +115,13 @@ def compute_mercier_stability(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data,
     )
 
@@ -169,12 +181,14 @@ def compute_magnetic_well(
     L_lmn,
     p_l,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     pressure,
     iota,
+    current,
     data=None,
 ):
     """Compute the magnetic well proxy for MHD stability.
@@ -196,6 +210,8 @@ def compute_magnetic_well(
         Spectral coefficients of p(rho) -- pressure profile.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
@@ -208,6 +224,8 @@ def compute_magnetic_well(
         Transforms p_l coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -223,11 +241,13 @@ def compute_magnetic_well(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
 

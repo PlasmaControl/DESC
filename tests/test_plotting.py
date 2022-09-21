@@ -400,6 +400,13 @@ def test_plot_qs_error(SOLOVEV):
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
+def test_plot_qh_optimization(precise_QH):
+    eq = EquilibriaFamily.load(load_from=str(precise_QH["optimal_h5_path"]))[-1]
+    fig, ax = plot_boozer_surface(eq)
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_coils():
     N = 48
     NFP = 4

@@ -1,22 +1,27 @@
 import numpy as np
+import pytest
+
 import desc.examples
+from .utils import area_difference_vmec
+from desc.grid import LinearGrid
+from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.objectives import (
     ObjectiveFunction,
     ForceBalance,
     RadialForceBalance,
     HelicalForceBalance,
+    QuasisymmetryTwoTerm,
     AspectRatio,
     FixBoundaryR,
     FixBoundaryZ,
     FixPressure,
     FixIota,
+    FixCurrent,
     FixPsi,
 )
-from desc.profiles import PowerSeriesProfile
+from desc.optimize import Optimizer
 from desc.vmec_utils import vmec_boundary_subspace
-from .utils import area_difference_vmec
-import pytest
 
 
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
@@ -118,7 +123,7 @@ def test_1d_optimization(SOLOVEV):
     )
     options = {"perturb_options": {"order": 1}}
     with pytest.warns(UserWarning):
-        eq.optimize(objective, constraints, options=options)  # , optimizer=optimizer)
+        eq.optimize(objective, constraints, options=options)
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 
@@ -139,6 +144,63 @@ def test_1d_optimization_old(SOLOVEV):
     )
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+
+
+def test_qh_optimization(precise_QH):
+    """Tests precise QH optimization."""
+    eq = EquilibriaFamily.load(load_from=str(precise_QH["initial_h5_path"]))[-1]
+    grid = LinearGrid(
+        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+    )
+
+    for n in range(5):
+        objective = ObjectiveFunction(
+            (
+                QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid),
+                AspectRatio(target=8, weight=1e1),
+            ),
+            verbose=0,
+        )
+        R_modes = np.vstack(
+            (
+                [0, 0, 0],
+                eq.surface.R_basis.modes[
+                    np.max(np.abs(eq.surface.R_basis.modes), 1) > n + 1, :
+                ],
+            )
+        )
+        Z_modes = eq.surface.Z_basis.modes[
+            np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
+        ]
+        constraints = (
+            ForceBalance(),
+            FixBoundaryR(modes=R_modes),
+            FixBoundaryZ(modes=Z_modes),
+            FixPressure(),
+            FixCurrent(),
+            FixPsi(),
+        )
+        optimizer = Optimizer("lsq-exact")
+        eq.optimize(
+            objective=objective,
+            constraints=constraints,
+            optimizer=optimizer,
+            maxiter=50,
+            verbose=3,
+            options={
+                "initial_trust_radius": 0.5,
+                "perturb_options": {"verbose": 0},
+                "solve_options": {"verbose": 0},
+            },
+        )
+
+    eq.save(str(precise_QH["optimal_h5_path"]))
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, rho=1.0)
+    data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
+    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
+    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+
+    np.testing.assert_array_less(B_asym, 2e-3)
 
 
 def test_example_get_eq():

@@ -204,6 +204,29 @@ def HELIOTRON_vacuum(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
+def precise_QH(tmpdir_factory):
+    """Fun initial condition for precise QH optimization."""
+    input_path = ".//tests//inputs//precise_QH"
+    output_dir = tmpdir_factory.mktemp("result")
+    initial_h5_path = output_dir.join("precise_QH_initial.h5")
+    optimal_h5_path = output_dir.join("precise_QH_optimal.h5")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running precise QH test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(initial_h5_path), input_filename, "-vv"]
+    main(args)
+
+    precise_QH_out = {"input_path": input_path, "initial_h5_path": initial_h5_path}
+    return precise_QH_out
+
+
+@pytest.fixture(scope="session")
 def DummyStellarator(tmpdir_factory):
     """Create and save a dummy stellarator configuration for testing."""
     output_dir = tmpdir_factory.mktemp("result")

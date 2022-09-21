@@ -34,9 +34,8 @@ for diret in os.walk(cwd + "/compare_results"):
 
 # need arrays of size [ num benchmarks x num commits ]
 # one for mean one for stddev
-num_benchmarks = len(
-    data[list(data.keys())[0]]["benchmarks"]
-)  # number of benchmark cases
+# number of benchmark cases
+num_benchmarks = len(data[list(data.keys())[0]]["benchmarks"])
 num_commits = len(list(data.keys()))
 times = np.zeros([num_benchmarks, num_commits])
 stddevs = np.zeros([num_benchmarks, num_commits])
@@ -68,13 +67,11 @@ for i, pct in enumerate(delta_times_pct):
 # benchmark_name dt(%) dt(s) t_new(s) t_old(s)
 print(latest_commit_index)
 print(master_commit_index)
-commit_msg_lines = []
+commit_msg_lines = [
+    "```diff\n",
+    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(s)":>15}\t{"t_new(s)":>16}\t{"t_old(s)":>9}\n',
+]
 
-commit_msg_lines.append("```diff\n")
-
-commit_msg_lines.append(
-    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(s)":>15}\t{"t_new(s)":>16}\t{"t_old(s)":>9}\n'
-)
 for i, (dt, dpct) in enumerate(zip(delta_times_ms, delta_times_pct)):
 
     line = f"{colors[i]:>2}{test_names[i]:<36}\t{dpct:8.3f}\t{dt:8.5f}\t{times[i, latest_commit_index]:8.4f}\t{times[i, master_commit_index]:8.4f}\n"

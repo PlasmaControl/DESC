@@ -76,8 +76,14 @@ class MercierStability(_Objective):
 
         self._pressure = eq.pressure.copy()
         self._pressure.grid = self.grid
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid,
@@ -107,7 +113,7 @@ class MercierStability(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute the Mercier stability criterion.
 
         Parameters
@@ -122,6 +128,8 @@ class MercierStability(_Objective):
             Spectral coefficients of p(rho) -- pressure profile.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -137,12 +145,14 @@ class MercierStability(_Objective):
             L_lmn,
             p_l,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._pressure,
             self._iota,
+            self._current,
         )
         return self._shift_scale(compress(self.grid, data["D_Mercier"]))
 
@@ -213,8 +223,14 @@ class MagneticWell(_Objective):
 
         self._pressure = eq.pressure.copy()
         self._pressure.grid = self.grid
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid,
@@ -244,7 +260,7 @@ class MagneticWell(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute a magnetic well parameter.
 
         Parameters
@@ -259,6 +275,8 @@ class MagneticWell(_Objective):
             Spectral coefficients of p(rho) -- pressure profile.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -274,11 +292,13 @@ class MagneticWell(_Objective):
             L_lmn,
             p_l,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._pressure,
             self._iota,
+            self._current,
         )
         return self._shift_scale(compress(self.grid, data["magnetic well"]))

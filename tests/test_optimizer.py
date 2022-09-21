@@ -172,3 +172,25 @@ class TestLSQTR(unittest.TestCase):
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
         )
         np.testing.assert_allclose(out["x"], p)
+
+
+def test_no_iterations():
+    """Make sure giving the correct answer works correctly"""
+
+    np.random.seed(0)
+    A = np.random.random((20, 10))
+    b = np.random.random(20)
+    x0 = np.linalg.lstsq(A, b)[0]
+
+    vecfun = lambda x: A @ x - b
+    vecjac = Derivative(vecfun)
+
+    fun = lambda x: np.sum(vecfun(x) ** 2)
+    grad = Derivative(fun, 0, mode="grad")
+    hess = Derivative(fun, 0, mode="hess")
+
+    out1 = fmintr(fun, x0, grad, hess)
+    out2 = lsqtr(vecfun, x0, vecjac)
+
+    np.testing.assert_allclose(x0, out1["x"])
+    np.testing.assert_allclose(x0, out2["x"])

@@ -530,19 +530,17 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        if name != "|F|":
-            return ValueError(colored("Can only normalize |F|.", "red"))
-        else:
-            if (
-                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-            ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|/2mu0"
-                norm_data, _ = _compute(eq, norm_name, grid)
-            else:  # normalize force balance with pressure by gradient of pressure
-                compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
-                norm_name = "<|grad(p)|>_vol"
-                norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
-            data = data / np.nanmean(np.abs(norm_data))  # normalize
+        assert name != "|F|", "Can only normalize |F|."
+        if (
+            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+        ):  # normalize vacuum force by B pressure gradient
+            norm_name = "|grad(|B|^2)|/2mu0"
+            norm_data, _ = _compute(eq, norm_name, grid)
+        else:  # normalize force balance with pressure by gradient of pressure
+            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+            norm_name = "<|grad(p)|>_vol"
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
     if 0 in plot_axes:
@@ -859,19 +857,17 @@ def plot_fsa(
     data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
     if norm_F:
-        if name != "|F|":
-            return ValueError(colored("Can only normalize |F|.", "red"))
-        else:
-            if (
-                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-            ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|/2mu0"
-                norm_data, _ = _compute(eq, norm_name, grid)
-            else:  # normalize force balance with pressure by gradient of pressure
-                compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
-                norm_name = "<|grad(p)|>_vol"
-                norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
-            values = values / np.nanmean(np.abs(norm_data))  # normalize
+        assert name != "|F|", "Can only normalize |F|."
+        if (
+            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+        ):  # normalize vacuum force by B pressure gradient
+            norm_name = "|grad(|B|^2)|/2mu0"
+            norm_data, _ = _compute(eq, norm_name, grid)
+        else:  # normalize force balance with pressure by gradient of pressure
+            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+            norm_name = "<|grad(p)|>_vol"
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+        values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(
@@ -982,19 +978,17 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
-        if name != "|F|":
-            return ValueError(colored("Can only normalize |F|.", "red"))
-        else:
-            if (
-                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-            ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|/2mu0"
-                norm_data, _ = _compute(eq, norm_name, grid)
-            else:  # normalize force balance with pressure by gradient of pressure
-                compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
-                norm_name = "<|grad(p)|>_vol"
-                norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
-            data = data / np.nanmean(np.abs(norm_data))  # normalize
+        assert name != "|F|", "Can only normalize |F|."
+        if (
+            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+        ):  # normalize vacuum force by B pressure gradient
+            norm_name = "|grad(|B|^2)|/2mu0"
+            norm_data, _ = _compute(eq, norm_name, grid)
+        else:  # normalize force balance with pressure by gradient of pressure
+            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+            norm_name = "<|grad(p)|>_vol"
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
     figh = 5 * rows

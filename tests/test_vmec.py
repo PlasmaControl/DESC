@@ -464,7 +464,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(L_vmec, L_desc, rtol=5e-3)
+    np.testing.assert_allclose(L_vmec, L_desc, rtol=1e-2)
 
     # Jacobian
     g_vmec = VMECIO.vmec_interpolate(

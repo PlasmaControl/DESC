@@ -27,21 +27,28 @@ from desc.basis import (
     DoubleFourierSeries,
     FourierZernikeBasis,
 )
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.coils import FourierXYZCoil, CoilSet
+
+
+def test_kwarg_warning(DummyStellarator):
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    with pytest.raises(AssertionError):
+        fig, ax = plot_1d(eq, "p", not_a_kwarg=True)
+    return None
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_p(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "p")
+    fig, ax = plot_1d(eq, "p", figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_dpdr(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "p_r")
+    fig, ax = plot_1d(eq, "p_r", figsize=(4, 4))
     return fig
 
 
@@ -49,14 +56,14 @@ def test_1d_dpdr(SOLOVEV):
 def test_1d_iota(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
-    fig, ax = plot_1d(eq, "iota", grid=grid)
+    fig, ax = plot_1d(eq, "iota", grid=grid, figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_logpsi(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "psi", log=True)
+    fig, ax = plot_1d(eq, "psi", log=True, figsize=(4, 4))
     return fig
 
 
@@ -65,7 +72,7 @@ def test_2d_logF(SOLOVEV):
     # plot test is inconsistent
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-    fig, ax = plot_2d(eq, "|F|", log=True, grid=grid)
+    fig, ax = plot_2d(eq, "|F|", log=True, grid=grid, figsize=(4, 4))
     return fig
 
 
@@ -73,7 +80,7 @@ def test_2d_logF(SOLOVEV):
 def test_2d_g_tz(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
-    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid)
+    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4))
     return fig
 
 
@@ -81,14 +88,14 @@ def test_2d_g_tz(SOLOVEV):
 def test_2d_g_rz(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid)
+    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_lambda(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "lambda")
+    fig, ax = plot_2d(eq, "lambda", figsize=(4, 4))
     return fig
 
 
@@ -215,42 +222,42 @@ def test_plot_comparison_no_theta(DSHAPE):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_con_basis(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "e^rho", component="R")
+    fig, ax = plot_2d(eq, "e^rho", component="R", figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_cov_basis(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "e_rho")
+    fig, ax = plot_2d(eq, "e_rho", figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_tension(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|(B*grad)B|")
+    fig, ax = plot_2d(eq, "|(B*grad)B|", figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0")
+    fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0", figsize=(4, 4))
     return fig
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_gradpsi(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|grad(rho)|")
+    fig, ax = plot_2d(eq, "|grad(rho)|", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=55)
 def test_plot_normF_2d(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|F|", norm_F=True)
+    fig, ax = plot_2d(eq, "|F|", norm_F=True, figsize=(4, 4))
     return fig
 
 
@@ -284,7 +291,7 @@ class TestPlotGrid(unittest.TestCase):
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_quad(self):
         grid = QuadratureGrid(L=10, M=10, N=1)
-        fig, ax = plot_grid(grid)
+        fig, ax = plot_grid(grid, figsize=(6, 6))
         return fig
 
     @pytest.mark.mpl_image_compare(tolerance=50)
@@ -381,7 +388,7 @@ def test_plot_boozer_modes(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_boozer_surface(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_boozer_surface(eq)
+    fig, ax = plot_boozer_surface(eq, figsize=(4, 4))
     return fig
 
 

@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
@@ -22,6 +23,9 @@ class ObjectiveFunction(IOAble):
         Equilibrium that will be optimized to satisfy the objectives.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
+    deriv_mode : {"batched", "blocked"}
+        method for computing derivatives. "batched" is generally faster, "blocked" may
+        use less memory. Note that the "blocked" hessian will only be block diagonal.
     verbose : int, optional
         Level of output.
 
@@ -29,13 +33,19 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, eq=None, use_jit=True, verbose=1):
+    def __init__(
+        self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
+    ):
 
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
 
+        assert use_jit in {True, False}
+        assert deriv_mode in {"batched", "blocked"}
+
         self._objectives = objectives
         self._use_jit = use_jit
+        self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
 
@@ -43,7 +53,7 @@ class ObjectiveFunction(IOAble):
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def _set_state_vector(self):
-        """Set state vector components, dimensions, and indicies."""
+        """Set state vector components, dimensions, and indices."""
         self._args = np.concatenate([obj.args for obj in self.objectives])
         self._args = [arg for arg in arg_order if arg in self._args]
 
@@ -64,17 +74,62 @@ class ObjectiveFunction(IOAble):
             Whether to just-in-time compile the objective and derivatives.
 
         """
-        self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-        self._hess = Derivative(
-            self.compute_scalar,
-            mode="hess",
-            use_jit=use_jit,
-        )
-        self._jac = Derivative(
-            self.compute,
-            mode="fwd",
-            use_jit=use_jit,
-        )
+
+        self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
+        for arg in self.args:
+            self._derivatives["jac"][arg] = lambda x, arg=arg: jnp.vstack(
+                [
+                    obj.derivatives["jac"][arg](
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                    )
+                    for obj in self.objectives
+                ]
+            )
+            self._derivatives["grad"][arg] = lambda x, arg=arg: jnp.sum(
+                jnp.array(
+                    [
+                        obj.derivatives["grad"][arg](
+                            *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                        )
+                        for obj in self.objectives
+                    ]
+                ),
+                axis=0,
+            )
+            self._derivatives["hess"][arg] = lambda x, arg=arg: jnp.sum(
+                jnp.array(
+                    [
+                        obj.derivatives["hess"][arg](
+                            *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                        )
+                        for obj in self.objectives
+                    ]
+                ),
+                axis=0,
+            )
+
+        if self._deriv_mode == "blocked":
+            self._grad = lambda x: jnp.concatenate(
+                [jnp.atleast_1d(self._derivatives["grad"][arg](x)) for arg in self.args]
+            )
+            self._jac = lambda x: jnp.hstack(
+                [self._derivatives["jac"][arg](x) for arg in self.args]
+            )
+            self._hess = lambda x: scipy.linalg.block_diag(
+                *[self._derivatives["hess"][arg](x) for arg in self.args]
+            )
+        if self._deriv_mode == "batched":
+            self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
+            self._hess = Derivative(
+                self.compute_scalar,
+                mode="hess",
+                use_jit=use_jit,
+            )
+            self._jac = Derivative(
+                self.compute,
+                mode="fwd",
+                use_jit=use_jit,
+            )
 
         if use_jit:
             self.compute = jit(self.compute)
@@ -97,7 +152,7 @@ class ObjectiveFunction(IOAble):
         """
         self._use_jit = use_jit
         timer = Timer()
-        timer.start("Objecive build")
+        timer.start("Objective build")
 
         # build objectives
         self._dim_f = 0
@@ -118,9 +173,9 @@ class ObjectiveFunction(IOAble):
         self._set_derivatives(self.use_jit)
 
         self._built = True
-        timer.stop("Objecive build")
+        timer.stop("Objective build")
         if verbose > 1:
-            timer.disp("Objecive build")
+            timer.disp("Objective build")
 
     def compute(self, x):
         """Compute the objective function.
@@ -137,7 +192,12 @@ class ObjectiveFunction(IOAble):
 
         """
         kwargs = self.unpack_state(x)
-        f = jnp.concatenate([obj.compute(**kwargs) for obj in self.objectives])
+        f = jnp.concatenate(
+            [
+                obj.compute(*self._kwargs_to_args(kwargs, obj.args))
+                for obj in self.objectives
+            ]
+        )
         return f
 
     def compute_scalar(self, x):
@@ -157,7 +217,7 @@ class ObjectiveFunction(IOAble):
         f = jnp.sum(self.compute(x) ** 2) / 2
         return f
 
-    def callback(self, x):
+    def print_value(self, x):
         """Print the value(s) of the objective.
 
         Parameters
@@ -166,11 +226,14 @@ class ObjectiveFunction(IOAble):
             State vector.
 
         """
-        f = self.compute_scalar(x)
+        if self.compiled and self._compile_mode in {"scalar", "all"}:
+            f = self.compute_scalar(x)
+        else:
+            f = jnp.sum(self.compute(x) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
-            obj.callback(**kwargs)
+            obj.print_value(**kwargs)
         return None
 
     def unpack_state(self, x):
@@ -196,8 +259,12 @@ class ObjectiveFunction(IOAble):
 
         kwargs = {}
         for arg in self.args:
-            kwargs[arg] = x[self.x_idx[arg]]
+            kwargs[arg] = jnp.atleast_1d(x[self.x_idx[arg]])
         return kwargs
+
+    def _kwargs_to_args(self, kwargs, args):
+        tuple_args = (kwargs[arg] for arg in args)
+        return tuple_args
 
     def x(self, eq):
         """Return the full state vector from the Equilibrium eq."""
@@ -208,18 +275,15 @@ class ObjectiveFunction(IOAble):
 
     def grad(self, x):
         """Compute gradient vector of scalar form of the objective wrt x."""
-        # TODO: add block method
-        return self._grad.compute(x)
+        return jnp.atleast_1d(self._grad(x).squeeze())
 
     def hess(self, x):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
-        # TODO: add block method
-        return self._hess.compute(x)
+        return jnp.atleast_2d(self._hess(x).squeeze())
 
     def jac(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        J = self._jac.compute(x)
-        return jnp.atleast_2d(J)
+        return jnp.atleast_2d(self._jac(x).squeeze())
 
     def jvp(self, v, x):
         """Compute Jacobian-vector product of the objective function.
@@ -268,7 +332,7 @@ class ObjectiveFunction(IOAble):
             mode = "scalar"
         elif mode == "auto":
             mode = "lsq"
-
+        self._compile_mode = mode
         # variable values are irrelevant for compilation
         x = np.zeros((self.dim_x,))
 
@@ -348,7 +412,7 @@ class ObjectiveFunction(IOAble):
 
     @property
     def x_idx(self):
-        """dict: Indicies of the components of the state vector."""
+        """dict: Indices of the components of the state vector."""
         return self._x_idx
 
     @property
@@ -404,46 +468,51 @@ class _Objective(IOAble, ABC):
         self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
         self._dimensions["L_lmn"] = eq.L_basis.num_modes
         self._dimensions["p_l"] = eq.pressure.params.size
-        self._dimensions["i_l"] = eq.iota.params.size
+        try:
+            self._dimensions["i_l"] = eq.iota.params.size
+            self._dimensions["c_l"] = 0
+        except AttributeError:
+            self._dimensions["i_l"] = 0
+            self._dimensions["c_l"] = eq.current.params.size
         self._dimensions["Psi"] = 1
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective wrt each argument."""
-        self._derivatives = {}
-        self._scalar_derivatives = {}
+        self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
-        # only used for linear objectives so variable values are irrelevant
-        kwargs = dict(  # FIXME: need to use dim_x
-            [(arg, np.zeros((self.dimensions[arg],))) for arg in self.dimensions.keys()]
-        )
-        args = [kwargs[arg] for arg in self.args]
-
-        # constant derivatives are pre-computed, otherwise set up Derivative instance
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
-                self._derivatives[arg] = Derivative(
+                self._derivatives["jac"][arg] = Derivative(
                     self.compute,
                     argnum=self.args.index(arg),
                     mode="fwd",
                     use_jit=use_jit,
                 )
-                self._scalar_derivatives[arg] = Derivative(
+                self._derivatives["grad"][arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
-                    mode="fwd",
+                    mode="grad",
                     use_jit=use_jit,
                 )
-                if self.linear:  # linear objectives have constant derivatives
-                    self._derivatives[arg] = self._derivatives[arg].compute(*args)
-                    self._scalar_derivatives[arg] = self._scalar_derivatives[
-                        arg
-                    ].compute(*args)
+                self._derivatives["hess"][arg] = Derivative(
+                    self.compute_scalar,
+                    argnum=self.args.index(arg),
+                    mode="hess",
+                    use_jit=use_jit,
+                )
             else:  # these derivatives are always zero
-                self._derivatives[arg] = np.zeros((self.dim_f, self.dimensions[arg]))
-                self._scalar_derivatives[arg] = np.zeros((1, self.dimensions[arg]))
+                self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
+                    (self.dim_f, self.dimensions[arg])
+                )
+                self._derivatives["grad"][arg] = lambda *args, **kwargs: jnp.zeros(
+                    (1, self.dimensions[arg])
+                )
+                self._derivatives["hess"][arg] = lambda *args, **kwargs: jnp.zeros(
+                    (self.dimensions[arg], self.dimensions[arg])
+                )
 
         if use_jit:
             self.compute = jit(self.compute)
@@ -488,12 +557,12 @@ class _Objective(IOAble, ABC):
             f = self.compute(*args, **kwargs)
         else:
             f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
-        return f
+        return f.squeeze()
 
-    def callback(self, *args, **kwargs):
+    def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._callback_fmt.format(jnp.linalg.norm(x)))
+        print(self._print_value_fmt.format(jnp.linalg.norm(x)))
 
     def _shift_scale(self, x):
         """Apply target and weighting."""

@@ -22,14 +22,21 @@ Or from GitHub (for development builds)
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-    # option 1: install with pip
+    # OPTION 1: install with pip
+    # standard build
+    pip install -r requirements.txt
+    # developer build (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-    # option 2: install with conda
-    conda create --name desc-env
-    conda config --env --append channels conda-forge
-    conda install --file=devtools/dev-requirements_conda.txt
-    pip install nvgpu
+    # OPTION 2: install with conda
+    conda create --name desc-dev
+    conda activate desc-env
+    # standard build
+    conda install --file=requirements_conda.txt
+    # developer build (if you want to run tests)
+    conda install --channel=conda-forge --file=devtools/dev-requirements_conda.txt
+    # required
+    pip install 'jax >= 0.2.11, <= 0.2.25' 'jaxlib >= 0.1.69, <= 0.1.76' nvgpu
 
 On Most Linux Computing Clusters
 ********************************
@@ -46,20 +53,24 @@ Or from GitHub (for development builds)
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
-    module load anaconda # load your python module
-    conda create --name desc-env # create a new conda virtual environment
-    conda activate desc-env # activate the environment
+    module load anaconda  # load your python module
+    conda create --name desc-env
+    conda activate desc-env
+
+    # OPTION 1: install with pip
     conda install pip
+    # standard build
+    pip install -r requirements.txt
+    # developer build (if you want to run tests)
+    pip install -r devtools/dev-requirements.txt
 
-    # option 1: install with pip
-    pip install -r requirements.txt  # standard install
-    pip install -r devtools/dev-requirements.txt  # optional, if you want to run DESC/tests
-
-    # option 2: install with conda
-    conda config --env --append channels conda-forge
-    conda install --file=requirements_conda.txt  # standard install
-    conda install --file=devtools/dev-requirements_conda.txt  # optional
-    pip install nvgpu
+    # OPTION 2: install with conda
+    # standard build
+    conda install --file=requirements_conda.txt
+    # developer build (if you want to run tests)
+    conda install --channel=conda-forge --file=devtools/dev-requirements_conda.txt
+    # required
+    pip install 'jax >= 0.2.11, <= 0.2.25' 'jaxlib >= 0.1.69, <= 0.1.76' nvgpu
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -80,10 +91,13 @@ Then install python dependencies:
 
 .. code-block:: sh
 
-    conda create --name desc-env python=3.8  # create a new conda virtual environment
+    conda create --name desc-env python=3.8
     conda activate desc-env
-    # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
-    conda install colorama "h5py>=3.0.0" "matplotlib>=3.5.0" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.2.0" psutil "scipy>=1.5.0" termcolor
+    # standard build
+    conda install --file=requirements_conda.txt
+    # developer build (if you want to run tests)
+    conda install --channel=conda-forge --file=devtools/dev-requirements_conda.txt
+    # required
     pip install nvgpu
 
 Finally, build and install JAX:
@@ -102,13 +116,6 @@ Finally, build and install JAX:
     python build/build.py --enable_cuda --cuda_path /usr/local/cuda-11.1 --cuda_version=11.1 --cudnn_version=8.0.4 --cudnn_path /usr/local/cudnn/cuda-11.1/8.0.4 --noenable_mkl_dnn --bazel_path /usr/bin/bazel --target_cpu=ppc
     pip install dist/*.whl
     pip install .
-
-Optionally, if you want to be able to use pytest and other development tools:
-
-.. code-block:: sh
-
-    cd ../DESC
-    pip install -r devtools/dev-requirements.txt
 
 Checking your Installation
 **************************

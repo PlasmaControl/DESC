@@ -1,7 +1,7 @@
 colorama
 h5py >= 3.0.0
-jax >= 0.2.11, <= 0.2.25
-jaxlib >= 0.1.69, <= 0.1.76
+# pip install jax >= 0.2.11, <= 0.2.25
+# pip install jaxlib >= 0.1.69, <= 0.1.76
 matplotlib >= 3.5.0
 mpmath >= 1.0.0
 netcdf4 >= 1.5.4

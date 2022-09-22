@@ -1823,7 +1823,7 @@ def plot_qs_error(
             )
             f_B = np.append(f_B, f_b)
         if fC:
-            data = eq.compute("f_C", grid, data)
+            data = eq.compute("f_C", grid, data, helicity=helicity)
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])

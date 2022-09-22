@@ -6,6 +6,7 @@ from netCDF4 import Dataset, stringtochar
 from scipy import optimize, interpolate, integrate
 
 from desc.backend import sign
+from desc.compute.utils import compress
 from desc.utils import Timer
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
@@ -328,14 +329,20 @@ class VMECIO:
         ai = file.createVariable("ai", np.float64, ("preset",))
         ai.long_name = "rotational transform coefficients"
         ai[:] = np.zeros((file.dimensions["preset"].size,))
-        # only using up to 10th order to avoid poor conditioning
-        ai[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.iota(r_full), order=10, sym=False
-        ).params
+        if eq.iota is not None:
+            # only using up to 10th order to avoid poor conditioning
+            ai[:11] = PowerSeriesProfile.from_values(
+                s_full, eq.iota(r_full), order=10, sym=False
+            ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"
         ac[:] = np.zeros((file.dimensions["preset"].size,))
+        if eq.current is not None:
+            # only using up to 10th order to avoid poor conditioning
+            ac[:11] = PowerSeriesProfile.from_values(
+                s_full, eq.current(r_full), order=10, sym=False
+            ).params
 
         presf = file.createVariable("presf", np.float64, ("radius",))
         presf.long_name = "pressure on full mesh"
@@ -355,12 +362,21 @@ class VMECIO:
 
         iotaf = file.createVariable("iotaf", np.float64, ("radius",))
         iotaf.long_name = "rotational transform on full mesh"
-        iotaf[:] = eq.iota(r_full)
+        if eq.iota is not None:
+            iotaf[:] = eq.iota(r_full)
+        else:
+            # value closest to axis will be nan
+            grid = LinearGrid(M=12, N=12, rho=r_full)
+            iotaf[:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
         iotas[0] = 0
-        iotas[1:] = eq.iota(r_half)
+        if eq.iota is not None:
+            iotas[1:] = eq.iota(r_half)
+        else:
+            grid = LinearGrid(M=12, N=12, rho=r_half)
+            iotas[1:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -1168,7 +1184,7 @@ class VMECIO:
         )
 
         # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
-        # the DESC radial coordiante rho = sqrt(s)
+        # the DESC radial coordinate rho = sqrt(s)
 
         # convert from rho -> s
         r_nodes = r_grid.nodes

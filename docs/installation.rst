@@ -52,7 +52,7 @@ On Clusters with IBM Power Architecture
 If pre-built JAX binaries are not available, you will first need to build JAX from source.
 More info can be found here: https://jax.readthedocs.io/en/latest/developer.html
 
-The following are instrctions tested to work on the Traverse supercomputer at Princeton:
+The following are instructions tested to work on the Traverse supercomputer at Princeton:
 
 .. code-block:: bash
 

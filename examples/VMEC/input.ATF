@@ -1,5 +1,5 @@
 &INDATA
-  ! ATF configuration from Hirshman and Whitson 1983
+  ! ATF configuration from Hirshman and Whitson 1983 at moderate beta (2%)
   MGRID_FILE = 'none'
   LFREEB = F
   DELT =   9.00E-01
@@ -20,7 +20,7 @@
   BLOAT =   1.000000E+00
   CURTOR =   0.00000000000000E+00
   SPRES_PED =   1.00000000000000E+00
-  PRES_SCALE = 2.0E+06
+  PRES_SCALE = 5.0E+05
   PMASS_TYPE = "power_series"
   AM =  1 -2 1
   AI = 0.35 0.65

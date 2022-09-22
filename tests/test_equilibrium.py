@@ -9,29 +9,33 @@ from desc.grid import Grid
 from desc.__main__ import main
 
 
-def test_compute_geometry(DSHAPE):
+def test_compute_geometry(DSHAPE, DSHAPE_current):
     """Test computation of plasma geometric values."""
 
-    # VMEC values
-    file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    V_vmec = float(file.variables["volume_p"][-1])
-    R0_vmec = float(file.variables["Rmajor_p"][-1])
-    a_vmec = float(file.variables["Aminor_p"][-1])
-    ar_vmec = float(file.variables["aspect"][-1])
-    file.close()
+    def test(stellarator):
+        # VMEC values
+        file = Dataset(str(stellarator["vmec_nc_path"]), mode="r")
+        V_vmec = float(file.variables["volume_p"][-1])
+        R0_vmec = float(file.variables["Rmajor_p"][-1])
+        a_vmec = float(file.variables["Aminor_p"][-1])
+        ar_vmec = float(file.variables["aspect"][-1])
+        file.close()
 
-    # DESC values
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    data = eq.compute("R0/a")
-    V_desc = data["V"]
-    R0_desc = data["R0"]
-    a_desc = data["a"]
-    ar_desc = data["R0/a"]
+        # DESC values
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        data = eq.compute("R0/a")
+        V_desc = data["V"]
+        R0_desc = data["R0"]
+        a_desc = data["a"]
+        ar_desc = data["R0/a"]
 
-    assert abs(V_vmec - V_desc) < 5e-3
-    assert abs(R0_vmec - R0_desc) < 5e-3
-    assert abs(a_vmec - a_desc) < 5e-3
-    assert abs(ar_vmec - ar_desc) < 5e-3
+        assert abs(V_vmec - V_desc) < 5e-3
+        assert abs(R0_vmec - R0_desc) < 5e-3
+        assert abs(a_vmec - a_desc) < 5e-3
+        assert abs(ar_vmec - ar_desc) < 5e-3
+
+    test(DSHAPE)
+    test(DSHAPE_current)
 
 
 @pytest.mark.slow
@@ -107,7 +111,8 @@ def test_continuation_resolution(tmpdir_factory):
     input_filename = os.path.join(exec_dir, input_path)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning):
+        main(args)
 
 
 def test_grid_resolution_warning(SOLOVEV):

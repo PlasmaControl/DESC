@@ -1,17 +1,15 @@
-# this is the DESC input file for ESTELL in vacuum
+# This is the DESC input file for ESTELL in vacuum
 # ESTELL is a quasi-axisymmetric (QA) stellarator
 # Drevlak, M. et al. Contrib. Plasma Phys. 53, 459–468 (2013).
 
 # global parameters
 sym = 1
 NFP = 2
-Psi = 2.13333000E-01
+Psi = 2.13333E-01
 
 # spectral resolution
 M_pol  =  6, 12
 N_tor  =  0x2,  6x2
-M_grid = 12, 16
-N_grid =  0x2,  9x2
 
 # continuation parameters
 bdry_ratio = 0, 0:0.5:1
@@ -27,24 +25,11 @@ nfev = 50
 # solver methods
 optimizer         = lsq-exact
 objective         = force
-spectral_indexing = fringe
+spectral_indexing = ansi
 node_pattern      = jacobi
 
 # pressure and rotational transform profiles
-l:   0	p =   0.00000000E+00	i =    2.04073045e-01
-l:   2	p =   0.00000000E+00	i =   4.18054555e-02
-l:   4	p =   0.00000000E+00	i =  -2.42407677e-01
-l:   6	p =   0.00000000E+00	i =   7.78946528e-01
-l:   8	p =   0.00000000E+00	i =  -1.14166816e+00
-l:  10	p =   0.00000000E+00	i =   8.36620820e-01
-l:  12	p =   0.00000000E+00	i =  -2.38552892e-01
-
-# magnetic axis initial guess
-n:   0	R0 =   1.40000000E+00	Z0 =   0.00000000E+00
-n:   1	R0 =  -1.25451000E-01	Z0 =   0.00000000E+00
-n:   2	R0 =   8.92420000E-03	Z0 =   0.00000000E+00
-n:  -1	R0 =   0.00000000E+00	Z0 =   9.45672000E-02
-n:  -2	R0 =   0.00000000E+00	Z0 =  -1.30731000E-03
+l:   0	p =   0.0	c =   0.0
 
 # fixed-boundary surface shape
 m:   0	n:   0	R1 =   1.40000000E+00	Z1 =   0.00000000E+00

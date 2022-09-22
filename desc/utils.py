@@ -143,7 +143,6 @@ class Timer:
             if timer ``'name'`` has not been started
 
         """
-
         try:  # has the timer been stopped?
             time = self._times[name]
         except KeyError:  # might still be running, let's check
@@ -193,31 +192,6 @@ Index = _Indexable()
 
 
 # Helper Functions -----------------------------------------------------------
-
-
-def unpack_state(x, nR, nZ):
-    """Unpack the state vector x into R_lmn, Z_lmn, L_lmn components.
-    Parameters
-    ----------
-    x : ndarray
-        vector to unpack: x = [cR, cZ, cL]
-    nR : int
-        number of R_lmn coefficients
-    nZ : int
-        number of Z_lmn coefficients
-    Returns
-    -------
-    R_lmn : ndarray
-        spectral coefficients of R
-    Z_lmn : ndarray
-        spectral coefficients of Z
-    L_lmn : ndarray
-        spectral coefficients of lambda
-    """
-    R_lmn = x[:nR]
-    Z_lmn = x[nR : nR + nZ]
-    L_lmn = x[nR + nZ :]
-    return R_lmn, Z_lmn, L_lmn
 
 
 def equals(a, b):

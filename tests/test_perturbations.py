@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from desc.equilibrium import EquilibriaFamily
 from desc.grid import ConcentricGrid

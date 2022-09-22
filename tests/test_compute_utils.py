@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import desc.io
 from desc.grid import ConcentricGrid, LinearGrid

@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from desc.io import InputReader
 from desc.profiles import PowerSeriesProfile, FourierZernikeProfile
 from desc.equilibrium import Equilibrium

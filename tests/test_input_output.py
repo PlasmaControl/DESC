@@ -65,7 +65,7 @@ class TestInputReader:
             pathlib.Path("./" + self.argv2[0]).resolve()
         ), "Path to input file is incorrect."
         # Test defaults
-        assert ir.args.plot is False, "plot is not default False"
+        assert ir.args.plot == False, "plot is not default False"
         assert ir.args.quiet is False, "quiet is not default False"
         assert ir.args.verbose == 1, "verbose is not default 1"
         # self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")

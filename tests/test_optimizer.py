@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+
 from desc.backend import jnp
 from desc.optimize import fmintr, lsqtr
 from desc.optimize.utils import make_spd, chol_U_update

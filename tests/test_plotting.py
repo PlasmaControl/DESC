@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+
 from desc.plotting import (
     plot_1d,
     plot_2d,

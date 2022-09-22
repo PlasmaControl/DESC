@@ -215,31 +215,31 @@ class TestGetExample:
     """Tests for desc.examples.get."""
 
     @pytest.mark.unit
-    def test_example_get_eq():
+    def test_example_get_eq(self):
         """Test getting a single equilibrium."""
         eq = desc.examples.get("SOLOVEV")
         assert eq.Psi == 1
 
     @pytest.mark.unit
-    def test_example_get_eqf():
+    def test_example_get_eqf(self):
         """Test getting full equilibria family."""
         eqf = desc.examples.get("DSHAPE", "all")
         np.testing.assert_allclose(eqf[0].pressure.params, 0)
 
     @pytest.mark.unit
-    def test_example_get_boundary():
+    def test_example_get_boundary(self):
         """Test getting boundary surface."""
         surf = desc.examples.get("HELIOTRON", "boundary")
         np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
     @pytest.mark.unit
-    def test_example_get_pressure():
+    def test_example_get_pressure(self):
         """Test getting pressure profile."""
         pres = desc.examples.get("ATF", "pressure")
         np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
 
     @pytest.mark.unit
-    def test_example_get_iota():
+    def test_example_get_iota(self):
         """Test getting iota profile."""
         iota = desc.examples.get("NCSX", "iota")
         np.testing.assert_allclose(
@@ -254,7 +254,7 @@ class TestGetExample:
         )
 
     @pytest.mark.unit
-    def test_example_get_current():
+    def test_example_get_current(self):
         """Test getting current profile."""
         current = desc.examples.get("QAS", "current")
         np.testing.assert_allclose(

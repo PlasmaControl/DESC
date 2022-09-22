@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from desc.backend import jnp
 from desc.derivatives import AutoDiffDerivative, FiniteDiffDerivative

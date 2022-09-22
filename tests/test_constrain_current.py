@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import desc.io
 from desc.compute import data_index

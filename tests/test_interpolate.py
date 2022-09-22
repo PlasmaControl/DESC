@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from desc.interpolate import interp1d, interp2d, interp3d
 

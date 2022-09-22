@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+
 from desc.geometry.utils import (
     rotation_matrix,
     xyz2rpz,

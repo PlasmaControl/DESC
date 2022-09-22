@@ -1,4 +1,6 @@
 import numpy as np
+import pytest
+
 from desc.equilibrium import Equilibrium
 from desc.objectives import (
     ObjectiveFunction,

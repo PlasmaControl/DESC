@@ -3,23 +3,17 @@ from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr
 from desc.utils import isalmostequal
 
 
-def solve_trust_region_dogleg(
-    g, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
-):
+def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
     """Solve trust region subproblem the dog-leg method.
 
     Parameters
     ----------
     g : ndarray
         gradient of objective function
-    hess : Hessian
-        Hessian with dot and solve methods
-    scale : ndarray
-        scaling array for gradient and hessian
+    H : ndarray
+        Hessian matrix
     trust_radius : float
         We are allowed to wander only this far away from the origin.
-    f : ndarray, optional
-        function values for least squares dogleg step
     initial_alpha : float
         initial guess for levenberg-marquadt parameter - unused by this method
 
@@ -40,17 +34,17 @@ def solve_trust_region_dogleg(
 
     # This is the optimum for the quadratic model function.
     # If it is inside the trust radius then return this point.
-    if f is None:
-        p_newton = -1 / scale * hess.solve(g)
-    else:
-        p_newton = -1 / scale * hess.solve(f)
+    L, lower = cho_factor(H)
+    if jnp.any(jnp.isnan(L)):
+        raise np.linalg.linalg.LinAlgError
+    p_newton = -cho_solve((L, lower), g)
     if jnp.linalg.norm(p_newton) < trust_radius:
         hits_boundary = False
         return p_newton, hits_boundary, initial_alpha
 
     # This is the predicted optimum along the direction of steepest descent.
-    gBg = hess.quadratic(scale ** 2 * g, scale ** 2 * g)
-    p_cauchy = -(jnp.dot(scale * g, scale * g) / gBg) * scale * g
+    gBg = g @ H @ g
+    p_cauchy = -(jnp.dot(g, g) / gBg) * g
 
     # If the Cauchy point is outside the trust region,
     # then return the point where the path intersects the boundary.
@@ -73,24 +67,18 @@ def solve_trust_region_dogleg(
     return p_boundary, hits_boundary, initial_alpha
 
 
-def solve_trust_region_2d_subspace(
-    grad, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
-):
+def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwargs):
     """Solve a trust region problem over the 2d subspace spanned by the gradient
     and Newton direction
 
     Parameters
     ----------
-    grad : ndarray
+    g : ndarray
         gradient of objective function
-    hess : OptimizerDerivative
+    H : ndarray
         hessian of objective function
-    scale : ndarray
-        scaling array for gradient and hessian
     trust_radius : float
         We are allowed to wander only this far away from the origin.
-    f : ndarray, optional
-        function values for least squares subspace step
     initial_alpha : float
         initial guess for levenberg-marquadt parameter - unused by this method
 
@@ -104,18 +92,12 @@ def solve_trust_region_2d_subspace(
         "levenberg-marquadt" parameter - unused by this method
 
     """
-    if hess.is_pos_def and f is None:
-        p_newton = -1 / scale * hess.solve(grad)
-    elif f is None:
-        p_newton = hess.negative_curvature_direction
-    else:
-        p_newton = -1 / scale * hess.solve(f)
+    p_newton = -jnp.linalg.solve(H, g)
 
-    S = np.vstack([grad, p_newton]).T
+    S = np.vstack([g, p_newton]).T
     S, _ = qr(S, mode="economic")
-    g = S.T.dot(scale * grad)
-    Sscale = S * scale[:, jnp.newaxis]
-    B = hess.quadratic(Sscale, Sscale)
+    g = S.T @ g
+    B = S.T @ H @ S
 
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]

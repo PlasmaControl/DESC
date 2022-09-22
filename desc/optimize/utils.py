@@ -93,8 +93,8 @@ def chol_U_update(U, x, alpha):
     return U
 
 
-def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
-    """Compute values of a quadratic function arising in least squares.
+def evaluate_quadratic_form(x, f, g, H, scale=None):
+    """Compute values of a quadratic function arising in trust region subproblem.
     The function is 0.5 * x.T * H * x + g.T * x + f.
 
     Parameters
@@ -105,8 +105,8 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
         constant term
     g : ndarray, shape(n,)
         Gradient, defines the linear term.
-    HorJ : ndarray, LinearOperator or OptimizerDerivative
-        Hessian/Jacobian matrix or operator
+    H : ndarray
+        Hessian matrix
     scale : ndarray, shape(n,)
         scaling to apply. Scales hess -> scale*hess*scale, g-> scale*g
 
@@ -116,7 +116,7 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
         Value of the function.
     """
     scale = scale if scale is not None else 1
-    q = HorJ.quadratic(x * scale, x * scale)
+    q = (x * scale) @ H @ (x * scale)
     l = jnp.dot(scale * g, x)
 
     return f + l + 1 / 2 * q
@@ -248,6 +248,15 @@ def check_termination(
 
 def compute_jac_scale(A, prev_scale_inv=None):
     scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
+    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1 / scale_inv, scale_inv
+
+
+def compute_hess_scale(H, prev_scale_inv=None):
+    scale_inv = jnp.abs(jnp.diag(H))
     scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
     if prev_scale_inv is not None:

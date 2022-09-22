@@ -7,9 +7,10 @@ from desc.optimize.utils import make_spd, chol_U_update
 from scipy.optimize import rosen, rosen_der, rosen_hess
 from desc.derivatives import Derivative
 from numpy.random import default_rng
+from scipy.optimize import BFGS
 
 
-def fun(x, p):
+def vector_fun(x, p):
     a0 = x * p[0]
     a1 = jnp.exp(-(x ** 2) * p[1])
     a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
@@ -18,6 +19,14 @@ def fun(x, p):
         axis=0,
     )
     return a0 + a1 + 3 * a2 + a3
+
+
+def scalar_fun(x):
+    return x[0] ** 2 + x[1] ** 2 - jnp.log(x[0] + 2) + 10 - jnp.log(x[1] + 2)
+
+
+scalar_grad = Derivative(scalar_fun, mode="grad")
+scalar_hess = Derivative(scalar_fun, mode="hess")
 
 
 class TestUtils(unittest.TestCase):
@@ -50,48 +59,47 @@ class TestUtils(unittest.TestCase):
 
 
 class TestFmin(unittest.TestCase):
-    def test_rosenbrock_full_hess_dogleg(self):
-        rando = default_rng(seed=1)
+    def test_convex_full_hess_dogleg(self):
+        rando = default_rng(seed=2)
 
-        x0 = rando.random(7)
-        true_x = np.ones(7)
+        x0 = 10 * rando.random(2)
 
         out = fmintr(
-            rosen,
+            scalar_fun,
             x0,
-            rosen_der,
-            hess=rosen_hess,
+            scalar_grad,
+            scalar_hess,
             verbose=1,
             method="dogleg",
             x_scale="hess",
-            ftol=1e-8,
-            xtol=1e-8,
-            gtol=1e-8,
-            options={"ga_accept_threshold": 1},
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
+            options={"ga_accept_threshold": 0},
         )
+        assert out["success"] is True
+        np.testing.assert_allclose(scalar_grad(out["x"]), 0, atol=1e-12)
 
-        np.testing.assert_allclose(out["x"], true_x)
-
-    def test_rosenbrock_full_hess_subspace(self):
+    def test_convex_full_hess_subspace(self):
         rando = default_rng(seed=2)
 
-        x0 = rando.random(7)
-        true_x = np.ones(7)
+        x0 = rando.random(2)
+
         out = fmintr(
-            rosen,
+            scalar_fun,
             x0,
-            rosen_der,
-            hess=rosen_hess,
+            scalar_grad,
+            scalar_hess,
             verbose=1,
             method="subspace",
             x_scale="hess",
-            ftol=1e-8,
-            xtol=1e-8,
-            gtol=1e-8,
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
             options={"ga_accept_threshold": 1},
         )
-
-        np.testing.assert_allclose(out["x"], true_x)
+        assert out["success"] is True
+        np.testing.assert_allclose(scalar_grad(out["x"]), 0, atol=1e-12)
 
     @pytest.mark.slow
     def test_rosenbrock_bfgs_dogleg(self):
@@ -106,7 +114,7 @@ class TestFmin(unittest.TestCase):
             hess="bfgs",
             verbose=1,
             method="dogleg",
-            x_scale="hess",
+            x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
@@ -124,10 +132,10 @@ class TestFmin(unittest.TestCase):
             rosen,
             x0,
             rosen_der,
-            hess="bfgs",
+            hess=BFGS(),
             verbose=1,
             method="subspace",
-            x_scale="hess",
+            x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
@@ -141,10 +149,10 @@ class TestLSQTR(unittest.TestCase):
 
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
         x = np.linspace(-1, 1, 100)
-        y = fun(x, p)
+        y = vector_fun(x, p)
 
         def res(p):
-            return fun(x, p) - y
+            return vector_fun(x, p) - y
 
         rando = default_rng(seed=0)
         p0 = p + 0.25 * (rando.random(p.size) - 0.5)

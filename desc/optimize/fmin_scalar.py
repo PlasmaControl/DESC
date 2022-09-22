@@ -1,9 +1,9 @@
 import numpy as np
 from termcolor import colored
 from desc.backend import jnp
-from .derivative import CholeskyHessian
 from .utils import (
     check_termination,
+    compute_hess_scale,
     evaluate_quadratic_form,
     print_header_nonlinear,
     print_iteration_nonlinear,
@@ -14,7 +14,7 @@ from .tr_subproblems import (
     solve_trust_region_2d_subspace,
     update_tr_radius,
 )
-from scipy.optimize import OptimizeResult
+from scipy.optimize import OptimizeResult, BFGS
 
 
 def fmintr(
@@ -115,6 +115,27 @@ def fmintr(
     g = grad(x, *args)
     ngev += 1
 
+    if callable(hess):
+        H = hess(x, *args)
+        nhev += 1
+        bfgs = False
+    elif isinstance(hess, str) and hess.lower() == "bfgs":
+        hess_init_scale = options.pop("hessian_init_scale", "auto")
+        hess_exception_strategy = options.pop(
+            "hessian_exception_strategy", "damp_update"
+        )
+        hess_min_curvature = options.pop("hessian_minimum_curvature", None)
+        hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
+        hess.initialize(N, "hess")
+        H = hess.get_matrix()
+        bfgs = True
+    elif isinstance(hess, BFGS):
+        hess.initialize(N, "hess")
+        bfgs = True
+        H = hess.get_matrix()
+    else:
+        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
+
     if method == "dogleg":
         subproblem = solve_trust_region_dogleg
     elif method == "subspace":
@@ -132,60 +153,26 @@ def fmintr(
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     step_accept_threshold = options.pop("step_accept_threshold", 0.15)
-    init_hess = options.pop("init_hess", "auto")
-    hess_recompute_freq = options.pop(
-        "hessian_recompute_interval", 1 if callable(hess) else 0
-    )
-    hess_damp_ratio = options.pop("hessian_damping_ratio", 0.2)
-    hess_exception_strategy = options.pop("hessian_exception_strategy", "damp_update")
-    hess_min_curvature = options.pop("hessian_minimum_curvature", None)
     ga_fd_step = options.pop("ga_fd_step", 0.1)
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
 
-    if np.size(hess_recompute_freq) == 1 and hess_recompute_freq > 0 and callable(hess):
-        hess_recompute_iters = np.arange(0, maxiter, hess_recompute_freq)
-    elif np.size(hess_recompute_freq) == 1 or not callable(hess):  # never recompute
-        hess_recompute_iters = []
-    else:
-        hess_recompute_iters = hess_recompute_freq
-
-    if hess == "bfgs":
-        hess = CholeskyHessian(
-            N,
-            init_hess,
-            hessfun=None,
-            hessfun_args=(),
-            exception_strategy=hess_exception_strategy,
-            min_curvature=hess_min_curvature,
-            damp_ratio=hess_damp_ratio,
-        )
-
-    elif callable(hess):
-        hess = CholeskyHessian(
-            N,
-            init_hess,
-            hessfun=hess,
-            hessfun_args=tuple(args),
-            exception_strategy=hess_exception_strategy,
-            min_curvature=hess_min_curvature,
-            damp_ratio=hess_damp_ratio,
-        )
-    else:
-        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
-
     hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
+    assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
     if hess_scale:
-        scale, scale_inv = hess.get_scale()
+        scale, scale_inv = compute_hess_scale(H)
     else:
         x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
+    g_h = g * scale
+    H_h = scale * H * scale[:, None]
+
     # initial trust region radius
     g_norm = np.linalg.norm(g, ord=gnorm_ord)
     x_norm = np.linalg.norm(x, ord=xnorm_ord)
-    trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
+    trust_radius = options.pop("initial_trust_radius", (g_h @ g_h) / (g_h @ H_h @ g_h))
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
@@ -218,12 +205,6 @@ def fmintr(
 
     while True:
 
-        if iteration in hess_recompute_iters:
-            hess.recompute(x)
-            nhev += 1
-            if hess_scale:
-                scale, scale_inv = hess.get_scale(scale_inv)
-
         success, message = check_termination(
             actual_reduction,
             f,
@@ -253,7 +234,7 @@ def fmintr(
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
             try:
-                step_h, hits_boundary, alpha = subproblem(g, hess, scale, trust_radius)
+                step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius)
 
             except np.linalg.linalg.LinAlgError:
                 success = False
@@ -266,7 +247,9 @@ def fmintr(
                 g1 = grad(x + ga_fd_step * step_h * scale, *args)
                 ngev += 1
                 dg = (g1 - g0) / ga_fd_step ** 2
-                ga_step_h = -scale_inv * hess.solve(dg) + 1 / ga_fd_step * step_h
+                ga_step_h = (
+                    -scale_inv * jnp.linalg.solve(H, dg) + 1 / ga_fd_step * step_h
+                )
                 ga_ratio = np.linalg.norm(
                     scale * ga_step_h, ord=xnorm_ord
                 ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
@@ -277,9 +260,7 @@ def fmintr(
                 ga_step_h = np.zeros_like(step_h)
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = f - evaluate_quadratic_form(
-                step_h, f, g, hess, scale=scale
-            )
+            predicted_reduction = f - evaluate_quadratic_form(step_h, f, g_h, H_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
@@ -339,12 +320,19 @@ def fmintr(
             ngev += 1
             g_norm = np.linalg.norm(g, ord=gnorm_ord)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
-            # don't update the hessian if we're going to recompute on the next iteration
-            if iteration + 1 not in hess_recompute_iters:
-                hess.update(x_new, x_old, g, g_old)
+            if bfgs:
+                hess.update(x - x_old, g - g_old)
+                H = hess.get_matrix()
+            else:
+                H = hess(x, *args)
+                nhev += 1
 
             if hess_scale:
-                scale, scale_inv = hess.get_scale(scale_inv)
+                scale, scale_inv = compute_hess_scale(H)
+
+            g_h = g * scale
+            H_h = scale * H * scale[:, None]
+
             if verbose > 1:
                 print_iteration_nonlinear(
                     iteration, nfev, f, actual_reduction, step_norm, g_norm
@@ -370,7 +358,7 @@ def fmintr(
         success=success,
         fun=f,
         grad=g,
-        hess=hess.get_matrix(),
+        hess=H,
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

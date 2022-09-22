@@ -12,6 +12,7 @@ from desc.profiles import PowerSeriesProfile
 
 
 def test_LambdaGauge_axis_sym(DummyStellarator):
+    """Test that lambda at axis is fixed correctly for symmetric equilibrium."""
     # symmetric cases only have the axis constraint
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
@@ -27,6 +28,7 @@ def test_LambdaGauge_axis_sym(DummyStellarator):
 
 
 def test_LambdaGauge_asym():
+    """Test that lambda gauge is fixed correctly for asymmetric equilibrium."""
     # just testing the gauge condition
     inputs = {
         "sym": False,
@@ -69,6 +71,7 @@ def test_LambdaGauge_asym():
 
 
 def test_bc_on_interior_surfaces():
+    """Test applying boundary conditions on internal surface."""
     surf = FourierRZToroidalSurface(rho=0.5)
     iota = PowerSeriesProfile([1, 0, 0.5])
     eq = Equilibrium(L=4, M=4, N=0, surface=surf, iota=iota)
@@ -80,6 +83,7 @@ def test_bc_on_interior_surfaces():
 
 
 def test_constrain_asserts():
+    """Test error checking for incompatible constraints."""
     # nonexistent toroidal current can't be constrained
     eq = Equilibrium(iota=PowerSeriesProfile(0, 0))
     with pytest.raises(RuntimeError):

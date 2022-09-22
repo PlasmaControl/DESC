@@ -7,9 +7,11 @@ from numpy.random import default_rng
 
 
 class TestDerivative:
-    """Tests Grid classes"""
+    """Tests Derivative classes"""
 
     def test_finite_diff_vec(self):
+        """Test finite differences of vector function."""
+
         def test_fun(x, y, a):
             return x * y + a
 
@@ -24,6 +26,8 @@ class TestDerivative:
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
     def test_finite_diff_scalar(self):
+        """Test finite differences of scalar function."""
+
         def test_fun(x, y, a):
             return np.dot(x, y) + a
 
@@ -42,6 +46,8 @@ class TestDerivative:
         np.testing.assert_allclose(J, x, atol=1e-8)
 
     def test_auto_diff(self):
+        """Test automatic differentiation."""
+
         def test_fun(x, y, a):
             return jnp.cos(x) + x * y + a
 
@@ -56,6 +62,8 @@ class TestDerivative:
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
     def test_compare_AD_FD(self):
+        """Compare finite differences to automatic differentiation."""
+
         def test_fun(x, y, a):
             return jnp.cos(x) + x * y + a
 
@@ -72,6 +80,7 @@ class TestDerivative:
         np.testing.assert_allclose(J_FD, J_AD, atol=1e-8)
 
     def test_fd_hessian(self):
+        """Test finite difference calculation of hessian."""
         rando = default_rng(seed=0)
 
         n = 5
@@ -90,6 +99,7 @@ class TestDerivative:
         np.testing.assert_allclose(A1, A)
 
     def test_block_jacobian(self):
+        """Test calculation of jacoiban using blocked method."""
         rando = default_rng(seed=0)
         A = rando.random((19, 17))
 
@@ -105,8 +115,11 @@ class TestDerivative:
 
 
 class TestJVP:
+    """Test calculation of jacobian vector products."""
+
     @staticmethod
     def fun(x, c1, c2):
+        """Function for testing."""
         Amat = np.arange(12).reshape((4, 3))
         return jnp.dot(Amat, (x + c1 * c2) ** 3)
 
@@ -119,7 +132,7 @@ class TestJVP:
     dc2 = np.array([-3, 1, -2]).astype(float)
 
     def test_autodiff_jvp(self):
-
+        """Tests using AD for JVP calculation."""
         df = AutoDiffDerivative.compute_jvp(
             self.fun, 0, self.dx, self.x, self.c1, self.c2
         )
@@ -134,7 +147,7 @@ class TestJVP:
         np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
 
     def test_finitediff_jvp(self):
-
+        """Tests using FD for JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp(
             self.fun, 0, self.dx, self.x, self.c1, self.c2
         )
@@ -149,7 +162,7 @@ class TestJVP:
         np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
 
     def test_autodiff_jvp2(self):
-
+        """Tests using AD for 2nd order JVP calculation."""
         df = AutoDiffDerivative.compute_jvp2(
             self.fun, 0, 0, self.dx + 1, self.dx, self.x, self.c1, self.c2
         )
@@ -185,7 +198,7 @@ class TestJVP:
         np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
 
     def test_finitediff_jvp2(self):
-
+        """Tests using FD for 2nd order JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp2(
             self.fun, 0, 0, self.dx + 1, self.dx, self.x, self.c1, self.c2
         )
@@ -221,7 +234,7 @@ class TestJVP:
         np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
 
     def test_autodiff_jvp3(self):
-
+        """Tests using AD for 3rd order JVP calculation."""
         df = AutoDiffDerivative.compute_jvp3(
             self.fun, 0, 0, 0, self.dx + 1, self.dx, self.dx, self.x, self.c1, self.c2
         )
@@ -266,7 +279,7 @@ class TestJVP:
         )
 
     def test_finitediff_jvp3(self):
-
+        """Tests using FD for 3rd order JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp3(
             self.fun, 0, 0, 0, self.dx + 1, self.dx, self.dx, self.x, self.c1, self.c2
         )

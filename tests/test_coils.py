@@ -6,7 +6,10 @@ from desc.geometry import FourierRZCurve
 
 
 class TestCoil:
+    """Tests for singular coil objects."""
+
     def test_biot_savart(self):
+        """Test biot-savart implementation against analytic formula for circular coil."""
         R = 2
         y = 1
         I = 1
@@ -19,7 +22,7 @@ class TestCoil:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     def test_properties(self):
-
+        """Test getting/setting attributes for Coil class."""
         current = 4.34
         coil = FourierPlanarCoil(current)
         assert coil.current == current
@@ -29,6 +32,8 @@ class TestCoil:
 
 
 class TestCoilSet:
+    """Tests for sets of multiple coils."""
+
     def test_linspaced_linear(self):
         """Field from straight solenoid."""
         R = 10
@@ -91,6 +96,7 @@ class TestCoilSet:
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     def test_properties(self):
+        """Test getting/setting of CoilSet attributes."""
         coil = FourierPlanarCoil()
         coils = CoilSet.linspaced_linear(coil, n=4)
         coils.grid = np.array([[0.0, 0.0, 0.0]])
@@ -195,6 +201,7 @@ class TestCoilSet:
         )
 
     def test_dunder_methods(self):
+        """Test methods for combining and calling CoilSet objects."""
         coil1 = FourierXYZCoil()
         coils1 = CoilSet.from_symmetry(coil1, NFP=4)
         coil2 = FourierPlanarCoil()
@@ -231,6 +238,7 @@ class TestCoilSet:
 
 
 def test_repr():
+    """Test string representation of Coil objects."""
     coil = FourierRZCoil()
     assert "FourierRZCoil" in str(coil)
     assert "current=1" in str(coil)

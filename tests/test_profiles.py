@@ -7,8 +7,11 @@ from .utils import compute_coords, area_difference
 
 
 class TestProfiles:
+    """Tests for Profile classes."""
+
     @pytest.mark.slow
     def test_same_result(self):
+        """Test that different representations of the same profile give the same eq."""
         input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
@@ -28,7 +31,7 @@ class TestProfiles:
 
     @pytest.mark.slow
     def test_close_values(self):
-
+        """Test that different forms of the same profile give similar values."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
         )
@@ -59,7 +62,7 @@ class TestProfiles:
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
 
     def test_repr(self):
-
+        """Test string representation of profile classes."""
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
         sp = pp.to_spline()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
@@ -73,7 +76,7 @@ class TestProfiles:
         assert "ScaledProfile" in str(2 * zp)
 
     def test_get_set(self):
-
+        """Test getting/setting of profile attributes."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
         )
@@ -98,6 +101,7 @@ class TestProfiles:
         assert len(zp.params) == 1
 
     def test_auto_sym(self):
+        """Test that even parity is enforced automatically."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -110,6 +114,7 @@ class TestProfiles:
         assert pp.basis.num_modes == 5
 
     def test_sum_profiles(self):
+        """Test adding two profiles together."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -131,6 +136,7 @@ class TestProfiles:
         np.testing.assert_allclose(f(), 4 * (pp(x)), atol=1e-3)
 
     def test_product_profiles(self):
+        """Test multiplying two profiles together."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -152,6 +158,7 @@ class TestProfiles:
         np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
 
     def test_scaled_profiles(self):
+        """Test scaling profiles by a constant."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -179,6 +186,7 @@ class TestProfiles:
         np.testing.assert_allclose(f(), 8 * (pp(x)), atol=1e-3)
 
     def test_profile_errors(self):
+        """Test error checking when creating and working with profiles."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )

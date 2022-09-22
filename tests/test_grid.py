@@ -13,7 +13,7 @@ class TestGrid:
     """Test Grid classes."""
 
     def test_custom_grid(self):
-
+        """Test creating a grid with custom set of nodes."""
         nodes = np.array(
             [
                 [0, 0, 0],
@@ -34,7 +34,7 @@ class TestGrid:
         np.testing.assert_allclose(np.sum(grid.weights), (2 * np.pi) ** 2)
 
     def test_linear_grid(self):
-
+        """Test node placement in a LinearGrid."""
         L, M, N, NFP, axis, endpoint = 8, 5, 3, 2, True, False
         g = LinearGrid(L, M, N, NFP, sym=False, axis=axis, endpoint=endpoint)
 
@@ -65,7 +65,7 @@ class TestGrid:
         np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
 
     def test_concentric_grid(self):
-
+        """Test node placement in ConcentricGrid."""
         M = 2
         N = 0
         NFP = 1
@@ -115,7 +115,7 @@ class TestGrid:
         np.testing.assert_allclose(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
 
     def test_quadrature_grid(self):
-
+        """Test node placement in QuadratureGrid."""
         L = 2
         M = 2
         N = 0
@@ -140,11 +140,11 @@ class TestGrid:
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
 
     def test_concentric_grid_high_res(self):
-        # need to make sure this builds without crashing, as in GH issue #207
+        """Test that we can create high resolution grids without crashing, as in GH issue #207."""
         grid = ConcentricGrid(L=32, M=28, N=30)
 
     def test_quad_grid_volume_integration(self):
-
+        """Test that quadrature grid gives correct volume integrals."""
         r = 1
         R = 10
         vol = 2 * (np.pi ** 2) * (r ** 2) * R
@@ -171,7 +171,7 @@ class TestGrid:
         np.testing.assert_allclose(vol, vol_quad)
 
     def test_repr(self):
-
+        """Test string representations of grid objects."""
         qg = ConcentricGrid(2, 3, 4)
         s = str(qg)
         assert "ConcentricGrid" in s
@@ -181,7 +181,7 @@ class TestGrid:
         assert "N=4" in s
 
     def test_change_resolution(self):
-
+        """Test changing grid resolution."""
         lg = LinearGrid(1, 2, 3)
         lg.change_resolution(2, 3, 4)
         assert lg.L == 2

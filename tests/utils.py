@@ -6,7 +6,7 @@ from desc.grid import Grid, LinearGrid
 
 
 def compute_coords(equil, check_all_zeta=False):
-
+    """Computes coordinate values from a given equilibrium."""
     if equil.N == 0 and not check_all_zeta:
         Nz = 1
     else:

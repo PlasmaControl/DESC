@@ -13,6 +13,7 @@ from desc.magnetic_fields import (
 
 
 def phi_lm(R, phi, Z, a, m):
+    """Scalar potential test function."""
     CNm0 = (R ** m - R ** -m) / (2 * m)
     Nm1 = CNm0 * Z
     CDm0 = (R ** m + R ** -m) / 2
@@ -33,8 +34,10 @@ args = {"a": a, "m": m}
 
 
 class TestMagneticFields:
-    def test_basic_fields(self):
+    """Tests for MagneticField classes."""
 
+    def test_basic_fields(self):
+        """Tests for basic field types (toroidal, vertical, poloidal)."""
         tfield = ToroidalMagneticField(2, 1)
         vfield = VerticalMagneticField(1)
         pfield = PoloidalMagneticField(2, 1, 2)
@@ -46,7 +49,7 @@ class TestMagneticFields:
         )
 
     def test_scalar_field(self):
-
+        """Test scalar potential magnetic field against analytic result."""
         field = ScalarPotentialField(phi_lm, args)
         np.testing.assert_allclose(
             field.compute_magnetic_field([1.0, 0, 0]), [[0, 1, 0]]
@@ -57,7 +60,7 @@ class TestMagneticFields:
 
     @pytest.mark.slow
     def test_spline_field(self):
-
+        """Test accuracy of spline magnetic field."""
         field1 = ScalarPotentialField(phi_lm, args)
         R = np.linspace(0.5, 1.5, 20)
         Z = np.linspace(-1.5, 1.5, 20)
@@ -77,7 +80,7 @@ class TestMagneticFields:
         )
 
     def test_field_line_integrate(self):
-
+        """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit
         # from outboard midplane to top center
         field = ToroidalMagneticField(2, 10) + PoloidalMagneticField(2, 10, 0.25)

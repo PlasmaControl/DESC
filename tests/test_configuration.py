@@ -11,8 +11,10 @@ from desc.geometry import (
 
 
 class TestConstructor:
-    def test_defaults(self):
+    """Tests for creating equilibrium objects."""
 
+    def test_defaults(self):
+        """Tests that default attribute values get set correctly."""
         eq = Equilibrium()
 
         assert eq.spectral_indexing == "ansi"
@@ -28,7 +30,7 @@ class TestConstructor:
         np.testing.assert_allclose(eq.c_l, [0])
 
     def test_supplied_objects(self):
-
+        """Tests that profile and surface objects are parsed correctly."""
         pressure = SplineProfile([1, 2, 3])
         iota = SplineProfile([2, 3, 4])
         surface = FourierRZToroidalSurface(NFP=2, sym=False)
@@ -65,7 +67,7 @@ class TestConstructor:
         np.testing.assert_allclose(eq4.axis.R_n, [10])
 
     def test_dict(self):
-
+        """Test creating an equilibrium from a dictionary of arrays."""
         inputs = {
             "L": 4,
             "M": 2,
@@ -159,7 +161,7 @@ class TestConstructor:
         )
 
     def test_asserts(self):
-
+        """Test error checking in equilibrium creation."""
         with pytest.raises(AssertionError):
             eq = Equilibrium(L=3.4)
         with pytest.raises(AssertionError):
@@ -192,7 +194,7 @@ class TestConstructor:
             eq.c_l = None
 
     def test_supplied_coeffs(self):
-
+        """Test passing in specific spectral coefficients."""
         R_lmn = np.random.random(3)
         Z_lmn = np.random.random(3)
         L_lmn = np.random.random(3)
@@ -206,7 +208,10 @@ class TestConstructor:
 
 
 class TestInitialGuess:
+    """Tests for setting initial guess for an equilibrium."""
+
     def test_default_set(self):
+        """Test the default initial guess."""
         eq = Equilibrium()
         eq.set_initial_guess()
         np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 1 * 1)
@@ -215,7 +220,7 @@ class TestInitialGuess:
         np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 1 * 1)
 
     def test_errors(self):
-
+        """Test error checking for setting initial guess."""
         eq = Equilibrium()
         with pytest.raises(ValueError):
             eq.set_initial_guess(1, "a", 4, 5, 6)
@@ -243,7 +248,7 @@ class TestInitialGuess:
             )
 
     def test_guess_from_other(self):
-
+        """Test using one equilibrium as the initial guess for another."""
         eq1 = Equilibrium(L=4, M=2)
         eq2 = Equilibrium(L=2, M=1)
         eq2.set_initial_guess(eq1)
@@ -253,7 +258,7 @@ class TestInitialGuess:
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
     def test_guess_from_surface(self):
-
+        """Test initial guess by scaling boundary surface."""
         eq = Equilibrium()
         surface = FourierRZToroidalSurface()
         # turn the circular cross-section into an ellipse w AR=2
@@ -264,7 +269,7 @@ class TestInitialGuess:
         np.testing.assert_allclose(eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2 * 1)
 
     def test_guess_from_surface2(self):
-
+        """Test initial guess by scaling interior surface."""
         eq = Equilibrium()
         # specify an interior flux surface
         surface = FourierRZToroidalSurface(rho=0.5)
@@ -274,6 +279,7 @@ class TestInitialGuess:
         )
 
     def test_guess_from_points(self):
+        """Test initial guess by fitting R,Z at specified points."""
         eq = Equilibrium(L=3, M=3, N=1)
         # these are just the default circular tokamak with a random normal
         # perturbation with std=0.03, fixed for repeatability
@@ -372,20 +378,22 @@ class TestInitialGuess:
         with pytest.raises(ValueError):
             eq = Equilibrium(surface=surface3, axis=axis, NFP=2)
 
+    def test_guess_from_file(self, SOLOVEV):
+        """Test setting initial guess from saved equilibrium file."""
+        path = SOLOVEV["desc_h5_path"]
+        eq1 = Equilibrium(M=12, sym=True)
+        eq1.set_initial_guess(path)
+        eq2 = EquilibriaFamily.load(path)[-1]
 
-def test_guess_from_file(SOLOVEV):
-
-    path = SOLOVEV["desc_h5_path"]
-    eq1 = Equilibrium(M=12, sym=True)
-    eq1.set_initial_guess(path)
-    eq2 = EquilibriaFamily.load(path)[-1]
-
-    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
-    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
 
-class TestSurfaces:
+class TestGetSurfaces:
+    """Tests for get_surface method"""
+
     def test_get_rho_surface(self):
+        """Test getting a constant rho surface."""
         eq = Equilibrium()
         surf = eq.get_surface_at(rho=0.5)
         np.testing.assert_allclose(
@@ -394,17 +402,20 @@ class TestSurfaces:
         assert surf.rho == 0.5
 
     def test_get_zeta_surface(self):
+        """Test getting a constant zeta surface."""
         eq = Equilibrium()
         surf = eq.get_surface_at(zeta=np.pi)
         np.testing.assert_allclose(surf.compute_surface_area(), np.pi * (1.0) ** 2)
         assert surf.zeta == np.pi
 
     def test_get_theta_surface(self):
+        """Test that getting a constant theta surface doesn't work yet."""
         eq = Equilibrium()
         with pytest.raises(NotImplementedError):
             surf = eq.get_surface_at(theta=np.pi)
 
     def test_asserts(self):
+        """Test error checking in get_surface method."""
         eq = Equilibrium()
         with pytest.raises(ValueError):
             surf = eq.get_surface_at(rho=1, zeta=2)
@@ -426,7 +437,7 @@ def test_magnetic_axis(HELIOTRON):
 
 
 def test_is_nested():
-
+    """Test that jacobian sign indicates whether surfaces are nested."""
     eq = Equilibrium()
     grid = QuadratureGrid(L=10, M=10, N=0)
     assert eq.is_nested(grid=grid)
@@ -440,6 +451,7 @@ def test_is_nested():
 
 
 def test_get_profile(DSHAPE):
+    """Test getting/setting iota and current profiles."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     iota0 = eq.iota
     iota1 = eq.get_profile("iota")

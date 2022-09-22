@@ -9,6 +9,7 @@ class TestBackend:
     """tests for backend functions"""
 
     def test_put(self):
+        """Test put function as replacement for fancy array indexing."""
         a = np.array([0, 0, 0])
         b = np.array([1, 2, 3])
 
@@ -17,6 +18,7 @@ class TestBackend:
         np.testing.assert_array_almost_equal(a, b)
 
     def test_sign(self):
+        """Test modified sign function to return +1 for x=0."""
         assert sign(4) == 1
         assert sign(0) == 1
         assert sign(-10.3) == -1

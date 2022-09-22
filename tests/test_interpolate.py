@@ -4,7 +4,10 @@ from desc.interpolate import interp1d, interp2d, interp3d
 
 
 class TestInterp1D:
+    """Tests for interp1d function."""
+
     def test_interp1d(self):
+        """Test accuracy of different 1d interpolation methods."""
         xp = np.linspace(0, 2 * np.pi, 100)
         x = np.linspace(0, 2 * np.pi, 10000)
         f = lambda x: np.sin(x)
@@ -29,6 +32,7 @@ class TestInterp1D:
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
 
     def test_interp1d_extrap_periodic(self):
+        """Test extrapolation and periodic BC of 1d interpolation."""
         xp = np.linspace(0, 2 * np.pi, 200)
         x = np.linspace(-1, 2 * np.pi + 1, 10000)
         f = lambda x: np.sin(x)
@@ -48,7 +52,7 @@ class TestInterp1D:
 
 class TestInterp2D:
     def test_interp2d(self):
-
+        """Test accuracy of different 2d interpolation methods."""
         xp = np.linspace(0, 4 * np.pi, 40)
         yp = np.linspace(0, 2 * np.pi, 40)
         y = np.linspace(0, 2 * np.pi, 10000)
@@ -70,7 +74,7 @@ class TestInterp2D:
 
 class TestInterp3D:
     def test_interp3d(self):
-
+        """Test accuracy of different 3d interpolation methods."""
         xp = np.linspace(0, np.pi, 20)
         yp = np.linspace(0, 2 * np.pi, 20)
         zp = np.linspace(0, np.pi, 20)

@@ -9,6 +9,7 @@ from numpy.random import default_rng
 
 
 def fun(x, p):
+    """Example function to optimize."""
     a0 = x * p[0]
     a1 = jnp.exp(-(x ** 2) * p[1])
     a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
@@ -20,7 +21,10 @@ def fun(x, p):
 
 
 class TestUtils:
+    """Tests for optimizer utility functions."""
+
     def test_spd(self):
+        """Test making a matrix positive definite."""
         rando = default_rng(seed=0)
 
         n = 100
@@ -33,6 +37,7 @@ class TestUtils:
         assert mineig > 0
 
     def test_chol_update(self):
+        """Test rank 1 update to cholesky factorization."""
         rando = default_rng(seed=0)
 
         n = 100
@@ -49,7 +54,10 @@ class TestUtils:
 
 
 class TestFmin:
+    """Test for scalar minimization function."""
+
     def test_rosenbrock_full_hess_dogleg(self):
+        """Test minimizing rosenbrock function using dogleg method with full hessian."""
         rando = default_rng(seed=1)
 
         x0 = rando.random(7)
@@ -72,6 +80,7 @@ class TestFmin:
         np.testing.assert_allclose(out["x"], true_x)
 
     def test_rosenbrock_full_hess_subspace(self):
+        """Test minimizing rosenbrock function using subspace method with full hessian."""
         rando = default_rng(seed=2)
 
         x0 = rando.random(7)
@@ -94,6 +103,7 @@ class TestFmin:
 
     @pytest.mark.slow
     def test_rosenbrock_bfgs_dogleg(self):
+        """Test minimizing rosenbrock function using dogleg method with BFGS hessian."""
         rando = default_rng(seed=3)
 
         x0 = rando.random(7)
@@ -115,6 +125,7 @@ class TestFmin:
 
     @pytest.mark.slow
     def test_rosenbrock_bfgs_subspace(self):
+        """Test minimizing rosenbrock function using subspace method with BFGS hessian."""
         rando = default_rng(seed=4)
 
         x0 = rando.random(7)
@@ -136,8 +147,10 @@ class TestFmin:
 
 
 class TestLSQTR:
-    def test_lsqtr_exact(self):
+    """Tests for least squares optimizer."""
 
+    def test_lsqtr_exact(self):
+        """Test minimizing least squares test function using svd and cholesky methods."""
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
         x = np.linspace(-1, 1, 100)
         y = fun(x, p)

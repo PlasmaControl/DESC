@@ -17,9 +17,11 @@ from desc.profiles import PowerSeriesProfile
 
 
 class TestObjectiveFunction:
-    """Test ObjectiveFunction class."""
+    """Test ObjectiveFunction classes."""
 
     def test_generic(self):
+        """Test GenericObjective for arbitrary quantities."""
+
         def test(f, eq):
             obj = GenericObjective(f, eq=eq)
             kwargs = {
@@ -37,6 +39,8 @@ class TestObjectiveFunction:
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_volume(self):
+        """Test calculation of plasma volume."""
+
         def test(eq):
             obj = Volume(target=10 * np.pi ** 2, weight=1 / np.pi ** 2, eq=eq)
             V = obj.compute(eq.R_lmn, eq.Z_lmn)
@@ -48,6 +52,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_aspect_ratio(self):
+        """Test calculation of aspect ratio."""
+
         def test(eq):
             obj = AspectRatio(target=5, weight=2, eq=eq)
             AR = obj.compute(eq.R_lmn, eq.Z_lmn)
@@ -57,6 +63,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_energy(self):
+        """Test calculation of MHD energy."""
+
         def test(eq):
             obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
             W = obj.compute(
@@ -68,6 +76,8 @@ class TestObjectiveFunction:
         test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
 
     def test_toroidal_current(self):
+        """Test calculation of toroidal current."""
+
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq)
             I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
@@ -77,6 +87,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_qs_boozer(self):
+        """Test calculation of boozer qs metric."""
+
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
             fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
@@ -86,6 +98,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_qs_twoterm(self):
+        """Test calculation of two term qs metric."""
+
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
             fc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
@@ -95,6 +109,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_qs_tp(self):
+        """Test calculation of triple product qs metric."""
+
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
             ft = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
@@ -104,6 +120,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_mercier_stability(self):
+        """Test calculation of mercier stability criteria."""
+
         def test(eq):
             obj = MercierStability(eq=eq)
             DMerc = obj.compute(
@@ -116,6 +134,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     def test_magnetic_well(self):
+        """Test calculation of magnetic well stability criteria."""
+
         def test(eq):
             obj = MagneticWell(eq=eq)
             magnetic_well = obj.compute(
@@ -129,6 +149,7 @@ class TestObjectiveFunction:
 
 
 def test_derivative_modes():
+    """Test equality of derivatives using batched and blocked methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     obj1 = ObjectiveFunction(MagneticWell(), deriv_mode="batched", use_jit=False)
     obj2 = ObjectiveFunction(MagneticWell(), deriv_mode="blocked", use_jit=False)

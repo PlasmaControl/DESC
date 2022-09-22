@@ -391,6 +391,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
     def test_fft_warnings(self):
+        """Test that warnings are thrown when trying to use fft where it doesn't work."""
         g = LinearGrid(rho=2, theta=2, zeta=2)
         b = ZernikePolynomial(L=0, M=0)
         with pytest.warns(UserWarning):
@@ -454,7 +455,7 @@ class TestTransform:
         assert t.method == "direct2"
 
     def test_direct2_warnings(self):
-
+        """Test that warnings are thrown when trying to use direct2 where it doesn't work."""
         g = LinearGrid(rho=2, theta=2, zeta=5)
         b = DoubleFourierSeries(M=1, N=1)
         g._nodes = g._nodes[::-1]
@@ -484,7 +485,7 @@ class TestTransform:
         assert t.method == "direct1"
 
     def test_fit_direct1(self):
-
+        """Test fitting with direct1 method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = ConcentricGrid(3, 3, 2, node_pattern="ocs")
         transform = Transform(grid, basis, method="direct1", build_pinv=True)
@@ -495,7 +496,7 @@ class TestTransform:
         np.testing.assert_allclose(c, c1, atol=1e-12)
 
     def test_fit_direct2(self):
-
+        """Test fitting with direct2 method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
         transform = Transform(grid, basis, method="direct2", build_pinv=True)
@@ -506,7 +507,7 @@ class TestTransform:
         np.testing.assert_allclose(c, c1, atol=1e-12)
 
     def test_fit_fft(self):
-
+        """Test fitting with fft method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
         grid = LinearGrid(4, 4, 3)
         transform = Transform(grid, basis, method="fft", build_pinv=True)

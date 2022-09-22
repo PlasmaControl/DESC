@@ -16,6 +16,7 @@ from desc.equilibrium import Equilibrium
 
 
 def test_vmec_input(tmpdir_factory):
+    """Test converting VMEC to DESC input file."""
     input_path = "./tests/inputs/input.DSHAPE"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("input.DSHAPE")
@@ -33,19 +34,24 @@ def test_vmec_input(tmpdir_factory):
 
 
 class TestInputReader:
+    """Tests for the InputReader class."""
+
     argv0 = []
     argv1 = ["nonexistant_input_file"]
     argv2 = ["./tests/inputs/MIN_INPUT"]
 
     def test_no_input_file(self):
+        """Test an error is raised when no input file is given."""
         with pytest.raises(NameError):
             InputReader(cl_args=self.argv0)
 
     def test_nonexistant_input_file(self):
+        """Test error is raised when nonexistent path is given."""
         with pytest.raises(FileNotFoundError):
             InputReader(cl_args=self.argv1)
 
     def test_min_input(self):
+        """Test that minimal input is parsed correctly."""
         ir = InputReader(cl_args=self.argv2)
         # self.assertEqual(ir.args.prog, 'DESC', 'Program is incorrect.')
         assert ir.args.input_file[0] == self.argv2[0], "Input file name does not match"
@@ -71,6 +77,7 @@ class TestInputReader:
         # test equality of arguments
 
     def test_np_environ(self):
+        """Test setting numpy backend via environment variable."""
         argv = self.argv2 + ["--numpy"]
         InputReader(cl_args=argv)
         assert (
@@ -78,6 +85,7 @@ class TestInputReader:
         ), "numpy environment variable incorrect on use"
 
     def test_quiet_verbose(self):
+        """Test setting of quiet and verbose options."""
         ir = InputReader(self.argv2)
         assert (
             ir.inputs[0]["verbose"] == 1
@@ -110,6 +118,7 @@ class MockObject:
 
 
 def test_writer_given_filename(writer_test_file):
+    """Test writing to a given file by filename."""
     writer = hdf5Writer(writer_test_file, "w")
     assert writer.check_type(writer.target) is False
     assert writer.check_type(writer.base) is True
@@ -119,6 +128,7 @@ def test_writer_given_filename(writer_test_file):
 
 
 def test_writer_given_file(writer_test_file):
+    """Test writing to given file instance."""
     f = h5py.File(writer_test_file, "w")
     writer = hdf5Writer(f, "w")
     assert writer.check_type(writer.target) is True
@@ -131,6 +141,7 @@ def test_writer_given_file(writer_test_file):
 
 
 def test_writer_close_on_delete(writer_test_file):
+    """Test that files are closed when writer is deleted."""
     writer = hdf5Writer(writer_test_file, "w")
     with pytest.raises(OSError):
         newwriter = hdf5Writer(writer_test_file, "w")
@@ -140,6 +151,7 @@ def test_writer_close_on_delete(writer_test_file):
 
 
 def test_writer_write_dict(writer_test_file):
+    """Test writing dictionary to hdf5 file."""
     thedict = {"1": 1, "2": 2, "3": 3}
     writer = hdf5Writer(writer_test_file, "w")
     writer.write_dict(thedict)
@@ -159,6 +171,7 @@ def test_writer_write_dict(writer_test_file):
 
 
 def test_writer_write_list(writer_test_file):
+    """Test writing list to hdf5 file."""
     thelist = ["1", 1, "2", 2, "3", 3]
     writer = hdf5Writer(writer_test_file, "w")
     writer.write_list(thelist)
@@ -173,6 +186,7 @@ def test_writer_write_list(writer_test_file):
 
 
 def test_writer_write_obj(writer_test_file):
+    """Test writing objects to hdf5 file."""
     mo = MockObject()
     writer = hdf5Writer(writer_test_file, "w")
     # writer should throw runtime warning if any save_attrs are undefined
@@ -197,6 +211,7 @@ def test_writer_write_obj(writer_test_file):
 
 
 def test_reader_given_filename(reader_test_file):
+    """Test opening a reader with a given filename."""
     reader = hdf5Reader(reader_test_file)
     assert reader.check_type(reader.target) is False
     assert reader.check_type(reader.base) is True
@@ -206,6 +221,7 @@ def test_reader_given_filename(reader_test_file):
 
 
 def test_reader_given_file(reader_test_file):
+    """Test opening a reader from a given file instance."""
     f = h5py.File(reader_test_file, "r")
     reader = hdf5Reader(f)
     assert reader.check_type(reader.target) is True
@@ -216,6 +232,7 @@ def test_reader_given_file(reader_test_file):
 
 
 def test_reader_read_obj(reader_test_file):
+    """Test reading an object from hdf5 file."""
     mo = MockObject()
     reader = hdf5Reader(reader_test_file)
     reader.read_obj(mo)
@@ -231,6 +248,7 @@ def test_reader_read_obj(reader_test_file):
 
 
 def test_pickle_io(SOLOVEV, tmpdir_factory):
+    """Test saving and loading equilibrium in pickle format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.pkl")
     eqf = load(load_from=str(SOLOVEV["desc_h5_path"]))
@@ -240,6 +258,7 @@ def test_pickle_io(SOLOVEV, tmpdir_factory):
 
 
 def test_ascii_io(SOLOVEV, tmpdir_factory):
+    """Test saving and loading equilibrium in ASCII format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.txt")
     eq1 = load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
@@ -252,6 +271,7 @@ def test_ascii_io(SOLOVEV, tmpdir_factory):
 
 
 def test_copy():
+    """Test thing.copy() method of IOAble objects."""
     basis = FourierZernikeBasis(2, 2, 2)
     grid = LinearGrid(2, 2, 2)
     transform1 = Transform(grid, basis, method="direct1")
@@ -277,6 +297,7 @@ def test_copy():
 
 
 def test_save_none(tmpdir_factory):
+    """Test that None attributes are saved/loaded correctly."""
     tmpdir = tmpdir_factory.mktemp("none_test")
     eq = Equilibrium()
     eq._iota = None

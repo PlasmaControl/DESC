@@ -7,7 +7,10 @@ import desc.examples
 
 
 class TestFourierRZToroidalSurface:
+    """Tests for FourierRZToroidalSurface class."""
+
     def test_area(self):
+        """Test calculation of surface area."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=24, N=24)
         s.grid = grid
@@ -18,6 +21,7 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(s.compute_surface_area(grid=(10, 15)), area)
 
     def test_normal(self):
+        """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
         s.grid = grid
@@ -30,6 +34,7 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
 
     def test_misc(self):
+        """Test getting/setting attributes of surface."""
         c = FourierRZToroidalSurface()
         grid = LinearGrid(L=0, M=2, N=2)
         c.grid = grid
@@ -74,7 +79,7 @@ class TestFourierRZToroidalSurface:
         assert c.Z_basis.NFP == 3
 
     def test_from_input_file(self):
-
+        """Test reading a surface from a vmec or desc input file."""
         vmec_path = ".//tests//inputs//input.DSHAPE"
         desc_path = ".//tests//inputs//DSHAPE"
         vmec_surf = FourierRZToroidalSurface.from_input_file(vmec_path)
@@ -100,7 +105,10 @@ class TestFourierRZToroidalSurface:
 
 
 class TestZernikeRZToroidalSection:
+    """Tests for ZerinkeRZTorioidalSection class."""
+
     def test_area(self):
+        """Test calculation of surface area."""
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=10, M=10)
         s.grid = grid
@@ -111,6 +119,7 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(s.compute_surface_area(grid=(5, 5)), area)
 
     def test_normal(self):
+        """Test calculation of surface normal vector."""
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=8, M=4, N=0)
         s.grid = grid
@@ -118,6 +127,7 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
     def test_misc(self):
+        """Test getting/setting surface attributes."""
         c = ZernikeRZToroidalSection()
         grid = LinearGrid(L=2, M=2, N=0)
         c.grid = grid

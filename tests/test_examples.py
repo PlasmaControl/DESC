@@ -203,55 +203,59 @@ def test_qh_optimization(precise_QH):
     np.testing.assert_array_less(B_asym, 2e-3)
 
 
-def test_example_get_eq():
-    eq = desc.examples.get("SOLOVEV")
-    assert eq.Psi == 1
+class TestGetExample:
+    """Tests for desc.examples.get."""
 
+    def test_example_get_eq():
+        """Test getting a single equilibrium."""
+        eq = desc.examples.get("SOLOVEV")
+        assert eq.Psi == 1
 
-def test_example_get_eqf():
-    eqf = desc.examples.get("DSHAPE", "all")
-    np.testing.assert_allclose(eqf[0].pressure.params, 0)
+    def test_example_get_eqf():
+        """Test getting full equilibria family."""
+        eqf = desc.examples.get("DSHAPE", "all")
+        np.testing.assert_allclose(eqf[0].pressure.params, 0)
 
+    def test_example_get_boundary():
+        """Test getting boundary surface."""
+        surf = desc.examples.get("HELIOTRON", "boundary")
+        np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
-def test_example_get_boundary():
-    surf = desc.examples.get("HELIOTRON", "boundary")
-    np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
+    def test_example_get_pressure():
+        """Test getting pressure profile."""
+        pres = desc.examples.get("ATF", "pressure")
+        np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
 
+    def test_example_get_iota():
+        """Test getting iota profile."""
+        iota = desc.examples.get("NCSX", "iota")
+        np.testing.assert_allclose(
+            iota.params[:5],
+            [
+                3.49197642e-01,
+                6.81105159e-01,
+                -1.29781695e00,
+                2.07888586e00,
+                -1.15800135e00,
+            ],
+        )
 
-def test_example_get_pressure():
-    pres = desc.examples.get("ATF", "pressure")
-    np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
-
-
-def test_example_get_iota():
-    iota = desc.examples.get("NCSX", "iota")
-    np.testing.assert_allclose(
-        iota.params[:5],
-        [
-            3.49197642e-01,
-            6.81105159e-01,
-            -1.29781695e00,
-            2.07888586e00,
-            -1.15800135e00,
-        ],
-    )
-
-
-def test_example_get_current():
-    current = desc.examples.get("QAS", "current")
-    np.testing.assert_allclose(
-        current.params[:11],
-        [
-            0.00000000e00,
-            -5.30230329e03,
-            -4.65196499e05,
-            2.31960013e06,
-            -1.20570566e07,
-            4.17520547e07,
-            -9.51373229e07,
-            1.38268651e08,
-            -1.23703891e08,
-            6.24782996e07,
-            -1.36284423e07,
-        ],
-    )
+    def test_example_get_current():
+        """Test getting current profile."""
+        current = desc.examples.get("QAS", "current")
+        np.testing.assert_allclose(
+            current.params[:11],
+            [
+                0.00000000e00,
+                -5.30230329e03,
+                -4.65196499e05,
+                2.31960013e06,
+                -1.20570566e07,
+                4.17520547e07,
+                -9.51373229e07,
+                1.38268651e08,
+                -1.23703891e08,
+                6.24782996e07,
+                -1.36284423e07,
+            ],
+        )

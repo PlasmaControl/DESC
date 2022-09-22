@@ -524,12 +524,14 @@ def test_boozer_transform(DSHAPE):
 
 
 def test_compute_grad_p_volume_avg():
+    """Test calculation of volume averaged pressure gradient."""
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
 
 
 def test_compute_dmerc(DSHAPE, HELIOTRON):
+    """Test calculation of DMERC stability criteria against VMEC."""
     eq = Equilibrium()
     DMerc = eq.compute("D_Mercier")["D_Mercier"]
     np.testing.assert_allclose(DMerc, 0, err_msg="should be 0 in vacuum")
@@ -550,6 +552,7 @@ def test_compute_dmerc(DSHAPE, HELIOTRON):
 
 
 def test_compute_dshear(DSHAPE, HELIOTRON):
+    """Test calculation of DSHEAR stability criteria against VMEC."""
     eq = Equilibrium()
     DShear = eq.compute("D_shear")["D_shear"]
     np.testing.assert_allclose(DShear, 0, err_msg="should be 0 in vacuum")
@@ -572,6 +575,7 @@ def test_compute_dshear(DSHAPE, HELIOTRON):
 
 
 def test_compute_dcurr(DSHAPE, HELIOTRON):
+    """Test calculation of DCURR stability criteria against VMEC."""
     eq = Equilibrium()
     DCurr = eq.compute("D_current")["D_current"]
     np.testing.assert_allclose(DCurr, 0, err_msg="should be 0 in vacuum")
@@ -590,6 +594,7 @@ def test_compute_dcurr(DSHAPE, HELIOTRON):
 
 
 def test_compute_dwell(DSHAPE, HELIOTRON):
+    """Test calculation of DWELL stability criteria against VMEC."""
     eq = Equilibrium()
     DWell = eq.compute("D_well")["D_well"]
     np.testing.assert_allclose(DWell, 0, err_msg="should be 0 in vacuum")
@@ -610,6 +615,7 @@ def test_compute_dwell(DSHAPE, HELIOTRON):
 
 
 def test_compute_dgeod(DSHAPE, HELIOTRON):
+    """Test calculation of DGEOD stability criteria against VMEC."""
     eq = Equilibrium()
     DGeod = eq.compute("D_geodesic")["D_geodesic"]
     np.testing.assert_allclose(DGeod, 0, err_msg="should be 0 in vacuum")
@@ -633,6 +639,8 @@ def test_compute_dgeod(DSHAPE, HELIOTRON):
 
 
 def test_compute_magnetic_well(DSHAPE, HELIOTRON):
+    """Test calculation of magnetic well stability criteria against VMEC."""
+
     def test(stellarator, name):
         eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, vmec = get_vmec_data(name, "DWell")

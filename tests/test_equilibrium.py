@@ -89,7 +89,7 @@ def test_compute_flux_coords(SOLOVEV):
 
 @pytest.mark.slow
 def test_to_sfl(SOLOVEV):
-
+    """Test converting an equilibrium to straight field line coordinates."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
@@ -102,6 +102,7 @@ def test_to_sfl(SOLOVEV):
 
 @pytest.mark.slow
 def test_continuation_resolution(tmpdir_factory):
+    """Test that stepping resolution in continuation method works correctly."""
     input_path = ".//tests//inputs//res_test"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("res_test_out.h5")
@@ -116,6 +117,7 @@ def test_continuation_resolution(tmpdir_factory):
 
 
 def test_grid_resolution_warning(SOLOVEV):
+    """Test that a warning is thrown if grid resolution is too low."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
@@ -132,6 +134,7 @@ def test_grid_resolution_warning(SOLOVEV):
 
 
 def test_eq_change_grid_resolution(SOLOVEV):
+    """Test changing equilibrium grid resolution."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
     assert eq.L_grid == 10
@@ -140,6 +143,7 @@ def test_eq_change_grid_resolution(SOLOVEV):
 
 
 def test_resolution():
+    """Test changing equilibrium spectral resolution."""
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
     eq2 = Equilibrium()
 
@@ -158,6 +162,7 @@ def test_resolution():
 
 
 def test_poincare_solve_not_implemented():
+    """Test that solving with fixed poincare section doesn't work yet."""
     inputs = {
         "L": 4,
         "M": 2,

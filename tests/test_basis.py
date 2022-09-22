@@ -47,6 +47,7 @@ class TestBasis:
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
     def test_zernike_coeffs(self):
+        """Test calculation of zernike polynomial coefficients."""
         basis = FourierZernikeBasis(L=40, M=40, N=0, spectral_indexing="ansi")
         l, m = basis.modes[:, :2].T
         coeffs = zernike_radial_coeffs(l, m, exact=False)
@@ -58,6 +59,7 @@ class TestBasis:
 
     @pytest.mark.slow
     def test_polyval_exact(self):
+        """Test "exact" polynomial evaluation using extended precision."""
         basis = FourierZernikeBasis(L=80, M=40, N=0)
         l, m = basis.modes[::40, 0], basis.modes[::40, 1]
         coeffs = zernike_radial_coeffs(l, m, exact=True)
@@ -106,7 +108,7 @@ class TestBasis:
         np.testing.assert_allclose(approx2dddf, exactdddf, atol=1e-12)
 
     def test_powers(self):
-        """Test powers function."""
+        """Test powers function for power series evaluation."""
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
@@ -120,7 +122,7 @@ class TestBasis:
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     def test_zernike_radial(self):
-        """Test zernike_radial function."""
+        """Test zernike_radial function, comparing to analytic formulas."""
         l = np.array([3, 4, 6])
         m = np.array([1, 2, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
@@ -159,7 +161,7 @@ class TestBasis:
         np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
 
     def test_fourier(self):
-        """Test Fourier evaluation."""
+        """Test Fourier series evaluation."""
         m = np.array([-1, 0, 1])
         t = np.linspace(0, 2 * np.pi, 8, endpoint=False)  # theta coordinates
 
@@ -239,7 +241,7 @@ class TestBasis:
         assert fz.num_modes == 30
 
     def test_repr(self):
-
+        """Test string representation of basis classes."""
         fz = FourierZernikeBasis(L=6, M=3, N=0)
         s = str(fz)
         assert "FourierZernikeBasis" in s
@@ -249,7 +251,7 @@ class TestBasis:
         assert "N=0" in s
 
     def test_zernike_indexing(self):
-
+        """Test what modes are in the basis for given resolution and indexing."""
         basis = ZernikePolynomial(L=8, M=4, spectral_indexing="ansi")
         assert (basis.modes == [8, 4, 0]).all(axis=1).any()
         assert not (basis.modes == [8, 8, 0]).all(axis=1).any()

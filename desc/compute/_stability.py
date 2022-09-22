@@ -263,19 +263,19 @@ def compute_magnetic_well(
         # Thermal pressure is constant over a rho surface.
         # surface average(pressure) = thermal + surface average(magnetic)
         dp_drho = 2 * mu_0 * data["p_r"]
-        dB2_drho_avg = (
+        dB2_avg_drho = (
             surface_integrals(
                 grid,
-                jnp.abs(data["sqrt(g)_r"]) * data["|B|^2"]
+                data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"]) * data["|B|^2"]
                 + jnp.abs(data["sqrt(g)"]) * 2 * dot(data["B"], data["B_r"]),
             )
-            - surface_integrals(grid, jnp.abs(data["sqrt(g)_r"])) * B2_avg
+            - data["V_rr(r)"] * B2_avg
         ) / data["V_r(r)"]
         data["magnetic well"] = (
-            data["V(r)"] * (dp_drho + dB2_drho_avg) / (data["V_r(r)"] * B2_avg)
+            data["V(r)"] * (dp_drho + dB2_avg_drho) / (data["V_r(r)"] * B2_avg)
         )
 
         # equivalent method (besides scaling factor) that avoids computing the volume
-        # data["magnetic well"] = data["rho"] * (dp_drho + dB2_drho_avg) / B2_avg
+        # data["magnetic well"] = data["rho"] * (dp_drho + dB2_avg_drho) / B2_avg
 
     return data

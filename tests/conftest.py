@@ -116,7 +116,6 @@ def DSHAPE_current(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_current_out.h5")
     desc_nc_path = output_dir.join("DSHAPE_current_out.nc")
-    # TODO: change these paths too? (note that DSHAPE_current converges to DSHAPE)
     vmec_nc_path = ".//tests//inputs//wout_DSHAPE.nc"
     booz_nc_path = output_dir.join("DSHAPE_bx.nc")
 

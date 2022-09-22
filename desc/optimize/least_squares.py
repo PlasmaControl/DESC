@@ -146,8 +146,13 @@ def lsqtr(
         x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
+    g_h = g * scale
+    J_h = J * scale
+
     # initial trust region radius
-    trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
+    trust_radius = options.pop(
+        "initial_trust_radius", np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2)
+    )
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)

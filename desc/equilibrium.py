@@ -339,11 +339,12 @@ class Equilibrium(_Configuration, IOAble):
         inputs["surface"] = None
 
         rho, _ = special.js_roots(L, 2, 2)
-        grid = LinearGrid(M=(ntheta - 1) / 2, N=(eq.nphi - 1) / 2, NFP=eq.nfp, rho=rho)
+        grid = LinearGrid(rho=rho, theta=ntheta, zeta=eq.nphi, NFP=eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,
             N=N,
+            NFP=eq.nfp,
             sym="cos" if not eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
@@ -351,6 +352,7 @@ class Equilibrium(_Configuration, IOAble):
             L=L,
             M=M,
             N=N,
+            NFP=eq.nfp,
             sym="sin" if not eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
@@ -363,8 +365,8 @@ class Equilibrium(_Configuration, IOAble):
         for rho_i in rho:
             idx = idx = np.where((grid.nodes[:, 0] == rho_i))[0]
             R_2D, Z_2D, _ = eq.Frenet_to_cylindrical(r * rho_i, ntheta)
-            R_1D[idx] = R_2D.T.flatten()
-            Z_1D[idx] = Z_2D.T.flatten()
+            R_1D[idx] = R_2D.flatten(order="F")
+            Z_1D[idx] = Z_2D.flatten(order="F")
 
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)

@@ -508,7 +508,7 @@ def test_plot_qs_error(SOLOVEV):
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_qh_optimization(precise_QH):
     """Test plotting B in boozer coordinates from precise QH optimization."""
-    eq = EquilibriaFamily.load(load_from=str(precise_QH["optimal_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(precise_QH["optimal_h5_path"]))
     fig, ax = plot_boozer_surface(eq)
     return fig
 

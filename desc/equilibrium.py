@@ -4,6 +4,7 @@ import numbers
 from termcolor import colored
 from collections.abc import MutableSequence
 from scipy import special
+from scipy.constants import mu_0
 
 from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
@@ -328,8 +329,8 @@ class Equilibrium(_Configuration, IOAble):
         inputs["sym"] = not eq.lasym
         inputs["spectral_indexing "] = spectral_indexing
         inputs["pressure"] = np.array([[0, -eq.p2 * r ** 2], [2, eq.p2 * r ** 2]])
-        inputs["iota"] = np.array([[0, eq.iota]])  # FIXME: change to None
-        # inputs["current"] = np.array([[0, 2 * np.pi / mu_0 * eq.I2 * r ** 2]])  # TODO
+        inputs["iota"] = None
+        inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * eq.I2 * r ** 2]])
         inputs["axis"] = FourierRZCurve(
             R_n=np.concatenate((np.flipud(eq.rs[1:]), eq.rc)),
             Z_n=np.concatenate((np.flipud(eq.zs[1:]), eq.zc)),

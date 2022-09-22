@@ -42,21 +42,21 @@ def test_kwarg_warning(DummyStellarator):
     return None
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_p(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "p", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_dpdr(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "p_r", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_iota(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
@@ -64,14 +64,14 @@ def test_1d_iota(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_logpsi(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "psi", log=True, figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=10)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=10)
 def test_2d_logF(DSHAPE):
     # plot test is inconsistent
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
@@ -80,7 +80,7 @@ def test_2d_logF(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_2d_g_tz(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
@@ -88,7 +88,7 @@ def test_2d_g_tz(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_2d_g_rz(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
@@ -96,21 +96,21 @@ def test_2d_g_rz(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_2d_lambda(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "lambda", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_B(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_3d(eq, "B^zeta")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_J(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=1.0, theta=100, zeta=100)
@@ -118,7 +118,7 @@ def test_3d_J(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_tz(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
@@ -126,7 +126,7 @@ def test_3d_tz(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_rz(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
@@ -134,7 +134,7 @@ def test_3d_rz(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_3d_rt(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
@@ -142,70 +142,70 @@ def test_3d_rt(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_fsa_I(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "B_theta")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_fsa_G(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "B_zeta", log=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_fsa_F_normalized(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_fsa_F_normalized_vac(SOLOVEV_vac):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_section_J(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "J^rho")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=24)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=24)
 def test_section_Z(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "Z")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_section_R(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "R")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_section_F(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "F_rho")
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_section_F_normalized_vac(SOLOVEV_vac):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "|F|", norm_F=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=50)
 def test_section_logF(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "|F|", log=True)
@@ -213,7 +213,7 @@ def test_section_logF(DSHAPE):
 
 
 @pytest.mark.slow
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_surfaces(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_surfaces(eq)
@@ -221,7 +221,7 @@ def test_plot_surfaces(DSHAPE):
 
 
 @pytest.mark.slow
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_surfaces_no_theta(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_surfaces(eq, theta=False)
@@ -229,7 +229,7 @@ def test_plot_surfaces_no_theta(DSHAPE):
 
 
 @pytest.mark.slow
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_comparison(DSHAPE):
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))
     fig, ax = plot_comparison(eqf)
@@ -237,49 +237,49 @@ def test_plot_comparison(DSHAPE):
 
 
 @pytest.mark.slow
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_comparison_no_theta(DSHAPE):
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))
     fig, ax = plot_comparison(eqf, theta=0)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_con_basis(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "e^rho", component="R", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_cov_basis(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "e_rho", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_magnetic_tension(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|(B*grad)B|", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_magnetic_pressure(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_gradpsi(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|grad(rho)|", figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_normF_2d(DSHAPE):
     grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
@@ -287,58 +287,58 @@ def test_plot_normF_2d(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_normF_section(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_coefficients(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_coefficients(eq)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_logo():
     fig, ax = plot_logo()
     return fig
 
 
 class TestPlotGrid(unittest.TestCase):
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_linear(self):
         grid = LinearGrid(rho=10, theta=10, zeta=1)
         fig, ax = plot_grid(grid)
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_quad(self):
         grid = QuadratureGrid(L=10, M=10, N=1)
         fig, ax = plot_grid(grid, figsize=(6, 6))
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_jacobi(self):
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
         fig, ax = plot_grid(grid)
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_cheb1(self):
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb1")
         fig, ax = plot_grid(grid)
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_cheb2(self):
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb2")
         fig, ax = plot_grid(grid)
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_grid_ocs(self):
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="ocs")
         fig, ax = plot_grid(grid)
@@ -346,27 +346,27 @@ class TestPlotGrid(unittest.TestCase):
 
 
 class TestPlotBasis(unittest.TestCase):
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_powerseries(self):
         basis = PowerSeries(L=6)
         fig, ax = plot_basis(basis)
         return fig
 
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierseries(self):
         basis = FourierSeries(N=3)
         fig, ax = plot_basis(basis)
         return fig
 
     @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_doublefourierseries(self):
         basis = DoubleFourierSeries(M=3, N=2)
         fig, ax = plot_basis(basis)
         return fig
 
     @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
     def test_plot_basis_fourierzernike(self):
         basis = FourierZernikeBasis(L=8, M=3, N=2)
         fig, ax = plot_basis(basis)
@@ -387,7 +387,7 @@ class TestPlotFieldLines(unittest.TestCase):
 
 
 @pytest.mark.slow
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_field_line(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
@@ -395,7 +395,7 @@ def test_plot_field_line(DSHAPE):
 
 
 @pytest.mark.slow
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_plot_field_lines(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax, _ = plot_field_lines_sfl(
@@ -404,28 +404,28 @@ def test_plot_field_lines(DSHAPE):
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_plot_boozer_modes(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_boozer_modes(eq)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_boozer_surface(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_boozer_surface(eq, figsize=(4, 4))
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_plot_qs_error(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_qs_error(eq, helicity=(0, 0), log=False)
     return fig
 
 
-@pytest.mark.mpl_image_compare(tolerance=tol_3d)
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_3d)
 def test_plot_coils():
     N = 48
     NFP = 4

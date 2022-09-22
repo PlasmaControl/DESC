@@ -1,4 +1,3 @@
-import unittest
 import numpy as np
 from desc.equilibrium import Equilibrium
 from desc.objectives import (
@@ -17,7 +16,7 @@ from desc.objectives import (
 from desc.profiles import PowerSeriesProfile
 
 
-class TestObjectiveFunction(unittest.TestCase):
+class TestObjectiveFunction:
     """Test ObjectiveFunction class."""
 
     def test_generic(self):

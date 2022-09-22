@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import os
 import pathlib
@@ -33,90 +32,71 @@ def test_vmec_input(tmpdir_factory):
     assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
 
 
-class TestInputReader(unittest.TestCase):
-    def setUp(self):
-        self.argv0 = []
-        self.argv1 = ["nonexistant_input_file"]
-        self.argv2 = ["./tests/inputs/MIN_INPUT"]
+class TestInputReader:
+    argv0 = []
+    argv1 = ["nonexistant_input_file"]
+    argv2 = ["./tests/inputs/MIN_INPUT"]
 
     def test_no_input_file(self):
-        with self.assertRaises(NameError):
+        with pytest.raises(NameError):
             InputReader(cl_args=self.argv0)
 
     def test_nonexistant_input_file(self):
-        with self.assertRaises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError):
             InputReader(cl_args=self.argv1)
 
     def test_min_input(self):
         ir = InputReader(cl_args=self.argv2)
         # self.assertEqual(ir.args.prog, 'DESC', 'Program is incorrect.')
-        self.assertEqual(
-            ir.args.input_file[0], self.argv2[0], "Input file name does not match"
-        )
+        assert ir.args.input_file[0] == self.argv2[0], "Input file name does not match"
         # self.assertEqual(ir.output_path, self.argv2[0] + '.output',
         #        'Default output file does not match.')
-        self.assertEqual(
-            ir.input_path,
-            str(pathlib.Path("./" + self.argv2[0]).resolve()),
-            "Path to input file is incorrect.",
-        )
+        assert ir.input_path == str(
+            pathlib.Path("./" + self.argv2[0]).resolve()
+        ), "Path to input file is incorrect."
         # Test defaults
-        self.assertFalse(ir.args.plot, "plot is not default False")
-        self.assertFalse(ir.args.quiet, "quiet is not default False")
-        self.assertEqual(ir.args.verbose, 1, "verbose is not default 1")
+        assert ir.args.plot is False, "plot is not default False"
+        assert ir.args.quiet is False, "quiet is not default False"
+        assert ir.args.verbose == 1, "verbose is not default 1"
         # self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")
         # self.assertFalse(ir.args.gpuID, 'gpu argument was given')
-        self.assertFalse(ir.args.numpy, "numpy is not default False")
-        self.assertEqual(
-            os.environ["DESC_BACKEND"],
-            "jax",
-            "numpy environment variable incorrect with default argument",
-        )
-        self.assertFalse(ir.args.version, "version is not default False")
-        self.assertEqual(
-            len(ir.inputs[0]),
-            28,
-            "number of inputs does not match number expected in MIN_INPUT",
-        )
+        assert ir.args.numpy is False, "numpy is not default False"
+        assert (
+            os.environ["DESC_BACKEND"] == "jax"
+        ), "numpy environment variable incorrect with default argument"
+        assert ir.args.version is False, "version is not default False"
+        assert (
+            len(ir.inputs[0]) == 28
+        ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 
     def test_np_environ(self):
         argv = self.argv2 + ["--numpy"]
         InputReader(cl_args=argv)
-        self.assertEqual(
-            os.environ["DESC_BACKEND"],
-            "numpy",
-            "numpy environment variable incorrect on use",
-        )
+        assert (
+            os.environ["DESC_BACKEND"] == "numpy"
+        ), "numpy environment variable incorrect on use"
 
     def test_quiet_verbose(self):
         ir = InputReader(self.argv2)
-        self.assertEqual(
-            ir.inputs[0]["verbose"],
-            1,
-            "value of inputs['verbose'] incorrect on no arguments",
-        )
+        assert (
+            ir.inputs[0]["verbose"] == 1
+        ), "value of inputs['verbose'] incorrect on no arguments"
         argv = self.argv2 + ["-v"]
         ir = InputReader(argv)
-        self.assertEqual(
-            ir.inputs[0]["verbose"],
-            2,
-            "value of inputs['verbose'] incorrect on verbose argument",
-        )
+        assert (
+            ir.inputs[0]["verbose"] == 2
+        ), "value of inputs['verbose'] incorrect on verbose argument"
         argv = self.argv2 + ["-vv"]
         ir = InputReader(argv)
-        self.assertEqual(
-            ir.inputs[0]["verbose"],
-            3,
-            "value of inputs['verbose'] incorrect on double verbose argument",
-        )
+        assert (
+            ir.inputs[0]["verbose"] == 3
+        ), "value of inputs['verbose'] incorrect on double verbose argument"
         argv = self.argv2 + ["-q"]
         ir = InputReader(argv)
-        self.assertEqual(
-            ir.inputs[0]["verbose"],
-            0,
-            "value of inputs['verbose'] incorrect on quiet argument",
-        )
+        assert (
+            ir.inputs[0]["verbose"] == 0
+        ), "value of inputs['verbose'] incorrect on quiet argument"
 
     def test_vmec_to_desc_input(self):
         # FIXME: maybe just store a file we know is converted correctly,

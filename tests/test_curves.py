@@ -1,12 +1,11 @@
 import numpy as np
-import unittest
 import pytest
 
 from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
 from desc.grid import LinearGrid
 
 
-class TestRZCurve(unittest.TestCase):
+class TestRZCurve:
     def test_length(self):
         c = FourierRZCurve()
         np.testing.assert_allclose(c.compute_length(grid=20), 10 * 2 * np.pi)
@@ -117,7 +116,7 @@ class TestRZCurve(unittest.TestCase):
             c.grid = [1, 2, 3]
 
 
-class TestXYZCurve(unittest.TestCase):
+class TestXYZCurve:
     def test_length(self):
         c = FourierXYZCurve()
         np.testing.assert_allclose(c.compute_length(grid=20), 2 * 2 * np.pi)
@@ -207,7 +206,7 @@ class TestXYZCurve(unittest.TestCase):
             c.grid = [1, 2, 3]
 
 
-class TestPlanarCurve(unittest.TestCase):
+class TestPlanarCurve:
     def test_length(self):
         c = FourierPlanarCurve(modes=[0])
         np.testing.assert_allclose(c.compute_length(grid=20), 2 * 2 * np.pi)

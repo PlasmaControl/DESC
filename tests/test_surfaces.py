@@ -1,5 +1,4 @@
 import numpy as np
-import unittest
 import pytest
 
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
@@ -7,7 +6,7 @@ from desc.grid import LinearGrid
 import desc.examples
 
 
-class TestFourierRZToroidalSurface(unittest.TestCase):
+class TestFourierRZToroidalSurface:
     def test_area(self):
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=24, N=24)
@@ -100,7 +99,7 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         )
 
 
-class TestZernikeRZToroidalSection(unittest.TestCase):
+class TestZernikeRZToroidalSection:
     def test_area(self):
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=10, M=10)

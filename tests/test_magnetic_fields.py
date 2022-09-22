@@ -1,5 +1,4 @@
 import numpy as np
-import unittest
 import pytest
 
 from desc.backend import jnp
@@ -33,7 +32,7 @@ m = 5
 args = {"a": a, "m": m}
 
 
-class TestMagneticFields(unittest.TestCase):
+class TestMagneticFields:
     def test_basic_fields(self):
 
         tfield = ToroidalMagneticField(2, 1)

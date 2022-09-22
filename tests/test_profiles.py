@@ -1,5 +1,4 @@
 import numpy as np
-import unittest
 import pytest
 from desc.io import InputReader
 from desc.profiles import PowerSeriesProfile, FourierZernikeProfile
@@ -7,14 +6,13 @@ from desc.equilibrium import Equilibrium
 from .utils import compute_coords, area_difference
 
 
-class TestProfiles(unittest.TestCase):
+class TestProfiles:
     @pytest.mark.slow
     def test_same_result(self):
         input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
         eq1 = Equilibrium(**ir.inputs[-1])
-        print(eq1.pressure)
         eq2 = eq1.copy()
         eq2.pressure = eq1.pressure.to_spline()
         eq2.iota = eq1.iota.to_spline()
@@ -27,8 +25,6 @@ class TestProfiles(unittest.TestCase):
         rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
         np.testing.assert_allclose(rho_err, 0, atol=1e-7)
         np.testing.assert_allclose(theta_err, 0, atol=2e-11)
-
-        assert True
 
     @pytest.mark.slow
     def test_close_values(self):

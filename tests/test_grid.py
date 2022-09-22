@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import numpy as np
 from scipy import special
@@ -10,7 +9,7 @@ from desc.equilibrium import Equilibrium
 from desc.transform import Transform
 
 
-class TestGrid(unittest.TestCase):
+class TestGrid:
     """Test Grid classes."""
 
     def test_custom_grid(self):
@@ -32,7 +31,7 @@ class TestGrid(unittest.TestCase):
         weights_ref = np.array([w, w, w / 2, w / 2, w, w])
 
         np.testing.assert_allclose(weights, weights_ref)
-        self.assertAlmostEqual(np.sum(grid.weights), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(np.sum(grid.weights), (2 * np.pi) ** 2)
 
     def test_linear_grid(self):
 
@@ -63,7 +62,7 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(g.nodes, nodes)
         # spacing.prod == weights for linear grids (not true for concentric)
         np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
-        self.assertAlmostEqual(g.weights.sum(), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
 
     def test_concentric_grid(self):
 
@@ -113,7 +112,7 @@ class TestGrid(unittest.TestCase):
 
         np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, err_msg="ansi")
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, err_msg="fringe")
-        self.assertAlmostEqual(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
 
     def test_quadrature_grid(self):
 
@@ -169,7 +168,7 @@ class TestGrid(unittest.TestCase):
         g = eq.compute("sqrt(g)", grid)
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
-        self.assertAlmostEqual(vol, vol_quad)
+        np.testing.assert_allclose(vol, vol_quad)
 
     def test_repr(self):
 

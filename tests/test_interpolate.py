@@ -1,10 +1,9 @@
 import numpy as np
-import unittest
 
 from desc.interpolate import interp1d, interp2d, interp3d
 
 
-class TestInterp1D(unittest.TestCase):
+class TestInterp1D:
     def test_interp1d(self):
         xp = np.linspace(0, 2 * np.pi, 100)
         x = np.linspace(0, 2 * np.pi, 10000)
@@ -47,7 +46,7 @@ class TestInterp1D(unittest.TestCase):
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-2)
 
 
-class TestInterp2D(unittest.TestCase):
+class TestInterp2D:
     def test_interp2d(self):
 
         xp = np.linspace(0, 4 * np.pi, 40)
@@ -69,7 +68,7 @@ class TestInterp2D(unittest.TestCase):
         np.testing.assert_allclose(fq, f(x, y), rtol=1e-4, atol=1e-2)
 
 
-class TestInterp3D(unittest.TestCase):
+class TestInterp3D:
     def test_interp3d(self):
 
         xp = np.linspace(0, np.pi, 20)

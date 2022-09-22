@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import numpy as np
 import mpmath
@@ -22,7 +21,7 @@ from desc.basis import (
 )
 
 
-class TestBasis(unittest.TestCase):
+class TestBasis:
     """Test Basis class."""
 
     def test_polyder(self):

@@ -1,5 +1,4 @@
 import pytest
-import unittest
 import numpy as np
 from desc.plotting import (
     plot_1d,
@@ -281,7 +280,7 @@ def test_plot_logo():
     return fig
 
 
-class TestPlotGrid(unittest.TestCase):
+class TestPlotGrid:
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_linear(self):
         grid = LinearGrid(rho=10, theta=10, zeta=1)
@@ -319,7 +318,7 @@ class TestPlotGrid(unittest.TestCase):
         return fig
 
 
-class TestPlotBasis(unittest.TestCase):
+class TestPlotBasis:
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_powerseries(self):
         basis = PowerSeries(L=6)
@@ -347,14 +346,14 @@ class TestPlotBasis(unittest.TestCase):
         return fig
 
 
-class TestPlotFieldLines(unittest.TestCase):
+class TestPlotFieldLines:
     def test_find_idx(self):
         # pick the first grid node point, add epsilon to it, check it returns idx of 0
         grid = LinearGrid(L=1, M=2, N=2, axis=False)
         epsilon = np.finfo(float).eps
         test_point = grid.nodes[0, :] + epsilon
         idx = _find_idx(*test_point, grid=grid)
-        self.assertEqual(idx, 0)
+        assert idx == 0
 
     def test_field_line_Rbf(self):
         pass

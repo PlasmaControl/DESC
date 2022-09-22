@@ -1,4 +1,3 @@
-import unittest
 import numpy as np
 import pytest
 from desc.grid import Grid, LinearGrid, ConcentricGrid
@@ -12,7 +11,7 @@ from desc.basis import (
 from desc.transform import Transform
 
 
-class TestTransform(unittest.TestCase):
+class TestTransform:
     """Tests Transform classes."""
 
     def test_eq(self):
@@ -30,9 +29,9 @@ class TestTransform(unittest.TestCase):
         transf_32 = Transform(grid_3, basis_2)
         transf_32b = Transform(grid_3, basis_2)
 
-        self.assertFalse(transf_11.eq(transf_21))
-        self.assertFalse(transf_31.eq(transf_32))
-        self.assertTrue(transf_32.eq(transf_32b))
+        assert not transf_11.eq(transf_21)
+        assert not transf_31.eq(transf_32)
+        assert transf_32.eq(transf_32b)
 
     def test_transform_order_error(self):
         """Tests error handling with transform method."""
@@ -41,12 +40,12 @@ class TestTransform(unittest.TestCase):
         transf = Transform(grid, basis, derivs=0)
 
         # invalid derivative orders
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             c = np.array([1, 2, 3])
             transf.transform(c, 1, 1, 1)
 
         # incompatible number of coefficients
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             c = np.array([1, 2])
             transf.transform(c, 0, 0, 0)
 
@@ -144,10 +143,10 @@ class TestTransform(unittest.TestCase):
             transf_5 = Transform(grid_5, basis, method="fft")
 
         transf_3.grid = grid_5
-        self.assertTrue(transf_3.eq(transf_5))
+        assert transf_3.eq(transf_5)
 
         transf_3.grid = grid_1
-        self.assertTrue(transf_3.eq(transf_1))
+        assert transf_3.eq(transf_1)
 
         np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
 
@@ -164,10 +163,10 @@ class TestTransform(unittest.TestCase):
         transf_31 = Transform(grid, basis_31, method="fft")
 
         transf_21.basis = basis_31
-        self.assertTrue(transf_21.eq(transf_31))
+        assert transf_21.eq(transf_31)
 
         transf_21.basis = basis_20
-        self.assertTrue(transf_21.eq(transf_20))
+        assert transf_21.eq(transf_20)
 
         np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 

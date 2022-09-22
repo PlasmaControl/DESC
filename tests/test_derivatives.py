@@ -1,4 +1,3 @@
-import unittest
 import numpy as np
 
 from desc.backend import jnp
@@ -7,7 +6,7 @@ from desc.derivatives import AutoDiffDerivative, FiniteDiffDerivative
 from numpy.random import default_rng
 
 
-class TestDerivative(unittest.TestCase):
+class TestDerivative:
     """Tests Grid classes"""
 
     def test_finite_diff_vec(self):
@@ -105,7 +104,7 @@ class TestDerivative(unittest.TestCase):
         np.testing.assert_allclose(jac(x), A)
 
 
-class TestJVP(unittest.TestCase):
+class TestJVP:
     @staticmethod
     def fun(x, c1, c2):
         Amat = np.arange(12).reshape((4, 3))

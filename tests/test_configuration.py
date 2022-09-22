@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-import unittest
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -11,21 +10,21 @@ from desc.geometry import (
 )
 
 
-class TestConstructor(unittest.TestCase):
+class TestConstructor:
     def test_defaults(self):
 
         eq = Equilibrium()
 
-        self.assertEqual(eq.spectral_indexing, "ansi")
-        self.assertEqual(eq.NFP, 1)
-        self.assertEqual(eq.L, 1)
-        self.assertEqual(eq.M, 1)
-        self.assertEqual(eq.N, 0)
-        self.assertEqual(eq.sym, False)
-        self.assertTrue(eq.surface.eq(FourierRZToroidalSurface()))
-        self.assertIsInstance(eq.pressure, PowerSeriesProfile)
+        assert eq.spectral_indexing == "ansi"
+        assert eq.NFP == 1
+        assert eq.L == 1
+        assert eq.M == 1
+        assert eq.N == 0
+        assert eq.sym is False
+        assert eq.surface.eq(FourierRZToroidalSurface())
+        assert isinstance(eq.pressure, PowerSeriesProfile)
+        assert isinstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
-        self.assertIsInstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.c_l, [0])
 
     def test_supplied_objects(self):
@@ -44,23 +43,23 @@ class TestConstructor(unittest.TestCase):
             sym=False,
         )
 
-        self.assertTrue(eq.pressure.eq(pressure))
-        self.assertTrue(eq.iota.eq(iota))
-        self.assertEqual(eq.spectral_indexing, "ansi")
-        self.assertEqual(eq.NFP, 2)
-        self.assertEqual(eq.axis.NFP, 2)
+        assert eq.pressure.eq(pressure)
+        assert eq.iota.eq(iota)
+        assert eq.spectral_indexing == "ansi"
+        assert eq.NFP == 2
+        assert eq.axis.NFP == 2
 
         np.testing.assert_allclose(axis.R_n, eq.Ra_n)
         np.testing.assert_allclose(axis.Z_n, eq.Za_n)
 
         surface2 = ZernikeRZToroidalSection(spectral_indexing="ansi")
         eq2 = Equilibrium(surface=surface2)
-        self.assertTrue(eq2.surface.eq(surface2))
+        assert eq2.surface.eq(surface2)
 
         surface3 = FourierRZToroidalSurface(NFP=3)
         eq3 = Equilibrium(surface=surface3)
-        self.assertEqual(eq3.NFP, 3)
-        self.assertEqual(eq3.axis.NFP, 3)
+        assert eq3.NFP == 3
+        assert eq3.axis.NFP == 3
 
         eq4 = Equilibrium(surface=surface2, axis=None)
         np.testing.assert_allclose(eq4.axis.R_n, [10])
@@ -83,14 +82,14 @@ class TestConstructor(unittest.TestCase):
         }
         eq = Equilibrium(**inputs)
 
-        self.assertEqual(eq.L, 4)
-        self.assertEqual(eq.M, 2)
-        self.assertEqual(eq.N, 2)
-        self.assertEqual(eq.NFP, 3)
-        self.assertEqual(eq.spectral_indexing, "ansi")
+        assert eq.L == 4
+        assert eq.M == 2
+        assert eq.N == 2
+        assert eq.NFP == 3
+        assert eq.spectral_indexing == "ansi"
         np.testing.assert_allclose(eq.p_l, [10, 5])
         np.testing.assert_allclose(eq.i_l, [1, 3])
-        self.assertIsInstance(eq.surface, FourierRZToroidalSurface)
+        assert isinstance(eq.surface, FourierRZToroidalSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn,
             [
@@ -154,7 +153,7 @@ class TestConstructor(unittest.TestCase):
 
         inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
         eq = Equilibrium(**inputs)
-        self.assertEqual(eq.bdry_mode, "poincare")
+        assert eq.bdry_mode == "poincare"
         np.testing.assert_allclose(
             eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         )
@@ -206,7 +205,7 @@ class TestConstructor(unittest.TestCase):
             eq = Equilibrium(L=4, R_lmn=R_lmn)
 
 
-class TestInitialGuess(unittest.TestCase):
+class TestInitialGuess:
     def test_default_set(self):
         eq = Equilibrium()
         eq.set_initial_guess()
@@ -385,7 +384,7 @@ def test_guess_from_file(SOLOVEV):
     np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
 
-class TestSurfaces(unittest.TestCase):
+class TestSurfaces:
     def test_get_rho_surface(self):
         eq = Equilibrium()
         surf = eq.get_surface_at(rho=0.5)

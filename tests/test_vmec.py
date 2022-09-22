@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import numpy as np
 from netCDF4 import Dataset
@@ -16,7 +15,7 @@ from desc.vmec_utils import (
 )
 
 
-class TestVMECIO(unittest.TestCase):
+class TestVMECIO:
     """Tests VMECIO class"""
 
     def test_ptolemy_identity_fwd(self):

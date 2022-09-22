@@ -1,12 +1,11 @@
 import numpy as np
-import unittest
 import pytest
 from desc.grid import LinearGrid, Grid
 from desc.coils import CoilSet, FourierRZCoil, FourierXYZCoil, FourierPlanarCoil
 from desc.geometry import FourierRZCurve
 
 
-class TestCoil(unittest.TestCase):
+class TestCoil:
     def test_biot_savart(self):
         R = 2
         y = 1
@@ -29,7 +28,7 @@ class TestCoil(unittest.TestCase):
         assert coil.current == new_current
 
 
-class TestCoilSet(unittest.TestCase):
+class TestCoilSet:
     def test_linspaced_linear(self):
         """Field from straight solenoid."""
         R = 10

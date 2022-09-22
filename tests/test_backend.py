@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import numpy as np
 
@@ -6,7 +5,7 @@ from desc.backend import put, sign
 
 
 @pytest.mark.fast
-class TestBackend(unittest.TestCase):
+class TestBackend:
     """tests for backend functions"""
 
     def test_put(self):
@@ -18,7 +17,6 @@ class TestBackend(unittest.TestCase):
         np.testing.assert_array_almost_equal(a, b)
 
     def test_sign(self):
-
-        self.assertEqual(sign(4), 1)
-        self.assertEqual(sign(0), 1)
-        self.assertEqual(sign(-10.3), -1)
+        assert sign(4) == 1
+        assert sign(0) == 1
+        assert sign(-10.3) == -1

@@ -1,4 +1,3 @@
-import unittest
 import numpy as np
 import pytest
 from desc.backend import jnp
@@ -20,7 +19,7 @@ def fun(x, p):
     return a0 + a1 + 3 * a2 + a3
 
 
-class TestUtils(unittest.TestCase):
+class TestUtils:
     def test_spd(self):
         rando = default_rng(seed=0)
 
@@ -28,10 +27,10 @@ class TestUtils(unittest.TestCase):
         A = rando.random((n, n))
         A = A + A.T - 5
         mineig = sorted(np.linalg.eig(A)[0])[0]
-        self.assertTrue(mineig < 0)
+        assert mineig < 0
         B = make_spd(A)
         mineig = sorted(np.linalg.eig(B)[0])[0]
-        self.assertTrue(mineig > 0)
+        assert mineig > 0
 
     def test_chol_update(self):
         rando = default_rng(seed=0)
@@ -49,7 +48,7 @@ class TestUtils(unittest.TestCase):
         np.testing.assert_allclose(Uv, Uva)
 
 
-class TestFmin(unittest.TestCase):
+class TestFmin:
     def test_rosenbrock_full_hess_dogleg(self):
         rando = default_rng(seed=1)
 
@@ -136,7 +135,7 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(out["x"], true_x)
 
 
-class TestLSQTR(unittest.TestCase):
+class TestLSQTR:
     def test_lsqtr_exact(self):
 
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])

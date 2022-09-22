@@ -399,8 +399,9 @@ class _Configuration(IOAble, ABC):
     def _set_up(self):
         """Called after loading, to ensure object has all properties needed for current DESC version.
         Allows for backwards-compatibility with equilibria saved/ran with older DESC versions"""
-        if not hasattr(self, "current"):
-            self.current = None
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.

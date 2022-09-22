@@ -736,7 +736,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         cstride=1,
         alpha=alpha,
     )
-    fig.colorbar(m)
+    fig.colorbar(m, ax=ax)
 
     ax.set_xlabel(_axis_labels_XYZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(_axis_labels_XYZ[1], fontsize=ylabel_fontsize)
@@ -1503,7 +1503,7 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
         )
 
     if cbar:
-        cbar = fig.colorbar(sm)
+        cbar = fig.colorbar(sm, ax=ax)
         cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()

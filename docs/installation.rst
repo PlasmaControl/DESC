@@ -32,9 +32,9 @@ Or from GitHub (for development builds)
     conda create --name desc-env
     conda activate desc-env
     # standard build
-    conda install --file=requirements_conda.txt
+    conda install --file requirements_conda.txt
     # developer build (if you want to run tests)
-    conda install --channel=conda-forge --file=devtools/dev-requirements_conda.txt
+    conda install --channel conda-forge --file devtools/dev-requirements_conda.txt
     # required
     pip install 'jax >= 0.2.11, <= 0.2.25' 'jaxlib >= 0.1.69, <= 0.1.76' nvgpu
 
@@ -59,9 +59,9 @@ Or from GitHub (for development builds)
     conda create --name desc-env
     conda activate desc-env
     # standard build
-    conda install --file=requirements_conda.txt
+    conda install --file requirements_conda.txt
     # developer build (if you want to run tests)
-    conda install --channel=conda-forge --file=devtools/dev-requirements_conda.txt
+    conda install --channel conda-forge --file devtools/dev-requirements_conda.txt
     # required
     pip install 'jax >= 0.2.11, <= 0.2.25' 'jaxlib >= 0.1.69, <= 0.1.76' nvgpu
 
@@ -83,9 +83,9 @@ The following are instructions tested to work on the Traverse supercomputer at P
     conda create --name desc-env python=3.8
     conda activate desc-env
     # standard build
-    conda install --file=requirements_conda.txt
+    conda install --file requirements_conda.txt
     # developer build (if you want to run tests)
-    conda install --channel=conda-forge --file=devtools/dev-requirements_conda.txt
+    conda install --channel conda-forge --file devtools/dev-requirements_conda.txt
     # required
     pip install nvgpu
 

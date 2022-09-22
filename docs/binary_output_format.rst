@@ -33,7 +33,7 @@ Below are some examples of common data items and where to find them within a sav
 
   - ``/_Psi``
 
-* Boundary fourier coefficients:
+* Boundary Fourier coefficients:
 
   - ``/_surface/_R_lmn``
   - ``/_surface/_Z_lmn``
@@ -43,7 +43,7 @@ Below are some examples of common data items and where to find them within a sav
   - ``/_surface/_R_basis/_modes``
   - ``/_surface/_Z_basis/_modes``
 
-A saved hdf5 file can be loaded by with ``desc.io.load``, and it will return a reconstruction of the object(s) saved within. Some data may not be saved (fields not in ``_io_attrs_``), generally things that require large amounts of memory but are trivially recomputable (ie, transform matrices).
+A saved hdf5 file can be loaded by with ``desc.io.load``, and it will return a reconstruction of the object(s) saved within. Some data may not be saved (fields not in ``_io_attrs_``), generally things that require large amounts of memory but are trivially recomputable (i.e., transform matrices).
 
 DESC also has the option of saving to pythons standard binary format, known as ``pickle`` [3]_ (".pkl" file extension). The internal structure of this is somewhat more complicated than hdf5 and is meant only for saving and loading data between python environments.
 

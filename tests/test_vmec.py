@@ -164,8 +164,16 @@ def test_load_then_save(TmpDir):
     np.testing.assert_allclose(zmns2, zmns1, rtol=1e-3, atol=1e-3)
     np.testing.assert_allclose(lmns2, lmns1, rtol=1e-3, atol=5e-2)
 
-    file1.close
-    file2.close
+    file1.close()
+    file2.close()
+
+
+def test_vmec_save_asym(TmpDir):
+    """Tests that saving a non-symmetric equilibrium runs without errors."""
+
+    output_path = str(TmpDir.join("output.nc"))
+    eq = Equilibrium(L=2, M=2, N=2, NFP=3, pressure=np.array([[2, 0]]), sym=False)
+    VMECIO.save(eq, output_path)
 
 
 @pytest.mark.slow
@@ -447,8 +455,8 @@ def test_vmec_save(DSHAPE, TmpDir):
 
     # TODO: not testing J^theta & J^zeta because VMEC radial derivatives are inaccurate
 
-    vmec.close
-    desc.close
+    vmec.close()
+    desc.close()
 
 
 @pytest.mark.mpl_image_compare(tolerance=50)

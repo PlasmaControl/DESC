@@ -4,7 +4,7 @@
 Input File
 ==========
 
-The following is an example DESC input file, which containts all of the available input arguments. 
+The following is an example DESC input file, which contains all of the available input arguments. 
 This example is only intended to demonstrate the input file format, and may not necessarily converge well. 
 More realistic input examples are included in the repository. 
 DESC can also accept VMEC input files, which are converted to DESC inputs as explained below (however not all desc solver options have VMEC analogs, see below). 
@@ -42,16 +42,17 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    # solver methods
    objective         = force
    optimizer         = lsq-exact
-   spectral_indexing = fringe
+   spectral_indexing = ansi
    node_pattern      = jacobi
    bdry_mode         = lcfs
    
-   # pressure and rotational transform profiles
+   # pressure and rotational transform/current profiles
    l:   0   p =  1.80000000E+04   i =  1.0
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
    
-   n:   0  R0 =  10  Z0 =  0.0  # magnetic axis initial guess
+   # magnetic axis initial guess
+   n:   0  R0 =  10  Z0 =  0.0
    
    # fixed-boundary surface shape
    m:   0   n:   0  R1 =  1.00000000E+01  Z1 =  0.00000000E+00
@@ -108,7 +109,7 @@ When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal
 Convergence is typically superior when the number of nodes exceeds the number of spectral coefficients, but this adds compuational cost. 
 
 These arguments can be passed as arrays, where each element denotes the value to use at that iteration. 
-Array elements are deliminated by either a space `` ``, comma ``,``, or semi-colon ``;``. 
+Array elements are delimited by either a space `` ``, comma ``,``, or semicolon ``;``. 
 Arrays can also be created using the shorthand notation ``start:interval:end`` and ``(value)x(repititions)``. 
 For example, the input line for ``M_pol`` shown above is equivalent to ``M_pol = 6, 8, 10, 10, 11, 11, 12``. 
 In this example there will be 7 iterations; any array with fewer than 7 elements will use its final value for the remaining iterations. 
@@ -162,7 +163,7 @@ Solver Methods
    node_pattern      = jacobi
    bdry_mode         = lcfs
 
-- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``force`` (Default) or ``energy``. 
+- ``objective`` (string): Form of equations to use for solving the equilibrium. Options are ``force`` (Default), ``forces``, ``energy``, or ``vacuum``. 
 - ``optimizer`` (string): Type of optimizer to use. Default = ``lsq-exact``. For more details and options see :py:class:`desc.optimize.Optimizer`.
 - ``spectral_indexing`` (string): Zernike polynomial index ordering. Options are ``ANSI`` or ``Fringe`` (Default). For more information see `Basis functions and collocation nodes`_.
 - ``node_pattern`` (string): Pattern of collocation nodes. Options are ``jacobi`` (Default), ``cheb1``, ``cheb2`` or ``quad``. For more information see `Basis functions and collocation nodes`_.
@@ -171,29 +172,34 @@ Solver Methods
 The ``objective`` option ``force`` minimizes the equilibrium force balance errors in units of Newtons, while the ``energy`` option minimizes the total plasma energy in units of Joules. 
 The ``bdry_mode`` option ``LCFS`` enforces the boundary condition on the shape of the last closed flux surface, while the ``Poincare`` option constraints the shapes of the flux surfaces in the Poincare section at :math:`\zeta=0`. 
 
-Pressure & Rotational Transform Profiles
-****************************************
+Pressure & Iota/Current Profiles
+********************************
 
 .. code-block:: text
 
+   iota = 1
    l:   0   p =  1.80000000E+04   i =  1.0
    l:   2   p = -3.60000000E+04   i =  1.5
    l:   4   p =  1.80000000E+04
 
 - ``l`` (int): Radial polynomial order. 
-- ``p`` (float): Pressure profile coefficient :math:`p_{l}`. 
-- ``i`` (float): Rotational transform coefficient :math:`\iota_{l}`. 
+- ``p`` (float): Pressure profile coefficients :math:`p_{l}`. 
+- ``i`` (float): Rotational transform coefficients :math:`\iota_{l}`. 
+- ``c`` (float): Toroidal current coefficients :math:`c_{l}`. 
 
-The pressure and rotational transform profiles are given as a power series in the flux surface label 
-:math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
+The profiles are given as a power series in the flux surface label :math:`\rho \equiv \sqrt{\psi / \psi_a}` as follows: 
 
 .. math::
    \begin{aligned}
    p(\rho) &= \sum p_{l} \rho^{l} \\
-   \iota(\rho) &= \sum \iota_{l} \rho^{l}.
+   \iota(\rho) &= \sum \iota_{l} \rho^{l} \\
+   \frac{2\pi}{\mu_0} I(\rho) &= \sum c_{l} \rho^{l} \\.
    \end{aligned}
 
-The coefficients :math:`p_{l}` and :math:`\iota_{l}` are specified by the input variables ``p`` and ``i``, respectively. 
+The coefficients :math:`p_{l}` are specified by the input variables ``p`` in Pascals. 
+The coefficients :math:`\iota_{l}` are specified by the input variables ``i``. 
+The coefficients :math:`c_{l}` are specified by the input variables ``c`` in Amperes. 
+Either the rotational transform or toroidal current profiles can be specified, but not both. 
 The radial exponent :math:`l` is given by ``l``, which must be on the same input line as the coefficients. 
 The profiles given in the example are: 
 
@@ -203,7 +209,7 @@ The profiles given in the example are:
    \iota(\rho) &= 1 + 1.5 \rho^2.
    \end{aligned}
 
-If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\iota(\rho) = 0`. 
+If no profile inputs are given, it is assumed that they are :math:`p(\rho) = 0` and :math:`\frac{2\pi}{\mu_0} I(\rho) = 0`. 
 Also, note that the rotational transform given is technically assumed to be
 
 .. math::
@@ -376,7 +382,7 @@ You can see that the main elements of the input file are present here.
 However, no DESC solver options are listed, as currently DESC can not automatically decide on the continuation method parameters.
 As it is, this input file will run but likely not give an excellent solution. 
 Once a conversion from a VMEC input file to a DESC input file is made, it is recommended to add solver options for the continuation method and add arrays to the spectral resolution to allow for better convergence.
-See the example DESC input files on the github repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
+See the example DESC input files on the GitHub repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
 
 Some general considerations
 

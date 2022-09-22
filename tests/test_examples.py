@@ -13,8 +13,10 @@ from desc.objectives import (
     FixIota,
     FixPsi,
 )
-from desc.vmec import VMECIO
+from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
+from .utils import area_difference_vmec
+import pytest
 
 
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
@@ -23,7 +25,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
     data = eq.compute("|J|")
 
-    np.testing.assert_allclose(eq.i_l, 0, atol=1e-16)
+    np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
     np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
 
 
@@ -31,63 +33,79 @@ def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    rho_err, theta_err = VMECIO.area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
 
-def test_DSHAPE_results(DSHAPE):
-    """Tests that the DSHAPE example gives the same result as VMEC."""
+def test_DSHAPE_results(DSHAPE, DSHAPE_current):
+    """Tests that the DSHAPE examples gives the same results as VMEC."""
 
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    rho_err, theta_err = VMECIO.area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
+    def test(stellarator):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho_err, theta_err = area_difference_vmec(eq, stellarator["vmec_nc_path"])
+        np.testing.assert_allclose(rho_err, 0, atol=2e-3)
+        np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2e-3)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    test(DSHAPE)
+    test(DSHAPE_current)
 
 
-def test_HELIOTRON_results(HELIOTRON):
-    """Tests that the HELIOTRON example gives the same result as VMEC."""
+def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
+    """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
-    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
-    rho_err, theta_err = VMECIO.area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
+    def test(stellarator):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho_err, theta_err = area_difference_vmec(eq, stellarator["vmec_nc_path"])
+        np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+        np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
-    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
+    test(HELIOTRON)
+    test(HELIOTRON_vacuum)
 
 
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
+    # When ConcentricGrid had a rotation option,
+    # Radial, HelicalForceBalance defaulted to cos, sin rotation, respectively
+    # This test has been kept to increase code coverage.
 
-    res = 3
+    def test(iota=False):
+        if iota:
+            # pick quad here just to increase code coverage
+            eq1 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
+            eq2 = Equilibrium(iota=PowerSeriesProfile(0), sym=True, node_pattern="quad")
+        else:
+            eq1 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
+            eq2 = Equilibrium(current=PowerSeriesProfile(0), sym=True)
 
-    eq1 = Equilibrium(sym=True)
-    eq1.change_resolution(L=res, M=res)
-    eq1.L_grid = res
-    eq1.M_grid = res
+        res = 3
+        eq1.change_resolution(L=res, M=res)
+        eq1.L_grid = res
+        eq1.M_grid = res
+        eq2.change_resolution(L=res, M=res)
+        eq2.L_grid = res
+        eq2.M_grid = res
 
-    eq2 = Equilibrium(sym=True)
-    eq2.change_resolution(L=res, M=res)
-    eq2.L_grid = res
-    eq2.M_grid = res
+        # force balances on the same grids
+        obj1 = ObjectiveFunction(ForceBalance())
+        eq1.solve(objective=obj1)
 
-    # force balances on the same grids
-    obj1 = ObjectiveFunction(ForceBalance())
-    eq1.solve(objective=obj1)
+        # force balances on different grids
+        obj2 = ObjectiveFunction((RadialForceBalance(), HelicalForceBalance()))
+        eq2.solve(objective=obj2)
 
-    # force balances on different grids
-    obj2 = ObjectiveFunction((RadialForceBalance(), HelicalForceBalance()))
-    eq2.solve(objective=obj2)
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
+        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
 
-    np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=5e-4)
-    np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=5e-4)
-    np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=2e-3)
+    test(iota=True)
+    test(iota=False)
 
 
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
@@ -99,7 +117,8 @@ def test_1d_optimization(SOLOVEV):
         FixPsi(),
     )
     options = {"perturb_options": {"order": 1}}
-    eq.optimize(objective, constraints, options=options)
+    with pytest.warns(UserWarning):
+        eq.optimize(objective, constraints, options=options)  # , optimizer=optimizer)
 
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 
@@ -133,7 +152,7 @@ def test_example_get_eqf():
 
 
 def test_example_get_boundary():
-    surf = desc.examples.get("heliotron", "boundary")
+    surf = desc.examples.get("HELIOTRON", "boundary")
     np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
 
@@ -143,14 +162,34 @@ def test_example_get_pressure():
 
 
 def test_example_get_iota():
-    iota = desc.examples.get("ESTELL", "iota")
+    iota = desc.examples.get("NCSX", "iota")
     np.testing.assert_allclose(
         iota.params[:5],
         [
-            2.04073045e-01,
-            4.18054555e-02,
-            -2.42407677e-01,
-            7.78946528e-01,
-            -1.14166816e00,
+            3.49197642e-01,
+            6.81105159e-01,
+            -1.29781695e00,
+            2.07888586e00,
+            -1.15800135e00,
+        ],
+    )
+
+
+def test_example_get_current():
+    current = desc.examples.get("QAS", "current")
+    np.testing.assert_allclose(
+        current.params[:11],
+        [
+            0.00000000e00,
+            -5.30230329e03,
+            -4.65196499e05,
+            2.31960013e06,
+            -1.20570566e07,
+            4.17520547e07,
+            -9.51373229e07,
+            1.38268651e08,
+            -1.23703891e08,
+            6.24782996e07,
+            -1.36284423e07,
         ],
     )

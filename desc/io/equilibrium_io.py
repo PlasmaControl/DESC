@@ -114,7 +114,7 @@ class IOAble(ABC):
             reader = reader_factory(load_from, file_format)
             reader.read_obj(self)
 
-            # to set other secondary stuff that wasnt saved possibly:
+            # to set other secondary stuff that wasn't saved possibly:
             if hasattr(self, "_set_up"):
                 self._set_up()
 

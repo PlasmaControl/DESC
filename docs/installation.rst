@@ -29,7 +29,7 @@ Or from GitHub (for development builds)
     pip install -r devtools/dev-requirements.txt
 
     # OPTION 2: install with conda
-    conda create --name desc-dev
+    conda create --name desc-env
     conda activate desc-env
     # standard build
     conda install --file=requirements_conda.txt
@@ -53,18 +53,11 @@ Or from GitHub (for development builds)
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
+
     module load anaconda  # load your python module
+
     conda create --name desc-env
     conda activate desc-env
-
-    # OPTION 1: install with pip
-    conda install pip
-    # standard build
-    pip install -r requirements.txt
-    # developer build (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
-
-    # OPTION 2: install with conda
     # standard build
     conda install --file=requirements_conda.txt
     # developer build (if you want to run tests)
@@ -84,12 +77,8 @@ The following are instructions tested to work on the Traverse supercomputer at P
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
+
     module load anaconda3/2020.11 cudatoolkit/11.1 cudnn/cuda-11.1/8.0.4
-
-
-Then install python dependencies:
-
-.. code-block:: sh
 
     conda create --name desc-env python=3.8
     conda activate desc-env
@@ -100,16 +89,14 @@ Then install python dependencies:
     # required
     pip install nvgpu
 
-Finally, build and install JAX:
+Build and install JAX with GPU support:
 
 .. code-block:: sh
 
     cd ..
-    # git clone JAX repo
-
     git clone https://github.com/google/jax.git
     cd jax
-   
+
     # last commit of JAX that we got to work with Traverse
     git checkout 6c08702489b33f6c51d5cf0ccadc45e997ab406e
 

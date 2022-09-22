@@ -163,6 +163,13 @@ def test_fsa_F_normalized(DSHAPE):
     return fig
 
 
+@pytest.mark.mpl_image_compare(tolerance=tol_1d)
+def test_fsa_F_normalized_vac(SOLOVEV_vac):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
+    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    return fig
+
+
 @pytest.mark.mpl_image_compare(tolerance=tol_2d)
 def test_section_J(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
@@ -188,6 +195,13 @@ def test_section_R(DSHAPE):
 def test_section_F(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "F_rho")
+    return fig
+
+
+@pytest.mark.mpl_image_compare(tolerance=tol_2d)
+def test_section_F_normalized_vac(SOLOVEV_vac):
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
+    fig, ax = plot_section(eq, "|F|", norm_F=True)
     return fig
 
 

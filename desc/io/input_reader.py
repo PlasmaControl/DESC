@@ -537,6 +537,18 @@ class InputReader:
         else:
             del inputs["iota"]
 
+        # sort axis array
+        inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
+
+        # sort surface array
+        inputs["surface"] = inputs["surface"][inputs["surface"][:, 2].argsort()]
+        inputs["surface"] = inputs["surface"][
+            inputs["surface"][:, 1].argsort(kind="mergesort")
+        ]
+        inputs["surface"] = inputs["surface"][
+            inputs["surface"][:, 0].argsort(kind="mergesort")
+        ]
+
         # array inputs
         arrs = [
             "L",
@@ -856,7 +868,7 @@ class InputReader:
                 inputs["N_grid"] = 2 * numbers[0]
                 Ntor = numbers[0]
             match = re.search(
-                r"NCURR\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
+                r"NCURR\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -907,7 +919,9 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 pres_scale = numbers[0]
-            match = re.search(r"AM\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
+            match = re.search(
+                r"AM\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+            )
             if match:
                 numbers = [
                     float(x)
@@ -916,20 +930,22 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if len(inputs["pressure"]) < l + 1:
+                    if len(inputs["pressure"]) < k + 1:
                         inputs["pressure"] = np.pad(
                             inputs["pressure"],
-                            ((0, l + 1 - len(inputs["pressure"])), (0, 0)),
+                            ((0, k + 1 - len(inputs["pressure"])), (0, 0)),
                             mode="constant",
                         )
-                    inputs["pressure"][l, 1] = numbers[k]
-                    inputs["pressure"][l, 0] = l
+                    inputs["pressure"][k, 1] = numbers[k]
+                    inputs["pressure"][k, 0] = l
 
             # rotational transform
             if re.search(r"\bPIOTA_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Iota is not a power series!", "yellow"))
-            match = re.search(r"AI\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
+            match = re.search(
+                r"AI\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+            )
             if match:
                 numbers = [
                     float(x)
@@ -938,14 +954,14 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if len(inputs["iota"]) < l + 1:
+                    if len(inputs["iota"]) < k + 1:
                         inputs["iota"] = np.pad(
                             inputs["iota"],
-                            ((0, l + 1 - len(inputs["iota"])), (0, 0)),
+                            ((0, k + 1 - len(inputs["iota"])), (0, 0)),
                             mode="constant",
                         )
-                    inputs["iota"][l, 1] = numbers[k]
-                    inputs["iota"][l, 0] = l
+                    inputs["iota"][k, 1] = numbers[k]
+                    inputs["iota"][k, 0] = l
 
             # current
             if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
@@ -959,7 +975,9 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 curr_tor = numbers[0]
-            match = re.search(r"AC\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
+            match = re.search(
+                r"AC\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+            )
             if match:
                 numbers = [
                     float(x)
@@ -968,18 +986,18 @@ class InputReader:
                 ]
                 for k in range(len(numbers)):
                     l = 2 * k
-                    if len(inputs["current"]) < l + 1:
+                    if len(inputs["current"]) < k + 1:
                         inputs["current"] = np.pad(
                             inputs["current"],
-                            ((0, l + 1 - len(inputs["current"])), (0, 0)),
+                            ((0, k + 1 - len(inputs["current"])), (0, 0)),
                             mode="constant",
                         )
-                    inputs["current"][l, 1] = numbers[k]
-                    inputs["current"][l, 0] = l
+                    inputs["current"][k, 1] = numbers[k]
+                    inputs["current"][k, 0] = l
 
             # magnetic axis
             match = re.search(
-                r"RAXIS\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
+                r"RAXIS(_CC)?\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -988,20 +1006,17 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 for k in range(len(numbers)):
-                    if k > Ntor:
-                        l = -k + Ntor + 1
-                    else:
-                        l = k
-                    idx = np.where(inputs["axis"][:, 0] == l)[0]
+                    n = k
+                    idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
                         inputs["axis"][idx[0], 1] += numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
                         )
-                        inputs["axis"][-1, :] = np.array([l, numbers[k], 0.0])
+                        inputs["axis"][-1, :] = np.array([n, numbers[k], 0.0])
             match = re.search(
-                r"ZAXIS\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
+                r"RAXIS_CS\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1010,16 +1025,53 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 for k in range(len(numbers)):
-                    if k > Ntor:
-                        l = k - Ntor - 1
+                    n = -k
+                    idx = np.where(inputs["axis"][:, 0] == n)[0]
+                    if np.size(idx):
+                        inputs["axis"][idx[0], 1] += -numbers[k]
                     else:
-                        l = -k
-                    idx = np.where(inputs["axis"][:, 0] == l)[0]
-                    if np.size(idx) > 0:
+                        inputs["axis"] = np.pad(
+                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["axis"][-1, :] = np.array([n, -numbers[k], 0.0])
+            match = re.search(
+                r"ZAXIS(_CC)?\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+            )
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                for k in range(len(numbers)):
+                    n = k
+                    idx = np.where(inputs["axis"][:, 0] == n)[0]
+                    if np.size(idx):
                         inputs["axis"][idx[0], 2] += numbers[k]
                     else:
-                        axis = np.pad(inputs["axis"], ((0, 1), (0, 0)), mode="constant")
-                        axis[-1, :] = np.array([l, 0.0, numbers[k]])
+                        inputs["axis"] = np.pad(
+                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
+            match = re.search(
+                r"ZAXIS_CS\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+            )
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                for k in range(len(numbers)):
+                    n = -k
+                    idx = np.where(inputs["axis"][:, 0] == n)[0]
+                    if np.size(idx):
+                        inputs["axis"][idx[0], 2] += -numbers[k]
+                    else:
+                        inputs["axis"] = np.pad(
+                            inputs["axis"], ((0, 1), (0, 0)), mode="constant"
+                        )
+                        inputs["axis"][-1, :] = np.array([n, 0.0, -numbers[k]])
 
             # boundary shape
             # RBS*sin(m*t-n*p) = RBS*sin(m*t)*cos(n*p) - RBS*cos(m*t)*sin(n*p)
@@ -1232,6 +1284,13 @@ class InputReader:
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
 
+        # sort axis array
+        inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
+        # sort surface array
+        inputs["surface"] = inputs["surface"][inputs["surface"][:, 1].argsort()]
+        inputs["surface"] = inputs["surface"][
+            inputs["surface"][:, 0].argsort(kind="mergesort")
+        ]
         # add radial mode numbers to surface array
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         # scale pressure profile

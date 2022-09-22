@@ -45,6 +45,7 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
 
 
 class TestComputeUtils:
+    @pytest.mark.unit
     def test_compress_expand_inverse_op(self):
         """Test that compress & expand are inverse operations for surface functions."""
 
@@ -61,6 +62,7 @@ class TestComputeUtils:
         test("theta")
         test("zeta")
 
+    @pytest.mark.unit
     def test_surface_integrals(self):
         """Test the bulk surface averaging against a more intuitive implementation."""
 
@@ -81,6 +83,7 @@ class TestComputeUtils:
         test("theta")
         test("zeta")
 
+    @pytest.mark.unit
     def test_surface_area_unweighted(self):
         """Test the surface integral(ds) is 4pi^2, 2pi for rho, zeta surfaces."""
 
@@ -98,6 +101,7 @@ class TestComputeUtils:
         test("theta")
         test("zeta")
 
+    @pytest.mark.unit
     def test_surface_area_weighted(self, DSHAPE, HELIOTRON):
         """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
 
@@ -111,6 +115,7 @@ class TestComputeUtils:
         test(DSHAPE)
         test(HELIOTRON)
 
+    @pytest.mark.unit
     def test_surface_averages_identity_op(self, DSHAPE, HELIOTRON):
         """Test that surface averages of flux functions are identity operations."""
 
@@ -125,6 +130,7 @@ class TestComputeUtils:
         test(DSHAPE)
         test(HELIOTRON)
 
+    @pytest.mark.unit
     def test_surface_averages_homomorphism(self, DSHAPE, HELIOTRON):
         """
         Test that surface averages of flux surface functions are additive homomorphisms.
@@ -145,6 +151,7 @@ class TestComputeUtils:
         test(DSHAPE)
         test(HELIOTRON)
 
+    @pytest.mark.unit
     def test_surface_averages_shortcut(self, DSHAPE, HELIOTRON):
         """Test that surface_averages on single rho surface matches mean() shortcut."""
 

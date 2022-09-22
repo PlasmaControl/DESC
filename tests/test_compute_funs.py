@@ -72,6 +72,7 @@ def get_vmec_data(name, quantity):
 
 
 # TODO: add more tests for compute_geometry
+@pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
 
@@ -85,6 +86,7 @@ def test_total_volume(DummyStellarator):
     np.testing.assert_allclose(lcfs_volume, total_volume)
 
 
+@pytest.mark.unit
 def test_enclosed_volumes():
     """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
     eq = Equilibrium()  # torus
@@ -105,6 +107,7 @@ def test_enclosed_volumes():
     )
 
 
+@pytest.mark.unit
 def test_surface_areas():
     """Test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()  # torus
@@ -116,6 +119,7 @@ def test_surface_areas():
 
 
 # TODO: remove or combine with above
+@pytest.mark.unit
 def test_surface_areas_2():
     eq = Equilibrium()
 
@@ -143,6 +147,7 @@ def test_surface_areas_2():
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_magnetic_field_derivatives(DummyStellarator):
     """Test that the partial derivatives of B and |B| match with numerical derivatives
     for a dummy stellarator example."""
@@ -385,6 +390,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
     """Test that the components of grad(|B|^2)) match with numerical gradients
     for a dummy stellarator example."""
@@ -436,6 +442,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
 
+@pytest.mark.unit
 def test_currents(DSHAPE):
     """Test that different methods for computing I and G agree."""
 
@@ -455,6 +462,7 @@ def test_currents(DSHAPE):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_quasisymmetry(DummyStellarator):
     """Test that the components of grad(B*grad(|B|)) match with numerical gradients
     for a dummy stellarator example."""
@@ -491,6 +499,7 @@ def test_quasisymmetry(DummyStellarator):
 
 
 # TODO: add test with stellarator example
+@pytest.mark.unit
 def test_boozer_transform(DSHAPE):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
 
@@ -523,6 +532,7 @@ def test_boozer_transform(DSHAPE):
     )
 
 
+@pytest.mark.unit
 def test_compute_grad_p_volume_avg():
     """Test calculation of volume averaged pressure gradient."""
     eq = Equilibrium()  # default pressure profile is 0 pressure
@@ -530,6 +540,7 @@ def test_compute_grad_p_volume_avg():
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
 
 
+@pytest.mark.unit
 def test_compute_dmerc(DSHAPE, HELIOTRON):
     """Test calculation of DMERC stability criteria against VMEC."""
     eq = Equilibrium()
@@ -551,6 +562,7 @@ def test_compute_dmerc(DSHAPE, HELIOTRON):
     test(HELIOTRON, "HELIOTRON", (0.325, 0.95), rtol=5e-2)
 
 
+@pytest.mark.unit
 def test_compute_dshear(DSHAPE, HELIOTRON):
     """Test calculation of DSHEAR stability criteria against VMEC."""
     eq = Equilibrium()
@@ -574,6 +586,7 @@ def test_compute_dshear(DSHAPE, HELIOTRON):
     test(HELIOTRON, "HELIOTRON", (0, 1), 1e-12, 0)
 
 
+@pytest.mark.unit
 def test_compute_dcurr(DSHAPE, HELIOTRON):
     """Test calculation of DCURR stability criteria against VMEC."""
     eq = Equilibrium()
@@ -593,6 +606,7 @@ def test_compute_dcurr(DSHAPE, HELIOTRON):
     test(HELIOTRON, "HELIOTRON", (0.25, 0.85), rtol=1e-1)
 
 
+@pytest.mark.unit
 def test_compute_dwell(DSHAPE, HELIOTRON):
     """Test calculation of DWELL stability criteria against VMEC."""
     eq = Equilibrium()
@@ -614,6 +628,7 @@ def test_compute_dwell(DSHAPE, HELIOTRON):
     test(HELIOTRON, "HELIOTRON", (0.6, 0.99), rtol=13e-3)
 
 
+@pytest.mark.unit
 def test_compute_dgeod(DSHAPE, HELIOTRON):
     """Test calculation of DGEOD stability criteria against VMEC."""
     eq = Equilibrium()
@@ -638,6 +653,7 @@ def test_compute_dgeod(DSHAPE, HELIOTRON):
     test(HELIOTRON, "HELIOTRON", (0.85, 0.95), atol=12e-2)
 
 
+@pytest.mark.unit
 def test_compute_magnetic_well(DSHAPE, HELIOTRON):
     """Test calculation of magnetic well stability criteria against VMEC."""
 

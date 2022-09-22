@@ -23,6 +23,7 @@ def fun(x, p):
 class TestUtils:
     """Tests for optimizer utility functions."""
 
+    @pytest.mark.unit
     def test_spd(self):
         """Test making a matrix positive definite."""
         rando = default_rng(seed=0)
@@ -36,6 +37,7 @@ class TestUtils:
         mineig = sorted(np.linalg.eig(B)[0])[0]
         assert mineig > 0
 
+    @pytest.mark.unit
     def test_chol_update(self):
         """Test rank 1 update to cholesky factorization."""
         rando = default_rng(seed=0)
@@ -56,6 +58,7 @@ class TestUtils:
 class TestFmin:
     """Test for scalar minimization function."""
 
+    @pytest.mark.unit
     def test_rosenbrock_full_hess_dogleg(self):
         """Test minimizing rosenbrock function using dogleg method with full hessian."""
         rando = default_rng(seed=1)
@@ -79,6 +82,7 @@ class TestFmin:
 
         np.testing.assert_allclose(out["x"], true_x)
 
+    @pytest.mark.unit
     def test_rosenbrock_full_hess_subspace(self):
         """Test minimizing rosenbrock function using subspace method with full hessian."""
         rando = default_rng(seed=2)
@@ -102,6 +106,7 @@ class TestFmin:
         np.testing.assert_allclose(out["x"], true_x)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_rosenbrock_bfgs_dogleg(self):
         """Test minimizing rosenbrock function using dogleg method with BFGS hessian."""
         rando = default_rng(seed=3)
@@ -124,6 +129,7 @@ class TestFmin:
         np.testing.assert_allclose(out["x"], true_x)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_rosenbrock_bfgs_subspace(self):
         """Test minimizing rosenbrock function using subspace method with BFGS hessian."""
         rando = default_rng(seed=4)
@@ -149,6 +155,7 @@ class TestFmin:
 class TestLSQTR:
     """Tests for least squares optimizer."""
 
+    @pytest.mark.unit
     def test_lsqtr_exact(self):
         """Test minimizing least squares test function using svd and cholesky methods."""
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
@@ -186,6 +193,7 @@ class TestLSQTR:
         np.testing.assert_allclose(out["x"], p)
 
 
+@pytest.mark.unit
 def test_no_iterations():
     """Make sure giving the correct answer works correctly"""
 

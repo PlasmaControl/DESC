@@ -24,6 +24,7 @@ from desc.basis import (
 class TestBasis:
     """Test Basis class."""
 
+    @pytest.mark.unit
     def test_polyder(self):
         """Test polyder_vec function."""
         p0 = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
@@ -36,6 +37,7 @@ class TestBasis:
         np.testing.assert_allclose(p1, correct_p1, atol=1e-8)
         np.testing.assert_allclose(p2, correct_p2, atol=1e-8)
 
+    @pytest.mark.unit
     def test_polyval(self):
         """Test polyval_vec function."""
         p = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
@@ -46,6 +48,7 @@ class TestBasis:
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+    @pytest.mark.unit
     def test_zernike_coeffs(self):
         """Test calculation of zernike polynomial coefficients."""
         basis = FourierZernikeBasis(L=40, M=40, N=0, spectral_indexing="ansi")
@@ -57,6 +60,7 @@ class TestBasis:
         coeffs = zernike_radial_coeffs(l, m, exact=False)
         assert coeffs.dtype == np.float64
 
+    @pytest.mark.unit
     @pytest.mark.slow
     def test_polyval_exact(self):
         """Test "exact" polynomial evaluation using extended precision."""
@@ -107,6 +111,7 @@ class TestBasis:
         np.testing.assert_allclose(approx2ddf, exactddf, atol=1e-12)
         np.testing.assert_allclose(approx2dddf, exactdddf, atol=1e-12)
 
+    @pytest.mark.unit
     def test_powers(self):
         """Test powers function for power series evaluation."""
         l = np.array([0, 1, 2])
@@ -121,6 +126,7 @@ class TestBasis:
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
+    @pytest.mark.unit
     def test_zernike_radial(self):
         """Test zernike_radial function, comparing to analytic formulas."""
         l = np.array([3, 4, 6])
@@ -160,6 +166,7 @@ class TestBasis:
         np.testing.assert_allclose(values2, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
 
+    @pytest.mark.unit
     def test_fourier(self):
         """Test Fourier series evaluation."""
         m = np.array([-1, 0, 1])
@@ -174,6 +181,7 @@ class TestBasis:
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
+    @pytest.mark.unit
     def test_power_series(self):
         """Test PowerSeries evaluation."""
         grid = LinearGrid(rho=11)
@@ -189,6 +197,7 @@ class TestBasis:
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
+    @pytest.mark.unit
     def test_double_fourier(self):
         """Test DoubleFourierSeries evaluation."""
         grid = LinearGrid(M=2, N=2)
@@ -214,6 +223,7 @@ class TestBasis:
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+    @pytest.mark.unit
     def test_change_resolution(self):
         """Test change_resolution function."""
         ps = PowerSeries(L=4, sym=False)
@@ -240,6 +250,7 @@ class TestBasis:
         fz.change_resolution(L=3, M=3, N=1)
         assert fz.num_modes == 30
 
+    @pytest.mark.unit
     def test_repr(self):
         """Test string representation of basis classes."""
         fz = FourierZernikeBasis(L=6, M=3, N=0)
@@ -250,6 +261,7 @@ class TestBasis:
         assert "M=3" in s
         assert "N=0" in s
 
+    @pytest.mark.unit
     def test_zernike_indexing(self):
         """Test what modes are in the basis for given resolution and indexing."""
         basis = ZernikePolynomial(L=8, M=4, spectral_indexing="ansi")

@@ -6,6 +6,7 @@ from desc.interpolate import interp1d, interp2d, interp3d
 class TestInterp1D:
     """Tests for interp1d function."""
 
+    @pytest.mark.unit
     def test_interp1d(self):
         """Test accuracy of different 1d interpolation methods."""
         xp = np.linspace(0, 2 * np.pi, 100)
@@ -31,6 +32,7 @@ class TestInterp1D:
         fq = interp1d(x, xp, fp, method="catmull-rom")
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
 
+    @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):
         """Test extrapolation and periodic BC of 1d interpolation."""
         xp = np.linspace(0, 2 * np.pi, 200)
@@ -51,6 +53,7 @@ class TestInterp1D:
 
 
 class TestInterp2D:
+    @pytest.mark.unit
     def test_interp2d(self):
         """Test accuracy of different 2d interpolation methods."""
         xp = np.linspace(0, 4 * np.pi, 40)
@@ -73,6 +76,7 @@ class TestInterp2D:
 
 
 class TestInterp3D:
+    @pytest.mark.unit
     def test_interp3d(self):
         """Test accuracy of different 3d interpolation methods."""
         xp = np.linspace(0, np.pi, 20)

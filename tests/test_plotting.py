@@ -30,6 +30,7 @@ from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.coils import FourierXYZCoil, CoilSet
 
 
+@pytest.mark.unit
 def test_kwarg_warning(DummyStellarator):
     """Test that passing in unknown kwargs throws an error."""
     eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
@@ -38,6 +39,7 @@ def test_kwarg_warning(DummyStellarator):
     return None
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_p(SOLOVEV):
     """Test plotting 1d pressure profile."""
@@ -46,6 +48,7 @@ def test_1d_p(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_dpdr(SOLOVEV):
     """Test plotting 1d pressure derivative."""
@@ -54,6 +57,7 @@ def test_1d_dpdr(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_iota(SOLOVEV):
     """Test plotting 1d rotational transform."""
@@ -63,6 +67,7 @@ def test_1d_iota(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_logpsi(SOLOVEV):
     """Test plotting 1d flux funciton with log scale."""
@@ -71,6 +76,7 @@ def test_1d_logpsi(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=72)
 def test_2d_logF(SOLOVEV):
     """Test plotting 2d force error with log scale."""
@@ -81,6 +87,7 @@ def test_2d_logF(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_tz(SOLOVEV):
     """Test plotting 2d metric coefficients vs theta/zeta."""
@@ -90,6 +97,7 @@ def test_2d_g_tz(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_rz(SOLOVEV):
     """Test plotting 2d metric coefficients vs rho/zeta."""
@@ -99,6 +107,7 @@ def test_2d_g_rz(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_lambda(SOLOVEV):
     """Test plotting lambda on 2d grid."""
@@ -107,6 +116,7 @@ def test_2d_lambda(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_B(SOLOVEV):
     """Test 3d plot of toroidal field."""
@@ -115,6 +125,7 @@ def test_3d_B(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_J(SOLOVEV):
     """Test 3d plotting of poloidal current."""
@@ -124,6 +135,7 @@ def test_3d_J(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_tz(SOLOVEV):
     """Test 3d plot of force on interior surface."""
@@ -133,6 +145,7 @@ def test_3d_tz(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rz(SOLOVEV):
     """Test 3d plotting of pressure on toroidal cross section."""
@@ -142,6 +155,7 @@ def test_3d_rz(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rt(SOLOVEV):
     """Test 3d plotting of flux on poloidal ribbon."""
@@ -151,6 +165,7 @@ def test_3d_rt(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_fsa_I(SOLOVEV):
     """Test plotting of flux surface average toroidal current."""
@@ -159,6 +174,7 @@ def test_fsa_I(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_fsa_G(SOLOVEV):
     """Test plotting of flux surface average poloidal current."""
@@ -167,6 +183,7 @@ def test_fsa_G(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=60)
 def test_section_J(SOLOVEV):
     """Test plotting poincare section of radial current."""
@@ -175,6 +192,7 @@ def test_section_J(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_Z(SOLOVEV):
     """Test plotting poincare section of Z coordinate."""
@@ -183,6 +201,7 @@ def test_section_Z(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_R(SOLOVEV):
     """Test plotting poincare section of R coordinate."""
@@ -191,6 +210,7 @@ def test_section_R(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_F(SOLOVEV):
     """Test plotting poincare section of radial force."""
@@ -199,6 +219,7 @@ def test_section_F(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_logF(SOLOVEV):
     """Test plotting poincare section of force magnitude on log scale."""
@@ -208,6 +229,7 @@ def test_section_logF(SOLOVEV):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces(SOLOVEV):
     """Test plotting flux surfaces."""
@@ -217,6 +239,7 @@ def test_plot_surfaces(SOLOVEV):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces_no_theta(SOLOVEV):
     """Test plotting flux surfaces without theta contours."""
@@ -226,6 +249,7 @@ def test_plot_surfaces_no_theta(SOLOVEV):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison(DSHAPE):
     """Test plotting comparison of flux surfaces."""
@@ -235,6 +259,7 @@ def test_plot_comparison(DSHAPE):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison_no_theta(DSHAPE):
     """Test plotting comparison of flux surfaces without theta contours."""
@@ -243,6 +268,7 @@ def test_plot_comparison_no_theta(DSHAPE):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_con_basis(SOLOVEV):
     """Test 2d plot of R component of e^rho."""
@@ -251,6 +277,7 @@ def test_plot_con_basis(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_cov_basis(SOLOVEV):
     """Test 2d plot of norm of e_rho."""
@@ -259,6 +286,7 @@ def test_plot_cov_basis(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_tension(SOLOVEV):
     """Test 2d plot of magnetic tension."""
@@ -267,6 +295,7 @@ def test_plot_magnetic_tension(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(SOLOVEV):
     """Test 2d plot of magnetic pressure."""
@@ -275,6 +304,7 @@ def test_plot_magnetic_pressure(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_gradpsi(SOLOVEV):
     """Test 2d plot of norm of grad(rho)."""
@@ -283,6 +313,7 @@ def test_plot_gradpsi(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=55)
 def test_plot_normF_2d(SOLOVEV):
     """Test 2d plot of normalized force magnitude."""
@@ -291,6 +322,7 @@ def test_plot_normF_2d(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_normF_section(SOLOVEV):
     """Test poincare section plot of normalized force magnitude."""
@@ -299,6 +331,7 @@ def test_plot_normF_section(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=60)
 def test_plot_coefficients(SOLOVEV):
     """Test scatter plot of spectral coefficients."""
@@ -307,6 +340,7 @@ def test_plot_coefficients(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_logo():
     """Test plotting the DESC logo."""
@@ -317,6 +351,7 @@ def test_plot_logo():
 class TestPlotGrid:
     """Tests for the plot_grid function."""
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_linear(self):
         """Test plotting linear grid."""
@@ -324,6 +359,7 @@ class TestPlotGrid:
         fig, ax = plot_grid(grid)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_quad(self):
         """Test plotting quadrature grid."""
@@ -331,6 +367,7 @@ class TestPlotGrid:
         fig, ax = plot_grid(grid, figsize=(6, 6))
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_jacobi(self):
         """Test plotting concentric grid with jacobi nodes."""
@@ -338,6 +375,7 @@ class TestPlotGrid:
         fig, ax = plot_grid(grid)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_cheb1(self):
         """Test plotting concentric grid with chebyshev 1 nodes."""
@@ -345,6 +383,7 @@ class TestPlotGrid:
         fig, ax = plot_grid(grid)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_cheb2(self):
         """Test plotting concentric grid with chebyshev 2 nodes."""
@@ -352,6 +391,7 @@ class TestPlotGrid:
         fig, ax = plot_grid(grid)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_grid_ocs(self):
         """Test plotting concentric grid with optimal concentric sampling nodes."""
@@ -363,6 +403,7 @@ class TestPlotGrid:
 class TestPlotBasis:
     """Tests for plot_basis function."""
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_powerseries(self):
         """Test plotting power series basis."""
@@ -370,6 +411,7 @@ class TestPlotBasis:
         fig, ax = plot_basis(basis)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
@@ -377,6 +419,7 @@ class TestPlotBasis:
         fig, ax = plot_basis(basis)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.slow
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_doublefourierseries(self):
@@ -385,6 +428,7 @@ class TestPlotBasis:
         fig, ax = plot_basis(basis)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.slow
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_basis_fourierzernike(self):
@@ -397,6 +441,7 @@ class TestPlotBasis:
 class TestPlotFieldLines:
     """Tests for plotting field lines."""
 
+    @pytest.mark.unit
     def test_find_idx(self):
         """Test finding the index of the node closest to a given point."""
         # pick the first grid node point, add epsilon to it, check it returns idx of 0
@@ -406,9 +451,11 @@ class TestPlotFieldLines:
         idx = _find_idx(*test_point, grid=grid)
         assert idx == 0
 
+    @pytest.mark.unit
     def test_field_line_Rbf(self):
         pass
 
+    @pytest.mark.unit
     @pytest.mark.slow
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_field_line(self, SOLOVEV):
@@ -417,6 +464,7 @@ class TestPlotFieldLines:
         fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
         return fig
 
+    @pytest.mark.unit
     @pytest.mark.slow
     @pytest.mark.mpl_image_compare(tolerance=50)
     def test_plot_field_lines(self, SOLOVEV):
@@ -428,6 +476,7 @@ class TestPlotFieldLines:
         return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_boozer_modes(SOLOVEV):
     """Test plotting boozer spectrum."""
@@ -436,6 +485,7 @@ def test_plot_boozer_modes(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_boozer_surface(SOLOVEV):
     """Test plotting B in boozer coordinates."""
@@ -444,6 +494,7 @@ def test_plot_boozer_surface(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_qs_error(SOLOVEV):
     """Test plotting qs error metrics."""
@@ -452,6 +503,7 @@ def test_plot_qs_error(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_qh_optimization(precise_QH):
     """Test plotting B in boozer coordinates from precise QH optimization."""
@@ -460,6 +512,7 @@ def test_plot_qh_optimization(precise_QH):
     return fig
 
 
+@pytest.mark.unit
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_coils():
     """Test 3d plotting of coils with currents."""

@@ -24,6 +24,7 @@ from desc.optimize import Optimizer
 from desc.vmec_utils import vmec_boundary_subspace
 
 
+@pytest.mark.regression
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
     """Tests that the SOLOVEV vacuum example gives no rotational transform."""
 
@@ -34,6 +35,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
 
 
+@pytest.mark.regression
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
 
@@ -44,6 +46,7 @@ def test_SOLOVEV_results(SOLOVEV):
     np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
 
+@pytest.mark.regression
 def test_DSHAPE_results(DSHAPE, DSHAPE_current):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
 
@@ -57,6 +60,7 @@ def test_DSHAPE_results(DSHAPE, DSHAPE_current):
     test(DSHAPE_current)
 
 
+@pytest.mark.regression
 def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
@@ -70,6 +74,7 @@ def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
     test(HELIOTRON_vacuum)
 
 
+@pytest.mark.regression
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option,
@@ -109,6 +114,7 @@ def test_force_balance_grids():
     test(iota=False)
 
 
+@pytest.mark.regression
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
@@ -128,6 +134,7 @@ def test_1d_optimization(SOLOVEV):
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 
 
+@pytest.mark.regression
 def test_1d_optimization_old(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
 
@@ -146,6 +153,7 @@ def test_1d_optimization_old(SOLOVEV):
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 
 
+@pytest.mark.regression
 def test_qh_optimization(precise_QH):
     """Tests precise QH optimization."""
     eq = EquilibriaFamily.load(load_from=str(precise_QH["initial_h5_path"]))[-1]
@@ -206,26 +214,31 @@ def test_qh_optimization(precise_QH):
 class TestGetExample:
     """Tests for desc.examples.get."""
 
+    @pytest.mark.unit
     def test_example_get_eq():
         """Test getting a single equilibrium."""
         eq = desc.examples.get("SOLOVEV")
         assert eq.Psi == 1
 
+    @pytest.mark.unit
     def test_example_get_eqf():
         """Test getting full equilibria family."""
         eqf = desc.examples.get("DSHAPE", "all")
         np.testing.assert_allclose(eqf[0].pressure.params, 0)
 
+    @pytest.mark.unit
     def test_example_get_boundary():
         """Test getting boundary surface."""
         surf = desc.examples.get("HELIOTRON", "boundary")
         np.testing.assert_allclose(surf.R_lmn[surf.R_basis.get_idx(0, 1, 1)], -0.3)
 
+    @pytest.mark.unit
     def test_example_get_pressure():
         """Test getting pressure profile."""
         pres = desc.examples.get("ATF", "pressure")
         np.testing.assert_allclose(pres.params[:5], [5e5, -1e6, 5e5, 0, 0])
 
+    @pytest.mark.unit
     def test_example_get_iota():
         """Test getting iota profile."""
         iota = desc.examples.get("NCSX", "iota")
@@ -240,6 +253,7 @@ class TestGetExample:
             ],
         )
 
+    @pytest.mark.unit
     def test_example_get_current():
         """Test getting current profile."""
         current = desc.examples.get("QAS", "current")

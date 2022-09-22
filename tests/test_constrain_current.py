@@ -25,6 +25,7 @@ class _ExactValueProfile:
 class TestConstrainCurrent:
     """Tests for running DESC with a fixed current profile."""
 
+    @pytest.mark.unit
     def test_compute_rotational_transform(self, DSHAPE, HELIOTRON):
         """
         Test that compute_rotational_transform recovers iota and iota_r

@@ -9,6 +9,7 @@ import desc.examples
 class TestFourierRZToroidalSurface:
     """Tests for FourierRZToroidalSurface class."""
 
+    @pytest.mark.unit
     def test_area(self):
         """Test calculation of surface area."""
         s = FourierRZToroidalSurface()
@@ -20,6 +21,7 @@ class TestFourierRZToroidalSurface:
         np.testing.assert_allclose(s.compute_surface_area(grid=10), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=(10, 15)), area)
 
+    @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
@@ -33,6 +35,7 @@ class TestFourierRZToroidalSurface:
         N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
 
+    @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting attributes of surface."""
         c = FourierRZToroidalSurface()
@@ -78,6 +81,7 @@ class TestFourierRZToroidalSurface:
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
 
+    @pytest.mark.unit
     def test_from_input_file(self):
         """Test reading a surface from a vmec or desc input file."""
         vmec_path = ".//tests//inputs//input.DSHAPE"
@@ -107,6 +111,7 @@ class TestFourierRZToroidalSurface:
 class TestZernikeRZToroidalSection:
     """Tests for ZerinkeRZTorioidalSection class."""
 
+    @pytest.mark.unit
     def test_area(self):
         """Test calculation of surface area."""
         s = ZernikeRZToroidalSection()
@@ -118,6 +123,7 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(s.compute_surface_area(grid=15), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=(5, 5)), area)
 
+    @pytest.mark.unit
     def test_normal(self):
         """Test calculation of surface normal vector."""
         s = ZernikeRZToroidalSection()
@@ -126,6 +132,7 @@ class TestZernikeRZToroidalSection:
         N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
+    @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting surface attributes."""
         c = ZernikeRZToroidalSection()

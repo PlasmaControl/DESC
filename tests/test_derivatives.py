@@ -9,6 +9,7 @@ from numpy.random import default_rng
 class TestDerivative:
     """Tests Derivative classes"""
 
+    @pytest.mark.unit
     def test_finite_diff_vec(self):
         """Test finite differences of vector function."""
 
@@ -25,6 +26,7 @@ class TestDerivative:
 
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
+    @pytest.mark.unit
     def test_finite_diff_scalar(self):
         """Test finite differences of scalar function."""
 
@@ -45,6 +47,7 @@ class TestDerivative:
         J = jac.compute(x, y, a)
         np.testing.assert_allclose(J, x, atol=1e-8)
 
+    @pytest.mark.unit
     def test_auto_diff(self):
         """Test automatic differentiation."""
 
@@ -61,6 +64,7 @@ class TestDerivative:
 
         np.testing.assert_allclose(J, correct_J, atol=1e-8)
 
+    @pytest.mark.unit
     def test_compare_AD_FD(self):
         """Compare finite differences to automatic differentiation."""
 
@@ -79,6 +83,7 @@ class TestDerivative:
 
         np.testing.assert_allclose(J_FD, J_AD, atol=1e-8)
 
+    @pytest.mark.unit
     def test_fd_hessian(self):
         """Test finite difference calculation of hessian."""
         rando = default_rng(seed=0)
@@ -98,6 +103,7 @@ class TestDerivative:
 
         np.testing.assert_allclose(A1, A)
 
+    @pytest.mark.unit
     def test_block_jacobian(self):
         """Test calculation of jacoiban using blocked method."""
         rando = default_rng(seed=0)
@@ -131,6 +137,7 @@ class TestJVP:
     dc1 = np.array([3, 4, 5]).astype(float)
     dc2 = np.array([-3, 1, -2]).astype(float)
 
+    @pytest.mark.unit
     def test_autodiff_jvp(self):
         """Tests using AD for JVP calculation."""
         df = AutoDiffDerivative.compute_jvp(
@@ -146,6 +153,7 @@ class TestJVP:
         )
         np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
 
+    @pytest.mark.unit
     def test_finitediff_jvp(self):
         """Tests using FD for JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp(
@@ -161,6 +169,7 @@ class TestJVP:
         )
         np.testing.assert_allclose(df, np.array([-342.0, -630.0, -918.0, -1206.0]))
 
+    @pytest.mark.unit
     def test_autodiff_jvp2(self):
         """Tests using AD for 2nd order JVP calculation."""
         df = AutoDiffDerivative.compute_jvp2(
@@ -197,6 +206,7 @@ class TestJVP:
         )
         np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
 
+    @pytest.mark.unit
     def test_finitediff_jvp2(self):
         """Tests using FD for 2nd order JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp2(
@@ -233,6 +243,7 @@ class TestJVP:
         )
         np.testing.assert_allclose(df, np.array([5808.0, 15564.0, 25320.0, 35076.0]))
 
+    @pytest.mark.unit
     def test_autodiff_jvp3(self):
         """Tests using AD for 3rd order JVP calculation."""
         df = AutoDiffDerivative.compute_jvp3(
@@ -278,6 +289,7 @@ class TestJVP:
             df, np.array([-33858.0, -55584.0, -77310.0, -99036.0])
         )
 
+    @pytest.mark.unit
     def test_finitediff_jvp3(self):
         """Tests using FD for 3rd order JVP calculation."""
         df = FiniteDiffDerivative.compute_jvp3(

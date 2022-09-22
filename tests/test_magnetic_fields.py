@@ -36,6 +36,7 @@ args = {"a": a, "m": m}
 class TestMagneticFields:
     """Tests for MagneticField classes."""
 
+    @pytest.mark.unit
     def test_basic_fields(self):
         """Tests for basic field types (toroidal, vertical, poloidal)."""
         tfield = ToroidalMagneticField(2, 1)
@@ -48,6 +49,7 @@ class TestMagneticFields:
             (tfield + vfield - pfield)([1, 0, 0.1]), [[0.4, 2, 1]]
         )
 
+    @pytest.mark.unit
     def test_scalar_field(self):
         """Test scalar potential magnetic field against analytic result."""
         field = ScalarPotentialField(phi_lm, args)
@@ -59,6 +61,7 @@ class TestMagneticFields:
         )
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_spline_field(self):
         """Test accuracy of spline magnetic field."""
         field1 = ScalarPotentialField(phi_lm, args)
@@ -79,6 +82,7 @@ class TestMagneticFields:
             field3([0.70, 0, 0]), [[0, -0.671, 0.0858]], rtol=1e-3, atol=1e-8
         )
 
+    @pytest.mark.unit
     def test_field_line_integrate(self):
         """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit

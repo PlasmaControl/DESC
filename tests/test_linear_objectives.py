@@ -11,6 +11,7 @@ from desc.objectives import (
 from desc.profiles import PowerSeriesProfile
 
 
+@pytest.mark.unit
 def test_LambdaGauge_axis_sym(DummyStellarator):
     """Test that lambda at axis is fixed correctly for symmetric equilibrium."""
     # symmetric cases only have the axis constraint
@@ -27,6 +28,7 @@ def test_LambdaGauge_axis_sym(DummyStellarator):
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
 
+@pytest.mark.unit
 def test_LambdaGauge_asym():
     """Test that lambda gauge is fixed correctly for asymmetric equilibrium."""
     # just testing the gauge condition
@@ -70,6 +72,7 @@ def test_LambdaGauge_asym():
     )
 
 
+@pytest.mark.unit
 def test_bc_on_interior_surfaces():
     """Test applying boundary conditions on internal surface."""
     surf = FourierRZToroidalSurface(rho=0.5)
@@ -82,6 +85,7 @@ def test_bc_on_interior_surfaces():
     np.testing.assert_allclose(surf.Z_lmn, surf5.Z_lmn, atol=1e-12)
 
 
+@pytest.mark.unit
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
     # nonexistent toroidal current can't be constrained

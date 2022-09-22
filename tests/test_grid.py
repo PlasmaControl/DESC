@@ -12,6 +12,7 @@ from desc.transform import Transform
 class TestGrid:
     """Test Grid classes."""
 
+    @pytest.mark.unit
     def test_custom_grid(self):
         """Test creating a grid with custom set of nodes."""
         nodes = np.array(
@@ -33,6 +34,7 @@ class TestGrid:
         np.testing.assert_allclose(weights, weights_ref)
         np.testing.assert_allclose(np.sum(grid.weights), (2 * np.pi) ** 2)
 
+    @pytest.mark.unit
     def test_linear_grid(self):
         """Test node placement in a LinearGrid."""
         L, M, N, NFP, axis, endpoint = 8, 5, 3, 2, True, False
@@ -64,6 +66,7 @@ class TestGrid:
         np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
         np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
 
+    @pytest.mark.unit
     def test_concentric_grid(self):
         """Test node placement in ConcentricGrid."""
         M = 2
@@ -114,6 +117,7 @@ class TestGrid:
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, err_msg="fringe")
         np.testing.assert_allclose(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
 
+    @pytest.mark.unit
     def test_quadrature_grid(self):
         """Test node placement in QuadratureGrid."""
         L = 2
@@ -139,10 +143,12 @@ class TestGrid:
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
 
+    @pytest.mark.unit
     def test_concentric_grid_high_res(self):
         """Test that we can create high resolution grids without crashing, as in GH issue #207."""
         grid = ConcentricGrid(L=32, M=28, N=30)
 
+    @pytest.mark.unit
     def test_quad_grid_volume_integration(self):
         """Test that quadrature grid gives correct volume integrals."""
         r = 1
@@ -170,6 +176,7 @@ class TestGrid:
 
         np.testing.assert_allclose(vol, vol_quad)
 
+    @pytest.mark.unit
     def test_repr(self):
         """Test string representations of grid objects."""
         qg = ConcentricGrid(2, 3, 4)
@@ -180,6 +187,7 @@ class TestGrid:
         assert "M=3" in s
         assert "N=4" in s
 
+    @pytest.mark.unit
     def test_change_resolution(self):
         """Test changing grid resolution."""
         lg = LinearGrid(1, 2, 3)
@@ -200,6 +208,7 @@ class TestGrid:
         assert cg.M == 4
         assert cg.N == 5
 
+    @pytest.mark.unit
     def test_enforce_symmetry(self):
         """Tests that enforce_symmetry spaces theta nodes correctly."""
 
@@ -215,6 +224,7 @@ class TestGrid:
         test(ConcentricGrid(L=20, M=3, N=3, sym=True))
         test(LinearGrid(L=20, M=3, N=3, sym=True))
 
+    @pytest.mark.unit
     def test_symmetry_1(self):
         """Tests that surface averages of a smooth function are correct."""
 
@@ -252,6 +262,7 @@ class TestGrid:
         test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
         test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
 
+    @pytest.mark.unit
     def test_symmetry_2(self):
         """Tests that surface averages are correct using specified basis."""
 

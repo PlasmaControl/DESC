@@ -9,6 +9,7 @@ from desc.grid import Grid
 from desc.__main__ import main
 
 
+@pytest.mark.unit
 def test_compute_geometry(DSHAPE, DSHAPE_current):
     """Test computation of plasma geometric values."""
 
@@ -39,6 +40,7 @@ def test_compute_geometry(DSHAPE, DSHAPE_current):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_compute_theta_coords(SOLOVEV):
     """Test root finding for theta(theta*,lambda(theta))."""
 
@@ -64,6 +66,7 @@ def test_compute_theta_coords(SOLOVEV):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_compute_flux_coords(SOLOVEV):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
 
@@ -88,6 +91,7 @@ def test_compute_flux_coords(SOLOVEV):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_to_sfl(SOLOVEV):
     """Test converting an equilibrium to straight field line coordinates."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
@@ -101,6 +105,7 @@ def test_to_sfl(SOLOVEV):
 
 
 @pytest.mark.slow
+@pytest.mark.regression
 def test_continuation_resolution(tmpdir_factory):
     """Test that stepping resolution in continuation method works correctly."""
     input_path = ".//tests//inputs//res_test"
@@ -116,6 +121,7 @@ def test_continuation_resolution(tmpdir_factory):
         main(args)
 
 
+@pytest.mark.unit
 def test_grid_resolution_warning(SOLOVEV):
     """Test that a warning is thrown if grid resolution is too low."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
@@ -133,6 +139,7 @@ def test_grid_resolution_warning(SOLOVEV):
         eqL.solve(ftol=1e-2, maxiter=2)
 
 
+@pytest.mark.unit
 def test_eq_change_grid_resolution(SOLOVEV):
     """Test changing equilibrium grid resolution."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
@@ -142,6 +149,7 @@ def test_eq_change_grid_resolution(SOLOVEV):
     assert eq.N_grid == 10
 
 
+@pytest.mark.unit
 def test_resolution():
     """Test changing equilibrium spectral resolution."""
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
@@ -161,6 +169,7 @@ def test_resolution():
     assert eq1.R_basis.NFP == 5
 
 
+@pytest.mark.unit
 def test_poincare_solve_not_implemented():
     """Test that solving with fixed poincare section doesn't work yet."""
     inputs = {

@@ -8,6 +8,7 @@ from desc.grid import LinearGrid
 class TestRZCurve:
     """Tests for FourierRZCurve class."""
 
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierRZCurve()
@@ -17,6 +18,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_length(grid=20), 10 * 2 * np.pi)
 
+    @pytest.mark.unit
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierRZCurve()
@@ -26,6 +28,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_curvature(grid=20), 1 / 10)
 
+    @pytest.mark.unit
     def test_torsion(self):
         """Test torsion of circular curve."""
         c = FourierRZCurve()
@@ -35,6 +38,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_torsion(grid=20), 0)
 
+    @pytest.mark.unit
     def test_frenet(self):
         """Test frenet-seret frame of circular curve."""
         c = FourierRZCurve()
@@ -52,6 +56,7 @@ class TestRZCurve:
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 0, 1]]), atol=1e-12)
 
+    @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierRZCurve()
@@ -67,6 +72,7 @@ class TestRZCurve:
         np.testing.assert_allclose(p, np.arctan2(-9, 1))
         np.testing.assert_allclose(z, 1)
 
+    @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of FourierRZCurve."""
         c = FourierRZCurve()
@@ -114,6 +120,7 @@ class TestRZCurve:
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
 
+    @pytest.mark.unit
     def test_asserts(self):
         """Test error checking when creating FourierRZCurve."""
         with pytest.raises(ValueError):
@@ -126,6 +133,7 @@ class TestRZCurve:
 
 
 class TestXYZCurve:
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierXYZCurve()
@@ -135,6 +143,7 @@ class TestXYZCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_length(grid=20), 2 * 2 * np.pi)
 
+    @pytest.mark.unit
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierXYZCurve()
@@ -144,6 +153,7 @@ class TestXYZCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_curvature(grid=20), 1 / 2)
 
+    @pytest.mark.unit
     def test_torsion(self):
         """Test torsion of circular curve."""
         c = FourierXYZCurve(modes=[-1, 0, 1])
@@ -153,6 +163,7 @@ class TestXYZCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_curvature(grid=20), 1 / 2)
 
+    @pytest.mark.unit
     def test_frenet(self):
         """Test frenet-seret frame of circular curve."""
         c = FourierXYZCurve()
@@ -170,6 +181,7 @@ class TestXYZCurve:
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
 
+    @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierXYZCurve()
@@ -185,6 +197,7 @@ class TestXYZCurve:
         np.testing.assert_allclose(p, np.arctan2(-11, 1))
         np.testing.assert_allclose(z, 1)
 
+    @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of FourierXYZCurve."""
         c = FourierXYZCurve()
@@ -213,6 +226,7 @@ class TestXYZCurve:
         with pytest.raises(ValueError):
             c.Z_n = s.Z_n
 
+    @pytest.mark.unit
     def test_asserts(self):
         """Test error checking when creating FourierXYZCurve."""
         c = FourierXYZCurve()
@@ -223,6 +237,7 @@ class TestXYZCurve:
 
 
 class TestPlanarCurve:
+    @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
         c = FourierPlanarCurve(modes=[0])
@@ -232,6 +247,7 @@ class TestPlanarCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_length(grid=20), 2 * 2 * np.pi)
 
+    @pytest.mark.unit
     def test_curvature(self):
         """Test curvature of circular curve."""
         c = FourierPlanarCurve()
@@ -241,6 +257,7 @@ class TestPlanarCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_curvature(grid=20), 1 / 2)
 
+    @pytest.mark.unit
     def test_torsion(self):
         """Test torsion of circular curve."""
         c = FourierPlanarCurve()
@@ -250,6 +267,7 @@ class TestPlanarCurve:
         c.flip([0, 1, 0])
         np.testing.assert_allclose(c.compute_torsion(grid=20), 0)
 
+    @pytest.mark.unit
     def test_frenet(self):
         """Test frenet-seret frame of circular curve."""
         c = FourierPlanarCurve()
@@ -267,6 +285,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(N, np.array([[1, 0, 0]]), atol=1e-12)
         np.testing.assert_allclose(B, np.array([[0, 1, 0]]), atol=1e-12)
 
+    @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         c = FourierPlanarCurve()
@@ -288,6 +307,7 @@ class TestPlanarCurve:
         np.testing.assert_allclose(y, -11)
         np.testing.assert_allclose(z, 1)
 
+    @pytest.mark.unit
     def test_misc(self):
         """Test getting/setting misc attributes of FourierPlanarCurve."""
         c = FourierPlanarCurve()
@@ -317,6 +337,7 @@ class TestPlanarCurve:
         with pytest.raises(ValueError):
             c.r_n = s.r_n
 
+    @pytest.mark.unit
     def test_asserts(self):
         """Test error checking when creating FourierPlanarCurve."""
         c = FourierPlanarCurve()

@@ -15,6 +15,7 @@ from desc.transform import Transform
 from desc.equilibrium import Equilibrium
 
 
+@pytest.mark.unit
 def test_vmec_input(tmpdir_factory):
     """Test converting VMEC to DESC input file."""
     input_path = "./tests/inputs/input.DSHAPE"
@@ -40,16 +41,19 @@ class TestInputReader:
     argv1 = ["nonexistant_input_file"]
     argv2 = ["./tests/inputs/MIN_INPUT"]
 
+    @pytest.mark.unit
     def test_no_input_file(self):
         """Test an error is raised when no input file is given."""
         with pytest.raises(NameError):
             InputReader(cl_args=self.argv0)
 
+    @pytest.mark.unit
     def test_nonexistant_input_file(self):
         """Test error is raised when nonexistent path is given."""
         with pytest.raises(FileNotFoundError):
             InputReader(cl_args=self.argv1)
 
+    @pytest.mark.unit
     def test_min_input(self):
         """Test that minimal input is parsed correctly."""
         ir = InputReader(cl_args=self.argv2)
@@ -76,6 +80,7 @@ class TestInputReader:
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 
+    @pytest.mark.unit
     def test_np_environ(self):
         """Test setting numpy backend via environment variable."""
         argv = self.argv2 + ["--numpy"]
@@ -84,6 +89,7 @@ class TestInputReader:
             os.environ["DESC_BACKEND"] == "numpy"
         ), "numpy environment variable incorrect on use"
 
+    @pytest.mark.unit
     def test_quiet_verbose(self):
         """Test setting of quiet and verbose options."""
         ir = InputReader(self.argv2)
@@ -106,6 +112,7 @@ class TestInputReader:
             ir.inputs[0]["verbose"] == 0
         ), "value of inputs['verbose'] incorrect on quiet argument"
 
+    @pytest.mark.unit
     def test_vmec_to_desc_input(self):
         # FIXME: maybe just store a file we know is converted correctly,
         #  and checksum compare a live conversion to it
@@ -117,6 +124,7 @@ class MockObject:
         self._io_attrs_ = ["a", "b", "c"]
 
 
+@pytest.mark.unit
 def test_writer_given_filename(writer_test_file):
     """Test writing to a given file by filename."""
     writer = hdf5Writer(writer_test_file, "w")
@@ -127,6 +135,7 @@ def test_writer_given_filename(writer_test_file):
     assert writer._close_base_ is False
 
 
+@pytest.mark.unit
 def test_writer_given_file(writer_test_file):
     """Test writing to given file instance."""
     f = h5py.File(writer_test_file, "w")
@@ -140,6 +149,7 @@ def test_writer_given_file(writer_test_file):
     f.close()
 
 
+@pytest.mark.unit
 def test_writer_close_on_delete(writer_test_file):
     """Test that files are closed when writer is deleted."""
     writer = hdf5Writer(writer_test_file, "w")
@@ -150,6 +160,7 @@ def test_writer_close_on_delete(writer_test_file):
     del newwriter
 
 
+@pytest.mark.unit
 def test_writer_write_dict(writer_test_file):
     """Test writing dictionary to hdf5 file."""
     thedict = {"1": 1, "2": 2, "3": 3}
@@ -170,6 +181,7 @@ def test_writer_write_dict(writer_test_file):
     reader.close()
 
 
+@pytest.mark.unit
 def test_writer_write_list(writer_test_file):
     """Test writing list to hdf5 file."""
     thelist = ["1", 1, "2", 2, "3", 3]
@@ -185,6 +197,7 @@ def test_writer_write_list(writer_test_file):
     reader.close()
 
 
+@pytest.mark.unit
 def test_writer_write_obj(writer_test_file):
     """Test writing objects to hdf5 file."""
     mo = MockObject()
@@ -210,6 +223,7 @@ def test_writer_write_obj(writer_test_file):
     f.close()
 
 
+@pytest.mark.unit
 def test_reader_given_filename(reader_test_file):
     """Test opening a reader with a given filename."""
     reader = hdf5Reader(reader_test_file)
@@ -220,6 +234,7 @@ def test_reader_given_filename(reader_test_file):
     assert reader._close_base_ is False
 
 
+@pytest.mark.unit
 def test_reader_given_file(reader_test_file):
     """Test opening a reader from a given file instance."""
     f = h5py.File(reader_test_file, "r")
@@ -231,6 +246,7 @@ def test_reader_given_file(reader_test_file):
     f.close()
 
 
+@pytest.mark.unit
 def test_reader_read_obj(reader_test_file):
     """Test reading an object from hdf5 file."""
     mo = MockObject()
@@ -247,6 +263,7 @@ def test_reader_read_obj(reader_test_file):
         assert hasattr(submo, key)
 
 
+@pytest.mark.unit
 def test_pickle_io(SOLOVEV, tmpdir_factory):
     """Test saving and loading equilibrium in pickle format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
@@ -257,6 +274,7 @@ def test_pickle_io(SOLOVEV, tmpdir_factory):
     assert equals(eqf, peqf)
 
 
+@pytest.mark.unit
 def test_ascii_io(SOLOVEV, tmpdir_factory):
     """Test saving and loading equilibrium in ASCII format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
@@ -270,6 +288,7 @@ def test_ascii_io(SOLOVEV, tmpdir_factory):
     assert np.allclose(eq1.L_lmn, eq2.L_lmn)
 
 
+@pytest.mark.unit
 def test_copy():
     """Test thing.copy() method of IOAble objects."""
     basis = FourierZernikeBasis(2, 2, 2)
@@ -296,6 +315,7 @@ def test_copy():
     )
 
 
+@pytest.mark.unit
 def test_save_none(tmpdir_factory):
     """Test that None attributes are saved/loaded correctly."""
     tmpdir = tmpdir_factory.mktemp("none_test")

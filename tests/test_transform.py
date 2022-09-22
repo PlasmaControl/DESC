@@ -14,6 +14,7 @@ from desc.transform import Transform
 class TestTransform:
     """Tests Transform classes."""
 
+    @pytest.mark.unit
     def test_eq(self):
         """Tests equals operator overload method."""
         grid_1 = LinearGrid(L=10, N=1)
@@ -33,6 +34,7 @@ class TestTransform:
         assert not transf_31.eq(transf_32)
         assert transf_32.eq(transf_32b)
 
+    @pytest.mark.unit
     def test_transform_order_error(self):
         """Tests error handling with transform method."""
         grid = LinearGrid(L=10)
@@ -49,6 +51,7 @@ class TestTransform:
             c = np.array([1, 2])
             transf.transform(c, 0, 0, 0)
 
+    @pytest.mark.unit
     def test_profile(self):
         """Tests transform of power series on a radial profile."""
         grid = LinearGrid(L=10)
@@ -67,6 +70,7 @@ class TestTransform:
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
+    @pytest.mark.unit
     def test_surface(self):
         """Tests transform of double Fourier series on a flux surface."""
         grid = LinearGrid(M=2, N=2, sym=True)
@@ -102,6 +106,7 @@ class TestTransform:
         np.testing.assert_allclose(dz, correct_dz, atol=1e-8)
         np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
 
+    @pytest.mark.unit
     def test_volume(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume."""
         grid = ConcentricGrid(L=4, M=2, N=2)
@@ -129,6 +134,7 @@ class TestTransform:
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+    @pytest.mark.unit
     def test_set_grid(self):
         """Tests the grid setter method."""
         basis = FourierZernikeBasis(L=-1, M=1, N=1)
@@ -150,6 +156,7 @@ class TestTransform:
 
         np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
 
+    @pytest.mark.unit
     def test_set_basis(self):
         """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
@@ -170,6 +177,7 @@ class TestTransform:
 
         np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 
+    @pytest.mark.unit
     def test_fft(self):
         """Tests Fast Fourier Transform method."""
         grid = LinearGrid(N=16)
@@ -209,6 +217,7 @@ class TestTransform:
         np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_direct_fft_equal(self):
         """Tests that the direct and fft method produce the same results."""
 
@@ -345,6 +354,7 @@ class TestTransform:
                 err_msg="failed on double fourier after change, d={}".format(d),
             )
 
+    @pytest.mark.unit
     def test_project(self):
         """Tests projection method."""
 
@@ -390,6 +400,7 @@ class TestTransform:
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
+    @pytest.mark.unit
     def test_fft_warnings(self):
         """Test that warnings are thrown when trying to use fft where it doesn't work."""
         g = LinearGrid(rho=2, theta=2, zeta=2)
@@ -454,6 +465,7 @@ class TestTransform:
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
+    @pytest.mark.unit
     def test_direct2_warnings(self):
         """Test that warnings are thrown when trying to use direct2 where it doesn't work."""
         g = LinearGrid(rho=2, theta=2, zeta=5)
@@ -484,6 +496,7 @@ class TestTransform:
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
+    @pytest.mark.unit
     def test_fit_direct1(self):
         """Test fitting with direct1 method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
@@ -495,6 +508,7 @@ class TestTransform:
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
 
+    @pytest.mark.unit
     def test_fit_direct2(self):
         """Test fitting with direct2 method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
@@ -506,6 +520,7 @@ class TestTransform:
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
 
+    @pytest.mark.unit
     def test_fit_fft(self):
         """Test fitting with fft method."""
         basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")

@@ -19,6 +19,7 @@ from desc.profiles import PowerSeriesProfile
 class TestObjectiveFunction:
     """Test ObjectiveFunction classes."""
 
+    @pytest.mark.unit
     def test_generic(self):
         """Test GenericObjective for arbitrary quantities."""
 
@@ -38,6 +39,7 @@ class TestObjectiveFunction:
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_volume(self):
         """Test calculation of plasma volume."""
 
@@ -51,6 +53,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_aspect_ratio(self):
         """Test calculation of aspect ratio."""
 
@@ -62,6 +65,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_energy(self):
         """Test calculation of MHD energy."""
 
@@ -75,6 +79,7 @@ class TestObjectiveFunction:
         test(Equilibrium(node_pattern="quad", iota=PowerSeriesProfile(0)))
         test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_toroidal_current(self):
         """Test calculation of toroidal current."""
 
@@ -86,6 +91,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_qs_boozer(self):
         """Test calculation of boozer qs metric."""
 
@@ -97,6 +103,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_qs_twoterm(self):
         """Test calculation of two term qs metric."""
 
@@ -108,6 +115,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_qs_tp(self):
         """Test calculation of triple product qs metric."""
 
@@ -119,6 +127,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_mercier_stability(self):
         """Test calculation of mercier stability criteria."""
 
@@ -133,6 +142,7 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
     def test_magnetic_well(self):
         """Test calculation of magnetic well stability criteria."""
 
@@ -148,6 +158,7 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
 
+@pytest.mark.unit
 def test_derivative_modes():
     """Test equality of derivatives using batched and blocked methods."""
     eq = Equilibrium(M=2, N=1, L=2)

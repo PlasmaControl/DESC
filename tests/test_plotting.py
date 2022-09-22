@@ -68,6 +68,7 @@ def test_1d_iota(DSHAPE):
 def test_1d_logpsi(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "psi", log=True, figsize=(4, 4))
+    ax.set_ylim([1e-5, 1e0])
     return fig
 
 
@@ -153,6 +154,7 @@ def test_fsa_I(DSHAPE):
 def test_fsa_G(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "B_zeta", log=True)
+    ax.set_ylim([1e-1, 1e0])
     return fig
 
 
@@ -160,6 +162,7 @@ def test_fsa_G(DSHAPE):
 def test_fsa_F_normalized(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    ax.set_ylim([1e-7, 1e-4])
     return fig
 
 
@@ -167,6 +170,7 @@ def test_fsa_F_normalized(DSHAPE):
 def test_fsa_F_normalized_vac(SOLOVEV_vac):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    ax.set_ylim([1e-12, 1e-9])
     return fig
 
 
@@ -298,6 +302,7 @@ def test_plot_normF_section(DSHAPE):
 def test_plot_coefficients(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_coefficients(eq)
+    ax[0, 0].set_ylim([1e-8, 1e1])
     return fig
 
 
@@ -408,6 +413,7 @@ def test_plot_field_lines(DSHAPE):
 def test_plot_boozer_modes(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_boozer_modes(eq)
+    ax.set_ylim([1e-12, 1e0])
     return fig
 
 

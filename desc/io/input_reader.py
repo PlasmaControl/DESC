@@ -161,6 +161,7 @@ class InputReader:
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
             "pres_ratio": np.atleast_1d(1.0),
+            "curr_ratio": np.atleast_1d(1.0),
             "bdry_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
             "ftol": np.atleast_1d(1e-2),
@@ -174,9 +175,12 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
+            "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
+
+        iota_flag = False
 
         inputs["output_path"] = self.output_path
 
@@ -254,7 +258,7 @@ class InputReader:
                     ]
                     if len(nums):
                         numbers = np.append(numbers, nums)
-            flag = False
+            flag = False  # flag for valid input lines
 
             # global parameters
             match = re.search(r"sym", argument, re.IGNORECASE)
@@ -302,6 +306,10 @@ class InputReader:
             match = re.search(r"pres_ratio", argument, re.IGNORECASE)
             if match:
                 inputs["pres_ratio"] = numbers.astype(float)
+                flag = True
+            match = re.search(r"curr_ratio", argument, re.IGNORECASE)
+            if match:
+                inputs["curr_ratio"] = numbers.astype(float)
                 flag = True
             match = re.search(r"bdry_ratio", argument, re.IGNORECASE)
             if match:
@@ -353,7 +361,7 @@ class InputReader:
                 flag = True
                 # TODO: set bdry_mode automatically based on bdry coeffs
 
-            # coefficient indicies
+            # coefficient indices
             match = re.search(r"l\s*:\s*" + num_form, command, re.IGNORECASE)
             if match:
                 l = [
@@ -401,6 +409,7 @@ class InputReader:
                 flag = True
             match = re.search(r"\si\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
+                iota_flag = True
                 i_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -414,6 +423,22 @@ class InputReader:
                     )
                     inputs["iota"][prof_idx[0], 0] = l
                 inputs["iota"][prof_idx[0], 1] = i_l
+                flag = True
+            match = re.search(r"\sc\s*=\s*" + num_form, command, re.IGNORECASE)
+            if match:
+                c_l = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ][0]
+                prof_idx = np.where(inputs["current"][:, 0] == l)[0]
+                if prof_idx.size == 0:
+                    prof_idx = np.atleast_1d(inputs["current"].shape[0])
+                    inputs["current"] = np.pad(
+                        inputs["current"], ((0, 1), (0, 0)), mode="constant"
+                    )
+                    inputs["current"][prof_idx[0], 0] = l
+                inputs["current"][prof_idx[0], 1] = c_l
                 flag = True
 
             # boundary surface coefficients
@@ -502,9 +527,17 @@ class InputReader:
 
         # error handling
         if np.any(inputs["M"] == 0):
-            raise IOError(colored("M_pol is not assigned", "red"))
+            raise IOError(colored("M_pol is not assigned.", "red"))
         if np.sum(inputs["surface"]) == 0:
-            raise IOError(colored("Fixed-boundary surface is not assigned", "red"))
+            raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
+
+        # remove unused profile
+        if iota_flag:
+            del inputs["current"]
+        else:
+            del inputs["iota"]
+
+        # array inputs
         arrs = [
             "L",
             "M",
@@ -513,6 +546,7 @@ class InputReader:
             "M_grid",
             "N_grid",
             "pres_ratio",
+            "curr_ratio",
             "bdry_ratio",
             "pert_order",
             "ftol",
@@ -563,6 +597,9 @@ class InputReader:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
             inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
+            # apply current ratio
+            if "current" in inputs_ii:
+                inputs_ii["current"][:, 1] *= inputs_ii["curr_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
                 inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
@@ -587,7 +624,6 @@ class InputReader:
             text to print at the top of the file
 
         """
-
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):
             f = open(filename, "w+")
@@ -600,12 +636,12 @@ class InputReader:
 
         f.write(header + "\n")
 
-        f.write("# global parameters \n")
+        f.write("# global parameters\n")
         f.write("sym = {:1d} \n".format(inputs[0]["sym"]))
         f.write("NFP = {:3d} \n".format(int(inputs[0]["NFP"])))
         f.write("Psi = {:.8f} \n".format(inputs[0]["Psi"]))
 
-        f.write("\n# spectral resolution \n")
+        f.write("\n# spectral resolution\n")
         for key, val in {
             "L_rad": "L",
             "M_pol": "M",
@@ -615,20 +651,20 @@ class InputReader:
             "N_grid": "N_grid",
         }.items():
             f.write(
-                key + " = {} \n".format(", ".join([str(inp[val]) for inp in inputs]))
+                key + " = {}\n".format(", ".join([str(inp[val]) for inp in inputs]))
             )
 
-        f.write("\n# continuation parameters \n")
-        for key in ["bdry_ratio", "pres_ratio", "pert_order"]:
+        f.write("\n# continuation parameters\n")
+        for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
             f.write(
                 key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
             )
 
-        f.write("\n# solver tolerances \n")
+        f.write("\n# solver tolerances\n")
         for key in ["ftol", "xtol", "gtol", "nfev"]:
             f.write(
                 key
-                + " = {} \n".format(
+                + " = {}\n".format(
                     ", ".join(
                         [
                             str(inp[key]) if inp[key] is not None else str(0)
@@ -638,31 +674,37 @@ class InputReader:
                 )
             )
 
-        f.write("\n# solver methods \n")
-        f.write("optimizer = {} \n".format(inputs[0]["optimizer"]))
-        f.write("objective = {} \n".format(inputs[0]["objective"]))
-        f.write("bdry_mode = {} \n".format(inputs[0]["bdry_mode"]))
-        f.write("spectral_indexing = {} \n".format(inputs[0]["spectral_indexing"]))
-        f.write("node_pattern = {} \n".format(inputs[0]["node_pattern"]))
+        f.write("\n# solver methods\n")
+        f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
+        f.write("objective = {}\n".format(inputs[0]["objective"]))
+        f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
+        f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
+        f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
 
-        f.write("\n# pressure and rotational transform profiles \n")
-        ls = np.unique(
-            np.concatenate([inputs[0]["pressure"][:, 0], inputs[0]["iota"][:, 0]])
-        )
+        f.write("\n# pressure and rotational transform/current profiles\n")
+        if "iota" in inputs[-1].keys():
+            char = "i"
+            profile = inputs[-1]["iota"]
+        elif "current" in inputs[-1].keys():
+            char = "c"
+            profile = inputs[-1]["current"]
+        ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
         for l in ls:
-            idxp = np.where(l == inputs[0]["pressure"][:, 0])[0]
-            if len(idxp):
-                p = inputs[-1]["pressure"][idxp[0], 1]
+            idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
+            if len(idx):
+                p = inputs[-1]["pressure"][idx[0], 1]
             else:
                 p = 0.0
-            idxi = np.where(l == inputs[0]["iota"][:, 0])[0]
-            if len(idxi):
-                i = inputs[-1]["iota"][idxi[0], 1]
+            idx = np.where(l == profile[:, 0])[0]
+            if len(idx):
+                i = profile[idx[0], 1]
             else:
                 i = 0.0
-            f.write("l: {:3d}\tp = {:16.8E}\ti = {:16.8E}\n".format(int(l), p, i))
+            f.write(
+                "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
+            )
 
-        f.write("\n# fixed-boundary surface shape \n")
+        f.write("\n# fixed-boundary surface shape\n")
         for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
             f.write(
                 "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
@@ -670,7 +712,7 @@ class InputReader:
                 )
             )
 
-        f.write("\n# magnetic axis initial guess \n")
+        f.write("\n# magnetic axis initial guess\n")
         for (n, R0, Z0) in inputs[0]["axis"]:
             f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
 
@@ -736,6 +778,7 @@ class InputReader:
             "M_grid": 0,
             "N_grid": 0,
             "pres_ratio": 1.0,
+            "curr_ratio": 1.0,
             "bdry_ratio": 1.0,
             "pert_order": 1,
             "ftol": 1e-2,
@@ -749,16 +792,22 @@ class InputReader:
             "bdry_mode": "lcfs",
             "pressure": np.atleast_2d((0, 0.0)),
             "iota": np.atleast_2d((0, 0.0)),
+            "current": np.atleast_2d((0, 0.0)),
             "surface": np.atleast_2d((0, 0, 0.0, 0.0)),
             "axis": np.atleast_2d((0, 0.0, 0.0)),
         }
 
+        iota_flag = True
         pres_scale = 1.0
+        curr_tor = None
+
         for line in vmec_file:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
 
             # global parameters
+            if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
+                warnings.warn(colored("Using free-boundary mode!", "yellow"))
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
                 warnings.warn(
                     colored("Using poloidal flux instead of toroidal flux!", "yellow")
@@ -766,9 +815,9 @@ class InputReader:
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
                 if re.search(r"T", match.group(0), re.IGNORECASE):
-                    inputs["sym"] = 0
+                    inputs["sym"] = False
                 else:
-                    inputs["sym"] = 1
+                    inputs["sym"] = True
             match = re.search(r"NFP\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -806,6 +855,17 @@ class InputReader:
                 inputs["N"] = numbers[0]
                 inputs["N_grid"] = 2 * numbers[0]
                 Ntor = numbers[0]
+            match = re.search(
+                r"NCURR\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
+            )
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                if numbers[0] != 0:
+                    iota_flag = False
 
             # pressure profile
             match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
@@ -866,17 +926,6 @@ class InputReader:
                     inputs["pressure"][l, 0] = l
 
             # rotational transform
-            match = re.search(
-                r"NCURR\s*=(\s*" + num_form + ")*", command, re.IGNORECASE
-            )
-            if match:
-                numbers = [
-                    float(x)
-                    for x in re.findall(num_form, match.group(0))
-                    if re.search(r"\d", x)
-                ]
-                if numbers[0] != 0:
-                    warnings.warn(colored("Not using rotational transform!", "yellow"))
             if re.search(r"\bPIOTA_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Iota is not a power series!", "yellow"))
@@ -897,6 +946,36 @@ class InputReader:
                         )
                     inputs["iota"][l, 1] = numbers[k]
                     inputs["iota"][l, 0] = l
+
+            # current
+            if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
+                if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
+                    warnings.warn(colored("Current is not a power series!", "yellow"))
+            match = re.search(r"CURTOR\s*=\s*" + num_form, command, re.IGNORECASE)
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                curr_tor = numbers[0]
+            match = re.search(r"AC\s*=(\s*" + num_form + ")*", command, re.IGNORECASE)
+            if match:
+                numbers = [
+                    float(x)
+                    for x in re.findall(num_form, match.group(0))
+                    if re.search(r"\d", x)
+                ]
+                for k in range(len(numbers)):
+                    l = 2 * k
+                    if len(inputs["current"]) < l + 1:
+                        inputs["current"] = np.pad(
+                            inputs["current"],
+                            ((0, l + 1 - len(inputs["current"])), (0, 0)),
+                            mode="constant",
+                        )
+                    inputs["current"][l, 1] = numbers[k]
+                    inputs["current"][l, 0] = l
 
             # magnetic axis
             match = re.search(
@@ -1152,8 +1231,30 @@ class InputReader:
                     raise IOError(
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
+
+        # add radial mode numbers to surface array
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
+        # scale pressure profile
         inputs["pressure"][:, 1] *= pres_scale
+        # integrate current profile wrt s=rho^2
+        inputs["current"] = np.pad(
+            np.vstack(
+                (
+                    inputs["current"][:, 0] + 2,
+                    inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
+                )
+            ).T,
+            ((1, 0), (0, 0)),
+        )
+        # scale current profile
+        if curr_tor is not None:
+            inputs["current"][:, 1] *= curr_tor / np.sum(inputs["current"][:, 1])
+        # delete unused profile
+        if iota_flag:
+            del inputs["current"]
+        else:
+            del inputs["iota"]
+
         vmec_file.close()
 
         # default continuation stuff
@@ -1179,6 +1280,7 @@ class InputReader:
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
                 inputs_arr[i]["pres_ratio"] = 0
+                inputs_arr[i]["curr_ratio"] = 0
                 if bdry_steps != 0:
                     inputs_arr[i]["bdry_ratio"] = 0
                 else:
@@ -1187,6 +1289,7 @@ class InputReader:
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
                 inputs_arr[i]["pres_ratio"] = (i - res_steps + 1) * pres_step
+                inputs_arr[i]["curr_ratio"] = (i - res_steps + 1) * pres_step
                 inputs_arr[i]["pert_order"] = 2
                 if bdry_steps != 0:
                     inputs_arr[i]["bdry_ratio"] = 0

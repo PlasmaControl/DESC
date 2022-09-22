@@ -109,7 +109,7 @@ class TestTransform(unittest.TestCase):
         basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
-        r = grid.nodes[:, 0]  # rho coordiantes
+        r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
 

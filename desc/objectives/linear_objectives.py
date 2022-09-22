@@ -1,14 +1,14 @@
+import warnings
+
 import numpy as np
 from termcolor import colored
 import warnings
 from abc import ABC, abstractmethod
 
-
 from desc.backend import jnp
 from desc.basis import zernike_radial_coeffs, zernike_radial
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from .objective_funs import _Objective
-
 
 """Linear objective functions must be of the form `A*x-b`, where:
     - `A` is a constant matrix that can be pre-computed
@@ -33,7 +33,7 @@ class FixBoundaryR(_Objective):
         len(weight) must be equal to Objective.dim_f
     fixed_boundary : bool, optional
         True to enforce the boundary condition on flux surfaces,
-        or Falseto fix the boundary surface coefficients (defualt).
+        or False to fix the boundary surface coefficients (default).
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -173,7 +173,7 @@ class FixBoundaryZ(_Objective):
         len(weight) must be equal to Objective.dim_f
     fixed_boundary : bool, optional
         True to enforce the boundary condition on flux surfaces,
-        or Falseto fix the boundary surface coefficients (defualt).
+        or False to fix the boundary surface coefficients (default).
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -385,7 +385,7 @@ class FixLambdaGauge(_Objective):
                     self._A[j, i] = -1
             # l(rho,0,0) = 0
             # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
-            # what this constraint does is make all of the coefficients of each power of rho
+            # what this constraint does is make all the coefficients of each power of rho
             # equal to zero
             # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
             # this constraint will make
@@ -670,6 +670,10 @@ class FixIota(_FixProfile):
             Level of output.
 
         """
+        if eq.iota is None:
+            raise RuntimeError(
+                "Attempt to fix rotational transform on an equilibrium with no rotational transform profile assigned"
+            )
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)
 
@@ -694,6 +698,98 @@ class FixIota(_FixProfile):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "i_l"
+
+
+class FixCurrent(_FixProfile):
+    """Fixes toroidal current profile coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        profile=None,
+        indices=True,
+        name="fixed-current",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+        self._print_value_fmt = "Fixed-current profile error: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if eq.current is None:
+            raise RuntimeError(
+                "Attempt to fix toroidal current on an equilibrium no current profile assigned"
+            )
+        profile = eq.current
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, c_l, **kwargs):
+        """Compute fixed current errors.
+
+        Parameters
+        ----------
+        c_l : ndarray
+            parameters of the current profile.
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        fixed_params = c_l[self._idx]
+        return self._shift_scale(fixed_params)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "c_l"
 
 
 class FixPsi(_Objective):

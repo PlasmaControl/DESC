@@ -1,13 +1,13 @@
 import numpy as np
-from desc.utils import Timer
-from desc.grid import LinearGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
 from desc.compute import (
     data_index,
     compute_boozer_coordinates,
     compute_quasisymmetry_error,
 )
+from desc.grid import LinearGrid
+from desc.transform import Transform
+from desc.utils import Timer
 from .objective_funs import _Objective
 
 
@@ -93,8 +93,14 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
@@ -151,7 +157,7 @@ class QuasisymmetryBoozer(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute quasi-symmetry Boozer harmonics error.
 
         Parameters
@@ -164,6 +170,8 @@ class QuasisymmetryBoozer(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -178,6 +186,7 @@ class QuasisymmetryBoozer(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
@@ -185,6 +194,7 @@ class QuasisymmetryBoozer(_Objective):
             self._B_transform,
             self._w_transform,
             self._iota,
+            self._current,
         )
         b_mn = data["|B|_mn"]
         b_mn = b_mn[self._idx]
@@ -283,8 +293,14 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["f_C"]["R_derivs"], build=True
@@ -305,7 +321,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute quasi-symmetry two-term errors.
 
         Parameters
@@ -318,6 +334,8 @@ class QuasisymmetryTwoTerm(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -332,11 +350,13 @@ class QuasisymmetryTwoTerm(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
             self._helicity,
         )
         f = data["f_C"] * self.grid.weights
@@ -427,8 +447,14 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["f_T"]["R_derivs"], build=True
@@ -449,7 +475,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute quasi-symmetry triple product errors.
 
         Parameters
@@ -462,6 +488,8 @@ class QuasisymmetryTripleProduct(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -476,11 +504,13 @@ class QuasisymmetryTripleProduct(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         f = data["f_T"] * self.grid.weights
 

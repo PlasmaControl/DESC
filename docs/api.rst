@@ -103,6 +103,7 @@ Objective Functions
     desc.objectives.Energy
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ
+    desc.objectives.FixCurrent
     desc.objectives.FixIota
     desc.objectives.FixLambdaGauge
     desc.objectives.FixPressure

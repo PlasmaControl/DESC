@@ -420,6 +420,7 @@ class FiniteDiffDerivative(_Derivative):
     
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
+        print("AT DERIVATIVES JVP")
         rel_step = kwargs.get("rel_step",1e-3)
         h = rel_step
         if jnp.isscalar(argnum):

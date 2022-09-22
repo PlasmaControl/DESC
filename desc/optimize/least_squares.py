@@ -291,6 +291,7 @@ def lsqtr(
 
         # if reduction was enough, accept the step
         if actual_reduction > 0:
+        #if True:
             x_old = x
             x = x_new
             if return_all:

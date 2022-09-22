@@ -84,6 +84,7 @@ class FixBoundaryR(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.R_basis.modes
             idx = np.arange(eq.surface.R_basis.num_modes)
+            #modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -112,6 +113,7 @@ class FixBoundaryR(_Objective):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 self._A[j, i] = 1
+            #self._A = self._A[modes_idx]
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
@@ -214,6 +216,7 @@ class FixBoundaryZ(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.Z_basis.modes
             idx = np.arange(eq.surface.Z_basis.num_modes)
+            #modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -242,6 +245,7 @@ class FixBoundaryZ(_Objective):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
                 self._A[j, i] = 1
+            #self._A = self._A[modes_idx]
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 

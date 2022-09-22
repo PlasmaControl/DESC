@@ -3,7 +3,7 @@ import subprocess
 from scipy.interpolate import interp1d
 import os
 import time
-from desc.backend import jnp
+from desc.backend import jnp,put
 from desc.compute import arg_order
 from .utils import (
     get_equilibrium_objective,
@@ -533,30 +533,37 @@ class GXWrapper(_Objective):
         #self.write_input()
         
         self.run_gx()
-        #time.sleep(1)
+        #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
         ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
+        
+        #qflux = ds['Fluxes/qflux']
+        #qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
+        #print(qflux_avg)
         om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
-        #ky = ds['ky']
-        #omega = np.zeros(len(om))
         gamma = np.zeros(len(om))
         for i in range(len(gamma)):
-        #    #omega[i] = om[i][0][0]
             gamma[i] = om[i][0][1]
         print(max(gamma))
         
-        t = str(time.time())
-        nm = 'gx' + t + '.nc'
-        nmg = 'gxinput_wrap' + t + '.out'
+        #t = str(time.time())
+        #nm = 'gx' + t + '.nc'
+        #nmg = 'gxinput_wrap' + t + '.out'
         #os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/' + nm)
         #os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/' + nmg)
+        
+        
+
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
 
         #gamma = 1.0
         #print(gamma)
         return self._shift_scale(jnp.atleast_1d(max(gamma)))
+        #return self._shift_scale(jnp.atleast_1d(qflux_avg))
+
     
     def compute_gx_jvp(self,values,tangents):
+        print("AT WRAPPER JVP")
         #print("values are " + str(values))
         #print("tangents are " + str(tangents))
         R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values
@@ -580,6 +587,64 @@ class GXWrapper(_Objective):
         
         res = jnp.array([0.0])
 
+        #The shape of R_lmn is M x N, where M is the number of tangnents, and N is the number of R_lmn modes.
+        
+        numparam = 6
+        idx = jnp.zeros(numparam,dtype=int)
+        count = 0
+        for i in range(numparam):
+            #idx[i] = count + values[i][:].shape[1]
+            print("shape is " + str(values[i][:].shape[1]))
+            print("new value is " + str(count + values[i][:].shape[1]))
+            idx = put(idx,i,count + values[i][:].shape[1])
+            count = idx[i]
+        idx = put(idx,len(idx)-1,count+1)
+        print("idx is " + str(idx))
+
+        Rtan = values[0][:]
+        Ztan = values[1][:]
+        Ltan = values[2][:]
+        itan = values[3][:]
+        ptan = values[4][:]
+        Psitan = values[5][:]
+        MT = jnp.hstack([Rtan,Ztan,Ltan,itan,ptan,Psitan])
+        M = jnp.transpose(MT)
+        print("M is " + str(M))
+        Mnorm = jnp.linalg.norm(M,axis=0)
+        U,S,V = jnp.linalg.svd(M/Mnorm)
+        u1 = U[:,0]
+        v1 = V[0,:]
+        s1 = S[0]
+        print("U is " + str(U))
+        
+        u1T = jnp.transpose(u1)*s1
+        print("u1T is " + str(u1T))
+        Rsvd = u1T[0:idx[0]]
+        Zsvd = u1T[idx[0]:idx[1]]
+        Lsvd = u1T[idx[1]:idx[2]]
+        isvd = u1T[idx[2]:idx[3]]
+        psvd = u1T[idx[3]:idx[4]]
+        Psisvd = u1T[idx[4]:idx[5]]
+
+        print("Rsvd is " + str(Rsvd))
+        print("Zsvd is " + str(Zsvd))
+        print("Lsvd is " + str(Lsvd))
+        print("isvd is " + str(isvd))
+        print("psvd is " + str(psvd))
+        print("Psisvd is " + str(Psisvd))
+
+
+#        print("R shape is " + str(values[0][:].shape))
+#        print("Z shape is " + str(values[1][:].shape))
+#        Rnorm = jnp.linalg.norm(values[0][:],axis=0)
+#        Znorm = jnp.linalg.norm(values[1][:],axis=0)
+#        Lnorm = jnp.linalg.norm(values[2][:],axis=0)
+#        uR,sR,vR = jnp.linalg.svd(values[0][:]/Rnorm)
+#        uZ,sZ,vZ = jnp.linalg.svd(values[1][:]/Znorm)
+#        uL,sL,vL = jnp.linalg.svd(values[2][:]/Lnorm)
+#        print("The singular values of R_lmn are " + str(sR))
+#        print("The singular values of Z_lmn are " + str(sZ))
+#        print("The singular values of L_lmn are " + str(sL))
         for i in range(numdiff):
             R_lmn = values[0][i]
             Z_lmn = values[1][i]
@@ -591,6 +656,9 @@ class GXWrapper(_Objective):
             res = jnp.vstack([res,self.compute(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)])
 
         res = res[1:]
+
+#        qflux = self.compute(Rsvd,Zsvd,Lsvd,isvd,psvd,Psisvd)
+#        res = qflux*s1*jnp.transpose(v1)
 
         return res, axis[0]
 

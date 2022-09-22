@@ -15,7 +15,7 @@ from desc.objectives import (
     GXWrapper
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.optimize import fmintr, lsqtr
+from desc.optimize import fmintr, lsqtr, stoch
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
 
 
@@ -61,6 +61,7 @@ class Optimizer(IOAble):
     _scipy_constrained_least_squares_methods = []
     _desc_constrained_scalar_methods = []
     _desc_constrained_least_squares_methods = []
+    _desc_stochastic_methods = ["stochastic"]
     _scalar_methods = (
         _desc_scalar_methods
         + _scipy_scalar_methods
@@ -72,6 +73,7 @@ class Optimizer(IOAble):
         + _desc_least_squares_methods
         + _scipy_constrained_least_squares_methods
         + _desc_constrained_least_squares_methods
+        + _desc_stochastic_methods
     )
     _scipy_methods = (
         _scipy_least_squares_methods
@@ -84,6 +86,7 @@ class Optimizer(IOAble):
         + _desc_scalar_methods
         + _desc_constrained_scalar_methods
         + _desc_constrained_least_squares_methods
+        + _desc_stochastic_methods
     )
     _constrained_methods = (
         _desc_constrained_scalar_methods
@@ -96,6 +99,7 @@ class Optimizer(IOAble):
         + _scipy_scalar_methods
         + _desc_scalar_methods
         + _desc_least_squares_methods
+        + _desc_stochastic_methods
     )
 
     def __init__(self, method):
@@ -458,6 +462,23 @@ class Optimizer(IOAble):
         elif self.method in Optimizer._desc_least_squares_methods:
 
             result = lsqtr(
+                compute_wrapped,
+                x0=x0_reduced,
+                jac=jac_wrapped,
+                args=(),
+                x_scale=x_scale,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                verbose=disp,
+                maxiter=maxiter,
+                callback=None,
+                options=options,
+            )
+
+        elif self.method in Optimizer._desc_stochastic_methods:
+         
+            result = stoch(
                 compute_wrapped,
                 x0=x0_reduced,
                 jac=jac_wrapped,

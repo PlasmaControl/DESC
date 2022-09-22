@@ -535,9 +535,9 @@ class Equilibrium(_Configuration, IOAble):
 
         eq = self
         if not objective.built:
-            objective.build(eq)
+            objective.build(eq,use_jit=False)
         if not constraint.built:
-            constraint.build(eq)
+            constraint.build(eq,use_jit=False)
 
         cost = objective.compute_scalar(objective.x(eq))
         perturb_options = deepcopy(perturb_options)

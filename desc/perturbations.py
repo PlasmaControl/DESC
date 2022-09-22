@@ -308,7 +308,7 @@ def perturb(
             value = put(  # parameter values below threshold are set to 0
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
-            # don't set nonexistent profile
+            # don't set nonexistent profile (values are empty ndarrays)
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
@@ -696,7 +696,7 @@ def optimal_perturb(
             value = put(  # parameter values below threshold are set to 0
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
-            # don't set nonexistent profile
+            # don't set nonexistent profile (values are empty ndarrays)
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 

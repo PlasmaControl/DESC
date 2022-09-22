@@ -1,9 +1,13 @@
-import unittest
 import numpy as np
+import pytest
+
 from desc.equilibrium import Equilibrium
-from desc.basis import FourierZernikeBasis
-from desc.objectives import FixLambdaGauge
 from desc.geometry import FourierRZToroidalSurface
+from desc.objectives import (
+    FixLambdaGauge,
+    FixCurrent,
+    FixIota,
+)
 from desc.profiles import PowerSeriesProfile
 
 
@@ -73,3 +77,18 @@ def test_bc_on_interior_surfaces():
 
     np.testing.assert_allclose(surf.R_lmn, surf5.R_lmn, atol=1e-12)
     np.testing.assert_allclose(surf.Z_lmn, surf5.Z_lmn, atol=1e-12)
+
+
+def test_constrain_asserts():
+    # nonexistent toroidal current can't be constrained
+    eq = Equilibrium(iota=PowerSeriesProfile(0, 0))
+    with pytest.raises(RuntimeError):
+        eq.solve(constraints=FixCurrent())
+    # nonexistent rotational transform can't be constrained
+    eq = Equilibrium(current=PowerSeriesProfile(0))
+    with pytest.raises(RuntimeError):
+        eq.solve(constraints=FixIota())
+    # toroidal current and rotational transform can't be constrained simultaneously
+    eq = Equilibrium(current=PowerSeriesProfile(0))
+    with pytest.raises(ValueError):
+        eq.solve(constraints=(FixCurrent(), FixIota()))

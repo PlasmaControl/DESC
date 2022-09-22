@@ -4,8 +4,6 @@ import numpy as np
 import mpmath
 
 from desc.grid import LinearGrid
-from desc.equilibrium import Equilibrium
-from desc.transform import Transform
 from desc.basis import (
     polyder_vec,
     polyval_vec,
@@ -219,34 +217,34 @@ class TestBasis(unittest.TestCase):
         """Test change_resolution function."""
         ps = PowerSeries(L=4, sym=False)
         ps.change_resolution(L=6)
-        assert len(ps.modes) == 7
+        assert ps.num_modes == 7
 
         fs = FourierSeries(N=3)
         fs.change_resolution(N=2)
-        assert len(fs.modes) == 5
+        assert fs.num_modes == 5
 
         dfs = DoubleFourierSeries(M=3, N=4)
         dfs.change_resolution(M=2, N=1)
-        assert len(dfs.modes) == 15
+        assert dfs.num_modes == 15
 
-        zp = ZernikePolynomial(L=0, M=3, spectral_indexing="ansi")
-        zp.change_resolution(L=3, M=3)
-        assert len(zp.modes) == 10
+        zpa = ZernikePolynomial(L=0, M=3, spectral_indexing="ansi")
+        zpa.change_resolution(L=3, M=3)
+        assert zpa.num_modes == 10
 
-        zp2 = ZernikePolynomial(L=0, M=3, spectral_indexing="fringe")
-        zp2.change_resolution(L=6, M=3)
-        assert len(zp2.modes) == 16
+        zpf = ZernikePolynomial(L=0, M=3, spectral_indexing="fringe")
+        zpf.change_resolution(L=6, M=3)
+        assert zpf.num_modes == 16
 
-        fz = FourierZernikeBasis(L=6, M=3, N=0)
-        fz.change_resolution(L=6, M=3, N=1)
-        assert len(fz.modes) == 48
+        fz = FourierZernikeBasis(L=3, M=3, N=0)
+        fz.change_resolution(L=3, M=3, N=1)
+        assert fz.num_modes == 30
 
     def test_repr(self):
 
         fz = FourierZernikeBasis(L=6, M=3, N=0)
         s = str(fz)
         assert "FourierZernikeBasis" in s
-        assert "fringe" in s
+        assert "ansi" in s
         assert "L=6" in s
         assert "M=3" in s
         assert "N=0" in s

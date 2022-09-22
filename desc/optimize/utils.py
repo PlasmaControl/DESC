@@ -1,99 +1,8 @@
 import numpy as np
 from desc.backend import jnp
-import scipy.sparse
 
 
-def min_eig_est(A, tol=1e-2):
-    """Estimate the minimum eigenvalue of a matrix
-
-    Uses Lanzcos method through scipy.sparse.linalg
-
-    Parameters
-    ----------
-    A : ndarray
-        matrix, should be square
-    tol : float
-        precision for estimate of eigenvalue
-
-    Returns
-    -------
-    e1 : float
-        estimate for the minimum eigenvalue. Should be
-        accurate to with +/- tol
-    v1 : ndarray
-        approximate eigenvector corresponding to e1
-    """
-
-    return scipy.sparse.linalg.eigsh(A, k=1, which="SA", tol=tol)
-
-
-def make_spd(A, delta=1e-2, tol=1e-2):
-    """Modify a matrix to make it positive definite
-
-    Shifts the spectrum to make all eigenvalues > delta.
-    Uses iterative Lanzcos method to approximate the smallest
-    eigenvalue.
-
-    Parameters
-    -----------
-    A : ndarray
-        matrix, should be square and symmetric
-    delta : float
-        minimum allowed eigenvalue
-    tol : float
-        precision for estimate of minimum eigenvalue
-
-    Returns
-    -------
-    A : ndarray
-        A, but shifted by tau*I where tau is an approximation to
-        the minimum eigenvalue
-    """
-
-    A = np.asarray(A)
-    n = A.shape[0]
-    eig_1, eigvec_1 = min_eig_est(A, tol)
-    tau = max(0, (1 + tol) * (delta - eig_1))
-    A = A + tau * np.eye(n)
-    return 0.5 * (A + A.T)
-
-
-def chol_U_update(U, x, alpha):
-    """Rank 1 update to a cholesky decomposition
-
-    Given cholesky decomposition A = U.T * U
-    compute cholesky decomposition to A + alpha*x.T*x where
-    x is a vector and alpha is a scalar.
-
-    Parameters
-    ----------
-    U : ndarray
-        upper triangular cholesky factor
-    x : ndarray
-        rank 1 update vector
-    alpha : float
-        scalar coefficient
-
-    Returns
-    -------
-    U : ndarray
-        updated cholesky factor
-    """
-    U = U.copy()
-    sign = np.sign(alpha)
-    a = np.sqrt(np.abs(alpha))
-    x = a * x
-    for k in range(x.size):
-        r = np.sqrt(U[k, k] ** 2 + sign * x[k] ** 2)
-        c = r / U[k, k]
-        s = x[k] / U[k, k]
-        U[k, k] = r
-        U[k, k + 1 :] = (U[k, k + 1 :] + sign * s * x[k + 1 :]) / c
-        x[k + 1 :] = c * x[k + 1 :] - s * U[k, k + 1 :]
-    return U
-
-
-def evaluate_quadratic_form(x, f, g, H, scale=None):
+def evaluate_quadratic_form_hess(x, f, g, H, scale=None):
     """Compute values of a quadratic function arising in trust region subproblem.
     The function is 0.5 * x.T * H * x + g.T * x + f.
 
@@ -120,6 +29,45 @@ def evaluate_quadratic_form(x, f, g, H, scale=None):
     l = jnp.dot(scale * g, x)
 
     return f + l + 1 / 2 * q
+
+
+def evaluate_quadratic_form_jac(J, g, s, diag=None):
+    """Compute values of a quadratic function arising in least squares.
+
+    The function is 0.5 * s.T * (J.T * J + diag) * s + g.T * s.
+
+    Parameters
+    ----------
+    J : ndarray, sparse matrix or LinearOperator, shape (m, n)
+        Jacobian matrix, affects the quadratic term.
+    g : ndarray, shape (n,)
+        Gradient, defines the linear term.
+    s : ndarray, shape (k, n) or (n,)
+        Array containing steps as rows.
+    diag : ndarray, shape (n,), optional
+        Addition diagonal part, affects the quadratic term.
+        If None, assumed to be 0.
+
+    Returns
+    -------
+    values : ndarray with shape (k,) or float
+        Values of the function. If `s` was 2-D, then ndarray is
+        returned, otherwise, float is returned.
+    """
+    if s.ndim == 1:
+        Js = J.dot(s)
+        q = jnp.dot(Js, Js)
+        if diag is not None:
+            q += jnp.dot(s * diag, s)
+    else:
+        Js = J.dot(s.T)
+        q = jnp.sum(Js ** 2, axis=0)
+        if diag is not None:
+            q += jnp.sum(diag * s ** 2, axis=1)
+
+    l = jnp.dot(s, g)
+
+    return 0.5 * q + l
 
 
 def print_header_nonlinear():
@@ -262,42 +210,3 @@ def compute_hess_scale(H, prev_scale_inv=None):
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
     return 1 / scale_inv, scale_inv
-
-
-def evaluate_quadratic(J, g, s, diag=None):
-    """Compute values of a quadratic function arising in least squares.
-
-    The function is 0.5 * s.T * (J.T * J + diag) * s + g.T * s.
-
-    Parameters
-    ----------
-    J : ndarray, sparse matrix or LinearOperator, shape (m, n)
-        Jacobian matrix, affects the quadratic term.
-    g : ndarray, shape (n,)
-        Gradient, defines the linear term.
-    s : ndarray, shape (k, n) or (n,)
-        Array containing steps as rows.
-    diag : ndarray, shape (n,), optional
-        Addition diagonal part, affects the quadratic term.
-        If None, assumed to be 0.
-
-    Returns
-    -------
-    values : ndarray with shape (k,) or float
-        Values of the function. If `s` was 2-D, then ndarray is
-        returned, otherwise, float is returned.
-    """
-    if s.ndim == 1:
-        Js = J.dot(s)
-        q = jnp.dot(Js, Js)
-        if diag is not None:
-            q += jnp.dot(s * diag, s)
-    else:
-        Js = J.dot(s.T)
-        q = jnp.sum(Js ** 2, axis=0)
-        if diag is not None:
-            q += jnp.sum(diag * s ** 2, axis=1)
-
-    l = jnp.dot(s, g)
-
-    return 0.5 * q + l

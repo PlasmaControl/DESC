@@ -29,35 +29,6 @@ scalar_grad = Derivative(scalar_fun, mode="grad")
 scalar_hess = Derivative(scalar_fun, mode="hess")
 
 
-class TestUtils(unittest.TestCase):
-    def test_spd(self):
-        rando = default_rng(seed=0)
-
-        n = 100
-        A = rando.random((n, n))
-        A = A + A.T - 5
-        mineig = sorted(np.linalg.eig(A)[0])[0]
-        self.assertTrue(mineig < 0)
-        B = make_spd(A)
-        mineig = sorted(np.linalg.eig(B)[0])[0]
-        self.assertTrue(mineig > 0)
-
-    def test_chol_update(self):
-        rando = default_rng(seed=0)
-
-        n = 100
-        A = rando.random((n, n))
-        v = rando.random(n)
-        A = A + A.T - 5
-        B = make_spd(A)
-        U = np.linalg.cholesky(B).T
-        Bv = B + np.outer(v, v)
-        Uv = np.linalg.cholesky(Bv).T
-        Uva = chol_U_update(U, v, 1)
-
-        np.testing.assert_allclose(Uv, Uva)
-
-
 class TestFmin(unittest.TestCase):
     def test_convex_full_hess_dogleg(self):
         rando = default_rng(seed=2)

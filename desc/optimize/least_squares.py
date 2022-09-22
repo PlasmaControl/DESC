@@ -7,7 +7,7 @@ from .utils import (
     print_iteration_nonlinear,
     status_messages,
     compute_jac_scale,
-    evaluate_quadratic,
+    evaluate_quadratic_form_jac,
 )
 from .tr_subproblems import (
     trust_region_step_exact_svd,
@@ -241,7 +241,7 @@ def lsqtr(
                 step_h += ga_step_h
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = -evaluate_quadratic(J_h, g_h, step_h)
+            predicted_reduction = -evaluate_quadratic_form_jac(J_h, g_h, step_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h

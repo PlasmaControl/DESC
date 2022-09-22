@@ -4,7 +4,7 @@ from desc.backend import jnp
 from .utils import (
     check_termination,
     compute_hess_scale,
-    evaluate_quadratic_form,
+    evaluate_quadratic_form_hess,
     print_header_nonlinear,
     print_iteration_nonlinear,
     status_messages,
@@ -260,7 +260,7 @@ def fmintr(
                 ga_step_h = np.zeros_like(step_h)
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = f - evaluate_quadratic_form(step_h, f, g_h, H_h)
+            predicted_reduction = f - evaluate_quadratic_form_hess(step_h, f, g_h, H_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h

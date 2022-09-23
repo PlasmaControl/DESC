@@ -9,6 +9,7 @@ from desc.perturbations import perturb
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.solve
 def test_perturbation_orders(SOLOVEV):
     """Test that higher-order perturbations are more accurate."""
 

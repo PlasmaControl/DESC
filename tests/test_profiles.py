@@ -12,6 +12,7 @@ class TestProfiles:
 
     @pytest.mark.slow
     @pytest.mark.regression
+    @pytest.mark.solve
     def test_same_result(self):
         """Test that different representations of the same profile give the same eq."""
         input_path = "./tests/inputs/SOLOVEV"

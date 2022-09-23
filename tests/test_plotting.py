@@ -41,6 +41,7 @@ def test_kwarg_warning(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_p(SOLOVEV):
     """Test plotting 1d pressure profile."""
@@ -50,6 +51,7 @@ def test_1d_p(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_dpdr(SOLOVEV):
     """Test plotting 1d pressure derivative."""
@@ -59,6 +61,7 @@ def test_1d_dpdr(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_iota(SOLOVEV):
     """Test plotting 1d rotational transform."""
@@ -69,6 +72,7 @@ def test_1d_iota(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_1d_logpsi(SOLOVEV):
     """Test plotting 1d flux funciton with log scale."""
@@ -78,6 +82,7 @@ def test_1d_logpsi(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=72)
 def test_2d_logF(SOLOVEV):
     """Test plotting 2d force error with log scale."""
@@ -89,6 +94,7 @@ def test_2d_logF(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_tz(SOLOVEV):
     """Test plotting 2d metric coefficients vs theta/zeta."""
@@ -99,6 +105,7 @@ def test_2d_g_tz(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_g_rz(SOLOVEV):
     """Test plotting 2d metric coefficients vs rho/zeta."""
@@ -109,6 +116,7 @@ def test_2d_g_rz(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_2d_lambda(SOLOVEV):
     """Test plotting lambda on 2d grid."""
@@ -118,6 +126,7 @@ def test_2d_lambda(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_B(SOLOVEV):
     """Test 3d plot of toroidal field."""
@@ -127,6 +136,7 @@ def test_3d_B(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_J(SOLOVEV):
     """Test 3d plotting of poloidal current."""
@@ -137,6 +147,7 @@ def test_3d_J(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_tz(SOLOVEV):
     """Test 3d plot of force on interior surface."""
@@ -147,6 +158,7 @@ def test_3d_tz(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rz(SOLOVEV):
     """Test 3d plotting of pressure on toroidal cross section."""
@@ -157,6 +169,7 @@ def test_3d_rz(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_3d_rt(SOLOVEV):
     """Test 3d plotting of flux on poloidal ribbon."""
@@ -167,6 +180,7 @@ def test_3d_rt(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_fsa_I(SOLOVEV):
     """Test plotting of flux surface average toroidal current."""
@@ -176,6 +190,7 @@ def test_fsa_I(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_fsa_G(SOLOVEV):
     """Test plotting of flux surface average poloidal current."""
@@ -185,6 +200,7 @@ def test_fsa_G(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=60)
 def test_section_J(SOLOVEV):
     """Test plotting poincare section of radial current."""
@@ -194,6 +210,7 @@ def test_section_J(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_Z(SOLOVEV):
     """Test plotting poincare section of Z coordinate."""
@@ -203,6 +220,7 @@ def test_section_Z(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_R(SOLOVEV):
     """Test plotting poincare section of R coordinate."""
@@ -212,6 +230,7 @@ def test_section_R(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_F(SOLOVEV):
     """Test plotting poincare section of radial force."""
@@ -221,6 +240,7 @@ def test_section_F(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_section_logF(SOLOVEV):
     """Test plotting poincare section of force magnitude on log scale."""
@@ -231,6 +251,7 @@ def test_section_logF(SOLOVEV):
 
 @pytest.mark.slow
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces(SOLOVEV):
     """Test plotting flux surfaces."""
@@ -241,6 +262,7 @@ def test_plot_surfaces(SOLOVEV):
 
 @pytest.mark.slow
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_surfaces_no_theta(SOLOVEV):
     """Test plotting flux surfaces without theta contours."""
@@ -251,6 +273,7 @@ def test_plot_surfaces_no_theta(SOLOVEV):
 
 @pytest.mark.slow
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison(DSHAPE):
     """Test plotting comparison of flux surfaces."""
@@ -261,6 +284,7 @@ def test_plot_comparison(DSHAPE):
 
 @pytest.mark.slow
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_comparison_no_theta(DSHAPE):
     """Test plotting comparison of flux surfaces without theta contours."""
@@ -270,6 +294,7 @@ def test_plot_comparison_no_theta(DSHAPE):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_con_basis(SOLOVEV):
     """Test 2d plot of R component of e^rho."""
@@ -279,6 +304,7 @@ def test_plot_con_basis(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_cov_basis(SOLOVEV):
     """Test 2d plot of norm of e_rho."""
@@ -288,6 +314,7 @@ def test_plot_cov_basis(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_tension(SOLOVEV):
     """Test 2d plot of magnetic tension."""
@@ -297,6 +324,7 @@ def test_plot_magnetic_tension(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_magnetic_pressure(SOLOVEV):
     """Test 2d plot of magnetic pressure."""
@@ -306,6 +334,7 @@ def test_plot_magnetic_pressure(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_gradpsi(SOLOVEV):
     """Test 2d plot of norm of grad(rho)."""
@@ -315,6 +344,7 @@ def test_plot_gradpsi(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=55)
 def test_plot_normF_2d(SOLOVEV):
     """Test 2d plot of normalized force magnitude."""
@@ -324,6 +354,7 @@ def test_plot_normF_2d(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_normF_section(SOLOVEV):
     """Test poincare section plot of normalized force magnitude."""
@@ -333,6 +364,7 @@ def test_plot_normF_section(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=60)
 def test_plot_coefficients(SOLOVEV):
     """Test scatter plot of spectral coefficients."""
@@ -478,6 +510,7 @@ class TestPlotFieldLines:
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_boozer_modes(SOLOVEV):
     """Test plotting boozer spectrum."""
@@ -487,6 +520,7 @@ def test_plot_boozer_modes(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_boozer_surface(SOLOVEV):
     """Test plotting B in boozer coordinates."""
@@ -496,6 +530,7 @@ def test_plot_boozer_surface(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_qs_error(SOLOVEV):
     """Test plotting qs error metrics."""
@@ -505,6 +540,7 @@ def test_plot_qs_error(SOLOVEV):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_qh_optimization(precise_QH):
     """Test plotting B in boozer coordinates from precise QH optimization."""

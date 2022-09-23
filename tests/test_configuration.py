@@ -391,6 +391,7 @@ class TestInitialGuess:
             eq = Equilibrium(surface=surface3, axis=axis, NFP=2)
 
     @pytest.mark.unit
+    @pytest.mark.solve
     def test_guess_from_file(self, SOLOVEV):
         """Test setting initial guess from saved equilibrium file."""
         path = SOLOVEV["desc_h5_path"]
@@ -441,6 +442,7 @@ class TestGetSurfaces:
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_magnetic_axis(HELIOTRON):
     """Test that Configuration.axis returns the true axis location."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
@@ -470,6 +472,7 @@ def test_is_nested():
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_get_profile(DSHAPE):
     """Test getting/setting iota and current profiles."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]

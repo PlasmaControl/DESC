@@ -443,6 +443,7 @@ def test_magnetic_pressure_gradient(DummyStellarator):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_currents(DSHAPE):
     """Test that different methods for computing I and G agree."""
 
@@ -500,6 +501,7 @@ def test_quasisymmetry(DummyStellarator):
 
 # TODO: add test with stellarator example
 @pytest.mark.unit
+@pytest.mark.solve
 def test_boozer_transform(DSHAPE):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
 
@@ -541,6 +543,7 @@ def test_compute_grad_p_volume_avg():
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_compute_dmerc(DSHAPE, HELIOTRON):
     """Test calculation of DMERC stability criteria against VMEC."""
     eq = Equilibrium()
@@ -563,6 +566,7 @@ def test_compute_dmerc(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_compute_dshear(DSHAPE, HELIOTRON):
     """Test calculation of DSHEAR stability criteria against VMEC."""
     eq = Equilibrium()
@@ -587,6 +591,7 @@ def test_compute_dshear(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_compute_dcurr(DSHAPE, HELIOTRON):
     """Test calculation of DCURR stability criteria against VMEC."""
     eq = Equilibrium()
@@ -607,6 +612,7 @@ def test_compute_dcurr(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_compute_dwell(DSHAPE, HELIOTRON):
     """Test calculation of DWELL stability criteria against VMEC."""
     eq = Equilibrium()
@@ -629,6 +635,7 @@ def test_compute_dwell(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_compute_dgeod(DSHAPE, HELIOTRON):
     """Test calculation of DGEOD stability criteria against VMEC."""
     eq = Equilibrium()
@@ -654,6 +661,7 @@ def test_compute_dgeod(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_compute_magnetic_well(DSHAPE, HELIOTRON):
     """Test calculation of magnetic well stability criteria against VMEC."""
 

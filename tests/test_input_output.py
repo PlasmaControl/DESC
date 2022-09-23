@@ -264,6 +264,7 @@ def test_reader_read_obj(reader_test_file):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_pickle_io(SOLOVEV, tmpdir_factory):
     """Test saving and loading equilibrium in pickle format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
@@ -275,6 +276,7 @@ def test_pickle_io(SOLOVEV, tmpdir_factory):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 def test_ascii_io(SOLOVEV, tmpdir_factory):
     """Test saving and loading equilibrium in ASCII format."""
     tmpdir = tmpdir_factory.mktemp("desc_inputs")

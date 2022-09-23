@@ -183,6 +183,7 @@ def test_vmec_save_asym(TmpDir):
 
 @pytest.mark.unit
 @pytest.mark.slow
+@pytest.mark.solve
 def test_vmec_save(DSHAPE, TmpDir):
     """Tests that saving in NetCDF format agrees with VMEC."""
 
@@ -466,6 +467,7 @@ def test_vmec_save(DSHAPE, TmpDir):
 
 
 @pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
 def test_plot_vmec_comparison(SOLOVEV):
     """Test that DESC and VMEC flux surface plots match."""

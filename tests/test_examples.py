@@ -25,6 +25,7 @@ from desc.vmec_utils import vmec_boundary_subspace
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
     """Tests that the SOLOVEV vacuum example gives no rotational transform."""
 
@@ -36,6 +37,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
 
@@ -47,6 +49,7 @@ def test_SOLOVEV_results(SOLOVEV):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_DSHAPE_results(DSHAPE, DSHAPE_current):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
 
@@ -61,6 +64,7 @@ def test_DSHAPE_results(DSHAPE, DSHAPE_current):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
@@ -75,6 +79,7 @@ def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option,
@@ -115,6 +120,7 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
@@ -135,6 +141,7 @@ def test_1d_optimization(SOLOVEV):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_1d_optimization_old(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
 
@@ -154,6 +161,7 @@ def test_1d_optimization_old(SOLOVEV):
 
 
 @pytest.mark.regression
+@pytest.mark.solve
 def test_qh_optimization(precise_QH):
     """Tests precise QH optimization."""
     eq = EquilibriaFamily.load(load_from=str(precise_QH["initial_h5_path"]))[-1]

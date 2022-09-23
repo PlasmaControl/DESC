@@ -371,7 +371,7 @@ class TestPlotBasis(unittest.TestCase):
         return fig
 
     @pytest.mark.slow
-    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+    @pytest.mark.mpl_image_compare(remove_text=True, tolerance=26)
     def test_plot_basis_fourierzernike(self):
         basis = FourierZernikeBasis(L=8, M=3, N=2)
         fig, ax = plot_basis(basis)

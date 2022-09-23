@@ -55,11 +55,4 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest tests/test_plotting.py --durations=0 --mpl --maxfail=1 --mpl-results-path=mpl_results.html --mpl-generate-summary=html
-      - name: save plot comparison results
-        if: always()
-        uses: actions/upload-artifact@v2
-        with:
-          name: my-plotting-artifact
-          path: |
-            ./mpl_results.html
+          python -m pytest tests/test_plotting.py --durations=0 --mpl --maxfail=1 

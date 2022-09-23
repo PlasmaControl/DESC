@@ -65,7 +65,7 @@ def test_DSHAPE_results(DSHAPE, DSHAPE_current):
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
+def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
     def test(stellarator):
@@ -75,7 +75,7 @@ def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vacuum):
         np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
     test(HELIOTRON)
-    test(HELIOTRON_vacuum)
+    test(HELIOTRON_vac)
 
 
 @pytest.mark.regression

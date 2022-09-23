@@ -6,7 +6,8 @@ from netCDF4 import Dataset, stringtochar
 from scipy import optimize, interpolate, integrate
 
 from desc.backend import sign
-from desc.utils import Timer, area_difference
+from desc.compute.utils import compress
+from desc.utils import Timer
 from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
@@ -31,7 +32,7 @@ class VMECIO:
 
     @classmethod
     def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
-        """Load a VMEC netCDF file as a Equilibrium.
+        """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
         ----------
@@ -102,7 +103,7 @@ class VMECIO:
         inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
         inputs["iota"][:, 1] = file.variables["ai"][:]
 
-        file.close
+        file.close()
 
         # boundary
         m, n, Rb_lmn = ptolemy_identity_fwd(xm, xn, s=rmns[-1, :], c=rmnc[-1, :])
@@ -322,20 +323,26 @@ class VMECIO:
         am[:] = np.zeros((file.dimensions["preset"].size,))
         # only using up to 10th order to avoid poor conditioning
         am[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.pressure(r_full), order=10
+            s_full, eq.pressure(r_full), order=10, sym=False
         ).params
 
         ai = file.createVariable("ai", np.float64, ("preset",))
         ai.long_name = "rotational transform coefficients"
         ai[:] = np.zeros((file.dimensions["preset"].size,))
-        # only using up to 10th order to avoid poor conditioning
-        ai[:11] = PowerSeriesProfile.from_values(
-            s_full, eq.iota(r_full), order=10
-        ).params
+        if eq.iota is not None:
+            # only using up to 10th order to avoid poor conditioning
+            ai[:11] = PowerSeriesProfile.from_values(
+                s_full, eq.iota(r_full), order=10, sym=False
+            ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"
         ac[:] = np.zeros((file.dimensions["preset"].size,))
+        if eq.current is not None:
+            # only using up to 10th order to avoid poor conditioning
+            ac[:11] = PowerSeriesProfile.from_values(
+                s_full, eq.current(r_full), order=10, sym=False
+            ).params
 
         presf = file.createVariable("presf", np.float64, ("radius",))
         presf.long_name = "pressure on full mesh"
@@ -355,12 +362,21 @@ class VMECIO:
 
         iotaf = file.createVariable("iotaf", np.float64, ("radius",))
         iotaf.long_name = "rotational transform on full mesh"
-        iotaf[:] = eq.iota(r_full)
+        if eq.iota is not None:
+            iotaf[:] = eq.iota(r_full)
+        else:
+            # value closest to axis will be nan
+            grid = LinearGrid(M=12, N=12, rho=r_full)
+            iotaf[:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
         iotas[0] = 0
-        iotas[1:] = eq.iota(r_half)
+        if eq.iota is not None:
+            iotas[1:] = eq.iota(r_half)
+        else:
+            grid = LinearGrid(M=12, N=12, rho=r_half)
+            iotas[1:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -441,7 +457,7 @@ class VMECIO:
         if not eq.sym:
             zaxis_cc = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
             zaxis_cc.long_name = "cos(n*p) component of magnetic axis Z coordinate"
-            zaxis_cc[1:] = Z0_n[N:]
+            zaxis_cc[:] = Z0_n[N:]
 
         # R
         timer.start("R")
@@ -509,9 +525,10 @@ class VMECIO:
 
         grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
         coords = eq.compute("R", grid)
+        sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
+        cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
+        full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
         if eq.sym:
-            sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
-            cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
             sin_transform = Transform(
                 grid=grid, basis=sin_basis, build=False, build_pinv=True
             )
@@ -519,7 +536,6 @@ class VMECIO:
                 grid=grid, basis=cos_basis, build=False, build_pinv=True
             )
         else:
-            full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
             full_transform = Transform(
                 grid=grid, basis=full_basis, build=False, build_pinv=True
             )
@@ -934,7 +950,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^zeta")
 
-        file.close
+        file.close()
         timer.stop("Total time")
         if verbose > 1:
             timer.disp("Total time")
@@ -1095,54 +1111,6 @@ class VMECIO:
         return out.x
 
     @classmethod
-    def area_difference_vmec(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Compute average normalized area difference between VMEC and DESC equilibria.
-
-        Parameters
-        ----------
-        equil : Equilibrium
-            desc equilibrium to compare
-        vmec_data : dict
-            dictionary of vmec outputs
-        Nr : int, optional
-            number of radial surfaces to average over
-        Nt : int, optional
-            number of vartheta contours to compare
-
-        Returns
-        -------
-        area_rho : ndarray, shape(Nr, Nz)
-            normalized area difference of rho contours, computed as the symmetric
-            difference divided by the intersection
-        area_theta : ndarray, shape(Nt, Nz)
-            normalized area difference between vartheta contours, computed as the area
-            of the polygon created by closing the two vartheta contours divided by the
-            perimeter squared
-
-        """
-        # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
-        if isinstance(vmec_data, (str, os.PathLike)):
-            vmec_data = cls.read_vmec_output(vmec_data)
-
-        if equil.N == 0:
-            Nz = 1
-        else:
-            Nz = 6
-
-        coords = cls.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
-
-        Rr1 = coords["Rr_desc"]
-        Zr1 = coords["Zr_desc"]
-        Rv1 = coords["Rv_desc"]
-        Zv1 = coords["Zv_desc"]
-        Rr2 = coords["Rr_vmec"]
-        Zr2 = coords["Zr_vmec"]
-        Rv2 = coords["Rv_vmec"]
-        Zv2 = coords["Zv_vmec"]
-        area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
-        return area_rho, area_theta
-
-    @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
         """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC
 
@@ -1216,7 +1184,7 @@ class VMECIO:
         )
 
         # Note: the VMEC radial coordinate s is the normalized toroidal magnetic flux;
-        # the DESC radial coordiante rho = sqrt(s)
+        # the DESC radial coordinate rho = sqrt(s)
 
         # convert from rho -> s
         r_nodes = r_grid.nodes

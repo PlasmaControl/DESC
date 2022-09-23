@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import unittest
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.grid import ConcentricGrid
+from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.geometry import (
     FourierRZCurve,
@@ -25,32 +25,45 @@ class TestConstructor(unittest.TestCase):
         self.assertTrue(eq.surface.eq(FourierRZToroidalSurface()))
         self.assertIsInstance(eq.pressure, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
-        self.assertIsInstance(eq.iota, PowerSeriesProfile)
-        np.testing.assert_allclose(eq.i_l, [0])
+        self.assertIsInstance(eq.current, PowerSeriesProfile)
+        np.testing.assert_allclose(eq.c_l, [0])
 
     def test_supplied_objects(self):
 
         pressure = SplineProfile([1, 2, 3])
         iota = SplineProfile([2, 3, 4])
-        surface = ZernikeRZToroidalSection(spectral_indexing="ansi")
-        axis = FourierRZCurve([-1, 10, 1], [1, 0, -1], NFP=2)
-
-        eq = Equilibrium(pressure=pressure, iota=iota, surface=surface, axis=axis)
+        surface = FourierRZToroidalSurface(NFP=2, sym=False)
+        axis = FourierRZCurve([-0.2, 10, 0.3], [0.3, 0, -0.2], NFP=2, sym=False)
+        eq = Equilibrium(
+            M=2,
+            pressure=pressure,
+            iota=iota,
+            surface=surface,
+            axis=axis,
+            N=1,
+            sym=False,
+        )
 
         self.assertTrue(eq.pressure.eq(pressure))
         self.assertTrue(eq.iota.eq(iota))
-        self.assertTrue(eq.surface.eq(surface))
-        self.assertTrue(eq.axis.eq(axis))
         self.assertEqual(eq.spectral_indexing, "ansi")
         self.assertEqual(eq.NFP, 2)
+        self.assertEqual(eq.axis.NFP, 2)
 
-        surface2 = FourierRZToroidalSurface(NFP=3)
+        np.testing.assert_allclose(axis.R_n, eq.Ra_n)
+        np.testing.assert_allclose(axis.Z_n, eq.Za_n)
+
+        surface2 = ZernikeRZToroidalSection(spectral_indexing="ansi")
         eq2 = Equilibrium(surface=surface2)
-        self.assertEqual(eq2.NFP, 3)
-        self.assertEqual(eq2.axis.NFP, 3)
+        self.assertTrue(eq2.surface.eq(surface2))
 
-        eq3 = Equilibrium(surface=surface, axis=None)
-        np.testing.assert_allclose(eq3.axis.R_n, [10])
+        surface3 = FourierRZToroidalSurface(NFP=3)
+        eq3 = Equilibrium(surface=surface3)
+        self.assertEqual(eq3.NFP, 3)
+        self.assertEqual(eq3.axis.NFP, 3)
+
+        eq4 = Equilibrium(surface=surface2, axis=None)
+        np.testing.assert_allclose(eq4.axis.R_n, [10])
 
     def test_dict(self):
 
@@ -168,6 +181,16 @@ class TestConstructor(unittest.TestCase):
             eq = Equilibrium(pressure="abc")
         with pytest.raises(TypeError):
             eq = Equilibrium(iota="def")
+        with pytest.raises(TypeError):
+            eq = Equilibrium(current="def")
+        with pytest.raises(ValueError):  # change to typeeror if allow both
+            eq = Equilibrium(iota="def", current="def")
+        with pytest.raises(ValueError):
+            eq = Equilibrium(iota=None)
+            eq.i_l = None
+        with pytest.raises(ValueError):
+            eq = Equilibrium(iota=PowerSeriesProfile(params=[1, 3], modes=[0, 2]))
+            eq.c_l = None
 
     def test_supplied_coeffs(self):
 
@@ -234,7 +257,7 @@ class TestInitialGuess(unittest.TestCase):
 
         eq = Equilibrium()
         surface = FourierRZToroidalSurface()
-        # turn the circular cross section into an elipse w AR=2
+        # turn the circular cross-section into an ellipse w AR=2
         surface.set_coeffs(m=-1, n=0, R=None, Z=2)
         # move z axis up to 0.5 for no good reason
         axis = FourierRZCurve([0, 10, 0], [0, 0.5, 0])
@@ -332,6 +355,24 @@ class TestInitialGuess(unittest.TestCase):
         np.testing.assert_allclose(eq.Z_lmn, eq2.Z_lmn, atol=1e-8)
         np.testing.assert_allclose(eq.L_lmn, eq2.L_lmn, atol=1e-8)
 
+    def test_NFP_error(self):
+        """Check for ValueError when eq, axis, and surface NFPs do not agree."""
+        axis = FourierRZCurve([-1, 10, 1], [1, 0, -1], NFP=2)
+        surface2 = FourierRZToroidalSurface(NFP=2)
+        surface3 = FourierRZToroidalSurface(NFP=3)
+
+        # test axis and eq NFP not agreeing
+        with pytest.raises(ValueError):
+            eq = Equilibrium(surface=surface3, axis=axis, NFP=3)
+
+        # test axis and surface NFP not agreeing
+        with pytest.raises(ValueError):
+            eq = Equilibrium(surface=surface2, axis=axis, NFP=3)
+
+        # test surface and eq NFP not agreeing
+        with pytest.raises(ValueError):
+            eq = Equilibrium(surface=surface3, axis=axis, NFP=2)
+
 
 def test_guess_from_file(SOLOVEV):
 
@@ -370,3 +411,46 @@ class TestSurfaces(unittest.TestCase):
             surf = eq.get_surface_at(rho=1, zeta=2)
         with pytest.raises(AssertionError):
             surf = eq.get_surface_at(rho=1.2)
+
+
+def test_magnetic_axis(HELIOTRON):
+    """Test that Configuration.axis returns the true axis location."""
+    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
+    axis = eq.axis
+    grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
+
+    data = eq.compute("sqrt(g)", grid=grid)
+    coords = axis.compute_coordinates(grid=grid)
+
+    np.testing.assert_allclose(coords[:, 0], data["R"])
+    np.testing.assert_allclose(coords[:, 2], data["Z"])
+
+
+def test_is_nested():
+
+    eq = Equilibrium()
+    grid = QuadratureGrid(L=10, M=10, N=0)
+    assert eq.is_nested(grid=grid)
+
+    eq.change_resolution(L=2, M=2)
+    eq.R_lmn[eq.R_basis.get_idx(L=1, M=1, N=0)] = 1
+    # make unnested by setting higher order mode to same amplitude as lower order mode
+    eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
+
+    assert eq.is_nested(grid=grid) == False
+
+
+def test_get_profile(DSHAPE):
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    iota0 = eq.iota
+    iota1 = eq.get_profile("iota")
+    current1 = eq.get_profile("current")
+    eq._iota = None
+    eq._current = current1
+    iota2 = eq.get_profile("iota")
+    current2 = eq.get_profile("current")
+
+    np.testing.assert_allclose(iota1.params, iota2.params)
+    np.testing.assert_allclose(current1.params, current2.params)
+    x = np.linspace(0, 1, 20)
+    np.testing.assert_allclose(iota2(x), iota0(x))

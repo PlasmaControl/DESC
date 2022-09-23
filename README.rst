@@ -28,7 +28,7 @@ Quick Start
 The easiest way to install DESC is from pypi: :bash:`pip install desc-opt`
 
 For more detailed instructions on installing DESC and its dependencies, see Installation_.
-The code is run using the syntax :bash:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that if you may have to prepend the command with :bash:`python -m`)
+The code is run using the syntax :bash:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :bash:`python -m`)
 DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files.
 Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in a HDF5 binary file, whose format is detailed in Outputs_.

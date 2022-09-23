@@ -1,16 +1,145 @@
-import numpy as np
-from scipy.signal import convolve2d
 import pytest
+import numpy as np
+from netCDF4 import Dataset
+from scipy.signal import convolve2d
+
 from desc.grid import LinearGrid
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-
-# TODO: add tests for compute_geometry
+from desc.compute.utils import compress  # TODO: remove when we change eq.compute dim
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
 FD_COEF_1_4 = np.array([1 / 12, -2 / 3, 0, 2 / 3, -1 / 12])[::-1]
 FD_COEF_2_2 = np.array([1, -2, 1])[::-1]
 FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
+
+# for mercier function comparison to vmec
+default_range = (0.05, 1)
+default_rtol = 1e-2
+default_atol = 1e-6
+
+
+def all_close(
+    y1, y2, rho, rho_range=default_range, rtol=default_rtol, atol=default_atol
+):
+    """
+    Test that the values of y1 and y2, over the indices defined by the given range,
+    are closer than the given tolerance.
+
+    Parameters
+    ----------
+    y1 : ndarray
+        values to compare
+    y2 : ndarray
+        values to compare
+    rho : ndarray
+        rho values
+    rho_range : (float, float)
+        the range of rho values to compare
+    rtol : float
+        relative tolerance
+    atol : float
+        absolute tolerance
+
+    """
+    minimum, maximum = rho_range
+    interval = np.where((minimum < rho) & (rho < maximum))[0]
+    np.testing.assert_allclose(y1[interval], y2[interval], rtol=rtol, atol=atol)
+
+
+def get_vmec_data(name, quantity):
+    """
+    Parameters
+    ----------
+    name : str
+        Name of the equilibrium.
+    quantity: str
+        Name of the quantity to return.
+
+    Returns
+    -------
+    rho : ndarray
+        Radial coordinate.
+    q : ndarray
+        Variable from VMEC output.
+
+    """
+    f = Dataset("tests/inputs/wout_" + name + ".nc")
+    rho = np.sqrt(f.variables["phi"] / np.array(f.variables["phi"])[-1])
+    q = np.asarray(f.variables[quantity])
+    f.close()
+    return rho, q
+
+
+# TODO: add more tests for compute_geometry
+def test_total_volume(DummyStellarator):
+    """Test that the volume enclosed by the LCFS is equal to the total volume."""
+
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+
+    grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
+    lcfs_volume = eq.compute("V(r)", grid)["V(r)"].mean()
+    total_volume = eq.compute("V")["V"]  # default quadrature grid
+    np.testing.assert_allclose(lcfs_volume, total_volume)
+
+
+def test_enclosed_volumes():
+    """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("V_rr(r)", grid=grid)
+    np.testing.assert_allclose(
+        2 * data["R0"] * (np.pi * rho) ** 2,
+        compress(grid, data["V(r)"]),
+    )
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi ** 2 * rho,
+        compress(grid, data["V_r(r)"]),
+    )
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi ** 2,
+        compress(grid, data["V_rr(r)"]),
+    )
+
+
+def test_surface_areas():
+    """Test that the flux surface areas match known analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("S(r)", grid=grid)
+    S = 4 * data["R0"] * np.pi ** 2 * rho
+    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
+
+
+# TODO: remove or combine with above
+def test_surface_areas_2():
+    eq = Equilibrium()
+
+    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
+    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
+    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
+
+    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
+    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
+    data_z = eq.compute("|e_rho x e_theta|", grid_z)
+
+    Ar = np.sum(
+        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
+    )
+    At = np.sum(
+        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
+    )
+    Az = np.sum(
+        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
+    )
+
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
+    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
+    np.testing.assert_allclose(Az, np.pi)
 
 
 @pytest.mark.slow
@@ -313,16 +442,16 @@ def test_currents(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
 
     grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid_symm = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
 
     data_booz = eq.compute("|B|_mn", grid_full, M_booz=eq.M, N_booz=eq.N)
     data_full = eq.compute("I", grid_full)
-    data_symm = eq.compute("I", grid_symm)
+    data_sym = eq.compute("I", grid_sym)
 
-    np.testing.assert_allclose(data_full["I"], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_symm["I"], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"], data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_symm["G"], data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
 
 
 @pytest.mark.slow
@@ -394,33 +523,125 @@ def test_boozer_transform(DSHAPE):
     )
 
 
-def test_surface_areas():
-    eq = Equilibrium()
-
-    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
-    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
-    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
-
-    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
-    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
-    data_z = eq.compute("|e_rho x e_theta|", grid_z)
-
-    Ar = np.sum(
-        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
-    )
-    At = np.sum(
-        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
-    )
-    Az = np.sum(
-        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
-    )
-
-    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
-    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
-    np.testing.assert_allclose(Az, np.pi)
-
-
 def test_compute_grad_p_volume_avg():
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
+
+
+def test_compute_dmerc(DSHAPE, HELIOTRON):
+    eq = Equilibrium()
+    DMerc = eq.compute("D_Mercier")["D_Mercier"]
+    np.testing.assert_allclose(DMerc, 0, err_msg="should be 0 in vacuum")
+
+    def test(
+        stellarator, name, rho_range=default_range, rtol=default_rtol, atol=default_atol
+    ):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, vmec = get_vmec_data(name, "DMerc")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DMerc = compress(grid, eq.compute("D_Mercier", grid)["D_Mercier"])
+        all_close(DMerc, vmec, rho, rho_range, rtol, atol)
+
+    test(DSHAPE, "DSHAPE", (0.175, 0.785))
+    test(DSHAPE, "DSHAPE", (0.785, 1), atol=53e-3)
+    test(HELIOTRON, "HELIOTRON", (0.1, 0.325), rtol=135e-3)
+    test(HELIOTRON, "HELIOTRON", (0.325, 0.95), rtol=5e-2)
+
+
+def test_compute_dshear(DSHAPE, HELIOTRON):
+    eq = Equilibrium()
+    DShear = eq.compute("D_shear")["D_shear"]
+    np.testing.assert_allclose(DShear, 0, err_msg="should be 0 in vacuum")
+
+    def test(
+        stellarator, name, rho_range=default_range, rtol=default_rtol, atol=default_atol
+    ):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, vmec = get_vmec_data(name, "DShear")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DShear = compress(grid, eq.compute("D_shear", grid)["D_shear"])
+
+        assert np.all(
+            DShear[np.isfinite(DShear)] >= 0
+        ), "D_shear should always have a stabilizing effect."
+        all_close(DShear, vmec, rho, rho_range, rtol, atol)
+
+    test(DSHAPE, "DSHAPE", (0, 1), 1e-12, 0)
+    test(HELIOTRON, "HELIOTRON", (0, 1), 1e-12, 0)
+
+
+def test_compute_dcurr(DSHAPE, HELIOTRON):
+    eq = Equilibrium()
+    DCurr = eq.compute("D_current")["D_current"]
+    np.testing.assert_allclose(DCurr, 0, err_msg="should be 0 in vacuum")
+
+    def test(
+        stellarator, name, rho_range=default_range, rtol=default_rtol, atol=default_atol
+    ):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, vmec = get_vmec_data(name, "DCurr")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DCurr = compress(grid, eq.compute("D_current", grid)["D_current"])
+        all_close(DCurr, vmec, rho, rho_range, rtol, atol)
+
+    test(DSHAPE, "DSHAPE", (0.075, 0.975))
+    test(HELIOTRON, "HELIOTRON", (0.25, 0.85), rtol=1e-1)
+
+
+def test_compute_dwell(DSHAPE, HELIOTRON):
+    eq = Equilibrium()
+    DWell = eq.compute("D_well")["D_well"]
+    np.testing.assert_allclose(DWell, 0, err_msg="should be 0 in vacuum")
+
+    def test(
+        stellarator, name, rho_range=default_range, rtol=default_rtol, atol=default_atol
+    ):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, vmec = get_vmec_data(name, "DWell")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DWell = compress(grid, eq.compute("D_well", grid)["D_well"])
+        all_close(DWell, vmec, rho, rho_range, rtol, atol)
+
+    test(DSHAPE, "DSHAPE", (0.11, 0.785))
+    test(HELIOTRON, "HELIOTRON", (0.01, 0.45), rtol=176e-3)
+    test(HELIOTRON, "HELIOTRON", (0.45, 0.6), atol=75e-2)
+    test(HELIOTRON, "HELIOTRON", (0.6, 0.99), rtol=13e-3)
+
+
+def test_compute_dgeod(DSHAPE, HELIOTRON):
+    eq = Equilibrium()
+    DGeod = eq.compute("D_geodesic")["D_geodesic"]
+    np.testing.assert_allclose(DGeod, 0, err_msg="should be 0 in vacuum")
+
+    def test(
+        stellarator, name, rho_range=default_range, rtol=default_rtol, atol=default_atol
+    ):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, vmec = get_vmec_data(name, "DGeod")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        DGeod = compress(grid, eq.compute("D_geodesic", grid)["D_geodesic"])
+
+        assert np.all(
+            DGeod[np.isfinite(DGeod)] <= 0
+        ), "DGeod should always have a destabilizing effect."
+        all_close(DGeod, vmec, rho, rho_range, rtol, atol)
+
+    test(DSHAPE, "DSHAPE", (0.15, 0.975))
+    test(HELIOTRON, "HELIOTRON", (0.15, 0.825), rtol=12e-2)
+    test(HELIOTRON, "HELIOTRON", (0.85, 0.95), atol=12e-2)
+
+
+def test_compute_magnetic_well(DSHAPE, HELIOTRON):
+    def test(stellarator, name):
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, vmec = get_vmec_data(name, "DWell")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        magnetic_well = compress(
+            grid, eq.compute("magnetic well", grid)["magnetic well"]
+        )
+        # sign should match for finite non-zero pressure cases
+        assert len(np.where(np.sign(magnetic_well) != np.sign(vmec))[0]) <= 6
+
+    test(DSHAPE, "DSHAPE")
+    test(HELIOTRON, "HELIOTRON")

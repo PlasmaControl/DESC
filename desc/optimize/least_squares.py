@@ -164,6 +164,7 @@ def lsqtr(
 
     x_norm = np.linalg.norm(x, ord=xnorm_ord)
     success = None
+    message = None
     step_norm = np.inf
     actual_reduction = np.inf
     ratio = 0  # ratio between actual reduction and predicted reduction
@@ -183,6 +184,7 @@ def lsqtr(
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
         if g_norm < gtol:
             success = True
+            message = status_messages["gtol"]
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration, nfev, cost, actual_reduction, step_norm, g_norm

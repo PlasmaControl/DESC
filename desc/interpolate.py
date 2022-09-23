@@ -24,7 +24,7 @@ def interp1d(
         - `'linear'`: linear interpolation
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         - `'cardinal'`: c1 cubic general tension splines. If used, can also pass keyword
             parameter `c` in float[0,1] to specify tension
     derivative : int
@@ -149,7 +149,7 @@ def interp2d(
         - `'linear'`: linear interpolation
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         - `'cardinal'`: c1 cubic general tension splines. If used, can also pass keyword
             parameter `c` in float[0,1] to specify tension
     derivative : int, array-like
@@ -337,7 +337,7 @@ def interp3d(
         - `'linear'`: linear interpolation
         - `'cubic'`: C1 cubic splines (aka local splines)
         - `'cubic2'`: C2 cubic splines (aka natural splines)
-        - `'catmull-rom'`: C1 cubic centripedal "tension" splines
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         - `'cardinal'`: c1 cubic general tension splines. If used, can also pass keyword
             parameter `c` in float[0,1] to specify tension
     derivative : int, array-like

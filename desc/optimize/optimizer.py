@@ -12,7 +12,9 @@ from desc.objectives import (
     HelicalForceBalance,
     CurrentDensity,
     WrappedEquilibriumObjective,
-    GXWrapper
+    GXWrapper,
+    FixIota,
+    FixCurrent,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr, stoch
@@ -20,9 +22,9 @@ from .utils import check_termination, print_header_nonlinear, print_iteration_no
 
 
 class Optimizer(IOAble):
-    """A helper class to wrap several different optimization routines
+    """A helper class to wrap several optimization routines
 
-    Offers all of the ``scipy.optimize.least_squares`` routines  and several of the most
+    Offers all the ``scipy.optimize.least_squares`` routines  and several of the most
     useful ``scipy.optimize.minimize`` routines.
     Also offers several custom routines specifically designed for DESC, both scalar and
     least squares routines with and without jacobian/hessian information.
@@ -170,7 +172,7 @@ class Optimizer(IOAble):
             If None, the termination by this condition is disabled.
         gtol : float or None, optional
             Absolute tolerance for termination by the norm of the gradient.
-            Default is 1e-8. Optimizer teriminates when ``norm(g) < gtol``, where
+            Default is 1e-8. Optimizer terminates when ``norm(g) < gtol``, where
             # FIXME: missing documentation!
             If None, the termination by this condition is disabled.
         x_scale : array_like or ``'auto'``, optional
@@ -221,6 +223,12 @@ class Optimizer(IOAble):
         nonlinear_constraints = tuple(
             constraint for constraint in constraints if not constraint.linear
         )
+        if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
+            isinstance(lc, FixIota) for lc in linear_constraints
+        ):
+            raise ValueError(
+                "Toroidal current and rotational transform can't be constrained simultaneously"
+            )
 
         # wrap nonlinear constraints if necessary
         wrapped = False
@@ -511,7 +519,7 @@ class Optimizer(IOAble):
             timer.disp("Solution time")
             timer.pretty_print(
                 "Avg time per step",
-                timer["Solution time"] / result.get("nit", result.get("nfev")),
+                timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
             )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)

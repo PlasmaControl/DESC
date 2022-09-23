@@ -231,52 +231,101 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
-        Gx = self._objective.jac(xg)
+#        Gx = self._objective.jac(xg)
         Fx = {
             arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
         }
-        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
+#        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
         for arg in self._eq_objective.args:
             if arg not in Fx.keys():
                 Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-            if arg not in Gx.keys():
-                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
+#            if arg not in Gx.keys():
+#                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
         Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
-        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+#        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
-        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
+#        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
         Fc = Fx @ dxdc
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
-        Gc = Gx @ dxdc
-        GxFx = Gx_reduced @ Fx_reduced_inv
+#        Gc = Gx @ dxdc
+#        GxFx = Gx_reduced @ Fx_reduced_inv
 
-        LHS  = GxFx @ Fc - Gc
+#        LHS  = GxFx @ Fc - Gc
         
-        #I = jnp.eye(len(xg),len(self._Z))
+        I = jnp.eye(len(xg),len(self._Z))
         #print("The shape of I is " + str(I.shape))
         #print("The shape of Z is " + str(self._Z.shape))
         #print("The shape of Fx_reduced_inv is " + str(Fx_reduced_inv.shape))
         #print("The shape of Fc is " + str(Fc.shape))
         #print("The shape of Fx is " + str(Fx.shape))
-        #t = I @ self._Z @ Fx_reduced_inv @ Fc
-        #print("The shape of t is " + str(t.shape))
+        t = I @ self._Z @ Fx_reduced_inv @ Fc
+        print("The shape of t is " + str(t.shape))
+        
+        num_singular_values = 10
+
+        tnorm = jnp.linalg.norm(t,axis=0)
+        print("t is " + str(t))
+        print("tnorm is " + str(tnorm))
+        tnp = np.array(t)
+        tnorm_np = np.array(tnorm)
+        nonzero_col = tnorm_np > 0
+        tnp[:,nonzero_col] /= tnorm_np[nonzero_col]
+        t = jnp.array(tnp)
+        #t = jnp.asarray(t).at([:,nonzero_col]).set(t[:,nonzero_col]/tnorm[nonzero_col])
+        
+
+        tU, tS, tV = jnp.linalg.svd(t)
+        print("The singular values are of t are " + str(tS))
+        tu1 = tU[:,:num_singular_values+1]
+        tv1 = tV[:num_singular_values+1,:]
+        ts1 = tS[:num_singular_values+1]
+
+        print("The shape of tu1 is " + str(tu1.shape))
+        print("The shape of tv1 is " + str(tv1.shape))
+        print("ts1 is " + str(ts1))
+        GxFxFc = jnp.array([])
+        for i in range(len(tu1[0])):
+            GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(tu1[:,i],xg)])
+        GxFxFc = GxFxFc @ jnp.diag(ts1) @ tv1
+        #GxFxFc = self._objective.jvp(tu1,xg)*ts1*tv1
 
         #GxFxFc = jnp.array([])
         #for i in range(len(t[0])):
         #    GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(t[:,i],xg)])
-#        GxFxFc = self._objective.jvp(t,xg)
+        #GxFxFc = self._objective.jvp(t,xg)
 
+        num_singular_values = dxdc.shape[1] 
+        dxdc_norm = jnp.linalg.norm(dxdc,axis=0)
+        print("dxdc is " + str(dxdc))
+        print("dxdc_norm is " + str(dxdc_norm))
+        dxdc_np = np.array(dxdc)
+        dxdc_norm_np = np.array(dxdc_norm)
+        nonzero_col = dxdc_norm_np > 0
+        dxdc_np[:,nonzero_col] /= dxdc_norm_np[nonzero_col]
+        dxdc = np.array(dxdc_np)
+        #dxdc = jnp.asarray(dxdc).at([:,nonzero_col]).set(dxdc[:,nonzero_col]/dxdc_norm[nonzero_col])
+
+        dxdc_U, dxdc_S, dxdc_V = jnp.linalg.svd(dxdc)
+        print("The singular values of dxdc are " + str(dxdc_S))
+        dxdc_u1 = dxdc_U[:,:num_singular_values]
+        dxdc_v1 = dxdc_V[:num_singular_values,:]
+        dxdc_s1 = dxdc_S[:num_singular_values]
+        Gc = jnp.array([])
+        for i in range(len(dxdc_u1[0])):
+            Gc = jnp.hstack([Gc,self._objective.jvp(dxdc_u1[:,i],xg)])
+        Gc = Gc @ jnp.diag(dxdc_s1) @ dxdc_v1
+        #Gc = self._objective.jvp(dxdc_u1,xg)*dxdc_s1*dxdc_v1
 
         #Gc = jnp.array([])
         #print("The shape of xg is " + str(xg.shape))
-        #print("The shape of dxdc is " + str(dxdc.shape))
+        print("The shape of dxdc is " + str(dxdc.shape))
         #for i in range(len(dxdc[0])):
         #    Gc = jnp.hstack([Gc,self._objective.jvp(dxdc[:,i],xg)])
         #Gc = self._objective.jvp(dxdc,xg)
 
-        #LHS = GxFxFc - Gc
+        LHS = jnp.atleast_2d(GxFxFc - Gc)
         print("The shape of LHS is " + str(LHS))
         return -LHS
 

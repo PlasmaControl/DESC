@@ -140,13 +140,14 @@ def stoch(
         print("g/gnorm is " + str(g/gnorm))
         
         x_new = x - step*g/gnorm
-        f_new = fun(x_new,*args)
-        if (f_new-f)/f < -0.05:
-            x_new = x - 2*step*g/gnorm
+        #f_new = fun(x_new,*args)
+        #if (f_new-f)/f < -0.05:
+        #    x_new = x - 2*step*g/gnorm
         x = x_new
-
         print("x_new is " + str(x))
         iteration += 1
+
+        print("outer loop iteration is " + str(iteration))
 
     success = True
     message = None

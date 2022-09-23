@@ -29,14 +29,11 @@ Or from GitHub (for development builds)
     pip install -r devtools/dev-requirements.txt
 
     # OPTION 2: install with conda
-    conda create --name desc-env
-    conda activate desc-env
     # standard build
-    conda install --file requirements_conda.txt
+    conda env create --file requirements_conda.yml
     # developer build (if you want to run tests)
-    conda install --channel conda-forge --file devtools/dev-requirements_conda.txt
-    # required
-    pip install 'jax >= 0.2.11, <= 0.2.25' 'jaxlib >= 0.1.69, <= 0.1.76' nvgpu
+    conda env create --file devtools/dev-requirements_conda.yml
+    conda activate desc-env
 
 On Most Linux Computing Clusters
 ********************************
@@ -56,14 +53,11 @@ Or from GitHub (for development builds)
 
     module load anaconda  # load your python module
 
-    conda create --name desc-env
-    conda activate desc-env
     # standard build
-    conda install --file requirements_conda.txt
+    conda env create --file requirements_conda.yml
     # developer build (if you want to run tests)
-    conda install --channel conda-forge --file devtools/dev-requirements_conda.txt
-    # required
-    pip install 'jax >= 0.2.11, <= 0.2.25' 'jaxlib >= 0.1.69, <= 0.1.76' nvgpu
+    conda env create --file devtools/dev-requirements_conda.yml
+    conda activate desc-env
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -82,11 +76,8 @@ The following are instructions tested to work on the Traverse supercomputer at P
 
     conda create --name desc-env python=3.8
     conda activate desc-env
-    # standard build
-    conda install --file requirements_conda.txt
-    # developer build (if you want to run tests)
-    conda install --channel conda-forge --file devtools/dev-requirements_conda.txt
-    # required
+    # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
+    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,~=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0" psutil "scipy>=1.5.0" termcolor
     pip install nvgpu
 
 Build and install JAX with GPU support:
@@ -103,6 +94,13 @@ Build and install JAX with GPU support:
     python build/build.py --enable_cuda --cuda_path /usr/local/cuda-11.1 --cuda_version=11.1 --cudnn_version=8.0.4 --cudnn_path /usr/local/cudnn/cuda-11.1/8.0.4 --noenable_mkl_dnn --bazel_path /usr/bin/bazel --target_cpu=ppc
     pip install dist/*.whl
     pip install .
+
+Optionally, if you want to be able to use pytest and other development tools:
+
+.. code-block:: sh
+
+    cd ../DESC
+    pip install -r devtools/dev-requirements.txt
 
 Checking your Installation
 **************************

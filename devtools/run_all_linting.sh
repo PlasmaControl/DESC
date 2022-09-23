@@ -1,4 +1,4 @@
 #!/bin/sh
 
-sh 'run_flake8_linting.sh'
-sh 'run_pylint.sh'
+sh -c 'run_flake8_linting.sh'
+sh -c 'run_pylint.sh'

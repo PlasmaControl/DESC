@@ -47,7 +47,7 @@ jobs:
           path: |
             ./cov.xml
             ./mpl_results.html
-	    ./prof.db
+            ./prof.db
       - name: Upload coverage
         uses: codecov/codecov-action@v2
         with:

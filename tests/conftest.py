@@ -172,7 +172,7 @@ def HELIOTRON(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def HELIOTRON_vacuum(tmpdir_factory):
+def HELIOTRON_vac(tmpdir_factory):
     """Run HELIOTRON vacuum (fixed current) example."""
     input_path = ".//tests//inputs//HELIOTRON_vacuum"
     output_dir = tmpdir_factory.mktemp("result")

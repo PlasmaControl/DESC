@@ -184,17 +184,17 @@ def test_vmec_save_asym(TmpDir):
 @pytest.mark.unit
 @pytest.mark.slow
 @pytest.mark.solve
-def test_vmec_save(DSHAPE, TmpDir):
+def test_vmec_save(DSHAPE_current, TmpDir):
     """Tests that saving in NetCDF format agrees with VMEC."""
 
-    vmec = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    vmec = Dataset(str(DSHAPE_current["vmec_nc_path"]), mode="r")
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
     eq._solved = True
     VMECIO.save(
-        eq, str(DSHAPE["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+        eq, str(DSHAPE_current["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )
-    desc = Dataset(str(DSHAPE["desc_nc_path"]), mode="r")
+    desc = Dataset(str(DSHAPE_current["desc_nc_path"]), mode="r")
 
     # parameters
     assert vmec.variables["version_"][:] == desc.variables["version_"][:]
@@ -469,11 +469,11 @@ def test_vmec_save(DSHAPE, TmpDir):
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=50)
-def test_plot_vmec_comparison(SOLOVEV):
+def test_plot_vmec_comparison(DSHAPE_current):
     """Test that DESC and VMEC flux surface plots match."""
 
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    fig, ax = VMECIO.plot_vmec_comparison(eq, str(DSHAPE_current["vmec_nc_path"]))
     return fig
 
 

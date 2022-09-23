@@ -11,7 +11,7 @@ from desc.__main__ import main
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_geometry(DSHAPE, DSHAPE_current):
+def test_compute_geometry(DSHAPE_current):
     """Test computation of plasma geometric values."""
 
     def test(stellarator):
@@ -36,17 +36,16 @@ def test_compute_geometry(DSHAPE, DSHAPE_current):
         assert abs(a_vmec - a_desc) < 5e-3
         assert abs(ar_vmec - ar_desc) < 5e-3
 
-    test(DSHAPE)
     test(DSHAPE_current)
 
 
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_theta_coords(SOLOVEV):
+def test_compute_theta_coords(DSHAPE_current):
     """Test root finding for theta(theta*,lambda(theta))."""
 
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -70,10 +69,10 @@ def test_compute_theta_coords(SOLOVEV):
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_flux_coords(SOLOVEV):
+def test_compute_flux_coords(DSHAPE_current):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
 
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -96,9 +95,9 @@ def test_compute_flux_coords(SOLOVEV):
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
-def test_to_sfl(SOLOVEV):
+def test_to_sfl(DSHAPE_current):
     """Test converting an equilibrium to straight field line coordinates."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
@@ -126,10 +125,9 @@ def test_continuation_resolution(tmpdir_factory):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_grid_resolution_warning(SOLOVEV):
+def test_grid_resolution_warning():
     """Test that a warning is thrown if grid resolution is too low."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = Equilibrium(L=2, M=2, N=2)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
     with pytest.warns(Warning):
@@ -145,10 +143,9 @@ def test_grid_resolution_warning(SOLOVEV):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
-def test_eq_change_grid_resolution(SOLOVEV):
+def test_eq_change_grid_resolution():
     """Test changing equilibrium grid resolution."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = Equilibrium(L=2, M=2, N=2)
     eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
     assert eq.L_grid == 10
     assert eq.M_grid == 10

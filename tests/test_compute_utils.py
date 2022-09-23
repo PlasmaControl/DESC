@@ -104,7 +104,7 @@ class TestComputeUtils:
 
     @pytest.mark.unit
     @pytest.mark.solve
-    def test_surface_area_weighted(self, DSHAPE, HELIOTRON):
+    def test_surface_area_weighted(self, DSHAPE_current, HELIOTRON_vac):
         """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
 
         def test(stellarator):
@@ -114,12 +114,12 @@ class TestComputeUtils:
             areas = compress(grid, surface_integrals(grid, sqrt_g))
             np.testing.assert_allclose(areas, np.sort(areas))
 
-        test(DSHAPE)
-        test(HELIOTRON)
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
     @pytest.mark.solve
-    def test_surface_averages_identity_op(self, DSHAPE, HELIOTRON):
+    def test_surface_averages_identity_op(self, DSHAPE_current, HELIOTRON_vac):
         """Test that surface averages of flux functions are identity operations."""
 
         def test(stellarator):
@@ -130,12 +130,12 @@ class TestComputeUtils:
             pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
             np.testing.assert_allclose(data["p"], pressure_average)
 
-        test(DSHAPE)
-        test(HELIOTRON)
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
     @pytest.mark.solve
-    def test_surface_averages_homomorphism(self, DSHAPE, HELIOTRON):
+    def test_surface_averages_homomorphism(self, DSHAPE_current, HELIOTRON_vac):
         """
         Test that surface averages of flux surface functions are additive homomorphisms.
         Meaning average(a + b) = average(a) + average(b).
@@ -152,12 +152,12 @@ class TestComputeUtils:
             )
             np.testing.assert_allclose(a_plus_b, a + b)
 
-        test(DSHAPE)
-        test(HELIOTRON)
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
     @pytest.mark.solve
-    def test_surface_averages_shortcut(self, DSHAPE, HELIOTRON):
+    def test_surface_averages_shortcut(self, DSHAPE_current, HELIOTRON_vac):
         """Test that surface_averages on single rho surface matches mean() shortcut."""
 
         def test(stellarator):
@@ -177,5 +177,5 @@ class TestComputeUtils:
                 err_msg="average without sqrt(g) fail",
             )
 
-        test(DSHAPE)
-        test(HELIOTRON)
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)

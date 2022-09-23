@@ -444,10 +444,10 @@ def test_magnetic_pressure_gradient(DummyStellarator):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_currents(DSHAPE):
+def test_currents(DSHAPE_current):
     """Test that different methods for computing I and G agree."""
 
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
@@ -502,10 +502,10 @@ def test_quasisymmetry(DummyStellarator):
 # TODO: add test with stellarator example
 @pytest.mark.unit
 @pytest.mark.solve
-def test_boozer_transform(DSHAPE):
+def test_boozer_transform(DSHAPE_current):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
 
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
@@ -544,7 +544,7 @@ def test_compute_grad_p_volume_avg():
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_dmerc(DSHAPE, HELIOTRON):
+def test_compute_dmerc(DSHAPE_current, HELIOTRON_vac):
     """Test calculation of DMERC stability criteria against VMEC."""
     eq = Equilibrium()
     DMerc = eq.compute("D_Mercier")["D_Mercier"]
@@ -559,15 +559,15 @@ def test_compute_dmerc(DSHAPE, HELIOTRON):
         DMerc = compress(grid, eq.compute("D_Mercier", grid)["D_Mercier"])
         all_close(DMerc, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.175, 0.785))
-    test(DSHAPE, "DSHAPE", (0.785, 1), atol=53e-3)
-    test(HELIOTRON, "HELIOTRON", (0.1, 0.325), rtol=135e-3)
-    test(HELIOTRON, "HELIOTRON", (0.325, 0.95), rtol=5e-2)
+    test(DSHAPE_current, "DSHAPE", (0.175, 0.785))
+    test(DSHAPE_current, "DSHAPE", (0.785, 1), atol=53e-3)
+    test(HELIOTRON_vac, "HELIOTRON", (0.1, 0.325), rtol=135e-3)
+    test(HELIOTRON_vac, "HELIOTRON", (0.325, 0.95), rtol=5e-2)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_dshear(DSHAPE, HELIOTRON):
+def test_compute_dshear(DSHAPE_current, HELIOTRON_vac):
     """Test calculation of DSHEAR stability criteria against VMEC."""
     eq = Equilibrium()
     DShear = eq.compute("D_shear")["D_shear"]
@@ -586,13 +586,13 @@ def test_compute_dshear(DSHAPE, HELIOTRON):
         ), "D_shear should always have a stabilizing effect."
         all_close(DShear, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0, 1), 1e-12, 0)
-    test(HELIOTRON, "HELIOTRON", (0, 1), 1e-12, 0)
+    test(DSHAPE_current, "DSHAPE", (0, 1), 1e-12, 0)
+    test(HELIOTRON_vac, "HELIOTRON", (0, 1), 1e-12, 0)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_dcurr(DSHAPE, HELIOTRON):
+def test_compute_dcurr(DSHAPE_current, HELIOTRON_vac):
     """Test calculation of DCURR stability criteria against VMEC."""
     eq = Equilibrium()
     DCurr = eq.compute("D_current")["D_current"]
@@ -607,13 +607,13 @@ def test_compute_dcurr(DSHAPE, HELIOTRON):
         DCurr = compress(grid, eq.compute("D_current", grid)["D_current"])
         all_close(DCurr, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.075, 0.975))
-    test(HELIOTRON, "HELIOTRON", (0.25, 0.85), rtol=1e-1)
+    test(DSHAPE_current, "DSHAPE", (0.075, 0.975))
+    test(HELIOTRON_vac, "HELIOTRON", (0.25, 0.85), rtol=1e-1)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_dwell(DSHAPE, HELIOTRON):
+def test_compute_dwell(DSHAPE_current, HELIOTRON_vac):
     """Test calculation of DWELL stability criteria against VMEC."""
     eq = Equilibrium()
     DWell = eq.compute("D_well")["D_well"]
@@ -628,15 +628,15 @@ def test_compute_dwell(DSHAPE, HELIOTRON):
         DWell = compress(grid, eq.compute("D_well", grid)["D_well"])
         all_close(DWell, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.11, 0.785))
-    test(HELIOTRON, "HELIOTRON", (0.01, 0.45), rtol=176e-3)
-    test(HELIOTRON, "HELIOTRON", (0.45, 0.6), atol=75e-2)
-    test(HELIOTRON, "HELIOTRON", (0.6, 0.99), rtol=13e-3)
+    test(DSHAPE_current, "DSHAPE", (0.11, 0.785))
+    test(HELIOTRON_vac, "HELIOTRON", (0.01, 0.45), rtol=176e-3)
+    test(HELIOTRON_vac, "HELIOTRON", (0.45, 0.6), atol=75e-2)
+    test(HELIOTRON_vac, "HELIOTRON", (0.6, 0.99), rtol=13e-3)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_dgeod(DSHAPE, HELIOTRON):
+def test_compute_dgeod(DSHAPE_current, HELIOTRON_vac):
     """Test calculation of DGEOD stability criteria against VMEC."""
     eq = Equilibrium()
     DGeod = eq.compute("D_geodesic")["D_geodesic"]
@@ -655,14 +655,14 @@ def test_compute_dgeod(DSHAPE, HELIOTRON):
         ), "DGeod should always have a destabilizing effect."
         all_close(DGeod, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, "DSHAPE", (0.15, 0.975))
-    test(HELIOTRON, "HELIOTRON", (0.15, 0.825), rtol=12e-2)
-    test(HELIOTRON, "HELIOTRON", (0.85, 0.95), atol=12e-2)
+    test(DSHAPE_current, "DSHAPE", (0.15, 0.975))
+    test(HELIOTRON_vac, "HELIOTRON", (0.15, 0.825), rtol=12e-2)
+    test(HELIOTRON_vac, "HELIOTRON", (0.85, 0.95), atol=12e-2)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_magnetic_well(DSHAPE, HELIOTRON):
+def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_vac):
     """Test calculation of magnetic well stability criteria against VMEC."""
 
     def test(stellarator, name):
@@ -675,5 +675,5 @@ def test_compute_magnetic_well(DSHAPE, HELIOTRON):
         # sign should match for finite non-zero pressure cases
         assert len(np.where(np.sign(magnetic_well) != np.sign(vmec))[0]) <= 6
 
-    test(DSHAPE, "DSHAPE")
-    test(HELIOTRON, "HELIOTRON")
+    test(DSHAPE_current, "DSHAPE")
+    test(HELIOTRON_vac, "HELIOTRON")

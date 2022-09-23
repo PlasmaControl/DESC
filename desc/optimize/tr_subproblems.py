@@ -361,24 +361,24 @@ def update_tr_radius(
     -------
     trust_radius : float
         New radius.
-    ratio : float
+    reduction_ratio : float
         Ratio between actual and predicted reductions.
     """
     if predicted_reduction > 0:
-        ratio = actual_reduction / predicted_reduction
+        reduction_ratio = actual_reduction / predicted_reduction
     elif predicted_reduction == actual_reduction == 0:
-        ratio = 1
+        reduction_ratio = 1
     else:
-        ratio = 0
+        reduction_ratio = 0
 
-    if ratio < decrease_threshold:
+    if reduction_ratio < decrease_threshold:
         trust_radius = decrease_ratio * step_norm
-    elif ratio > increase_threshold and bound_hit:
-        trust_radius *= increase_ratio
+    elif reduction_ratio > increase_threshold:
+        trust_radius = max(step_norm * increase_ratio, trust_radius)
 
     trust_radius = np.clip(trust_radius, min_tr, max_tr)
 
-    return trust_radius, ratio
+    return trust_radius, reduction_ratio
 
 
 def get_boundaries_intersections(z, d, trust_radius):

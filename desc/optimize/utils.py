@@ -148,7 +148,7 @@ def check_termination(
     dx_norm,
     x_norm,
     g_norm,
-    ratio,
+    reduction_ratio,
     ftol,
     xtol,
     gtol,
@@ -162,8 +162,8 @@ def check_termination(
     max_nhev,
 ):
     """Check termination condition and get message."""
-    ftol_satisfied = dF < abs(ftol * F) and ratio > 0.25
-    xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
+    ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
+    xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
 
     if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):

@@ -868,7 +868,7 @@ class InputReader:
                 inputs["N_grid"] = 2 * numbers[0]
                 Ntor = numbers[0]
             match = re.search(
-                r"NCURR\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"NCURR\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -920,7 +920,7 @@ class InputReader:
                 ]
                 pres_scale = numbers[0]
             match = re.search(
-                r"AM\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"AM\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -944,7 +944,7 @@ class InputReader:
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
                     warnings.warn(colored("Iota is not a power series!", "yellow"))
             match = re.search(
-                r"AI\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"AI\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -976,7 +976,7 @@ class InputReader:
                 ]
                 curr_tor = numbers[0]
             match = re.search(
-                r"AC\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"AC\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -997,7 +997,7 @@ class InputReader:
 
             # magnetic axis
             match = re.search(
-                r"RAXIS(_CC)?\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"RAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1016,7 +1016,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, numbers[k], 0.0])
             match = re.search(
-                r"RAXIS_CS\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"RAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1035,7 +1035,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, -numbers[k], 0.0])
             match = re.search(
-                r"ZAXIS(_CC)?\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"ZAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [
@@ -1054,7 +1054,7 @@ class InputReader:
                         )
                         inputs["axis"][-1, :] = np.array([n, 0.0, numbers[k]])
             match = re.search(
-                r"ZAXIS_CS\s*=(\s*" + num_form + "\s*,?)*", command, re.IGNORECASE
+                r"ZAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
             if match:
                 numbers = [

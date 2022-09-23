@@ -177,18 +177,10 @@ def test_vmec_save_asym(TmpDir):
 
 
 @pytest.mark.slow
-def test_vmec_save(DSHAPE, TmpDir):
+def test_vmec_save1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
 
-    vmec = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
-    eq._solved = True
-    VMECIO.save(
-        eq, str(DSHAPE["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
-    )
-    desc = Dataset(str(DSHAPE["desc_nc_path"]), mode="r")
-
+    vmec, desc = VMEC_save
     # parameters
     assert vmec.variables["version_"][:] == desc.variables["version_"][:]
     assert vmec.variables["mgrid_mode"][:] == desc.variables["mgrid_mode"][:]
@@ -311,6 +303,13 @@ def test_vmec_save(DSHAPE, TmpDir):
     np.testing.assert_allclose(
         vmec.variables["DMerc"][10:160], desc.variables["DMerc"][10:160], rtol=5e-2
     )
+
+
+@pytest.mark.slow
+def test_vmec_save2(VMEC_save):
+    """Tests that saving in NetCDF format agrees with VMEC."""
+
+    vmec, desc = VMEC_save
 
     # straight field-line grid to compare quantities in full volume
     grid = LinearGrid(L=15, M=6, N=0, NFP=desc.variables["nfp"][:])

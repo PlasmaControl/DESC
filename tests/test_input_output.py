@@ -282,6 +282,7 @@ def test_ascii_io(DSHAPE_current, tmpdir_factory):
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("solovev_test.txt")
     eq1 = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq1.iota = eq1.get_profile("iota").to_powerseries()
     write_ascii(tmp_path, eq1)
     with pytest.warns(UserWarning):
         eq2 = read_ascii(tmp_path)

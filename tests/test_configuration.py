@@ -395,7 +395,7 @@ class TestInitialGuess:
     def test_guess_from_file(self, DSHAPE_current):
         """Test setting initial guess from saved equilibrium file."""
         path = DSHAPE_current["desc_h5_path"]
-        eq1 = Equilibrium(M=12, sym=True)
+        eq1 = Equilibrium(M=13, sym=True, spectral_indexing="fringe")
         eq1.set_initial_guess(path)
         eq2 = EquilibriaFamily.load(path)[-1]
 
@@ -468,7 +468,7 @@ def test_is_nested():
     # make unnested by setting higher order mode to same amplitude as lower order mode
     eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
 
-    assert eq.is_nested(grid=grid) == False
+    assert not eq.is_nested(grid=grid)
 
 
 @pytest.mark.unit
@@ -476,15 +476,15 @@ def test_is_nested():
 def test_get_profile(DSHAPE_current):
     """Test getting/setting iota and current profiles."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    iota0 = eq.iota
+    current0 = eq.current
     iota1 = eq.get_profile("iota")
     current1 = eq.get_profile("current")
-    eq._iota = None
-    eq._current = current1
+    eq._current = None
+    eq._iota = iota1
     iota2 = eq.get_profile("iota")
     current2 = eq.get_profile("current")
 
     np.testing.assert_allclose(iota1.params, iota2.params)
     np.testing.assert_allclose(current1.params, current2.params)
     x = np.linspace(0, 1, 20)
-    np.testing.assert_allclose(iota2(x), iota0(x))
+    np.testing.assert_allclose(current2(x), current0(x))

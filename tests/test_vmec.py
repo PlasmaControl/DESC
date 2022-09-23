@@ -191,8 +191,12 @@ def test_vmec_save(DSHAPE_current, TmpDir):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
     eq._solved = True
+    eq.iota = eq.get_profile("iota")
     VMECIO.save(
-        eq, str(DSHAPE_current["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+        eq,
+        str(DSHAPE_current["desc_nc_path"]),
+        surfs=vmec.variables["ns"][:],
+        verbose=0,
     )
     desc = Dataset(str(DSHAPE_current["desc_nc_path"]), mode="r")
 

@@ -39,14 +39,15 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html
+          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --db ./prof.db
       - name: save coverage file and plot comparison results
         uses: actions/upload-artifact@v2
         with:
-          name: my-artifact
+          name: my-artifact-${{ matrix.python-version }}
           path: |
             ./cov.xml
             ./mpl_results.html
+	    ./prof.db
       - name: Upload coverage
         uses: codecov/codecov-action@v2
         with:

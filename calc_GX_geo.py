@@ -25,8 +25,8 @@ import netCDF4 as nc
 
 #path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
 #path = '/home/pk123/DESC/docs/notebooks/tutorials/HELIOTRON_output.h5'
-#path = '/home/pk123/DESC/examples/DESC/SOLOVEV_output.h5'
-path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
+path = '/scratch/gpfs/pk2354/DESC/desc/examples/W7X_output.h5'
+#path = '/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5'
 #path = '/scratch/gpfs/pk2354/DESC/desc/examples/ESTELL_output.h5'
 #path = "/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5"
 psi = 0.5
@@ -36,13 +36,14 @@ nzgrid = 32
 
 
 eq = desc.io.load(path)[-1]
-eq.change_resolution(M=4,L=4,M_grid=8,L_grid=8)
+#eq.change_resolution(M=4,L=4,M_grid=8,L_grid=8)
 grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
 iota_data = eq.compute('iota', grid=grid_1d)
 fi = interp1d(grid_1d.nodes[:,0],iota_data['iota'])
 
 psib = eq.compute('psi')["psi"][-1]
 if psib < 0:
+    print("psib < 0")
     sgn = False
     psib = np.abs(psib)
 else:
@@ -97,8 +98,8 @@ grad_alpha_r = (lmbda_r - zeta*shear)
 grad_alpha_t = (1 + lmbda_t)
 grad_alpha_z = (-iota+lmbda_z)
 
-print("shear is" + str(shear))
-print("iota is " + str(iota_data['iota']))
+#print("shear is" + str(shear))
+#print("iota is " + str(iota_data['iota']))
 
 grad_alpha = np.sqrt(grad_alpha_r**2 * grad['g^rr'] + grad_alpha_t**2 * grad['g^tt'] + grad_alpha_z**2 * grad['g^zz'] + 2*grad_alpha_r*grad_alpha_t*grad['g^rt'] + 2*grad_alpha_r*grad_alpha_z*grad['g^rz']
                      + 2*grad_alpha_t*grad_alpha_z*grad['g^tz'])

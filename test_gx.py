@@ -37,7 +37,8 @@ from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plo
 #eq_init = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 eq_init = desc.io.load('/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5')[-1]
 eq_init.change_resolution(M=6,L=6,M_grid=12,L_grid=12)
-optimizer = Optimizer("lsq-exact")
+#optimizer = Optimizer("lsq-exact")
+optimizer = Optimizer("stochastic")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=0)
 #idx_Rss = eq_init.surface.R_basis.get_idx(M=-2, N=0)
 idx_Zsc = eq_init.surface.Z_basis.get_idx(M=-1, N=0)
@@ -57,6 +58,8 @@ constraints = (
     FixPsi(),  # fix total toroidal magnetic flux
 )
 
+#constraint = ObjectiveFunction((ForceBalance(),FixBoundaryR(modes=R_modes),FixBoundaryZ(modes=Z_modes),FixPressure(),FixIota(),FixPsi()))
+
 grid_vol = ConcentricGrid(L=eq_init.L_grid, M=eq_init.M_grid, N=eq_init.N_grid, NFP=eq_init.NFP, sym=eq_init.sym)
 #plot_grid(grid_vol);
 #objective_fT = ObjectiveFunction(QuasisymmetryTripleProduct(grid=grid_vol), verbose=0,use_jit=False)
@@ -64,14 +67,15 @@ objective_fT = ObjectiveFunction(GXWrapper(target=0.1),verbose=0,use_jit=False)
 
 eq_qs_T_unc, result_T_unc = eq_init.optimize(
     objective=objective_fT,
+    #constraint=constraint,
     constraints=constraints,
     optimizer=optimizer,
     ftol=1e-2,  # stopping tolerance on the function value
     xtol=1e-6,  # stopping tolerance on the step size
     gtol=1e-6,  # stopping tolerance on the gradient
-    maxiter=5,  # maximum number of iterations
+    maxiter=20,  # maximum number of iterations
     options={
-        "initial_trust_radius":0.01,
+        #"initial_trust_radius":0.1,
         "perturb_options": {"order": 2, "verbose": 0},  # use 2nd-order perturbations
         "solve_options": {"ftol": 1e-2, "xtol": 1e-6, "gtol": 1e-6, "verbose": 0}, # for equilibrium subproblem
     },
@@ -79,5 +83,5 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     verbose=3,
 )
 
-eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx_MN6_4modes_test.h5')
+eq_qs_T_unc.save('/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_gx_nl.h5')
 

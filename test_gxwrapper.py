@@ -6,8 +6,8 @@ from desc.derivatives import nested_zeros_like
 import numpy as np
 import jax
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
-#eq = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5")[-1]
-eq = desc.io.load("/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs.h5")
+eq = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5")[-1]
+#eq = desc.io.load("/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs.h5")
 eq.change_resolution(M=6,L=6,M_grid=12,L_grid=12)
 gxw = GXWrapper(eq=eq)
 gxw.compute(R_lmn=eq.R_lmn,Z_lmn=eq.Z_lmn,L_lmn=eq.L_lmn,i_l=eq.i_l,p_l=eq.p_l,Psi=eq.Psi)

@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 from desc.backend import jnp
 from desc.optimize import fmintr, lsqtr
-from desc.optimize.utils import make_spd, chol_U_update
 from scipy.optimize import rosen, rosen_der, rosen_hess
 from desc.derivatives import Derivative
 from numpy.random import default_rng
@@ -11,6 +10,7 @@ from scipy.optimize import BFGS
 
 
 def vector_fun(x, p):
+    """Complicated-ish vector valued function for testing least squares."""
     a0 = x * p[0]
     a1 = jnp.exp(-(x ** 2) * p[1])
     a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
@@ -22,6 +22,7 @@ def vector_fun(x, p):
 
 
 def scalar_fun(x):
+    """Simple convex function for testing scalar minimization."""
     return x[0] ** 2 + x[1] ** 2 - jnp.log(x[0] + 2) + 10 - jnp.log(x[1] + 2)
 
 

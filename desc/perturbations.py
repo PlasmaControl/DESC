@@ -5,7 +5,7 @@ from desc.objectives.utils import factorize_linear_constraints
 from desc.backend import use_jax, put
 from desc.utils import Timer
 from desc.compute import arg_order
-from desc.optimize.utils import evaluate_quadratic
+from desc.optimize.utils import evaluate_quadratic_form_jac
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.objectives import ObjectiveFunction, get_fixed_boundary_constraints
 
@@ -700,7 +700,7 @@ def optimal_perturb(
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
+    predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:

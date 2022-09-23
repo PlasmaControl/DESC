@@ -487,4 +487,4 @@ def test_get_profile(DSHAPE_current):
     np.testing.assert_allclose(iota1.params, iota2.params)
     np.testing.assert_allclose(current1.params, current2.params)
     x = np.linspace(0, 1, 20)
-    np.testing.assert_allclose(current2(x), current0(x))
+    np.testing.assert_allclose(current2(x), current0(x), rtol=1e-6, atol=1e-6)

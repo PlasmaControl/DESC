@@ -607,7 +607,7 @@ def test_compute_dcurr(DSHAPE_current, HELIOTRON_vac):
         DCurr = compress(grid, eq.compute("D_current", grid)["D_current"])
         all_close(DCurr, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, "DSHAPE", (0.075, 0.975))
+    test(DSHAPE_current, "DSHAPE", (0.075, 0.975), rtol=7e-2)
     test(HELIOTRON_vac, "HELIOTRON", (0.25, 0.85), rtol=1e-1)
 
 
@@ -628,10 +628,10 @@ def test_compute_dwell(DSHAPE_current, HELIOTRON_vac):
         DWell = compress(grid, eq.compute("D_well", grid)["D_well"])
         all_close(DWell, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, "DSHAPE", (0.11, 0.785))
-    test(HELIOTRON_vac, "HELIOTRON", (0.01, 0.45), rtol=176e-3)
-    test(HELIOTRON_vac, "HELIOTRON", (0.45, 0.6), atol=75e-2)
-    test(HELIOTRON_vac, "HELIOTRON", (0.6, 0.99), rtol=13e-3)
+    test(DSHAPE_current, "DSHAPE", (0.11, 0.785), rtol=3e-2)
+    test(HELIOTRON_vac, "HELIOTRON", (0.01, 0.45), rtol=1.76e-1)
+    test(HELIOTRON_vac, "HELIOTRON", (0.45, 0.6), atol=7.5e-1)
+    test(HELIOTRON_vac, "HELIOTRON", (0.6, 0.99), rtol=1.3e-2)
 
 
 @pytest.mark.unit
@@ -655,7 +655,7 @@ def test_compute_dgeod(DSHAPE_current, HELIOTRON_vac):
         ), "DGeod should always have a destabilizing effect."
         all_close(DGeod, vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, "DSHAPE", (0.15, 0.975))
+    test(DSHAPE_current, "DSHAPE", (0.15, 0.975), rtol=2e-2)
     test(HELIOTRON_vac, "HELIOTRON", (0.15, 0.825), rtol=12e-2)
     test(HELIOTRON_vac, "HELIOTRON", (0.85, 0.95), atol=12e-2)
 

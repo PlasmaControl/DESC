@@ -120,7 +120,6 @@ def lsqtr(
     n = x0.size
     x = x0.copy()
     f = fun(x, *args)
-    m = f.size
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     J = jac(x, *args)
@@ -149,10 +148,16 @@ def lsqtr(
     g_h = g * scale
     J_h = J * scale
 
-    # initial trust region radius
-    trust_radius = options.pop(
-        "initial_trust_radius", np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2)
+    # initial trust region radius is based on the geometric mean of 2 possible rules:
+    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # second is the norm of the scaled x, as used in scipy
+    # in practice for our problems the C&G one is too small, while scipy is too big,
+    # but the geometric mean seems to work well
+    init_tr = np.sqrt(
+        np.sqrt(np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2))
+        * np.linalg.norm(x * scale_inv)
     )
+    trust_radius = options.pop("initial_trust_radius", init_tr)
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
@@ -256,7 +261,7 @@ def lsqtr(
 
             # update the trust radius according to the actual/predicted ratio
             tr_old = trust_radius
-            trust_radius, ratio = update_tr_radius(
+            trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
                 predicted_reduction,
@@ -279,7 +284,7 @@ def lsqtr(
                 step_norm,
                 x_norm,
                 g_norm,
-                ratio,
+                reduction_ratio,
                 ftol,
                 xtol,
                 gtol,

@@ -152,7 +152,6 @@ def fmintr(
     max_nhev = options.pop("max_nhev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    step_accept_threshold = options.pop("step_accept_threshold", 0.15)
     ga_fd_step = options.pop("ga_fd_step", 0.1)
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", True)
@@ -169,10 +168,17 @@ def fmintr(
     g_h = g * scale
     H_h = scale * H * scale[:, None]
 
-    # initial trust region radius
     g_norm = np.linalg.norm(g, ord=gnorm_ord)
     x_norm = np.linalg.norm(x, ord=xnorm_ord)
-    trust_radius = options.pop("initial_trust_radius", (g_h @ g_h) / (g_h @ H_h @ g_h))
+    # initial trust region radius is based on the geometric mean of 2 possible rules:
+    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # second is the norm of the scaled x, as used in scipy
+    # in practice for our problems the C&G one is too small, while scipy is too big,
+    # but the geometric mean seems to work well
+    init_tr = np.sqrt(
+        np.sqrt((g_h @ g_h) / abs(g_h @ H_h @ g_h)) * np.linalg.norm(x * scale_inv)
+    )
+    trust_radius = options.pop("initial_trust_radius", init_tr)
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
@@ -272,7 +278,7 @@ def fmintr(
             actual_reduction = f - f_new
 
             # update the trust radius according to the actual/predicted ratio
-            trust_radius, ratio = update_tr_radius(
+            trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
                 predicted_reduction,
@@ -294,7 +300,7 @@ def fmintr(
                 step_norm,
                 x_norm,
                 g_norm,
-                ratio,
+                reduction_ratio,
                 ftol,
                 xtol,
                 gtol,

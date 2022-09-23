@@ -170,7 +170,7 @@ def test_fsa_F_normalized(DSHAPE):
 def test_fsa_F_normalized_vac(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
-    ax.set_ylim([1e-12, 1e-9])
+    ax.set_ylim([1e-6, 2e-4])
     return fig
 
 

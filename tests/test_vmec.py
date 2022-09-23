@@ -542,7 +542,7 @@ def test_vmec_save2(VMEC_save):
     desc.close()
 
 
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=1)
 def test_plot_vmec_comparison(SOLOVEV):
     """Test that DESC and VMEC flux surface plots match."""
 

@@ -24,6 +24,7 @@ jobs:
     strategy:
       matrix:
         python-version: [3.7, 3.8, 3.9]
+	group: [1, 2, 3]
 
     steps:
       - uses: actions/checkout@v2
@@ -39,11 +40,11 @@ jobs:
         run: |
           pwd
           lscpu
-          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --db ./prof.db
+          python -m pytest --durations=0 --cov-report xml:cov.xml --cov-config=setup.cfg --cov=desc/ --mpl --mpl-results-path=mpl_results.html --mpl-generate-summary=html --db ./prof.db --splits 3 --group ${{ matrix.group }}
       - name: save coverage file and plot comparison results
         uses: actions/upload-artifact@v2
         with:
-          name: my-artifact-${{ matrix.python-version }}
+          name: artifact-${{ matrix.python-version }}-group${{ matrix.group }}
           path: |
             ./cov.xml
             ./mpl_results.html

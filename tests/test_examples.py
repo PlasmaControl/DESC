@@ -50,32 +50,46 @@ def test_SOLOVEV_results(SOLOVEV):
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_DSHAPE_results(DSHAPE, DSHAPE_current):
+def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
 
-    def test(stellarator):
-        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho_err, theta_err = area_difference_vmec(eq, stellarator["vmec_nc_path"])
-        np.testing.assert_allclose(rho_err, 0, atol=2e-3)
-        np.testing.assert_allclose(theta_err, 0, atol=1e-5)
-
-    test(DSHAPE)
-    test(DSHAPE_current)
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
+    np.testing.assert_allclose(rho_err, 0, atol=2e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
 
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_HELIOTRON_results(HELIOTRON, HELIOTRON_vac):
+def test_DSHAPE_current_results(DSHAPE_current):
+    """Tests that the DSHAPE with fixed current gives the same results as VMEC."""
+
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, DSHAPE_current["vmec_nc_path"])
+    np.testing.assert_allclose(rho_err, 0, atol=2e-3)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_HELIOTRON_results(HELIOTRON):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
-    def test(stellarator):
-        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-        rho_err, theta_err = area_difference_vmec(eq, stellarator["vmec_nc_path"])
-        np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
-        np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
+    eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
+    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
-    test(HELIOTRON)
-    test(HELIOTRON_vac)
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_HELIOTRON_results(HELIOTRON_vac):
+    """Tests that the HELIOTRON examples gives the same results as VMEC."""
+
+    eq = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_vmec(eq, HELIOTRON_vac["vmec_nc_path"])
+    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
 @pytest.mark.regression

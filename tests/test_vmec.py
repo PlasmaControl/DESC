@@ -148,7 +148,7 @@ def test_load_then_save(TmpDir):
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
     eq = VMECIO.load(input_path)
-    VMECIO.save(eq, output_path)
+    VMECIO.save(eq, output_path, surfs=64)
 
     file1 = Dataset(input_path, mode="r")
     file2 = Dataset(output_path, mode="r")

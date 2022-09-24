@@ -44,7 +44,6 @@ def test_kwarg_warning(DummyStellarator):
     return None
 
 
-
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
@@ -59,7 +58,7 @@ def test_1d_p(SOLOVEV):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_dpdr(DSHAPE):
-    """Test plotting 1d pressure derivative."""    
+    """Test plotting 1d pressure derivative."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "p_r", figsize=(4, 4))
     return fig
@@ -69,7 +68,7 @@ def test_1d_dpdr(DSHAPE):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_iota(DSHAPE):
-    """Test plotting 1d rotational transform."""    
+    """Test plotting 1d rotational transform."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
     fig, ax = plot_1d(eq, "iota", grid=grid, figsize=(4, 4))
@@ -220,7 +219,7 @@ def test_fsa_F_normalized(DSHAPE):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_fsa_F_normalized_vac(DSHAPE):
-    """Test plotting flux surface average normalized force error on log scale in vacuum."""    
+    """Test plotting flux surface average normalized force error on log scale in vacuum."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
     ax.set_ylim([1e-6, 2e-4])
@@ -241,7 +240,7 @@ def test_section_J(DSHAPE):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=24)
 def test_section_Z(DSHAPE):
-    """Test plotting poincare section of Z coordinate."""    
+    """Test plotting poincare section of Z coordinate."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "Z")
     return fig
@@ -379,7 +378,6 @@ def test_plot_gradpsi(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|grad(rho)|", figsize=(4, 4))
     return fig
-
 
 
 @pytest.mark.unit
@@ -527,7 +525,6 @@ class TestPlotFieldLines:
     def test_field_line_Rbf(self):
         pass
 
-
     @pytest.mark.unit
     @pytest.mark.solve
     @pytest.mark.slow
@@ -537,7 +534,7 @@ class TestPlotFieldLines:
         eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
         fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
         return fig
-     
+
     @pytest.mark.unit
     @pytest.mark.solve
     @pytest.mark.slow
@@ -550,11 +547,12 @@ class TestPlotFieldLines:
         )
         return fig
 
+
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_plot_boozer_modes(DSHAPE):
-    """Test plotting boozer spectrum."""    
+    """Test plotting boozer spectrum."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_boozer_modes(eq)
     ax.set_ylim([1e-12, 1e0])
@@ -579,7 +577,6 @@ def test_plot_qs_error(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     fig, ax = plot_qs_error(eq, helicity=(0, 0), log=False)
     return fig
-
 
 
 # @pytest.mark.unit

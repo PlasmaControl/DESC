@@ -86,7 +86,7 @@ def test_compute_d_mercier(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
-@pytest.mark.solve    
+@pytest.mark.solve
 def test_compute_d_shear(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DShear = eq.compute("D_shear")["D_shear"]
@@ -110,7 +110,7 @@ def test_compute_d_shear(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
-@pytest.mark.solve    
+@pytest.mark.solve
 def test_compute_d_current(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DCurr = eq.compute("D_current")["D_current"]
@@ -128,7 +128,7 @@ def test_compute_d_current(DSHAPE, HELIOTRON):
     test(DSHAPE, "DSHAPE", (0.075, 0.975))
     test(HELIOTRON, "HELIOTRON", (0.25, 0.85), rtol=1e-1)
 
-    
+
 @pytest.mark.unit
 @pytest.mark.solve
 def test_compute_d_well(DSHAPE, HELIOTRON):
@@ -152,7 +152,7 @@ def test_compute_d_well(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
-@pytest.mark.solve    
+@pytest.mark.solve
 def test_compute_d_geodesic(DSHAPE, HELIOTRON):
     eq = Equilibrium()
     DGeod = eq.compute("D_geodesic")["D_geodesic"]
@@ -177,7 +177,7 @@ def test_compute_d_geodesic(DSHAPE, HELIOTRON):
 
 
 @pytest.mark.unit
-@pytest.mark.solve    
+@pytest.mark.solve
 def test_compute_magnetic_well(DSHAPE, HELIOTRON):
     def test(stellarator, name):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]

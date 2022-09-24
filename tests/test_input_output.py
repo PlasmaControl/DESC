@@ -327,3 +327,9 @@ def test_save_none(tmpdir_factory):
     eq.save(tmpdir + "none_test.h5")
     eq1 = load(tmpdir + "none_test.h5")
     assert eq1.iota is None
+
+
+def test_load_eq_without_current():
+    desc_no_current_path = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+    eq = load(desc_no_current_path)[-1]
+    assert eq.current is None

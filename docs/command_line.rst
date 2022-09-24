@@ -14,6 +14,6 @@ DESC is executed with the following command line syntax:
 As an example, the following command will run the 'SOLOVEV' input file on a GPU
 with timing output and save the solution to the file `solution.h5`:
 
-.. code-block:: bash
+.. code-block:: console
 
    python -m desc --gpu -vvv -o solution.h5 examples/DESC/SOLOVEV

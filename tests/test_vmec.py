@@ -472,7 +472,7 @@ def test_vmec_save(DSHAPE_current, TmpDir):
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(tolerance=50)
+@pytest.mark.mpl_image_compare(tolerance=1)
 def test_plot_vmec_comparison(DSHAPE_current):
     """Test that DESC and VMEC flux surface plots match."""
 

@@ -15,7 +15,7 @@ def write_ascii(fname, eq):
     # can't import other stuff in io due to circular imports, so have to check by name
     assert (
         eq.pressure.__class__.__name__ == "PowerSeriesProfile"
-        and eq.iota.__class__.__name__ != "PowerSeriesProfile"
+        and eq.iota.__class__.__name__ == "PowerSeriesProfile"
     ), "Equilibrium must have power series profiles for ascii io"
 
     pressure = eq.pressure

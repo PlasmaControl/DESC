@@ -186,6 +186,7 @@ def read_ascii(filename):
     else:
         eq["sym"] = False
 
+    eq["spectral_indexing"] = "ansi" if eq["L"] == eq["M"] else "fringe"
     equil = Equilibrium(**eq)
     equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
     equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)

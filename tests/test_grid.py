@@ -210,7 +210,7 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):
-        """Tests that enforce_symmetry spaces theta nodes correctly."""
+        """Test that enforce_symmetry spaces theta nodes correctly."""
 
         def test(grid):
             # check if theta nodes cover the circumference of the theta curve
@@ -221,12 +221,12 @@ class TestGrid:
         # this grid has 2 surfaces near axis lacking theta > pi nodes.
         # These edge cases should be handled correctly.
         # Otherwise, a dimension mismatch / broadcast error should be raised.
-        test(ConcentricGrid(L=20, M=3, N=3, sym=True))
-        test(LinearGrid(L=20, M=3, N=3, sym=True))
+        test(ConcentricGrid(L=20, M=3, N=2, sym=True))
+        test(LinearGrid(L=20, M=3, N=2, sym=True))
 
     @pytest.mark.unit
     def test_symmetry_1(self):
-        """Tests that surface averages of a smooth function are correct."""
+        """Test surface averages of a smooth function."""
 
         def test(grid, err_msg):
             t = grid.nodes[:, 1]

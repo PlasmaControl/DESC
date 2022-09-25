@@ -103,8 +103,8 @@ def test_to_sfl(DSHAPE_current):
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2.5e-5)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-7)
+    np.testing.assert_allclose(rho_err, 0, atol=2.5e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.slow

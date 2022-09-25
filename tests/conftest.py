@@ -172,6 +172,24 @@ def HELIOTRON(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
+def HELIOTRON_ex(tmpdir_factory):
+    """Saved HELIOTRON fixed rotational transform example."""
+    input_path = ".//tests//inputs//HELIOTRON"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = ".//desc//examples//HELIOTRON_output.h5"
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
+
+    HELIOTRON_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_out
+
+
+@pytest.fixture(scope="session")
 def HELIOTRON_vac(tmpdir_factory):
     """Run HELIOTRON vacuum (fixed current) example."""
     input_path = ".//tests//inputs//HELIOTRON_vacuum"

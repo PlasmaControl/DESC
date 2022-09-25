@@ -6,6 +6,7 @@ import desc.io
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
+import desc.examples
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
@@ -78,7 +79,7 @@ def test_mercier_vacuum():
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_d_shear(DSHAPE, HELIOTRON):
+def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
     """Test that D_shear has a stabilizing effect and matches VMEC."""
 
     def test(stellarator, rho_range=(0, 1), rtol=1e-12, atol=0):
@@ -92,13 +93,13 @@ def test_compute_d_shear(DSHAPE, HELIOTRON):
         ), "D_shear should always have a stabilizing effect."
         all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE)
-    test(HELIOTRON)
+    test(DSHAPE_current, (0.2, 0.9))
+    test(HELIOTRON_ex)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_d_current(DSHAPE, HELIOTRON):
+def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
     """Test calculation of D_current stability criterion against VMEC."""
 
     def test(
@@ -115,13 +116,13 @@ def test_compute_d_current(DSHAPE, HELIOTRON):
         )
         all_close(d_current, d_current_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, (0.075, 0.975))
-    test(HELIOTRON, (0.25, 0.85), rtol=1e-1)
+    test(DSHAPE_current, (0.2, 0.9), rtol=1e-2, atol=1e-2)
+    test(HELIOTRON_ex, (0.25, 0.85), rtol=1e-1)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_d_well(DSHAPE, HELIOTRON):
+def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
     """Test calculation of D_well stability criterion against VMEC."""
 
     def test(
@@ -137,15 +138,15 @@ def test_compute_d_well(DSHAPE, HELIOTRON):
         )
         all_close(d_well, d_well_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, (0.11, 1))
-    test(HELIOTRON, (0.01, 0.45), rtol=1.75e-1)
-    test(HELIOTRON, (0.45, 0.6), atol=7.2e-1)
-    test(HELIOTRON, (0.6, 0.99), rtol=1.3e-2)
+    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
+    test(HELIOTRON_ex, (0.01, 0.45), rtol=1.75e-1)
+    test(HELIOTRON_ex, (0.45, 0.6), atol=7.2e-1)
+    test(HELIOTRON_ex, (0.6, 0.99), rtol=1.3e-2)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_d_geodesic(DSHAPE, HELIOTRON):
+def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
     """Test that D_geodesic has a destabilizing effect and matches VMEC."""
 
     def test(
@@ -161,14 +162,14 @@ def test_compute_d_geodesic(DSHAPE, HELIOTRON):
         ), "D_geodesic should always have a destabilizing effect."
         all_close(d_geodesic, d_geodesic_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, (0.15, 0.975))
-    test(HELIOTRON, (0.15, 0.825), rtol=1.2e-1)
-    test(HELIOTRON, (0.85, 0.95), atol=1.2e-1)
+    test(DSHAPE_current, (0.2, 0.9), rtol=2e-2)
+    test(HELIOTRON_ex, (0.15, 0.825), rtol=1.2e-1)
+    test(HELIOTRON_ex, (0.85, 0.95), atol=1.2e-1)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_d_mercier(DSHAPE, HELIOTRON):
+def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
     """Test calculation of D_Mercier stability criterion against VMEC."""
 
     def test(
@@ -185,14 +186,14 @@ def test_compute_d_mercier(DSHAPE, HELIOTRON):
         )
         all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE, (0.175, 1))
-    test(HELIOTRON, (0.1, 0.325), rtol=1.3e-1)
-    test(HELIOTRON, (0.325, 0.95), rtol=4e-2)
+    test(DSHAPE_current, (0.2, 0.9), rtol=2e-2)
+    test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
+    test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
 
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_compute_magnetic_well(DSHAPE, HELIOTRON):
+def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
     """Test that D_well and magnetic_well match signs under finite pressure."""
 
     def test(stellarator, rho=np.linspace(0, 1, 128)):
@@ -207,5 +208,5 @@ def test_compute_magnetic_well(DSHAPE, HELIOTRON):
             len(np.where(np.sign(d_well) != np.sign(magnetic_well))[0]) <= MAX_SIGN_DIFF
         )
 
-    test(DSHAPE)
-    test(HELIOTRON)
+    test(DSHAPE_current)
+    test(HELIOTRON_ex)

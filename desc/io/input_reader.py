@@ -225,7 +225,7 @@ class InputReader:
             command = (line.strip() + " ")[0:comment]
             argument = (command.strip() + " ")[0:equals]
             data = command[equals + 1 :]
-            words = data.split().lower()
+            words = data.split()
             num_list = re.split(r"[\s,;]", data)
             numbers = np.array([])
             for txt in num_list:
@@ -341,23 +341,23 @@ class InputReader:
             # solver methods
             match = re.search(r"objective", argument, re.IGNORECASE)
             if match:
-                inputs["objective"] = words[0]
+                inputs["objective"] = words[0].lower()
                 flag = True
             match = re.search(r"optimizer", argument, re.IGNORECASE)
             if match:
-                inputs["optimizer"] = words[0]
+                inputs["optimizer"] = words[0].lower()
                 flag = True
             match = re.search(r"spectral_indexing", argument, re.IGNORECASE)
             if match:
-                inputs["spectral_indexing"] = words[0]
+                inputs["spectral_indexing"] = words[0].lower()
                 flag = True
             match = re.search(r"node_pattern", argument, re.IGNORECASE)
             if match:
-                inputs["node_pattern"] = words[0]
+                inputs["node_pattern"] = words[0].lower()
                 flag = True
             match = re.search(r"bdry_mode", argument, re.IGNORECASE)
             if match:
-                inputs["bdry_mode"] = words[0]
+                inputs["bdry_mode"] = words[0].lower()
                 flag = True
                 # TODO: set bdry_mode automatically based on bdry coeffs
 

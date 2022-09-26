@@ -283,10 +283,14 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["buco"][:]), np.abs(desc.variables["buco"][:]), rtol=1e-3
+        np.abs(vmec.variables["buco"][20:100]),
+        np.abs(desc.variables["buco"][20:100]),
+        rtol=3e-2,
     )
     np.testing.assert_allclose(
-        np.abs(vmec.variables["bvco"][:]), np.abs(desc.variables["bvco"][:]), rtol=1e-3
+        np.abs(vmec.variables["bvco"][20:100]),
+        np.abs(desc.variables["bvco"][20:100]),
+        rtol=3e-2,
     )
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2

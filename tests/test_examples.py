@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 import desc.examples
-from .utils import area_difference_vmec
+from .utils import area_difference_vmec, area_difference_desc
 from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium, EquilibriaFamily
@@ -94,6 +94,18 @@ def test_HELIOTRON_results(HELIOTRON_vac):
 
 @pytest.mark.regression
 @pytest.mark.solve
+def test_precise_QH_results(precise_QH):
+    """Tests that the precise QH initial solve gives the same results as a base case."""
+
+    eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
+    eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-6)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option,
@@ -176,9 +188,9 @@ def test_1d_optimization_old(SOLOVEV):
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_qh_optimization(precise_QH):
+def test_qh_optimization():
     """Tests precise QH optimization."""
-    eq = EquilibriaFamily.load(load_from=str(precise_QH["initial_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=".//tests//inputs//precise_QH_output.h5")[-1]
     grid = LinearGrid(
         M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )

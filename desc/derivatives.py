@@ -113,8 +113,6 @@ class AutoDiffDerivative(_Derivative):
         ``'hess'`` (hessian of a scalar function),
         or ``'jvp'`` (jacobian vector product)
         Default = ``'fwd'``
-    use_jit : bool, optional
-        whether to use just-in-time compilation
 
     Raises
     ------
@@ -122,11 +120,10 @@ class AutoDiffDerivative(_Derivative):
 
     """
 
-    def __init__(self, fun, argnum=0, mode="fwd", use_jit=False, **kwargs):
+    def __init__(self, fun, argnum=0, mode="fwd", **kwargs):
 
         self._fun = fun
         self._argnum = argnum
-        self._use_jit = use_jit
 
         self._set_mode(mode)
 
@@ -280,28 +277,16 @@ class AutoDiffDerivative(_Derivative):
             )
 
         self._mode = mode
-        if self._use_jit:
-            if self._mode == "fwd":
-                self._compute = jax.jit(jax.jacfwd(self._fun, self._argnum))
-            elif self._mode == "rev":
-                self._compute = jax.jit(jax.jacrev(self._fun, self._argnum))
-            elif self._mode == "grad":
-                self._compute = jax.jit(jax.grad(self._fun, self._argnum))
-            elif self._mode == "hess":
-                self._compute = jax.jit(jax.hessian(self._fun, self._argnum))
-            elif self._mode == "jvp":
-                self._compute = self._compute_jvp
-        else:
-            if self._mode == "fwd":
-                self._compute = jax.jacfwd(self._fun, self._argnum)
-            elif self._mode == "rev":
-                self._compute = jax.jacrev(self._fun, self._argnum)
-            elif self._mode == "grad":
-                self._compute = jax.grad(self._fun, self._argnum)
-            elif self._mode == "hess":
-                self._compute = jax.hessian(self._fun, self._argnum)
-            elif self._mode == "jvp":
-                self._compute = self._compute_jvp
+        if self._mode == "fwd":
+            self._compute = jax.jacfwd(self._fun, self._argnum)
+        elif self._mode == "rev":
+            self._compute = jax.jacrev(self._fun, self._argnum)
+        elif self._mode == "grad":
+            self._compute = jax.grad(self._fun, self._argnum)
+        elif self._mode == "hess":
+            self._compute = jax.hessian(self._fun, self._argnum)
+        elif self._mode == "jvp":
+            self._compute = self._compute_jvp
 
 
 class FiniteDiffDerivative(_Derivative):

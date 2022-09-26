@@ -690,6 +690,8 @@ data_index["iota"] = {
     "description": "Rotational transform",
     "fun": "compute_rotational_transform",
     "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 data_index["iota_r"] = {
     "label": "\\partial_{\\rho} \\iota",
@@ -698,14 +700,16 @@ data_index["iota_r"] = {
     "description": "Rotational transform, first radial derivative",
     "fun": "compute_rotational_transform",
     "dim": 1,
-}
-data_index["iota_rr"] = {
-    "label": "\\partial_{\\rho\\rho} \\iota",
-    "units": "~",
-    "units_long": "None",
-    "description": "Rotational transform, second radial derivative",
-    "fun": "compute_rotational_transform",
-    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
 
 # covariant basis
@@ -1234,6 +1238,24 @@ data_index["g_tz"] = {
     "fun": "compute_covariant_metric_coefficients",
     "dim": 1,
     "R_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
+data_index["g_tt_r"] = {
+    "label": "\\partial_{\\rho} g_{\\theta\\theta}",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "Poloidal/Poloidal element of covariant metric tensor, derivative wrt rho",
+    "fun": "compute_covariant_metric_coefficients",
+    "dim": 1,
+    "R_derivs": [[0, 1, 0], [1, 1, 0]],
+}
+data_index["g_tz_r"] = {
+    "label": "\\partial_{\\rho} g_{\\theta\\zeta}",
+    "units": "m^{2}",
+    "units_long": "square meters",
+    "description": "Poloidal/Toroidal element of covariant metric tensor, derivative wrt rho",
+    "fun": "compute_covariant_metric_coefficients",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
 
 # contravariant metric coefficients
@@ -2721,11 +2743,39 @@ data_index["I"] = {
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
+data_index["current"] = {
+    "label": "\\frac{2\\pi}{\\mu_0} I",
+    "units": "A",
+    "units_long": "Amperes",
+    "description": "Net toroidal current",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
 data_index["I_r"] = {
     "label": "\\partial_{\\rho} I",
     "units": "T \\cdot m",
     "units_long": "Tesla * meters",
     "description": "Boozer toroidal current, derivative wrt radial coordinate",
+    "fun": "compute_boozer_magnetic_field",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
+}
+data_index["current_r"] = {
+    "label": "\\frac{2\\pi}{\\mu_0} \\partial_{\\rho} I",
+    "units": "A",
+    "units_long": "Amperes",
+    "description": "Net toroidal current, derivative wrt radial coordinate",
     "fun": "compute_boozer_magnetic_field",
     "dim": 1,
     "R_derivs": [
@@ -3478,8 +3528,16 @@ data_index["D_shear"] = {
     "description": "Mercier stability criterion magnetic shear term",
     "fun": "compute_mercier_stability",
     "dim": 1,
-    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
-    "L_derivs": [[0, 0, 0]],
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [1, 1, 0],
+        [1, 0, 1],
+    ],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 0], [1, 0, 1]],
 }
 data_index["D_current"] = {
     "label": "D_{current}",

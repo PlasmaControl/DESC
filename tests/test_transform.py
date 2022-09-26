@@ -109,7 +109,7 @@ class TestTransform(unittest.TestCase):
         basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
-        r = grid.nodes[:, 0]  # rho coordiantes
+        r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
 
@@ -483,3 +483,36 @@ class TestTransform(unittest.TestCase):
         ):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
+
+    def test_fit_direct1(self):
+
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = ConcentricGrid(3, 3, 2, node_pattern="ocs")
+        transform = Transform(grid, basis, method="direct1", build_pinv=True)
+        np.random.seed(0)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    def test_fit_direct2(self):
+
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
+        transform = Transform(grid, basis, method="direct2", build_pinv=True)
+        np.random.seed(1)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    def test_fit_fft(self):
+
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = LinearGrid(4, 4, 3)
+        transform = Transform(grid, basis, method="fft", build_pinv=True)
+        np.random.seed(2)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)

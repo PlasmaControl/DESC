@@ -11,6 +11,7 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixIota,
+    FixCurrent,
     FixPsi,
 )
 from ._equilibrium import (
@@ -22,13 +23,15 @@ from ._equilibrium import (
 )
 
 
-def get_fixed_boundary_constraints(profiles=True):
+def get_fixed_boundary_constraints(profiles=True, iota=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
     ----------
     profiles : bool
         Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
 
     Returns
     -------
@@ -43,7 +46,11 @@ def get_fixed_boundary_constraints(profiles=True):
         FixPsi(),
     )
     if profiles:
-        constraints = constraints + (FixPressure(), FixIota())
+        constraints += (FixPressure(),)
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
     return constraints
 
 
@@ -52,9 +59,9 @@ def get_equilibrium_objective(mode="force"):
 
     Parameters
     ----------
-    mode : {"force", "force2", "energy", "vacuum"}
+    mode : {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
-        "force2" uses two different grids for radial and helical forces. "energy" is
+        "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
 
     Returns
@@ -139,7 +146,7 @@ def factorize_linear_constraints(constraints, extra_args=[]):
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
-            A_ = obj.derivatives[arg]
+            A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             b_ = obj.target
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
@@ -172,7 +179,7 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):
-        """Recover the full state vector from the reducted optimization vector."""
+        """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 

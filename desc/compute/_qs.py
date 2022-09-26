@@ -15,6 +15,7 @@ def compute_boozer_coordinates(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
@@ -22,6 +23,7 @@ def compute_boozer_coordinates(
     B_transform,
     w_transform,
     iota,
+    current,
     data=None,
     **kwargs,
 ):
@@ -34,11 +36,13 @@ def compute_boozer_coordinates(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -55,6 +59,8 @@ def compute_boozer_coordinates(
         w_transform.basis should be of type DoubleFourierSeries.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -67,11 +73,13 @@ def compute_boozer_coordinates(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
     # TODO: can remove this call if compute_|B| changed to use B_covariant
@@ -80,11 +88,13 @@ def compute_boozer_coordinates(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
 
@@ -149,11 +159,13 @@ def compute_quasisymmetry_error(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     helicity=(1, 0),
     data=None,
     **kwargs,
@@ -167,11 +179,13 @@ def compute_quasisymmetry_error(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -182,6 +196,8 @@ def compute_quasisymmetry_error(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     helicity : tuple, int
         Type of quasi-symmetry (M, N).
 
@@ -197,11 +213,13 @@ def compute_quasisymmetry_error(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
     data = compute_boozer_magnetic_field(
@@ -209,11 +227,13 @@ def compute_quasisymmetry_error(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         data=data,
     )
 

@@ -8,7 +8,7 @@ from desc.backend import use_jax
 from desc.utils import Timer, isalmostequal
 from desc.configuration import _Configuration
 from desc.io import IOAble
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
+from desc.geometry import FourierRZToroidalSurface
 from desc.optimize import Optimizer
 from desc.objectives import (
     ObjectiveFunction,
@@ -52,24 +52,21 @@ class Equilibrium(_Configuration, IOAble):
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero rotational transform
+    current : Profile or ndarray shape(k,2) (optional)
+        Toroidal current profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and
-        minor radius 1
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
-        of mode numbers and spectral coefficints of the form [n, R, Z].
+        of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
-    objective : str or ObjectiveFunction (optional)
-        function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
-        optimizer to use
     """
 
     _io_attrs_ = _Configuration._io_attrs_ + [
@@ -93,12 +90,11 @@ class Equilibrium(_Configuration, IOAble):
         node_pattern=None,
         pressure=None,
         iota=None,
+        current=None,
         surface=None,
         axis=None,
         sym=None,
         spectral_indexing=None,
-        objective=None,
-        optimizer=None,
         **kwargs,
     ):
 
@@ -110,6 +106,7 @@ class Equilibrium(_Configuration, IOAble):
             N,
             pressure,
             iota,
+            current,
             surface,
             axis,
             sym,
@@ -286,7 +283,7 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        objective : {"force", "force2", "energy"}
+        objective : {"force", "forces", "energy", "vacuum"}
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
@@ -330,10 +327,12 @@ class Equilibrium(_Configuration, IOAble):
 
 
         """
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints(
+                profiles=objective != "vacuum", iota=self.iota is not None
+            )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints()
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer("lsq-exact")
 
@@ -375,7 +374,10 @@ class Equilibrium(_Configuration, IOAble):
             print("Start of solver")
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
+            # don't set nonexistent profile (values are empty ndarrays)
+            if not (key == "c_l" or key == "i_l") or value[-1].size:
+                setattr(eq, key, value[-1])
+
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))
@@ -403,7 +405,7 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to optimize.
-        constraint : Objective or tuple of Objective
+        constraints : Objective or tuple of Objective
             Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : Optimizer
             Optimization algorithm. Default = lsq-exact.
@@ -447,7 +449,7 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
             constraints = (ForceBalance(), *constraints)
 
         if copy:
@@ -472,7 +474,9 @@ class Equilibrium(_Configuration, IOAble):
             print("Start of solver")
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
+            # don't set nonexistent profile (values are empty ndarrays)
+            if not (key == "c_l" or key == "i_l") or value[-1].size:
+                setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))
@@ -518,7 +522,7 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            Optimized equilibrum.
+            Optimized equilibrium.
 
         """
         import inspect
@@ -656,6 +660,7 @@ class Equilibrium(_Configuration, IOAble):
         dZb=None,
         dp=None,
         di=None,
+        dc=None,
         dPsi=None,
         order=2,
         tr_ratio=0.1,
@@ -668,11 +673,11 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to satisfy. Default = force balance.
-        constraint : Objective or tuple of Objective
+        constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
-        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+        dR, dZ, dL, dRb, dZb, dp, di, dc, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, and total toroidal magnetic flux.
+            rotational transform, toroidal current, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -689,13 +694,13 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            Perturbed equilibrum.
+            Perturbed equilibrium.
 
         """
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
 
         if not objective.built:
             objective.build(self, verbose=verbose)
@@ -714,6 +719,7 @@ class Equilibrium(_Configuration, IOAble):
             dZb=dZb,
             dp=dp,
             di=di,
+            dc=dc,
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
@@ -784,13 +790,19 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
 
         p_l = np.zeros_like(equil.pressure.params)
-        i_l = np.zeros_like(equil.iota.params)
         for l, p in inputs["pressure"]:
-            idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
-            p_l[idx_p] = p
-        for l, i in inputs["iota"]:
-            idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
-            i_l[idx_i] = i
+            idx = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
+            p_l[idx] = p
+        if equil.iota is not None:
+            i_l = np.zeros_like(equil.iota.params)
+            for l, i in inputs["iota"]:
+                idx = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
+                i_l[idx] = i
+        if equil.current is not None:
+            c_l = np.zeros_like(equil.current.params)
+            for l, c in inputs["current"]:
+                idx = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
+                c_l[idx] = c
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
             deltas["dRb"] = Rb_lmn - equil.Rb_lmn
@@ -798,8 +810,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dZb"] = Zb_lmn - equil.Zb_lmn
         if not np.allclose(p_l, equil.p_l):
             deltas["dp"] = p_l - equil.p_l
-        if not np.allclose(i_l, equil.i_l):
+        if equil.iota is not None and not np.allclose(i_l, equil.i_l):
             deltas["di"] = i_l - equil.i_l
+        if equil.current is not None and not np.allclose(c_l, equil.c_l):
+            deltas["dc"] = c_l - equil.c_l
         if not np.allclose(inputs["Psi"], equil.Psi):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
@@ -811,6 +825,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         equil.resolution_summary()
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+        if "current" in self.inputs[ii]:
+            print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
         print("Objective: {}".format(self.inputs[ii]["objective"]))
         print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
@@ -856,7 +872,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             warnings.warn(
                 colored(
                     "Computing perturbations with finite differences can be "
-                    + "highly innacurate, consider using JAX or setting all "
+                    + "highly inaccurate, consider using JAX or setting all "
                     + "perturbation ratios to 1",
                     "yellow",
                 )
@@ -869,7 +885,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
             constraints = get_fixed_boundary_constraints(
-                profiles=self.inputs[ii]["objective"] != "vacuum"
+                profiles=self.inputs[ii]["objective"] != "vacuum",
+                iota="iota" in self.inputs[ii],
             )
 
             if ii == start_from:
@@ -893,7 +910,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 if verbose > 0:
                     self._print_iteration(ii, equil)
 
-                # figure out if we we need perturbations
+                # figure out if we need perturbations
                 deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:

@@ -201,6 +201,7 @@ def fmintr(
         )
 
     success = None
+    message = None
     step_norm = np.inf
     actual_reduction = np.inf
     ratio = 1  # ratio between actual reduction and predicted reduction
@@ -255,8 +256,8 @@ def fmintr(
                 step_h, hits_boundary, alpha = subproblem(g, hess, scale, trust_radius)
 
             except np.linalg.linalg.LinAlgError:
-                success = (False,)
-                message = (status_messages["err"],)
+                success = False
+                message = status_messages["err"]
                 break
 
             # geodesic acceleration

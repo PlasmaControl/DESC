@@ -371,14 +371,17 @@ class GXWrapper(_Objective):
                 #node_pattern=eq.node_pattern,
             )
 
-            grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
-            data = eq.compute('iota',grid=grid_1d)
-            iotad = data['iota']
-            fi = interp1d(grid_1d.nodes[:,0],iotad)
+            #grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
+            #data = eq.compute('iota',grid=grid_1d)
+            data = eq.compute('iota')
+            rhoa = eq.compute('rho')
+            iotad = np.abs(data['iota'])
+            fi = interp1d(rhoa['rho'],iotad)
             
             #get coordinate system
             rho = np.sqrt(self.psi)
             iota = fi(rho)
+            print("IOTA IS " + str(iota))
             zeta = np.linspace(-np.pi*self.npol/iota,np.pi*self.npol/iota,2*self.nzgrid+1)
             thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
 
@@ -395,11 +398,21 @@ class GXWrapper(_Objective):
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
-        self._iota = eq.iota.copy()
-        self._iota_eq = eq.iota.copy()
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota_eq = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._iota_eq.grid = self.grid
+        else:
+            self._iota = None
+            self._iota_eq = None
+        if eq.current is not None:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+        else:
+            self._current = None
+
         self._pressure.grid = self.grid
-        self._iota.grid = self.grid
-        self._iota_eq.grid = self.grid_eq
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=3, build=True
@@ -420,7 +433,7 @@ class GXWrapper(_Objective):
 
 
         
-        self._args = ["R_lmn","Z_lmn","L_lmn","i_l","p_l","Psi"]
+        self._args = ["R_lmn","Z_lmn","L_lmn","i_l","c_l", "p_l","Psi"]
         
         self.gx_compute = core.Primitive("gx")
         self.gx_compute.def_impl(self.compute_impl)
@@ -436,17 +449,19 @@ class GXWrapper(_Objective):
         #self._set_derivatives(use_jit=use_jit)
         self._built = True
     
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi):
         #print("At the beginning of compute: " + str(R_lmn[0]) + " " +str(Z_lmn[0]) + " " + str(L_lmn[0]))
-        args = (R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
+        args = (R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi)
         #self.gx_compute.bind(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)
         return self.gx_compute.bind(*args)
 
     def compute_impl(self, *args):
-        (R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi) = args
+        (R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi) = args
         #grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
-        data = compute_rotational_transform(i_l,self._iota)
-        iota= data['iota']
+        #data = compute_rotational_transform(i_l,self._iota)
+        data = compute_rotational_transform(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,self._current)
+        iota= np.abs(data['iota'])
+        print("iota is " + str(iota))
         #iotad = data['iota']
         #fi = interp1d(grid_1d.nodes[:,0],iotad)
             
@@ -455,9 +470,12 @@ class GXWrapper(_Objective):
         #iota = fi(rho)
 
         #fi = interp1d(grid_1d.nodes[:,0],iota)
-
-        data = compute_toroidal_flux(Psi,self._iota_eq,data=data)
-        psib = data['psi'][-1]
+        
+        if self._iota is not None:
+            data = compute_toroidal_flux(Psi,self._iota.grid,data=data)
+        else:
+            data = compute_toroidal_flux(Psi,self._current.grid,data=data)
+        psib = data['psi'][-1]*2
         if psib < 0:
             sgn = False
             psib = np.abs(psib)
@@ -480,11 +498,11 @@ class GXWrapper(_Objective):
         data_eq = compute_geometry(R_lmn,Z_lmn,self._R_transform_eq,self._Z_transform_eq)
         Lref = data_eq['a']
         Bref = 2*psib/Lref**2
-        #print('psib is ' + str(psib))
-        #print("Bref is " + str(Bref))
+        print('psib is ' + str(psib))
+        print("Bref is " + str(Bref))
 
         #calculate bmag
-        data = compute_magnetic_field_magnitude(R_lmn,Z_lmn,L_lmn,i_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,data=data)
+        data = compute_magnetic_field_magnitude(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,self._current,data=data)
         modB = data['|B|']
         #print("modB is " + str(modB))
         bmag = modB/Bref
@@ -493,6 +511,7 @@ class GXWrapper(_Objective):
         gradpar  = Lref*data['B^zeta']/modB
         data = compute_contravariant_metric_coefficients(R_lmn,Z_lmn,self._R_transform,self._Z_transform,data=data)
         grho = data['|grad(rho)|']*Lref
+        print("gradpar is " + str(gradpar))
 
         #calculate grad_psi and grad_alpha
         grad_psi = 2*psib*rho
@@ -503,7 +522,10 @@ class GXWrapper(_Objective):
         lmbda_t = data['lambda_t']
         lmbda_z = data['lambda_z']
         #iota_data = self.eq.compute('iota')
-        shear = data['iota_r']
+        if data['iota'][0] < 0:
+            shear = -data['iota_r']
+        else:
+            shear = data['iota_r']
 
         grad_alpha_r = (lmbda_r - zeta*shear)
         grad_alpha_t = (1 + lmbda_t)
@@ -523,7 +545,7 @@ class GXWrapper(_Objective):
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
 
         #calculate gbdrift0 and cvdrift0
-        data = compute_covariant_magnetic_field(R_lmn,Z_lmn,L_lmn,i_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,data=data)
+        data = compute_covariant_magnetic_field(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,self._current,data=data)
         B_t = data['B_theta']
         B_z = data['B_zeta']
         dB_t = data['|B|_t']
@@ -616,7 +638,7 @@ class GXWrapper(_Objective):
         print("AT WRAPPER JVP")
         #print("values are " + str(values))
         #print("tangents are " + str(tangents))
-        R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values
+        R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi = values
         #primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         primal_out = jnp.atleast_1d(0.0)
         
@@ -639,49 +661,49 @@ class GXWrapper(_Objective):
 
         #The shape of R_lmn is M x N, where M is the number of tangnents, and N is the number of R_lmn modes.
         
-        numparam = 6
-        idx = jnp.zeros(numparam,dtype=int)
-        count = 0
-        for i in range(numparam):
-            #idx[i] = count + values[i][:].shape[1]
-            print("shape is " + str(values[i][:].shape[1]))
-            print("new value is " + str(count + values[i][:].shape[1]))
-            idx = put(idx,i,count + values[i][:].shape[1])
-            count = idx[i]
-        idx = put(idx,len(idx)-1,count+1)
-        print("idx is " + str(idx))
+#        numparam = 6
+#        idx = jnp.zeros(numparam,dtype=int)
+#        count = 0
+#        for i in range(numparam):
+#            #idx[i] = count + values[i][:].shape[1]
+#            print("shape is " + str(values[i][:].shape[1]))
+#            print("new value is " + str(count + values[i][:].shape[1]))
+#            idx = put(idx,i,count + values[i][:].shape[1])
+#            count = idx[i]
+#        idx = put(idx,len(idx)-1,count+1)
+#        print("idx is " + str(idx))
+#
+#        Rtan = values[0][:]
+#        Ztan = values[1][:]
+#        Ltan = values[2][:]
+#        itan = values[3][:]
+#        ptan = values[4][:]
+#        Psitan = values[5][:]
+#        MT = jnp.hstack([Rtan,Ztan,Ltan,itan,ptan,Psitan])
+#        M = jnp.transpose(MT)
+#        print("M is " + str(M))
+#        Mnorm = jnp.linalg.norm(M,axis=0)
+#        U,S,V = jnp.linalg.svd(M/Mnorm)
+#        u1 = U[:,0]
+#        v1 = V[0,:]
+#        s1 = S[0]
+#        print("U is " + str(U))
+#        
+#        u1T = jnp.transpose(u1)*s1
+#        print("u1T is " + str(u1T))
+#        Rsvd = u1T[0:idx[0]]
+#        Zsvd = u1T[idx[0]:idx[1]]
+#        Lsvd = u1T[idx[1]:idx[2]]
+#        isvd = u1T[idx[2]:idx[3]]
+#        psvd = gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn):
+#        Psisvd = u1T[idx[4]:idx[5]]
 
-        Rtan = values[0][:]
-        Ztan = values[1][:]
-        Ltan = values[2][:]
-        itan = values[3][:]
-        ptan = values[4][:]
-        Psitan = values[5][:]
-        MT = jnp.hstack([Rtan,Ztan,Ltan,itan,ptan,Psitan])
-        M = jnp.transpose(MT)
-        print("M is " + str(M))
-        Mnorm = jnp.linalg.norm(M,axis=0)
-        U,S,V = jnp.linalg.svd(M/Mnorm)
-        u1 = U[:,0]
-        v1 = V[0,:]
-        s1 = S[0]
-        print("U is " + str(U))
-        
-        u1T = jnp.transpose(u1)*s1
-        print("u1T is " + str(u1T))
-        Rsvd = u1T[0:idx[0]]
-        Zsvd = u1T[idx[0]:idx[1]]
-        Lsvd = u1T[idx[1]:idx[2]]
-        isvd = u1T[idx[2]:idx[3]]
-        psvd = u1T[idx[3]:idx[4]]
-        Psisvd = u1T[idx[4]:idx[5]]
-
-        print("Rsvd is " + str(Rsvd))
-        print("Zsvd is " + str(Zsvd))
-        print("Lsvd is " + str(Lsvd))
-        print("isvd is " + str(isvd))
-        print("psvd is " + str(psvd))
-        print("Psisvd is " + str(Psisvd))
+#        print("Rsvd is " + str(Rsvd))
+#        print("Zsvd is " + str(Zsvd))
+#        print("Lsvd is " + str(Lsvd))
+#        print("isvd is " + str(isvd))
+#        print("psvd is " + str(psvd))
+#        print("Psisvd is " + str(Psisvd))
 
 
 #        print("R shape is " + str(values[0][:].shape))
@@ -797,6 +819,7 @@ class GXWrapper(_Objective):
         return geo_array_gx
 
     def get_gx_arrays(self,zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn):
+        
         dzeta = zeta[1] - zeta[0]
         dzeta_pi = np.pi / self.nzgrid
         index_of_middle = self.nzgrid

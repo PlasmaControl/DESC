@@ -93,7 +93,7 @@ def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
         ), "D_shear should always have a stabilizing effect."
         all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9))
+    test(DSHAPE_current, (0.2, 0.9), atol=0.01, rtol=0.1)
     test(HELIOTRON_ex)
 
 

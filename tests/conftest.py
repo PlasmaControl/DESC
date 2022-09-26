@@ -267,13 +267,13 @@ def reader_test_file(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def VMEC_save(SOLOVEV, tmpdir_factory):
-    vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+def VMEC_save(DSHAPE, tmpdir_factory):
+    vmec = Dataset(".//tests//inputs//wout_DSHAPE.nc", mode="r")
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
     eq._solved = True
     VMECIO.save(
-        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+        eq, str(DSHAPE["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )
-    desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
+    desc = Dataset(str(DSHAPE["desc_nc_path"]), mode="r")
     return vmec, desc

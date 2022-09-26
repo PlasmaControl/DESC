@@ -225,8 +225,8 @@ def precise_QH(tmpdir_factory):
     """Fun initial condition for precise QH optimization."""
     input_path = ".//tests//inputs//precise_QH"
     output_dir = tmpdir_factory.mktemp("result")
-    initial_h5_path = output_dir.join("precise_QH_step0.h5")
-    truth_path = ".//tests//inputs//precise_QH_output.h5"
+    initial_h5_path = output_dir.join("precise_QH_output.h5")
+    truth_path = ".//tests//inputs//precise_QH_step0.h5"
 
     cwd = os.path.dirname(__file__)
     exec_dir = os.path.join(cwd, "..")

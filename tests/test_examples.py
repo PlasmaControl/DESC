@@ -3,6 +3,7 @@ import pytest
 
 import desc.examples
 from .utils import area_difference_vmec, area_difference_desc
+from desc.io import load
 from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile
 from desc.equilibrium import Equilibrium, EquilibriaFamily
@@ -186,62 +187,93 @@ def test_1d_optimization_old(SOLOVEV):
     np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
 
 
-@pytest.mark.regression
-@pytest.mark.solve
-def test_qh_optimization():
-    """Tests precise QH optimization."""
-    eq = EquilibriaFamily.load(load_from=".//tests//inputs//precise_QH_output.h5")[-1]
+def run_qh_step(n, eq):
     grid = LinearGrid(
         M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )
 
-    for n in range(5):
-        objective = ObjectiveFunction(
-            (
-                QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid),
-                AspectRatio(target=8, weight=1e1),
-            ),
-            verbose=0,
+    objective = ObjectiveFunction(
+        (
+            QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(target=8, weight=1e1),
+        ),
+        verbose=0,
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > n + 1, :
+            ],
         )
-        R_modes = np.vstack(
-            (
-                [0, 0, 0],
-                eq.surface.R_basis.modes[
-                    np.max(np.abs(eq.surface.R_basis.modes), 1) > n + 1, :
-                ],
-            )
-        )
-        Z_modes = eq.surface.Z_basis.modes[
-            np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
-        ]
-        constraints = (
-            ForceBalance(),
-            FixBoundaryR(modes=R_modes),
-            FixBoundaryZ(modes=Z_modes),
-            FixPressure(),
-            FixCurrent(),
-            FixPsi(),
-        )
-        optimizer = Optimizer("lsq-exact")
-        eq.optimize(
-            objective=objective,
-            constraints=constraints,
-            optimizer=optimizer,
-            maxiter=50,
-            verbose=3,
-            options={
-                "initial_trust_radius": 0.5,
-                "perturb_options": {"verbose": 0},
-                "solve_options": {"verbose": 0},
-            },
-        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
+    ]
+    constraints = (
+        ForceBalance(),
+        FixBoundaryR(modes=R_modes),
+        FixBoundaryZ(modes=Z_modes),
+        FixPressure(),
+        FixCurrent(),
+        FixPsi(),
+    )
+    optimizer = Optimizer("lsq-exact")
+    eq.optimize(
+        objective=objective,
+        constraints=constraints,
+        optimizer=optimizer,
+        maxiter=50,
+        verbose=3,
+        options={
+            "initial_trust_radius": 0.5,
+            "perturb_options": {"verbose": 0},
+            "solve_options": {"verbose": 0},
+        },
+    )
 
-    eq.save(str(precise_QH["optimal_h5_path"]))
-    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=False, rho=1.0)
-    data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
+    return eq
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_qh_optimization1():
+    """Tests precise QH optimization, step 1."""
+    eq1 = load(".//tests//inputs//precise_QH_step0.h5")
+    eq2 = load(".//tests//inputs//precise_QH_step1.h5")
+    eq1 = run_qh_step(1, eq1)
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-6)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_qh_optimization2():
+    """Tests precise QH optimization, step 2."""
+    eq1 = load(".//tests//inputs//precise_QH_step1.h5")
+    eq2 = load(".//tests//inputs//precise_QH_step2.h5")
+    eq1 = run_qh_step(2, eq1)
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-6)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_qh_optimization3():
+    """Tests precise QH optimization, step 3."""
+    eq1 = load(".//tests//inputs//precise_QH_step2.h5")[-1]
+    eq2 = load(".//tests//inputs//precise_QH_step3.h5")[-1]
+    eq1 = run_qh_step(3, eq1)
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-6)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
+
+    grid = LinearGrid(M=eq1.M_grid, N=eq1.N_grid, NFP=eq1.NFP, sym=False, rho=1.0)
+    data = eq1.compute("|B|_mn", grid, M_booz=eq1.M, N_booz=eq1.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
-
     np.testing.assert_array_less(B_asym, 2e-3)
 
 

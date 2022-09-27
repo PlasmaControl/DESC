@@ -299,16 +299,6 @@ class Equilibrium(_Configuration, IOAble):
             Equilibrium approximation of the near-axis solution.
 
         """
-        try:
-            from qsc import Qsc
-            from qic import Qic
-        except ModuleNotFoundError:
-            raise ValueError("Must install the packages 'qsc' and 'qicna'.")
-        if not (isinstance(eq, Qsc) or isinstance(eq, Qic)):
-            raise TypeError(
-                "Got input type {} instead of 'Qsc' or 'Qic'.".format(type(eq))
-            )
-
         # default resolution parameters
         if L is None:
             if spectral_indexing == "ansi":
@@ -320,23 +310,26 @@ class Equilibrium(_Configuration, IOAble):
         if ntheta is None:
             ntheta = 2 * M + 1
 
-        inputs = {}
-        inputs["Psi"] = np.pi * r ** 2 * eq.spsi * eq.Bbar
-        inputs["NFP"] = eq.nfp
-        inputs["L"] = L
-        inputs["M"] = M
-        inputs["N"] = N
-        inputs["sym"] = not eq.lasym
-        inputs["spectral_indexing "] = spectral_indexing
-        inputs["pressure"] = np.array([[0, -eq.p2 * r ** 2], [2, eq.p2 * r ** 2]])
-        inputs["iota"] = None
-        inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * eq.I2 * r ** 2]])
-        inputs["axis"] = FourierRZCurve(
-            R_n=np.concatenate((np.flipud(eq.rs[1:]), eq.rc)),
-            Z_n=np.concatenate((np.flipud(eq.zs[1:]), eq.zc)),
-            NFP=eq.nfp,
-        )
-        inputs["surface"] = None
+        try:
+            inputs = {}
+            inputs["Psi"] = np.pi * r ** 2 * eq.spsi * eq.Bbar
+            inputs["NFP"] = eq.nfp
+            inputs["L"] = L
+            inputs["M"] = M
+            inputs["N"] = N
+            inputs["sym"] = not eq.lasym
+            inputs["spectral_indexing "] = spectral_indexing
+            inputs["pressure"] = np.array([[0, -eq.p2 * r ** 2], [2, eq.p2 * r ** 2]])
+            inputs["iota"] = None
+            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * eq.I2 * r ** 2]])
+            inputs["axis"] = FourierRZCurve(
+                R_n=np.concatenate((np.flipud(eq.rs[1:]), eq.rc)),
+                Z_n=np.concatenate((np.flipud(eq.zs[1:]), eq.zc)),
+                NFP=eq.nfp,
+            )
+            inputs["surface"] = None
+        except AttributeError:
+            raise ValueError("Input must be a pyQSC or pyQIC solution.")
 
         rho, _ = special.js_roots(L, 2, 2)
         grid = LinearGrid(rho=rho, theta=ntheta, zeta=eq.nphi, NFP=eq.nfp)

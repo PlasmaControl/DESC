@@ -1,11 +1,12 @@
 import os
 import numpy as np
-from netCDF4 import Dataset
 import pytest
+import pickle
+from netCDF4 import Dataset
 
 from .utils import area_difference, compute_coords
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import Grid
+from desc.grid import Grid, LinearGrid
 from desc.__main__ import main
 
 
@@ -155,6 +156,25 @@ def test_resolution():
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
     assert eq1.R_basis.NFP == 5
+
+
+def test_equilibrium_from_near_axis():
+    """Test loading a solution from pyQSC/pyQIC."""
+    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
+    file = open(qsc_path, "rb")
+    na = pickle.load(file)
+    file.close()
+
+    r = 1e-2
+    eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    data = eq.compute("|B|", grid)
+
+    assert eq.is_nested()
+    assert eq.NFP == na.nfp
+    np.testing.assert_allclose(eq.Ra_n[eq.N : eq.N + 2], na.rc, atol=1e-10)
+    np.testing.assert_allclose(eq.Za_n[eq.N : eq.N - 2 : -1], na.zs, atol=1e-10)
+    np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 
 def test_poincare_solve_not_implemented():

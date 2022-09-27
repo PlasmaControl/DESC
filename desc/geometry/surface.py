@@ -344,7 +344,7 @@ class FourierRZToroidalSurface(Surface):
             d2Z = Z_transform.transform(Z_lmn, dt=dt, dz=2)
             R = d2R - R0
             Z = d2Z
-            # 2nd derivative wrt to phi = 0
+            # 2nd derivative wrt phi = 0
             phi = 2 * dR * (dt == 0)
             coords = jnp.stack([R, phi, Z], axis=1)
         elif dz == 3:
@@ -450,7 +450,7 @@ class FourierRZToroidalSurface(Surface):
         """
         f = open(path, "r")
         if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
-            inputs = InputReader.parse_vmec_inputs(f)
+            inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
         if inputs["bdry_ratio"] != 1:

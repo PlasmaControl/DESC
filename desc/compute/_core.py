@@ -1,96 +1,14 @@
 """Core compute functions, for profiles, geometry, and basis vectors/jacobians."""
 
-import numpy as np
+from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import data_index
-
-
-def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
-    """Check if Transforms can compute required derivatives of R, Z, lambda.
-
-    Parameters
-    ----------
-    key : str
-        Key indicating a quantity from data_index.
-    R_transform : Transform, optional
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform, optional
-        Transforms Z_lmn coefficients to real space.
-    L_transform : Transform, optional
-        Transforms L_lmn coefficients to real space.
-
-    Returns
-    -------
-    flag : bool
-        True if the Transforms can compute requested derivatives, False otherwise.
-
-    """
-    if "R_derivs" not in data_index[key]:
-        R_flag = True
-        Z_flag = True
-    else:
-        R_flag = np.array(
-            [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
-        ).all()
-        Z_flag = np.array(
-            [d in Z_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
-        ).all()
-
-    if "L_derivs" not in data_index[key]:
-        L_flag = True
-    else:
-        L_flag = np.array(
-            [d in L_transform.derivatives.tolist() for d in data_index[key]["L_derivs"]]
-        ).all()
-
-    return R_flag and Z_flag and L_flag
-
-
-def dot(a, b, axis=-1):
-    """Batched vector dot product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = sum(a*b, axis=axis)
-
-    """
-    return jnp.sum(a * b, axis=axis, keepdims=False)
-
-
-def cross(a, b, axis=-1):
-    """Batched vector cross product.
-
-    Parameters
-    ----------
-    a : array-like
-        First array of vectors.
-    b : array-like
-        Second array of vectors.
-    axis : int
-        Axis along which vectors are stored.
-
-    Returns
-    -------
-    y : array-like
-        y = a x b
-
-    """
-    return jnp.cross(a, b, axis=axis)
+from .data_index import data_index
+from .utils import check_derivs, dot, cross, surface_averages, surface_integrals
 
 
 def compute_flux_coords(
-    iota,
+    grid,
     data=None,
     **kwargs,
 ):
@@ -98,8 +16,8 @@ def compute_flux_coords(
 
     Parameters
     ----------
-    iota : Profile
-        Transforms i_l coefficients to real space.
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
 
     Returns
     -------
@@ -110,16 +28,16 @@ def compute_flux_coords(
     if data is None:
         data = {}
 
-    data["rho"] = iota.grid.nodes[:, 0]
-    data["theta"] = iota.grid.nodes[:, 1]
-    data["zeta"] = iota.grid.nodes[:, 2]
+    data["rho"] = grid.nodes[:, 0]
+    data["theta"] = grid.nodes[:, 1]
+    data["zeta"] = grid.nodes[:, 2]
 
     return data
 
 
 def compute_toroidal_flux(
     Psi,
-    iota,
+    grid,
     data=None,
     **kwargs,
 ):
@@ -129,18 +47,19 @@ def compute_toroidal_flux(
     ----------
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
-    iota : Profile
-        Transforms i_l coefficients to real space.
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
 
     Returns
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of toroidal magnetic flux profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
-    data = compute_flux_coords(iota, data=data)
+    data = compute_flux_coords(grid, data=data)
 
+    # psi = Psi / 2*pi
     data["psi"] = Psi * data["rho"] ** 2 / (2 * jnp.pi)
     data["psi_r"] = 2 * Psi * data["rho"] / (2 * jnp.pi)
     data["psi_rr"] = 2 * Psi * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
@@ -227,7 +146,7 @@ def compute_cartesian_coords(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -239,7 +158,7 @@ def compute_cartesian_coords(
         Dictionary of ndarray, shape(num_nodes,) of Cartesian coordinates.
 
     """
-    data = compute_flux_coords(R_transform, data=data)
+    data = compute_flux_coords(R_transform.grid, data=data)
     data = compute_toroidal_coords(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     data["phi"] = data["zeta"]
@@ -268,7 +187,7 @@ def compute_lambda(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of lambda values.
-        Keys are of the form 'lambda_x' meaning the derivative of lambda wrt to x.
+        Keys are of the form 'lambda_x' meaning the derivative of lambda wrt x.
 
     """
     if data is None:
@@ -323,7 +242,7 @@ def compute_pressure(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of pressure profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
     if data is None:
@@ -336,33 +255,114 @@ def compute_pressure(
 
 
 def compute_rotational_transform(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
     i_l,
+    c_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
     iota,
+    current,
     data=None,
     **kwargs,
 ):
-    """Compute rotational transform profile.
+    """
+    Compute rotational transform profile from the iota or the toroidal current profile.
+
+    Notes
+    -----
+        The rotational transform is computed from the toroidal current profile using
+        equation 11 in S.P. Hishman & J.T. Hogan (1986)
+        doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
+        with an additional term to account for finite net toroidal currents. Note that
+        the flux surface average integrals in their formula should not be weighted by a
+        coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
+        these averages will not be canceled out.
 
     Parameters
     ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of rotational transform profile.
-        Keys are of the form 'X_y' meaning the derivative of X wrt to y.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
 
     """
     if data is None:
         data = {}
 
-    data["iota"] = iota.compute(i_l, dr=0)
-    data["iota_r"] = iota.compute(i_l, dr=1)
-    data["iota_rr"] = iota.compute(i_l, dr=2)
+    grid = R_transform.grid
+    if iota is not None:
+        data["iota"] = iota.compute(i_l, dr=0)
+        data["iota_r"] = iota.compute(i_l, dr=1)
+
+    elif current is not None:
+        data = compute_toroidal_flux(Psi, grid, data=data)
+        data = compute_lambda(L_lmn, L_transform, data=data)
+        data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
+        data = compute_covariant_metric_coefficients(
+            R_lmn, Z_lmn, R_transform, Z_transform, data=data
+        )
+
+        if check_derivs("iota", R_transform, Z_transform, L_transform):
+            # current_term = 2*pi * I / Psi_r = mu_0 / 2*pi * current / psi_r
+            current_term = (
+                mu_0 / (2 * jnp.pi) * current.compute(c_l, dr=0) / data["psi_r"]
+            )
+            num = (
+                data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+            ) / data["sqrt(g)"]
+            den = data["g_tt"] / data["sqrt(g)"]
+            num_avg = surface_averages(grid, num)
+            den_avg = surface_averages(grid, den)
+            data["iota"] = (current_term + num_avg) / den_avg
+
+        if check_derivs("iota_r", R_transform, Z_transform, L_transform):
+            current_term_r = (
+                mu_0 / (2 * jnp.pi) * current.compute(c_l, dr=1) / data["psi_r"]
+                - current_term * data["psi_rr"] / data["psi_r"]
+            )
+            num_r = (
+                data["lambda_rz"] * data["g_tt"]
+                + data["lambda_z"] * data["g_tt_r"]
+                - data["lambda_rt"] * data["g_tz"]
+                - (1 + data["lambda_t"]) * data["g_tz_r"]
+            ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
+            den_r = (
+                data["g_tt_r"] / data["sqrt(g)"]
+                - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
+            )
+            num_avg_r = surface_averages(grid, num_r)
+            den_avg_r = surface_averages(grid, den_r)
+            data["iota_r"] = (
+                current_term_r + num_avg_r - data["iota"] * den_avg_r
+            ) / den_avg
 
     return data
 
@@ -382,7 +382,7 @@ def compute_covariant_basis(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -483,7 +483,7 @@ def compute_contravariant_basis(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -593,7 +593,7 @@ def compute_jacobian(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -706,7 +706,7 @@ def compute_covariant_metric_coefficients(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -741,6 +741,13 @@ def compute_covariant_metric_coefficients(
     if check_derivs("g_tz", R_transform, Z_transform):
         data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
 
+    if check_derivs("g_tt_r", R_transform, Z_transform):
+        data["g_tt_r"] = 2 * dot(data["e_theta"], data["e_theta_r"])
+    if check_derivs("g_tz_r", R_transform, Z_transform):
+        data["g_tz_r"] = dot(data["e_theta_r"], data["e_zeta"]) + dot(
+            data["e_theta"], data["e_zeta_r"]
+        )
+
     return data
 
 
@@ -759,7 +766,7 @@ def compute_contravariant_metric_coefficients(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -876,22 +883,25 @@ def compute_contravariant_metric_coefficients(
     return data
 
 
-def compute_geometry(
+def compute_toroidal_flux_gradient(
     R_lmn,
     Z_lmn,
+    Psi,
     R_transform,
     Z_transform,
     data=None,
     **kwargs,
 ):
-    """Compute plasma volume and other geometric quantities such as effective minor/major radius and aspect ratio.
+    """Compute reciprocal metric coefficients.
 
     Parameters
     ----------
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -900,25 +910,82 @@ def compute_geometry(
     Returns
     -------
     data : dict
-        Dictionary of ndarray, shape(num_nodes,) with volume key "V", cross-sectional area "A", minor radius "a", major radius "R0", and aspect ration "R0/a".
+        Dictionary of ndarray, shape(num_nodes,) of toroidal flux gradient.
 
     """
+    data = compute_toroidal_flux(Psi, R_transform.grid, data=data)
+    data = compute_contravariant_metric_coefficients(
+        R_lmn,
+        Z_lmn,
+        R_transform,
+        Z_transform,
+        data=data,
+    )
+
+    if check_derivs("grad(psi)", R_transform, Z_transform):
+        data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
+    if check_derivs("|grad(psi)|", R_transform, Z_transform):
+        data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
+        data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+
+    return data
+
+
+def compute_geometry(
+    R_lmn,
+    Z_lmn,
+    R_transform,
+    Z_transform,
+    data=None,
+    **kwargs,
+):
+    """Compute geometric quantities such as plasma volume, aspect ratio, etc.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of geometric quantities with the keys
+        volume "V", enclosed volume "V(r)", cross-sectional area "A",
+        minor radius "a", major radius "R0", aspect ratio "R0/a".
+
+    """
+    grid = R_transform.grid
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
-    # Poincare cross-section weights
-    xs_weights = jnp.prod(R_transform.grid.spacing[:, :-1], axis=1)
-    # number of toroidal grid points
-    N = R_transform.grid.num_zeta
-
-    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
-    data["A"] = jnp.mean(
-        jnp.sum(  # sqrt(g) / R * weight = dArea
-            jnp.reshape(jnp.abs(data["sqrt(g)"] / data["R"]) * xs_weights, (N, -1)),
-            axis=1,
+    if check_derivs("V(r)", R_transform, Z_transform):
+        # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
+        data["V(r)"] = jnp.abs(
+            surface_integrals(
+                grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
+            )
         )
-    )
-    data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
-    data["a"] = jnp.sqrt(data["A"] / jnp.pi)
-    data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
+    if check_derivs("V_r(r)", R_transform, Z_transform):
+        # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
+        data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
+        data["S(r)"] = surface_integrals(grid, data["|e_theta x e_zeta|"])
+        data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
+        data["A"] = jnp.mean(
+            surface_integrals(
+                grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
+            )
+        )
+        data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
+        data["a"] = jnp.sqrt(data["A"] / jnp.pi)
+        data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
+    if check_derivs("V_rr(r)", R_transform, Z_transform):
+        data["V_rr(r)"] = surface_integrals(
+            grid, data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
+        )
 
     return data

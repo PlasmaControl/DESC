@@ -22,20 +22,20 @@ Please cite our work if you use DESC!
 Quick Start
 ===========
 
-.. role:: bash(code)
-   :language: bash
+.. role:: console(code)
+   :language: console
 
-The easiest way to install DESC is from pypi: :bash:`pip install desc-opt`
+The easiest way to install DESC is from pypi: :console:`pip install desc-opt`
 
 For more detailed instructions on installing DESC and its dependencies, see Installation_.
-The code is run using the syntax :bash:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that if you may have to prepend the command with :bash:`python -m`)
+The code is run using the syntax :console:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :console:`python -m`)
 DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files.
 Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in a HDF5 binary file, whose format is detailed in Outputs_.
 
-As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :bash:`DESC` directory is
-:bash:`desc -p examples/DESC/DSHAPE`
-Where the :bash:`-p` flag tells DESC to plot the results once it finishes.
+As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :console:`DESC` directory is
+:console:`desc -p examples/DESC/DSHAPE`
+Where the :console:`-p` flag tells DESC to plot the results once it finishes.
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html

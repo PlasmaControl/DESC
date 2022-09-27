@@ -575,7 +575,7 @@ class ZernikePolynomial(Basis):
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
     spectral_indexing : {``'ansi'``, ``'fringe'``}
-        Indexing method, default value = ``'fringe'``
+        Indexing method, default value = ``'ansi'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -594,7 +594,7 @@ class ZernikePolynomial(Basis):
 
     """
 
-    def __init__(self, L, M, sym=False, spectral_indexing="fringe"):
+    def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
 
         self._L = L
         self._M = M
@@ -609,7 +609,7 @@ class ZernikePolynomial(Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="fringe"):
+    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -619,7 +619,7 @@ class ZernikePolynomial(Basis):
         M : int
             Maximum poloidal resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
-            Indexing method, default value = ``'fringe'``
+            Indexing method, default value = ``'ansi'``
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -790,7 +790,7 @@ class FourierZernikeBasis(Basis):
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
     spectral_indexing : {``'ansi'``, ``'fringe'``}
-        Indexing method, default value = ``'fringe'``
+        Indexing method, default value = ``'ansi'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -809,7 +809,7 @@ class FourierZernikeBasis(Basis):
 
     """
 
-    def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="fringe"):
+    def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
 
         self._L = L
         self._M = M
@@ -824,7 +824,7 @@ class FourierZernikeBasis(Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="fringe"):
+    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -836,7 +836,7 @@ class FourierZernikeBasis(Basis):
         N : int
             Maximum toroidal resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
-            Indexing method, default value = ``'fringe'``
+            Indexing method, default value = ``'ansi'``
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -1277,7 +1277,7 @@ def powers(rho, l, dr=0):
     Parameters
     ----------
     rho : ndarray, shape(N,)
-        radial coordiantes to evaluate basis
+        radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
     dr : int

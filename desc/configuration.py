@@ -1,28 +1,29 @@
-import numpy as np
-import os
 import copy
 import numbers
-
-from termcolor import colored
+import os
+import warnings
 from abc import ABC
-from shapely.geometry import LineString, MultiLineString
 from inspect import signature
 
+import numpy as np
+from termcolor import colored
+
+import desc.compute as compute_funs
 from desc.backend import jnp, jit, put, while_loop
-from desc.io import IOAble, load
-from desc.utils import copy_coeffs, Index, unpack_state
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.transform import Transform
-from desc.profiles import Profile, PowerSeriesProfile
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
+from desc.compute import arg_order, data_index, compute_jacobian
+from desc.compute.utils import compress
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
     FourierRZCurve,
     Surface,
 )
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-import desc.compute as compute_funs
-from desc.compute import arg_order, data_index
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.io import IOAble, load
+from desc.profiles import Profile, PowerSeriesProfile, SplineProfile
+from desc.transform import Transform
+from desc.utils import copy_coeffs, Index
 
 
 class _Configuration(IOAble, ABC):
@@ -49,15 +50,16 @@ class _Configuration(IOAble, ABC):
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero rotational transform
+    current : Profile or ndarray shape(k,2) (optional)
+        Toroidal current profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and
-        minor radius 1
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
-        of mode numbers and spectral coefficints of the form [n, R, Z].
+        of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
@@ -87,6 +89,7 @@ class _Configuration(IOAble, ABC):
         "_axis",
         "_pressure",
         "_iota",
+        "_current",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -100,6 +103,7 @@ class _Configuration(IOAble, ABC):
         N=None,
         pressure=None,
         iota=None,
+        current=None,
         surface=None,
         axis=None,
         sym=None,
@@ -214,7 +218,7 @@ class _Configuration(IOAble, ABC):
         self.K_basis = DoubleFourierSeries(self.M, self.N, self.NFP, sym=self._Z_sym)
         self.IGphi_mn = jnp.zeros(self.K_basis.num_modes + 2)
 
-        # surface and axis
+        # surface
         if surface is None:
             self._surface = FourierRZToroidalSurface(NFP=self.NFP)
             self._bdry_mode = "lcfs"
@@ -253,6 +257,7 @@ class _Configuration(IOAble, ABC):
             raise TypeError("Got unknown surface type {}".format(surface))
         self._surface.change_resolution(self.L, self.M, self.N)
 
+        # magnetic axis
         if isinstance(axis, FourierRZCurve):
             self._axis = axis
         elif isinstance(axis, (np.ndarray, jnp.ndarray)):
@@ -283,6 +288,7 @@ class _Configuration(IOAble, ABC):
                     NFP=self.NFP,
                 )
             elif isinstance(self.surface, ZernikeRZToroidalSection):
+                # FIXME: include m=0 l!=0 modes
                 self._axis = FourierRZCurve(
                     R_n=self.surface.R_lmn[
                         np.where(
@@ -303,17 +309,12 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown axis type {}".format(axis))
 
-        # make sure field periods agree
-        eqNFP = self.NFP
-        surfNFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
-        axNFP = self.axis.NFP
-        if not (eqNFP == surfNFP == axNFP):
-            raise ValueError(
-                "Unequal number of field periods for equilirium "
-                + f"{eqNFP}, surface {surfNFP}, and axis {axNFP}"
-            )
-
         # profiles
+        self._pressure = None
+        self._iota = None
+        self._current = None
+
+        # pressure
         if isinstance(pressure, Profile):
             self._pressure = pressure
         elif isinstance(pressure, (np.ndarray, jnp.ndarray)):
@@ -327,18 +328,61 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
 
+        # default profile
+        if iota is None and current is None:
+            self._current = PowerSeriesProfile(
+                modes=np.array([0]), params=np.array([0]), name="current"
+            )
+        elif iota is not None and current is not None:
+            raise ValueError("Cannot specify both iota and current profiles.")
+
+        # iota
         if isinstance(iota, Profile):
             self.iota = iota
         elif isinstance(iota, (np.ndarray, jnp.ndarray)):
             self._iota = PowerSeriesProfile(
                 modes=iota[:, 0], params=iota[:, 1], name="iota"
             )
-        elif iota is None:
-            self._iota = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="iota"
-            )
-        else:
+        elif iota is not None:
             raise TypeError("Got unknown iota profile {}".format(iota))
+
+        # current
+        if isinstance(current, Profile):
+            self.current = current
+        elif isinstance(current, (np.ndarray, jnp.ndarray)):
+            self._current = PowerSeriesProfile(
+                modes=current[:, 0], params=current[:, 1], name="current"
+            )
+        elif current is not None:
+            raise TypeError("Got unknown current profile {}".format(current))
+
+        # warning about odd profiles
+        if isinstance(self.pressure, PowerSeriesProfile):
+            if self.pressure.sym != "even":
+                warnings.warn(
+                    colored("Pressure profile is not an even power series.", "yellow")
+                )
+        if isinstance(self.iota, PowerSeriesProfile):
+            if self.iota.sym != "even":
+                warnings.warn(
+                    colored("Iota profile is not an even power series.", "yellow")
+                )
+        if isinstance(self.current, PowerSeriesProfile):
+            if self.current.sym != "even":
+                warnings.warn(
+                    colored("Current profile is not an even power series.", "yellow")
+                )
+
+        # ensure number of field periods agree before setting guesses
+        eq_NFP = self.NFP
+        surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
+        axis_NFP = self._axis.NFP
+
+        if not (eq_NFP == surf_NFP == axis_NFP):
+            raise ValueError(
+                "Unequal number of field periods for equilirium "
+                + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
+            )
 
         # keep track of where it came from
         self._parent = None
@@ -357,6 +401,13 @@ class _Configuration(IOAble, ABC):
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
+    def _set_up(self):
+        """Called after loading, to ensure object has all properties needed for current DESC version.
+        Allows for backwards-compatibility with equilibria saved/ran with older DESC versions"""
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
+
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
@@ -420,16 +471,31 @@ class _Configuration(IOAble, ABC):
             if hasattr(self, "_surface"):
                 # use whatever surface is already assigned
                 if hasattr(self, "_axis"):
-                    axisR = np.array([self.axis.R_basis.modes[:, -1], self.axis.R_n]).T
-                    axisZ = np.array([self.axis.Z_basis.modes[:, -1], self.axis.Z_n]).T
+                    axisR = np.array(
+                        [self._axis.R_basis.modes[:, -1], self._axis.R_n]
+                    ).T
+                    axisZ = np.array(
+                        [self._axis.Z_basis.modes[:, -1], self._axis.Z_n]
+                    ).T
                 else:
                     axisR = None
                     axisZ = None
+                coord = self.surface.rho if hasattr(self.surface, "rho") else None
                 self.R_lmn = self._initial_guess_surface(
-                    self.R_basis, self.Rb_lmn, self.surface.R_basis, axisR
+                    self.R_basis,
+                    self.Rb_lmn,
+                    self.surface.R_basis,
+                    axisR,
+                    "lcfs",
+                    coord,
                 )
                 self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis, self.Zb_lmn, self.surface.Z_basis, axisZ
+                    self.Z_basis,
+                    self.Zb_lmn,
+                    self.surface.Z_basis,
+                    axisZ,
+                    "lcfs",
+                    coord,
                 )
             else:
                 raise ValueError(
@@ -504,7 +570,7 @@ class _Configuration(IOAble, ABC):
                             + "please make sure it is a valid DESC or VMEC equilibrium."
                         )
                 if not isinstance(eq, _Configuration):
-                    if hasattr(eq, "equilibria"):  # its a family!
+                    if hasattr(eq, "equilibria"):  # it's a family!
                         eq = eq[-1]
                     else:
                         raise TypeError(
@@ -535,7 +601,7 @@ class _Configuration(IOAble, ABC):
     def _initial_guess_surface(
         self, x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None
     ):
-        """Create an initial guess from the boundary coefficients and magnetic axis guess.
+        """Create an initial guess from boundary coefficients and a magnetic axis guess.
 
         Parameters
         ----------
@@ -553,7 +619,7 @@ class _Configuration(IOAble, ABC):
             Whether the boundary condition is specified by the last closed flux surface
             (rho=1) or the Poincare section (zeta=0).
         coord : float or None
-            Surface label (ie, rho, zeta etc) for supplied surface.
+            Surface label (ie, rho, zeta, etc.) for supplied surface.
 
         Returns
         -------
@@ -563,7 +629,7 @@ class _Configuration(IOAble, ABC):
         """
         x_lmn = np.zeros((x_basis.num_modes,))
         if mode is None:
-            # auto detect based on mode numbers
+            # auto-detect based on mode numbers
             if np.all(b_basis.modes[:, 0] == 0):
                 mode = "lcfs"
             elif np.all(b_basis.modes[:, 2] == 0):
@@ -692,11 +758,12 @@ class _Configuration(IOAble, ABC):
         self.K_basis.change_resolution(self.M, self.N, self.NFP)
 
         if L_change and hasattr(self.pressure, "change_resolution"):
-            self.pressure.change_resolution(L=L)
+            self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
         if L_change and hasattr(self.iota, "change_resolution"):
-            self.iota.change_resolution(L=L)
+            self.iota.change_resolution(L=max(L, self.iota.basis.L))
+        if L_change and hasattr(self.current, "change_resolution"):
+            self.current.change_resolution(L=max(L, self.current.basis.L))
 
-        self.axis.change_resolution(self.N, NFP=self.NFP)
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
@@ -708,8 +775,6 @@ class _Configuration(IOAble, ABC):
                 copy_coeffs(self.IGphi_mn[2:], old_modes_K, self.K_basis.modes),
             ]
         )
-
-        self._make_labels()
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -811,6 +876,32 @@ class _Configuration(IOAble, ABC):
                     rho, theta, zeta
                 )
             )
+
+    def get_profile(self, name, grid=None, **kwargs):
+        """Return a SplineProfile of the desired quantity
+
+        Parameters
+        ----------
+        name : str
+            Name of the quantity to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+            Note profile will only be a function of the radial coordinate.
+
+        Returns
+        -------
+        profile : SplineProfile
+            Radial profile of the desired quantity.
+
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        data = self.compute(name, grid, **kwargs)
+        x = data[name]
+        x = compress(grid, x, surface_label="rho")
+        return SplineProfile(
+            x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
+        )
 
     @property
     def surface(self):
@@ -961,18 +1052,31 @@ class _Configuration(IOAble, ABC):
     @property
     def axis(self):
         """Curve object representing the magnetic axis."""
-        # TODO: return the current axis by evaluating at rho=0
-        return self._axis
-
-    @axis.setter
-    def axis(self, new):
-        if isinstance(new, FourierRZCurve):
-            new.change_resolution(self.N)
-            self._axis = new
-        else:
-            raise TypeError(
-                f"axis should be of type FourierRZCurve or a subclass, got {new}"
+        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
+        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
+        # indices where m=0
+        idx0_R = np.where((self.R_basis.modes[:, 1] == 0))[0]
+        idx0_Z = np.where((self.Z_basis.modes[:, 1] == 0))[0]
+        # indices where l=0 & m=0
+        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        # this reshaping assumes the FourierZernike bases are sorted
+        R_n = np.sum(
+            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
+            axis=0,
+        )
+        modes_R = self.R_basis.modes[idx00_R, 2]
+        if len(idx00_Z):
+            Z_n = np.sum(
+                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
+                axis=0,
             )
+            modes_Z = self.Z_basis.modes[idx00_Z, 2]
+        else:  # catch cases such as axisymmetry with stellarator symmetry
+            Z_n = 0
+            modes_Z = 0
+        self._axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP)
+        return self._axis
 
     @property
     def pressure(self):
@@ -1004,7 +1108,7 @@ class _Configuration(IOAble, ABC):
 
     @iota.setter
     def iota(self, new):
-        if isinstance(new, Profile):
+        if isinstance(new, Profile) or (new is None):
             self._iota = new
         else:
             raise TypeError(
@@ -1014,11 +1118,42 @@ class _Configuration(IOAble, ABC):
     @property
     def i_l(self):
         """Coefficients of iota profile (ndarray)."""
-        return self.iota.params
+        return np.empty(0) if self.iota is None else self.iota.params
 
     @i_l.setter
     def i_l(self, i_l):
+        if self.iota is None:
+            raise ValueError(
+                "Attempt to set rotational transform on an equilibrium with fixed toroidal current"
+            )
         self.iota.params = i_l
+
+    @property
+    def current(self):
+        """Toroidal current (I) profile."""
+        return self._current
+
+    @current.setter
+    def current(self, new):
+        if isinstance(new, Profile) or (new is None):
+            self._current = new
+        else:
+            raise TypeError(
+                f"current profile should be of type Profile or a subclass, got {new} "
+            )
+
+    @property
+    def c_l(self):
+        """Coefficients of current profile (ndarray)."""
+        return np.empty(0) if self.current is None else self.current.params
+
+    @c_l.setter
+    def c_l(self, c_l):
+        if self.current is None:
+            raise ValueError(
+                "Attempt to set toroidal current on an equilibrium with fixed rotational transform"
+            )
+        self.current.params = c_l
 
     @property
     def R_basis(self):
@@ -1034,52 +1169,6 @@ class _Configuration(IOAble, ABC):
     def L_basis(self):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
-
-    # FIXME: update this now that x is no longer a property of Configuration
-    def _make_labels(self):
-        R_label = ["R_{},{},{}".format(l, m, n) for l, m, n in self.R_basis.modes]
-        Z_label = ["Z_{},{},{}".format(l, m, n) for l, m, n in self.Z_basis.modes]
-        L_label = ["L_{},{},{}".format(l, m, n) for l, m, n in self.L_basis.modes]
-        return None
-
-    def get_xlabel_by_idx(self, idx):
-        """Find which mode corresponds to a given entry in x.
-
-        Parameters
-        ----------
-        idx : int or array-like of int
-            index into optimization vector x
-
-        Returns
-        -------
-        label : str or list of str
-            label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
-
-        """
-        self._make_labels()
-        idx = np.atleast_1d(idx)
-        labels = [self.xlabel.get(i, None) for i in idx]
-        return labels
-
-    def get_idx_by_xlabel(self, labels):
-        """Find which index of x corresponds to a given mode.
-
-        Parameters
-        ----------
-        label : str or list of str
-            label for the coefficient at index idx, eg R_0,1,3 or L_4,3,0
-
-        Returns
-        -------
-        idx : int or array-like of int
-            index into optimization vector x
-
-        """
-        self._make_labels()
-        if not isinstance(labels, (list, tuple)):
-            labels = [labels]
-        idx = [self.rev_xlabel.get(label, None) for label in labels]
-        return np.array(idx)
 
     def compute(self, name, grid=None, data=None, **kwargs):
         """Compute the quantity given by name on grid.
@@ -1115,6 +1204,8 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = getattr(self, arg)
             elif arg == "orientation":
                 inputs[arg] = self.orientation
+            elif arg == "grid":
+                inputs[arg] = grid
             elif arg == "R_transform":
                 inputs[arg] = Transform(
                     grid, self.R_basis, derivs=data_index[name]["R_derivs"]
@@ -1148,8 +1239,19 @@ class _Configuration(IOAble, ABC):
                 inputs[arg] = self.pressure.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
-                inputs[arg] = self.iota.copy()
-                inputs[arg].grid = grid
+                if self.iota is not None:
+                    inputs[arg] = self.iota.copy()
+                    inputs[arg].grid = grid
+                else:
+                    inputs[arg] = None
+            elif arg == "current":
+                if self.current is not None:
+                    inputs[arg] = self.current.copy()
+                    inputs[arg].grid = grid
+                else:
+                    inputs[arg] = None
+            elif arg == "grid":
+                inputs[arg] = grid
 
         return fun(**inputs, **kwargs)
 
@@ -1322,78 +1424,50 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, nsurfs=10, ntheta=20, nzeta=None, Nt=45, Nr=20):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
+
+            Does so by checking coordianate jacobian (sqrt(g)) sign.
+            If coordinate jacobian switches sign somewhere in the volume, this indicates that
+            it is zero at some point, meaning surfaces are touching and the equilibrium is not nested
+
+            NOTE: If grid resolution used is too low, or the solution is just barely unnested, this function may
+                fail to return the correct answer.
 
         Parameters
         ----------
-        nsurfs : int, optional
-            Number of flux surfaces to check (Default = 10).
-        ntheta : int, optional
-            Number of straight field-line poloidal contours to check (Default = 20).
-        nzeta : int, optional
-            Number of toroidal planes to check. By default checks the zeta=0
-            plane for axisymmetric equilibria and 5 planes evenly spaced in
-            zeta between 0 and 2pi/NFP for non-axisymmetric equilibria.
-            Otherwise uses nzeta planes linearly spaced in zeta between 0 and 2pi/NFP.
-        Nt : int, optional
-            Number of theta coordinates to use for the rho contours (Default = 45).
-        Nr : int, optional
-            Number of rho coordinates to use for the theta contours (Default = 20).
+        grid  :  Grid, optional
+            Grid on which to evaluate the coordinate jacobian and check for the sign. (Default to QuadratureGrid with eq's current grid resolutions)
+        R_lmn, Z_lmn : ndarray, optional
+            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
 
         Returns
         -------
         is_nested : bool
-            whether or not the surfaces are nested
+            whether the surfaces are nested
 
         """
-        planes_nested_bools = []
-        if nzeta is None:
-            zetas = (
-                [0.0]
-                if self.N == 0
-                else np.linspace(0, 2 * np.pi / self.NFP, 5, endpoint=False)
-            )
-        else:
-            zetas = np.linspace(0, 2 * np.pi / self.NFP, nzeta, endpoint=False)
+        if R_lmn is None:
+            R_lmn = self.R_lmn
+        if Z_lmn is None:
+            Z_lmn = self.Z_lmn
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
-        for zeta in zetas:
-            r_grid = LinearGrid(rho=nsurfs, theta=Nt, zeta=zeta, endpoint=True)
-            t_grid = LinearGrid(rho=Nr, theta=ntheta, zeta=zeta, endpoint=False)
+        R_transform = Transform(
+            grid, self.R_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
+        )
+        Z_transform = Transform(
+            grid, self.Z_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
+        )
+        data = compute_jacobian(
+            R_lmn,
+            Z_lmn,
+            R_transform,
+            Z_transform,
+        )
 
-            r_coords = self.compute("R", r_grid)
-            t_coords = self.compute("lambda", t_grid)
-
-            v_nodes = t_grid.nodes
-            v_nodes[:, 1] = t_grid.nodes[:, 1] - t_coords["lambda"]
-            v_grid = Grid(v_nodes)
-            v_coords = self.compute("R", v_grid)
-
-            # rho contours
-            Rr = r_coords["R"].reshape(
-                (r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta)
-            )[:, :, 0]
-            Zr = r_coords["Z"].reshape(
-                (r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta)
-            )[:, :, 0]
-
-            # theta contours
-            Rv = v_coords["R"].reshape(
-                (t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta)
-            )[:, :, 0]
-            Zv = v_coords["Z"].reshape(
-                (t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta)
-            )[:, :, 0]
-
-            rline = MultiLineString(
-                [LineString(np.array([R, Z]).T) for R, Z in zip(Rr, Zr)]
-            )
-            vline = MultiLineString(
-                [LineString(np.array([R, Z]).T) for R, Z in zip(Rv.T, Zv.T)]
-            )
-
-            planes_nested_bools.append(rline.is_simple and vline.is_simple)
-        return np.all(planes_nested_bools)
+        return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
 
     def to_sfl(
         self,

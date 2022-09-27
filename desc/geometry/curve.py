@@ -286,7 +286,7 @@ class FourierRZCurve(Curve):
             d2Z = Z_transform.transform(Z_n, dz=2)
             R = d2R - R0
             Z = d2Z
-            # 2nd derivative wrt to phi = 0
+            # 2nd derivative wrt phi = 0
             phi = 2 * dR
             coords = jnp.stack([R, phi, Z], axis=1)
         elif dt == 3:

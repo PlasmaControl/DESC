@@ -12,6 +12,7 @@ from ._core import (
     compute_jacobian,
     compute_covariant_metric_coefficients,
     compute_contravariant_metric_coefficients,
+    compute_toroidal_flux_gradient,
     compute_geometry,
 )
 from ._field import (
@@ -21,11 +22,12 @@ from ._field import (
     compute_magnetic_pressure_gradient,
     compute_magnetic_tension,
     compute_B_dot_gradB,
+    compute_boozer_magnetic_field,
     compute_contravariant_current_density,
 )
-from ._qs import compute_boozer_coords, compute_quasisymmetry_error
 from ._equil import compute_force_error, compute_energy
-
+from ._qs import compute_boozer_coordinates, compute_quasisymmetry_error
+from ._stability import compute_mercier_stability, compute_magnetic_well
 
 # defines the order in which objective arguments get concatenated into the state vector
 arg_order = (
@@ -34,6 +36,7 @@ arg_order = (
     "L_lmn",
     "p_l",
     "i_l",
+    "c_l",
     "Psi",
     "IGphi_mn",
     "Rb_lmn",

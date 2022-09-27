@@ -13,6 +13,7 @@ from desc.utils import equals
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
+from desc.equilibrium import Equilibrium
 
 
 def test_vmec_input(tmpdir_factory):
@@ -22,14 +23,14 @@ def test_vmec_input(tmpdir_factory):
     shutil.copyfile(input_path, tmp_path)
     ir = InputReader(cl_args=[str(tmp_path)])
     vmec_inputs = ir.inputs
-    vmec_inputs[0].pop("output_path")
     path = tmpdir.join("desc_from_vmec")
     ir.write_desc_input(path, ir.inputs)
     ir2 = InputReader(cl_args=[str(path)])
     desc_inputs = ir2.inputs
-    desc_inputs[0].pop("output_path")
-    eq = [equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)]
-    assert all(eq)
+    for d, v in zip(desc_inputs, vmec_inputs):
+        d.pop("output_path")
+        v.pop("output_path")
+    assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
 
 
 class TestInputReader(unittest.TestCase):
@@ -69,13 +70,13 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(
             os.environ["DESC_BACKEND"],
             "jax",
-            "numpy environment " "variable incorrect with default argument",
+            "numpy environment variable incorrect with default argument",
         )
         self.assertFalse(ir.args.version, "version is not default False")
         self.assertEqual(
             len(ir.inputs[0]),
-            27,
-            "number of inputs does not match " "number expected in MIN_INPUT",
+            28,
+            "number of inputs does not match number expected in MIN_INPUT",
         )
         # test equality of arguments
 
@@ -85,7 +86,7 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(
             os.environ["DESC_BACKEND"],
             "numpy",
-            "numpy " "environment variable incorrect on use",
+            "numpy environment variable incorrect on use",
         )
 
     def test_quiet_verbose(self):
@@ -93,31 +94,33 @@ class TestInputReader(unittest.TestCase):
         self.assertEqual(
             ir.inputs[0]["verbose"],
             1,
-            "value of inputs['verbose'] " "incorrect on no arguments",
+            "value of inputs['verbose'] incorrect on no arguments",
         )
         argv = self.argv2 + ["-v"]
         ir = InputReader(argv)
         self.assertEqual(
             ir.inputs[0]["verbose"],
             2,
-            "value of inputs['verbose'] " "incorrect on verbose argument",
+            "value of inputs['verbose'] incorrect on verbose argument",
         )
         argv = self.argv2 + ["-vv"]
         ir = InputReader(argv)
         self.assertEqual(
             ir.inputs[0]["verbose"],
             3,
-            "value of inputs['verbose'] " "incorrect on double verbose argument",
+            "value of inputs['verbose'] incorrect on double verbose argument",
         )
         argv = self.argv2 + ["-q"]
         ir = InputReader(argv)
         self.assertEqual(
             ir.inputs[0]["verbose"],
             0,
-            "value of inputs['verbose'] " "incorrect on quiet argument",
+            "value of inputs['verbose'] incorrect on quiet argument",
         )
 
     def test_vmec_to_desc_input(self):
+        # FIXME: maybe just store a file we know is converted correctly,
+        #  and checksum compare a live conversion to it
         pass
 
 
@@ -160,16 +163,33 @@ def test_writer_write_dict(writer_test_file):
     thedict = {"1": 1, "2": 2, "3": 3}
     writer = hdf5Writer(writer_test_file, "w")
     writer.write_dict(thedict)
-    writer.write_dict(thedict, where=writer.sub("subgroup"))
     with pytest.raises(SyntaxError):
         writer.write_dict(thedict, where="not a writable type")
     writer.close()
     f = h5py.File(writer_test_file, "r")
-    g = f["subgroup"]
     for key in thedict.keys():
         assert key in f.keys()
-        assert key in g.keys()
+        assert f[key][()] == thedict[key]
     f.close()
+    reader = hdf5Reader(writer_test_file)
+
+    dict1 = reader.read_dict()
+    assert dict1 == thedict
+    reader.close()
+
+
+def test_writer_write_list(writer_test_file):
+    thelist = ["1", 1, "2", 2, "3", 3]
+    writer = hdf5Writer(writer_test_file, "w")
+    writer.write_list(thelist)
+    with pytest.raises(SyntaxError):
+        writer.write_list(thelist, where="not a writable type")
+    writer.close()
+    reader = hdf5Reader(writer_test_file)
+
+    list1 = reader.read_list()
+    assert list1 == thelist
+    reader.close()
 
 
 def test_writer_write_obj(writer_test_file):
@@ -244,7 +264,8 @@ def test_ascii_io(SOLOVEV, tmpdir_factory):
     tmp_path = tmpdir.join("solovev_test.txt")
     eq1 = load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     write_ascii(tmp_path, eq1)
-    eq2 = read_ascii(tmp_path)
+    with pytest.warns(UserWarning):
+        eq2 = read_ascii(tmp_path)
     assert np.allclose(eq1.R_lmn, eq2.R_lmn)
     assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
     assert np.allclose(eq1.L_lmn, eq2.L_lmn)
@@ -273,3 +294,18 @@ def test_copy():
         rtol=1e-10,
         atol=1e-10,
     )
+
+
+def test_save_none(tmpdir_factory):
+    tmpdir = tmpdir_factory.mktemp("none_test")
+    eq = Equilibrium()
+    eq._iota = None
+    eq.save(tmpdir + "none_test.h5")
+    eq1 = load(tmpdir + "none_test.h5")
+    assert eq1.iota is None
+
+
+def test_load_eq_without_current():
+    desc_no_current_path = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+    eq = load(desc_no_current_path)[-1]
+    assert eq.current is None

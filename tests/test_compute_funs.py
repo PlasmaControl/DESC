@@ -1,19 +1,89 @@
 import numpy as np
-from scipy.signal import convolve2d
 import pytest
 from desc.grid import LinearGrid, Grid
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.geometry import FourierRZToroidalSurface
 from desc.profiles import PowerSeriesProfile
+from desc.compute.utils import compress
 
+from scipy.signal import convolve2d
 
-# TODO: add tests for compute_geometry
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
 FD_COEF_1_4 = np.array([1 / 12, -2 / 3, 0, 2 / 3, -1 / 12])[::-1]
 FD_COEF_2_2 = np.array([1, -2, 1])[::-1]
 FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
+
+
+# TODO: add more tests for compute_geometry
+def test_total_volume(DummyStellarator):
+    """Test that the volume enclosed by the LCFS is equal to the total volume."""
+
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+
+    grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
+    lcfs_volume = eq.compute("V(r)", grid)["V(r)"].mean()
+    total_volume = eq.compute("V")["V"]  # default quadrature grid
+    np.testing.assert_allclose(lcfs_volume, total_volume)
+
+
+def test_enclosed_volumes():
+    """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("V_rr(r)", grid=grid)
+    np.testing.assert_allclose(
+        2 * data["R0"] * (np.pi * rho) ** 2,
+        compress(grid, data["V(r)"]),
+    )
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi ** 2 * rho,
+        compress(grid, data["V_r(r)"]),
+    )
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi ** 2,
+        compress(grid, data["V_rr(r)"]),
+    )
+
+
+def test_surface_areas():
+    """Test that the flux surface areas match known analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("S(r)", grid=grid)
+    S = 4 * data["R0"] * np.pi ** 2 * rho
+    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
+
+
+def test_surface_areas_2():
+    eq = Equilibrium()
+
+    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
+    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
+    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
+
+    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
+    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
+    data_z = eq.compute("|e_rho x e_theta|", grid_z)
+
+    Ar = np.sum(
+        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
+    )
+    At = np.sum(
+        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
+    )
+    Az = np.sum(
+        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
+    )
+
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
+    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
+    np.testing.assert_allclose(Az, np.pi)
 
 
 @pytest.mark.slow
@@ -316,16 +386,16 @@ def test_currents(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
 
     grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    grid_symm = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
 
     data_booz = eq.compute("|B|_mn", grid_full, M_booz=eq.M, N_booz=eq.N)
     data_full = eq.compute("I", grid_full)
-    data_symm = eq.compute("I", grid_symm)
+    data_sym = eq.compute("I", grid_sym)
 
-    np.testing.assert_allclose(data_full["I"], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_symm["I"], data_booz["I"], atol=1e-16)
-    np.testing.assert_allclose(data_full["G"], data_booz["G"], atol=1e-16)
-    np.testing.assert_allclose(data_symm["G"], data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
 
 
 @pytest.mark.slow

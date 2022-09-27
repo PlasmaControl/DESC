@@ -1,11 +1,10 @@
 """Compute functions for magnetic field quantities."""
 
-from desc.backend import jnp
 from scipy.constants import mu_0
 
+from desc.backend import jnp
+from .utils import check_derivs, dot, surface_averages
 from ._core import (
-    dot,
-    check_derivs,
     compute_toroidal_flux,
     compute_rotational_transform,
     compute_lambda,
@@ -20,11 +19,13 @@ def compute_contravariant_magnetic_field(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
@@ -36,13 +37,15 @@ def compute_contravariant_magnetic_field(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
-        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -51,6 +54,8 @@ def compute_contravariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
@@ -62,14 +67,27 @@ def compute_contravariant_magnetic_field(
         component of the magnetic field, differentiated wrt y.
 
     """
-    data = compute_toroidal_flux(Psi, iota, data=data)
-    data = compute_rotational_transform(i_l, iota, data=data)
+    data = compute_toroidal_flux(Psi, R_transform.grid, data=data)
     data = compute_lambda(L_lmn, L_transform, data=data)
     data = compute_jacobian(
         R_lmn,
         Z_lmn,
         R_transform,
         Z_transform,
+        data=data,
+    )
+    data = compute_rotational_transform(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
         data=data,
     )
 
@@ -221,11 +239,13 @@ def compute_covariant_magnetic_field(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
@@ -237,13 +257,15 @@ def compute_covariant_magnetic_field(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
-        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -252,6 +274,8 @@ def compute_covariant_magnetic_field(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
@@ -268,11 +292,13 @@ def compute_covariant_magnetic_field(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
@@ -331,11 +357,13 @@ def compute_magnetic_field_magnitude(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
@@ -347,13 +375,15 @@ def compute_magnetic_field_magnitude(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
-        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -362,6 +392,8 @@ def compute_magnetic_field_magnitude(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
@@ -378,11 +410,13 @@ def compute_magnetic_field_magnitude(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
@@ -394,11 +428,12 @@ def compute_magnetic_field_magnitude(
 
     # 0th order term
     if check_derivs("|B|", R_transform, Z_transform, L_transform):
-        data["|B|"] = jnp.sqrt(
+        data["|B|^2"] = (
             data["B^theta"] ** 2 * data["g_tt"]
             + data["B^zeta"] ** 2 * data["g_zz"]
             + 2 * data["B^theta"] * data["B^zeta"] * data["g_tz"]
         )
+        data["|B|"] = jnp.sqrt(data["|B|^2"])
 
     # 1st order derivatives
     # TODO: |B|_r
@@ -660,11 +695,13 @@ def compute_magnetic_pressure_gradient(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
@@ -676,13 +713,15 @@ def compute_magnetic_pressure_gradient(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
-        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -691,6 +730,8 @@ def compute_magnetic_pressure_gradient(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
@@ -707,11 +748,13 @@ def compute_magnetic_pressure_gradient(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
@@ -776,11 +819,13 @@ def compute_magnetic_tension(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
@@ -792,13 +837,15 @@ def compute_magnetic_tension(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
-        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -807,6 +854,8 @@ def compute_magnetic_tension(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
@@ -823,11 +872,13 @@ def compute_magnetic_tension(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
@@ -836,11 +887,13 @@ def compute_magnetic_tension(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
@@ -889,11 +942,13 @@ def compute_B_dot_gradB(
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
@@ -905,13 +960,15 @@ def compute_B_dot_gradB(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
-        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
     R_transform : Transform
         Transforms R_lmn coefficients to real space.
     Z_transform : Transform
@@ -920,6 +977,8 @@ def compute_B_dot_gradB(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
@@ -935,11 +994,13 @@ def compute_B_dot_gradB(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
@@ -970,21 +1031,23 @@ def compute_B_dot_gradB(
     return data
 
 
-def compute_contravariant_current_density(
+def compute_boozer_magnetic_field(
     R_lmn,
     Z_lmn,
     L_lmn,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     iota,
+    current,
     orientation,
     data=None,
     **kwargs,
 ):
-    """Compute contravariant current density components.
+    """Compute covariant magnetic field components in Boozer coordinates.
 
     Parameters
     ----------
@@ -996,6 +1059,8 @@ def compute_contravariant_current_density(
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -1006,8 +1071,92 @@ def compute_contravariant_current_density(
         Transforms L_lmn coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     orientation : {-1, 1}
         handedness of flux coordinate system. +1 for right handed, -1 for left handed.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_rho,) of covariant magnetic field components
+        in Boozer coordinates.
+
+    """
+    grid = R_transform.grid
+    data = compute_covariant_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
+        orientation,
+        data=data,
+    )
+
+    if check_derivs("I", R_transform, Z_transform, L_transform):
+        data["I"] = surface_averages(grid, data["B_theta"])
+        data["current"] = 2 * jnp.pi / mu_0 * data["I"]
+    if check_derivs("I_r", R_transform, Z_transform, L_transform):
+        data["I_r"] = surface_averages(grid, data["B_theta_r"])
+        data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
+    if check_derivs("G", R_transform, Z_transform, L_transform):
+        data["G"] = surface_averages(grid, data["B_zeta"])
+    if check_derivs("G_r", R_transform, Z_transform, L_transform):
+        data["G_r"] = surface_averages(grid, data["B_zeta_r"])
+
+    # TODO: add K(rho,theta,zeta)*grad(rho) term
+    return data
+
+
+def compute_contravariant_current_density(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    i_l,
+    c_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
+    iota,
+    current,
+    orientation,
+    data=None,
+    **kwargs,
+):
+    """Compute contravariant current density components.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface (Wb).
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -1017,21 +1166,36 @@ def compute_contravariant_current_density(
         component of the current density J, differentiated wrt y.
 
     """
-    data = compute_covariant_magnetic_field(
+    data = compute_magnetic_field_magnitude(
         R_lmn,
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
+        current,
         orientation,
         data=data,
     )
-    data = compute_covariant_metric_coefficients(
-        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+    # TODO: can remove this call if compute_|B| changed to use B_covariant
+    data = compute_covariant_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
+        orientation,
+        data=data,
     )
 
     if check_derivs("J^rho", R_transform, Z_transform, L_transform):
@@ -1062,11 +1226,6 @@ def compute_contravariant_current_density(
             + 2 * data["J^rho"] * data["J^theta"] * data["g_rt"]
             + 2 * data["J^rho"] * data["J^zeta"] * data["g_rz"]
             + 2 * data["J^theta"] * data["J^zeta"] * data["g_tz"]
-        )
-        data["|B|"] = jnp.sqrt(
-            data["B^theta"] ** 2 * data["g_tt"]
-            + data["B^zeta"] ** 2 * data["g_zz"]
-            + 2 * data["B^theta"] * data["B^zeta"] * data["g_tz"]
         )
         data["J_parallel"] = (
             data["J^rho"] * data["B_rho"]

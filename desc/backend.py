@@ -5,10 +5,6 @@ import os
 from termcolor import colored
 from desc import set_device, config as desc_config
 
-# we divide by zero in a few places but then overwrite with the
-# correct values, so lets suppress annoying warnings about that
-np.seterr(divide="ignore", invalid="ignore")
-
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
@@ -68,7 +64,7 @@ if use_jax:
     cond = jax.lax.cond
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
-    from jax.scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
+    from jax.scipy.linalg import cho_factor, cho_solve, qr, solve_triangular, block_diag
     from jax.scipy.special import gammaln
     from jax.experimental.ode import odeint
 
@@ -115,7 +111,7 @@ if use_jax:
 
 else:
     jit = lambda func, *args, **kwargs: func
-    from scipy.linalg import cho_factor, cho_solve, qr, solve_triangular
+    from scipy.linalg import cho_factor, cho_solve, qr, solve_triangular, block_diag
     from scipy.special import gammaln
     from scipy.integrate import odeint
 

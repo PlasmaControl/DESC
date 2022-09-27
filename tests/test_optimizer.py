@@ -201,7 +201,7 @@ def test_no_iterations():
     np.random.seed(0)
     A = np.random.random((20, 10))
     b = np.random.random(20)
-    x0 = np.linalg.lstsq(A, b)[0]
+    x0 = np.linalg.lstsq(A, b, rcond=None)[0]
 
     vecfun = lambda x: A @ x - b
     vecjac = Derivative(vecfun)

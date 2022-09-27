@@ -46,10 +46,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v2
         with:
-          name: my-artifact
+          name: artifact-${{ matrix.python-version }}
           path: |
             ./cov.xml
             ./mpl_results.html
+            ./prof.db
       - name: Upload coverage
         uses: codecov/codecov-action@v2
         with:

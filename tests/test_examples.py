@@ -84,7 +84,7 @@ def test_HELIOTRON_results(HELIOTRON):
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_HELIOTRON_results(HELIOTRON_vac):
+def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
 
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]

@@ -41,9 +41,36 @@ def test_near_axis_input_files():
     inputs_vmec = InputReader(vmec_path).inputs[-1]
     inputs_desc = InputReader(desc_path).inputs[-1]
     for arg in ["sym", "NFP", "Psi", "pressure", "iota", "current", "surface", "axis"]:
-        np.testing.assert_allclose(inputs_desc[arg], inputs_vmec[arg])
+        np.testing.assert_allclose(inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8)
 
 
+@pytest.mark.slow
+@pytest.mark.benchmark
+def test_perturb_0(SOLOVEV, benchmark):
+    """Benchmark 0th order perturbations."""
+
+    def setup():
+        eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+        objective = get_equilibrium_objective()
+        constraints = get_fixed_boundary_constraints()
+        tr_ratio = [0.01, 0.25, 0.25]
+        dp = np.zeros_like(eq.p_l)
+        objective.build(eq)
+        dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+
+        args = (eq,
+                objective,
+                constraints,
+    )
+        kwargs = {"dp": dp,
+                  "tr_ratio": tr_ratio,
+                  "order": 0,
+                  "verbose": 2,
+                  "copy": True,
+        }
+        return args, kwargs
+    benchmark.pedantic(perturb, setup=setup, rounds=5, iterations=1)
+    return None r
 class TestInputReader(unittest.TestCase):
     def setUp(self):
         self.argv0 = []

@@ -23,6 +23,7 @@ pytest-benchmark
 pytest-cov >= 2.6.0
 pytest-mpl == 0.16.1
 shapely >= 1.8.2
+pytest-monitor
 
 # building
 build

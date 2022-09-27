@@ -4,9 +4,11 @@ import os
 import h5py
 import numpy as np
 import time
+from netCDF4 import Dataset
 
-from desc.equilibrium import Equilibrium
+from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.__main__ import main
+from desc.vmec import VMECIO
 
 
 @pytest.fixture(scope="session")
@@ -262,3 +264,16 @@ def reader_test_file(tmpdir_factory):
         g.create_dataset(key, data=thedict[key])
     f.close()
     return filename
+
+
+@pytest.fixture(scope="session")
+def VMEC_save(SOLOVEV, tmpdir_factory):
+    vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
+    eq._solved = True
+    VMECIO.save(
+        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+    )
+    desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
+    return vmec, desc

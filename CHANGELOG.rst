@@ -1,6 +1,45 @@
 Changelog
 =========
 
+v0.5.2
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.5.1...v0.5.2>`_
+
+Major Changes
+
+- New objectives for ``MercierStability`` and ``MagneticWell``
+- Change ``LinearGrid`` API to be more consistent with other ``Grid`` classes:
+    - L, M, N now correspond to the grid spectral resolution, rather than the number of grid points
+    - rho, theta, zeta can be passed as integers to specify the number of grid points (functionality that used to belong to L, M, N)
+    - rho, theta, zeta still retain their functionality of specifying coordinate values if they are not integers
+    - Other code that depends on ``LinearGrid`` was updated accordingly to use the new syntax
+
+- Poloidal grid points are now shifted when ``sym=True`` to give correct averages over a flux surface.
+- Added default continuation steps to converted VMEC input files
+
+Minor Changes
+
+- add option to ``plot_comparison`` and ``plot_surfaces`` to not plot vartheta contours
+- Add better warnings for gpu and jax issues
+- add volume avg force and pressure gradient to the compute functions
+- change ``is_nested`` function to use jacobian sign instead of looking for intersections between surfaces
+- Allow alternate computation of multi-objective derivatives, computing individual jacobians and blocking together rather than computing all at once.
+
+Bug Fixes
+
+- Fix nfev=1 and Some scalar solver Issues
+- Fix some formula errors in second derivatives of certain magnetic field components, caused by some hanging expressions.
+- fix bug where node pattern is always jacobi when force is used as objective
+- Allow hdf5 to store None attributes correctly
+- Fix profile parity and Z axis coefficients in ``VMECIO.save``
+- Ensure axis coefficients are updated correctly after solving equilibrium
+
+New Contributors
+
+- @unalmis made their first contribution in https://github.com/PlasmaControl/DESC/pull/247
+
+
 v0.5.1
 #######
 
@@ -19,6 +58,7 @@ Major Changes
 - Adds new tutorial notebooks demonstrating VMEC io, continuation, plotting, perturbations, optimization etc.
 - New documentation on perturbation theory and evaluating Zernike polynomials.
 - Fix bug preventing vacuum solutions from solving properly.  
+
 
 v0.5.0
 #######

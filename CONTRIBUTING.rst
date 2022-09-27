@@ -32,8 +32,8 @@ I don’t want to read this whole thing I just have a question!!!
    **Note:** Please don’t file an issue to ask a question.
 
 If you just want to ask a question, the simplest method for now is to
-just contact the authors (Daniel Dudt & Rory Conlin) directly (If you’re
-reading this, you probably know who we are and how to get in touch).
+just contact the authors (Daniel Dudt, Rory Conlin, Dario Panici)
+directly.
 
 As the user base expands and more people start using and contributing to
 the code, we may set up some sort of user group Slack or Discord or

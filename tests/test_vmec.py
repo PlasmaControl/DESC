@@ -308,9 +308,6 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
     )
 
-    vmec.close()
-    desc.close()
-
 
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):
@@ -544,9 +541,6 @@ def test_vmec_save_2(VMEC_save):
     # FIXME: not testing B_psi
     # FIXME: not testing J^theta * sqrt(g)
     # FIXME: not testing J^zeta * sqrt(g)
-
-    vmec.close()
-    desc.close()
 
 
 @pytest.mark.mpl_image_compare(tolerance=1)

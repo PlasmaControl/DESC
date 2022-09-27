@@ -1,9 +1,20 @@
 import numpy as np
 from scipy.signal import convolve2d
 import pytest
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, Grid
+from desc.basis import DoubleFourierSeries
 from desc.equilibrium import Equilibrium, EquilibriaFamily
-
+from desc.geometry import FourierRZToroidalSurface
+from desc.profiles import PowerSeriesProfile
+from desc.transform import Transform
+from desc.compute import (
+    compute_covariant_magnetic_field,
+    compute_magnetic_field_magnitude,
+    compute_magnetic_pressure_gradient,
+    compute_B_dot_gradB,
+    compute_boozer_coords,
+)
+ 
 # TODO: add tests for compute_geometry
 
 # convolve kernel is reverse of FD coeffs
@@ -413,3 +424,62 @@ def test_surface_areas():
     np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
     np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
     np.testing.assert_allclose(Az, np.pi)
+
+
+def test_vector_signs():
+
+    iota1 = PowerSeriesProfile([1, 0, -0.5])
+    R_lmn = np.array([10, 1])
+    modes_R = np.array([[0, 0], [1, 0]])
+    Z_lmn = np.array([0, -2])
+    modes_Z = np.array([[0, 0], [-1, 0]])
+    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
+    eq1p = Equilibrium(surface=surface, L=5, M=10, N=5, NFP=1, sym=False, iota=iota1)
+
+    R_lmn = np.array([10, 1])
+    modes_R = np.array([[0, 0], [1, 0]])
+    Z_lmn = np.array([0, 2])
+    modes_Z = np.array([[0, 0], [-1, 0]])
+    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
+    eq1m = Equilibrium(surface=surface, L=5, M=10, N=5, NFP=1, sym=False, iota=iota1)
+
+    iota2 = PowerSeriesProfile([-1, 0, -0.5])
+
+    R_lmn = np.array([10, 1, 0.2])
+    modes_R = np.array([[0, 0], [1, 0], [-1, 1]])
+    Z_lmn = np.array([0, -2, -0.2])
+    modes_Z = np.array([[0, 0], [-1, 0], [-1, 1]])
+    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
+    eq2p = Equilibrium(surface=surface, L=5, M=10, N=5, Psi=-1.0, sym=False, iota=iota2)
+
+    R_lmn = np.array([10, 1, -0.2])
+    modes_R = np.array([[0, 0], [1, 0], [-1, 1]])
+    Z_lmn = np.array([0, 2, 0.2])
+    modes_Z = np.array([[0, 0], [-1, 0], [-1, 1]])
+    surface = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
+    eq2m = Equilibrium(surface=surface, L=5, M=10, N=5, Psi=-1.0, sym=False, iota=iota2)
+
+    assert np.sign(eq1p.compute("sqrt(g)")["sqrt(g)"][0]) == 1.0
+    assert np.sign(eq1m.compute("sqrt(g)")["sqrt(g)"][0]) == -1.0
+    assert np.sign(eq2p.compute("sqrt(g)")["sqrt(g)"][0]) == 1.0
+    assert np.sign(eq2m.compute("sqrt(g)")["sqrt(g)"][0]) == -1.0
+
+    pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 2]]))
+    mgrid = Grid(np.array([[1, 0, 0], [0.5, -np.pi / 6, np.pi / 2]]))
+
+    keys = ["B", "B_r", "B_z", "grad(|B|^2)", "curl(B)xB", "(B*grad)B", "J", "F"]
+    for key in keys:
+        np.testing.assert_allclose(
+            eq1p.compute(key, grid=pgrid)[key],
+            eq1m.compute(key, grid=mgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )
+        np.testing.assert_allclose(
+            eq2p.compute(key, grid=pgrid)[key],
+            eq2m.compute(key, grid=mgrid)[key],
+            rtol=1e-8,
+            atol=1e-8,
+            err_msg=key,
+        )

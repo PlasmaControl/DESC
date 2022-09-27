@@ -192,7 +192,6 @@ copied from jax.ops.index to work with either backend
 """
 Index = _Indexable()
 
-
 # Helper Functions -----------------------------------------------------------
 
 

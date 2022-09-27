@@ -38,8 +38,8 @@ def test_near_axis_input_files():
 
     vmec_path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
     desc_path = ".//tests//inputs//input.QSC_r2_5.5_desc"
-    inputs_vmec = InputReader(vmec_path).inputs
-    inputs_desc = InputReader(desc_path).inputs
+    inputs_vmec = InputReader(vmec_path).inputs[-1]
+    inputs_desc = InputReader(desc_path).inputs[-1]
     for arg in ["sym", "NFP", "Psi", "pressure", "iota", "current", "surface", "axis"]:
         np.testing.assert_allclose(inputs_desc[arg], inputs_vmec[arg])
 

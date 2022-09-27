@@ -9,7 +9,7 @@ from scipy.interpolate import Rbf
 from scipy.integrate import solve_ivp
 
 from desc.compute.utils import compress, surface_averages
-from desc.grid import Grid, LinearGrid
+from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import data_index
@@ -534,17 +534,17 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        if name != "|F|":
-            return ValueError(colored("Can only normalize |F|.", "red"))
-        else:
-            if (
-                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-            ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|/2mu0"
-            else:  # normalize force balance with pressure by gradient of pressure
-                norm_name = "|grad(p)|"
+        assert name == "|F|", "Can only normalize |F|."
+        if (
+            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+        ):  # normalize vacuum force by B pressure gradient
+            norm_name = "|grad(|B|^2)|/2mu0"
             norm_data, _ = _compute(eq, norm_name, grid)
-            data = data / np.nanmean(np.abs(norm_data))  # normalize
+        else:  # normalize force balance with pressure by gradient of pressure
+            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+            norm_name = "<|grad(p)|>_vol"
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
     if 0 in plot_axes:
@@ -740,7 +740,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         cstride=1,
         alpha=alpha,
     )
-    fig.colorbar(m)
+    fig.colorbar(m, ax=ax)
 
     ax.set_xlabel(_axis_labels_XYZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(_axis_labels_XYZ[1], fontsize=ylabel_fontsize)
@@ -783,6 +783,7 @@ def plot_fsa(
     rho=20,
     M=None,
     N=None,
+    norm_F=False,
     ax=None,
     **kwargs,
 ):
@@ -803,6 +804,10 @@ def plot_fsa(
         Poloidal grid resolution. Default is eq.M_grid.
     N : int, optional
         Toroidal grid resolution. Default is eq.N_grid.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the volume average of the gradient of magnetic pressure,
+        while finite beta equilibria are normalized by the volume average of the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     **kwargs : fig,ax and plotting properties
@@ -849,13 +854,24 @@ def plot_fsa(
     linecolor = kwargs.pop("linecolor", colorblind_colors[0])
     ls = kwargs.pop("ls", "-")
     lw = kwargs.pop("lw", 1)
-    fig, ax = _format_ax(ax, figsize=kwargs.get("figsize", (4, 4)))
+    fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
     g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-    data, label = _compute(eq, name, grid, kwargs.get("component", None), reshape=False)
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
-
+    if norm_F:
+        assert name == "|F|", "Can only normalize |F|."
+        if (
+            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+        ):  # normalize vacuum force by B pressure gradient
+            norm_name = "|grad(|B|^2)|/2mu0"
+            norm_data, _ = _compute(eq, norm_name, grid)
+        else:  # normalize force balance with pressure by gradient of pressure
+            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+            norm_name = "<|grad(p)|>_vol"
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+        values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
         ax.semilogy(
@@ -876,6 +892,15 @@ def plot_fsa(
 
     ax.set_xlabel(_axis_labels_rtz[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
+    if norm_F:
+        ax.set_ylabel(
+            "%s / %s"
+            % (
+                "$" + data_index[name]["label"] + "$",
+                "$" + data_index[norm_name]["label"] + "$",
+            ),
+            fontsize=ylabel_fontsize,
+        )
     fig.set_tight_layout(True)
     return fig, ax
 
@@ -957,17 +982,17 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
-        if name != "|F|":
-            return ValueError(colored("Can only normalize |F|.", "red"))
-        else:
-            if (
-                np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-            ):  # normalize vacuum force by B pressure gradient
-                norm_name = "|grad(|B|^2)|/2mu0"
-            else:  # normalize force balance with pressure by gradient of pressure
-                norm_name = "|grad(p)|"
+        assert name == "|F|", "Can only normalize |F|."
+        if (
+            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
+        ):  # normalize vacuum force by B pressure gradient
+            norm_name = "|grad(|B|^2)|/2mu0"
             norm_data, _ = _compute(eq, norm_name, grid)
-            data = data / np.nanmean(np.abs(norm_data))  # normalize
+        else:  # normalize force balance with pressure by gradient of pressure
+            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
+            norm_name = "<|grad(p)|>_vol"
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+        data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
     figh = 5 * rows
@@ -1482,7 +1507,7 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
         )
 
     if cbar:
-        cbar = fig.colorbar(sm)
+        cbar = fig.colorbar(sm, ax=ax)
         cbar.set_label(r"$\mathrm{Current} ~(\mathrm{A})$")
     x_limits = ax.get_xlim3d()
     y_limits = ax.get_ylim3d()

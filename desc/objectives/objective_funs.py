@@ -1,9 +1,8 @@
 import numpy as np
-import scipy.linalg
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-from desc.backend import use_jax, jnp, jit
+from desc.backend import use_jax, jnp, jit, block_diag
 from desc.utils import Timer
 from desc.io import IOAble
 from desc.derivatives import Derivative
@@ -115,27 +114,21 @@ class ObjectiveFunction(IOAble):
             self._jac = lambda x: jnp.hstack(
                 [self._derivatives["jac"][arg](x) for arg in self.args]
             )
-            self._hess = lambda x: scipy.linalg.block_diag(
+            self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
             )
         if self._deriv_mode == "batched":
-            self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-            self._hess = Derivative(
-                self.compute_scalar,
-                mode="hess",
-                use_jit=use_jit,
-            )
-            self._jac = Derivative(
-                self.compute,
-                mode="fwd",
-                use_jit=use_jit,
-            )
+            self._grad = Derivative(self.compute_scalar, mode="grad")
+            self._hess = Derivative(self.compute_scalar, mode="hess")
+            self._jac = Derivative(self.compute, mode="fwd")
 
         if use_jit:
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
-            # TODO: add jit for jac, hess, jvp, etc.
-            # then can remove jit from Derivatives class
+            self.jac = jit(self.jac)
+            self.hess = jit(self.hess)
+            self.grad = jit(self.grad)
+            self.jvp = jit(self.jvp)
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build the objective.
@@ -489,19 +482,16 @@ class _Objective(IOAble, ABC):
                     self.compute,
                     argnum=self.args.index(arg),
                     mode="fwd",
-                    use_jit=use_jit,
                 )
                 self._derivatives["grad"][arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
                     mode="grad",
-                    use_jit=use_jit,
                 )
                 self._derivatives["hess"][arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
                     mode="hess",
-                    use_jit=use_jit,
                 )
             else:  # these derivatives are always zero
                 self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
@@ -517,6 +507,9 @@ class _Objective(IOAble, ABC):
         if use_jit:
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
+            for mode, val in self._derivatives.items():
+                for arg, deriv in val.items():
+                    self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""

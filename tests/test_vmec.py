@@ -314,7 +314,7 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
     )
 
-    
+
 @pytest.mark.unit
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):

@@ -107,6 +107,18 @@ def test_precise_QH_results(precise_QH):
 
 @pytest.mark.regression
 @pytest.mark.solve
+def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
+    """Tests that the 2 methods for solving vacuum give the same results."""
+
+    eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
+    eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-6)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-6)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
     # When ConcentricGrid had a rotation option,

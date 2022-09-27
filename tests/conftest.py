@@ -193,7 +193,7 @@ def HELIOTRON_ex(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def HELIOTRON_vac(tmpdir_factory):
-    """Run HELIOTRON vacuum (fixed current) example."""
+    """Run HELIOTRON vacuum (vacuum) example."""
     input_path = ".//tests//inputs//HELIOTRON_vacuum"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_vacuum_out.h5")
@@ -205,7 +205,7 @@ def HELIOTRON_vac(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running HELIOTRON vacuum (fixed current) test.")
+    print("Running HELIOTRON vacuum (vacuum) test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -220,6 +220,37 @@ def HELIOTRON_vac(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return HELIOTRON_vacuum_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_vac2(tmpdir_factory):
+    """Run HELIOTRON vacuum (fixed current) example."""
+    input_path = ".//tests//inputs//HELIOTRON_vacuum2"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_vacuum2_out.h5")
+    desc_nc_path = output_dir.join("HELIOTRON_vacuum2_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum2.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_vacuum2_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON vacuum (fixed current) test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    HELIOTRON_vacuum2_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_vacuum2_out
 
 
 @pytest.fixture(scope="session")

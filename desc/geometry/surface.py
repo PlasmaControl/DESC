@@ -471,9 +471,7 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def from_near_axis(
-        cls, aspect_ratio, elongation, mirror_ratio, axis_Z, NFP=1, sym=True
-    ):
+    def from_near_axis(cls, aspect_ratio, elongation, mirror_ratio, axis_Z, NFP=1):
         """Create a surface from a near-axis model for quasi-poloidal/quasi-isodynamic.
 
         Parameters
@@ -488,8 +486,6 @@ class FourierRZToroidalSurface(Surface):
             Vertical extent of the magnetic axis Z coordinate; coefficient of sin(2*phi)
         NFP : int
             Number of field periods.
-        sym : bool
-            Whether to enforce stellarator symmetry.
 
         Returns
         -------

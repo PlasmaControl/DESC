@@ -13,8 +13,7 @@ from desc.utils import equals
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
-from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.objectives import get_fixed_boundary_constraints, get_equilibrium_objective
+from desc.equilibrium import Equilibrium
 
 
 def test_vmec_input(tmpdir_factory):

@@ -111,6 +111,7 @@ class FourierRZToroidalSurface(Surface):
             grid = LinearGrid(
                 M=2 * self.M,
                 N=2 * self.N,
+                NFP=self.NFP,
                 rho=np.asarray(self.rho),
                 endpoint=True,
             )

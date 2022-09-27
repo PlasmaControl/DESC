@@ -40,6 +40,8 @@ dependencies:
   - pytest-cov >= 2.6.0
   - pytest-mpl = 0.16.1
   - shapely >= 1.8.2
+  - pip:
+    - qsc
 
   # building
   - python-build

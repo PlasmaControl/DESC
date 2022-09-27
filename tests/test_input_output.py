@@ -13,7 +13,8 @@ from desc.utils import equals
 from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
 from desc.transform import Transform
-from desc.equilibrium import Equilibrium
+from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.objectives import get_fixed_boundary_constraints, get_equilibrium_objective
 
 
 def test_vmec_input(tmpdir_factory):
@@ -41,7 +42,9 @@ def test_near_axis_input_files():
     inputs_vmec = InputReader(vmec_path).inputs[-1]
     inputs_desc = InputReader(desc_path).inputs[-1]
     for arg in ["sym", "NFP", "Psi", "pressure", "iota", "current", "surface", "axis"]:
-        np.testing.assert_allclose(inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8)
+        np.testing.assert_allclose(
+            inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
+        )
 
 
 @pytest.mark.slow
@@ -58,19 +61,24 @@ def test_perturb_0(SOLOVEV, benchmark):
         objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
 
-        args = (eq,
-                objective,
-                constraints,
-    )
-        kwargs = {"dp": dp,
-                  "tr_ratio": tr_ratio,
-                  "order": 0,
-                  "verbose": 2,
-                  "copy": True,
+        args = (
+            eq,
+            objective,
+            constraints,
+        )
+        kwargs = {
+            "dp": dp,
+            "tr_ratio": tr_ratio,
+            "order": 0,
+            "verbose": 2,
+            "copy": True,
         }
         return args, kwargs
+
     benchmark.pedantic(perturb, setup=setup, rounds=5, iterations=1)
-    return None r
+    return None
+
+
 class TestInputReader(unittest.TestCase):
     def setUp(self):
         self.argv0 = []

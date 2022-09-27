@@ -219,12 +219,13 @@ def run_qh_step(n, eq):
         FixPsi(),
     )
     optimizer = Optimizer("lsq-exact")
-    eq.optimize(
+    eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
         verbose=3,
+        copy=True,
         options={
             "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0},
@@ -232,7 +233,7 @@ def run_qh_step(n, eq):
         },
     )
 
-    return eq
+    return eq1
 
 
 @pytest.mark.regression
@@ -241,7 +242,7 @@ def test_qh_optimization1():
     """Tests precise QH optimization, step 1."""
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
-    eq1a = run_qh_step(1, eq0)
+    eq1a = run_qh_step(0, eq0)
     rho_err, theta_err = area_difference_desc(eq1, eq1a)
     np.testing.assert_allclose(rho_err, 0, atol=1e-6)
     np.testing.assert_allclose(theta_err, 0, atol=1e-6)
@@ -253,7 +254,7 @@ def test_qh_optimization2():
     """Tests precise QH optimization, step 2."""
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
-    eq2a = run_qh_step(2, eq1)
+    eq2a = run_qh_step(1, eq1)
     rho_err, theta_err = area_difference_desc(eq2, eq2a)
     np.testing.assert_allclose(rho_err, 0, atol=1e-6)
     np.testing.assert_allclose(theta_err, 0, atol=1e-6)
@@ -265,7 +266,7 @@ def test_qh_optimization3():
     """Tests precise QH optimization, step 3."""
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq3 = load(".//tests//inputs//precise_QH_step3.h5")
-    eq3a = run_qh_step(3, eq2)
+    eq3a = run_qh_step(2, eq2)
     rho_err, theta_err = area_difference_desc(eq3, eq3a)
     np.testing.assert_allclose(rho_err, 0, atol=1e-6)
     np.testing.assert_allclose(theta_err, 0, atol=1e-6)

@@ -99,6 +99,15 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
             true_surf.Z_lmn, desc_surf.Z_lmn, atol=1e-10, rtol=1e-10
         )
 
+    def test_from_near_axis(self):
+        surf = FourierRZToroidalSurface.from_near_axis(10, 4, 0.3, 0.2)
+        np.testing.assert_allclose(
+            surf.R_lmn, np.array([-0.075, 0, 1, 0.125, 0, 0.0150853, -0.2, 0.075])
+        )
+        np.testing.assert_allclose(
+            surf.Z_lmn, np.array([0.2, -0.075, 0, 0, 0.125, 0.00377133, -0.075])
+        )
+
 
 class TestZernikeRZToroidalSection(unittest.TestCase):
     def test_area(self):

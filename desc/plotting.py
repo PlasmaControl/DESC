@@ -267,7 +267,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     with warnings.catch_warnings():
         data = eq.compute(name, grid)[name]
 
-    if data_index[name]["dim"] != 1:
+    if data_index[name]["dim"] > 1:
         if component is None:
             data = np.linalg.norm(data, axis=-1)
             label = "|" + label + "|"

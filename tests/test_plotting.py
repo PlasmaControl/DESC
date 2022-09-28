@@ -217,17 +217,6 @@ def test_fsa_F_normalized(DSHAPE_current):
 
 @pytest.mark.unit
 @pytest.mark.solve
-@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_fsa_F_normalized_vac(DSHAPE_current):
-    """Test plotting flux surface average normalized force error on log scale in vacuum."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[1]
-    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
-    ax.set_ylim([1e-4, 1e-2])
-    return fig
-
-
-@pytest.mark.unit
-@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_section_J(DSHAPE_current):
     """Test plotting poincare section of radial current."""

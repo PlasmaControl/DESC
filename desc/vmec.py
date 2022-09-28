@@ -366,7 +366,7 @@ class VMECIO:
             iotaf[:] = eq.iota(r_full)
         else:
             # value closest to axis will be nan
-            grid = LinearGrid(M=12, N=12, rho=r_full)
+            grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
             iotaf[:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
@@ -375,7 +375,7 @@ class VMECIO:
         if eq.iota is not None:
             iotas[1:] = eq.iota(r_half)
         else:
-            grid = LinearGrid(M=12, N=12, rho=r_half)
+            grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
             iotas[1:] = compress(grid, eq.compute("iota", grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
@@ -1316,13 +1316,13 @@ class VMECIO:
         rr = np.sqrt(idxes / Nr_vmec)
         rt = np.linspace(0, 2 * np.pi, num_theta)
         rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-        r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
+        r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
         # straight field-line angles to plot
         tr = np.linspace(0, 1, 50)
         tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
         tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-        t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
+        t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
         # angle in PEST-like flux coordinates

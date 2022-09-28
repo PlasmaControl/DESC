@@ -151,7 +151,8 @@ def test_resolution():
     eq1.L = 2
     eq1.M = 3
     eq1.N = 4
-    eq1.NFP = 5
+    with pytest.warns(UserWarning):
+        eq1.NFP = 5
     assert eq1.R_basis.L == 2
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4

@@ -24,8 +24,8 @@ pytest-cov >= 2.6.0
 pytest-monitor
 pytest-mpl == 0.16.1
 pytest-split
+qsc
 shapely >= 1.8.2
-
 
 # building
 build

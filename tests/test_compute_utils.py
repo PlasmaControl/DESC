@@ -109,7 +109,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=True)
             sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
             areas = compress(grid, surface_integrals(grid, sqrt_g))
             np.testing.assert_allclose(areas, np.sort(areas))
@@ -124,7 +124,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=True)
             data = eq.compute("p", grid=grid)
             data = eq.compute("sqrt(g)", grid=grid, data=data)
             pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
@@ -143,7 +143,7 @@ class TestComputeUtils:
 
         def test(stellarator):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            grid = ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=True)
             data = eq.compute("|B|_t", grid=grid)
             a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
             b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])

@@ -287,7 +287,8 @@ class Equilibrium(_Configuration, IOAble):
         M : int (optional)
             Poloidal resolution. Default is 8
         N : int (optional)
-            Toroidal resolution. Default is the max resolution provided by na_eq.nphi
+            Toroidal resolution. Default is M.
+            If N=np.inf, the max resolution provided by na_eq.nphi is used.
         ntheta : int, optional
             Number of poloidal grid points used in the conversion. Default 2*M+1
         spectral_indexing : str (optional)
@@ -307,7 +308,10 @@ class Equilibrium(_Configuration, IOAble):
                 elif spectral_indexing == "fringe":
                     L = 2 * M
             if N is None:
-                N = int((na_eq.nphi - 1) / 2)
+                if N == np.inf:
+                    N = int((na_eq.nphi - 1) / 2)
+                else:
+                    N = M
             if ntheta is None:
                 ntheta = 2 * M + 1
 

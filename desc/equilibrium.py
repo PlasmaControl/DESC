@@ -308,10 +308,10 @@ class Equilibrium(_Configuration, IOAble):
                 elif spectral_indexing == "fringe":
                     L = 2 * M
             if N is None:
-                if N == np.inf:
-                    N = int((na_eq.nphi - 1) / 2)
-                else:
-                    N = M
+                N = M
+            if N == np.inf:
+                N = int((na_eq.nphi - 1) / 2)
+
             if ntheta is None:
                 ntheta = 2 * M + 1
 

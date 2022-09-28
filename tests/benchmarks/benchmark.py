@@ -102,7 +102,7 @@ def test_build_transform_fft_highres(benchmark):
 @pytest.mark.benchmark(min_rounds=5, max_time=300, disable_gc=True, warmup=False)
 def test_SOLOVEV_run(tmpdir_factory, benchmark):
     """Benchmark the SOLOVEV example."""
-    input_path = ".//tests//benchmarks//SOLOVEV"
+    input_path = ".//tests//inputs//SOLOVEV"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("SOLOVEV_out.h5")
     cwd = os.path.dirname(__file__)
@@ -122,7 +122,7 @@ def test_SOLOVEV_run(tmpdir_factory, benchmark):
 @pytest.mark.benchmark(min_rounds=5, max_time=300, disable_gc=True, warmup=False)
 def test_DSHAPE_run(tmpdir_factory, benchmark):
     """Benchmark the DSHAPE fixed rotational transform example."""
-    input_path = ".//tests//benchmarks//DSHAPE"
+    input_path = ".//tests//inputs//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
     cwd = os.path.dirname(__file__)
@@ -162,7 +162,7 @@ def test_DSHAPE_current_run(tmpdir_factory, benchmark):
 @pytest.mark.benchmark(min_rounds=3, max_time=300, disable_gc=True, warmup=False)
 def test_HELIOTRON_run(tmpdir_factory, benchmark):
     """Benchmark the HELIOTRON fixed rotational transform example."""
-    input_path = ".//tests//benchmarks//HELIOTRON"
+    input_path = ".//tests//inputs//HELIOTRON"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_out.h5")
     cwd = os.path.dirname(__file__)

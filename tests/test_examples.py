@@ -22,6 +22,7 @@ from desc.objectives import (
     FixPsi,
 )
 from desc.optimize import Optimizer
+from desc.plotting import plot_boozer_surface
 from desc.vmec_utils import vmec_boundary_subspace
 
 
@@ -274,6 +275,7 @@ def test_qh_optimization2():
 
 @pytest.mark.regression
 @pytest.mark.solve
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)
 def test_qh_optimization3():
     """Tests precise QH optimization, step 3."""
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
@@ -288,6 +290,8 @@ def test_qh_optimization3():
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
     np.testing.assert_array_less(B_asym, 2e-3)
+    fig, ax = plot_boozer_surface(eq3a)
+    return fig
 
 
 class TestGetExample:

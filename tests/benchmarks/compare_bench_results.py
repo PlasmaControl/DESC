@@ -54,11 +54,15 @@ for id_num, commit_id in enumerate(data.keys()):
 
 colors = [""] * num_benchmarks  # g if faster, w if similar, r if slower
 delta_times_ms = times[:, latest_commit_index] - times[:, master_commit_index]
+delta_stds_ms = np.sqrt(
+    stddevs[:, latest_commit_index] ** 2 + stddevs[:, master_commit_index] ** 2
+)
 delta_times_pct = delta_times_ms / times[:, master_commit_index] * 100
-for i, pct in enumerate(delta_times_pct):
-    if pct > 20:
+delta_stds_pct = delta_stds_ms / times[:, master_commit_index] * 100
+for i, (pct, spct) in enumerate(zip(delta_times_pct, delta_stds_pct)):
+    if pct > 0 and pct > spct:
         colors[i] = "-"  # this will make the line red
-    elif pct < -20:
+    elif pct < 0 and -pct > spct:
         colors[i] = "+"  # this makes text green
     else:
         pass
@@ -68,17 +72,27 @@ for i, pct in enumerate(delta_times_pct):
 print(latest_commit_index)
 print(master_commit_index)
 commit_msg_lines = [
-    "```diff\n",
-    f'{"benchmark_name":^30}\t{"dt(%)":>15}\t{"dt(s)":>15}\t{"t_new(s)":>16}\t{"t_old(s)":>9}\n',
+    "```diff",
+    f"| {'benchmark_name':^31} | {'dt(%)':^19} | {'dt(s)':^19} | {'t_new(s)':^18} | {'t_old(s)':^18} | ",
+    "| ------------------------------- | ------------------- | ------------------- | ------------------ | ------------------ |",
 ]
 
-for i, (dt, dpct) in enumerate(zip(delta_times_ms, delta_times_pct)):
+for i, (dt, dpct, sdt, sdpct) in enumerate(
+    zip(delta_times_ms, delta_times_pct, delta_stds_ms, delta_stds_pct)
+):
 
-    line = f"{colors[i]:>2}{test_names[i]:<36}\t{dpct:8.3f}\t{dt:8.5f}\t{times[i, latest_commit_index]:8.4f}\t{times[i, master_commit_index]:8.4f}\n"
+    line = f"{colors[i]:>1}{test_names[i]:<32} | "
+    line += f"{dpct:+.2e}+/-{sdpct:.1e} | "
+    line += f"{dt:+.2e}+/-{sdt:.1e} | "
+    line += f"{times[i, latest_commit_index]:.2e}+/-{stddevs[i, latest_commit_index]:.1e} | "
+    line += (
+        f"{times[i, master_commit_index]:.2e}+/-{stddevs[i, master_commit_index]:.1e} |"
+    )
 
     commit_msg_lines.append(line)
 
 commit_msg_lines.append("```")
+print("\n".join(commit_msg_lines))
 # write out commit msg
 
 fname = "commit_msg.txt"

@@ -754,21 +754,22 @@ class InputReader:
         InputReader.write_desc_input(desc_fname, inputs, header)
 
     @staticmethod
-    def parse_vmec_inputs(vmec_fname):
-        """Parse a VMEC input file into a dictionary of DESC inputs
+    def parse_vmec_inputs(vmec_fname, threshold=0):
+        """Parse a VMEC input file into a dictionary of DESC inputs.
 
         Parameters
         ----------
         vmec_fname : str or PathLike
-            path to VMEC input file
+            Path to VMEC input file.
+        threshold : float
+            Threshold value of boundary surface magnitudes to ignore.
 
         Returns
         -------
         inputs : dict
-            dictionary of inputs formatted for DESC
+            Dictionary of inputs formatted for DESC.
 
         """
-
         if not isinstance(vmec_fname, io.IOBase):
             vmec_file = open(vmec_fname, "r")
         else:
@@ -1291,6 +1292,14 @@ class InputReader:
         inputs["surface"] = inputs["surface"][
             inputs["surface"][:, 0].argsort(kind="mergesort")
         ]
+        # delete surface modes below threshold magnitude
+        inputs["surface"] = np.delete(
+            inputs["surface"],
+            np.where((np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1)))[
+                0
+            ],
+            axis=0,
+        )
         # add radial mode numbers to surface array
         inputs["surface"] = np.pad(inputs["surface"], ((0, 0), (1, 0)), mode="constant")
         # scale pressure profile

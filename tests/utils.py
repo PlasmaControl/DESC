@@ -21,13 +21,13 @@ def compute_coords(equil, check_all_zeta=False):
     rr = np.linspace(0, 1, Nr)
     rt = np.linspace(0, 2 * np.pi, num_theta)
     rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
+    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
     # straight field-line angles to plot
     tr = np.linspace(0, 1, num_rho)
     tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
     tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
+    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
     # Note: theta* (also known as vartheta) is the poloidal straight field-line
     # angle in PEST-like flux coordinates

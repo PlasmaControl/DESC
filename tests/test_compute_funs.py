@@ -94,7 +94,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
 
     # partial derivatives wrt rho
     num_rho = 75
-    grid = LinearGrid(rho=num_rho)
+    grid = LinearGrid(rho=num_rho, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute("J", grid)
 

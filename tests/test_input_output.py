@@ -59,7 +59,6 @@ def test_vmec_input_surface_threshold():
 
 class TestInputReader:
     """Tests for the InputReader class."""
-    
     argv0 = []
     argv1 = ["nonexistant_input_file"]
     argv2 = ["./tests/inputs/MIN_INPUT"]

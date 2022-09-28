@@ -1,4 +1,4 @@
-name: nbtests
+name: Notebook tests
 
 on: 
   push:

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from desc.equilibrium import EquilibriaFamily
 from desc.grid import ConcentricGrid
@@ -6,6 +7,9 @@ from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constr
 from desc.perturbations import perturb
 
 
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.solve
 def test_perturbation_orders(SOLOVEV):
     """Test that higher-order perturbations are more accurate."""
 

@@ -6,7 +6,7 @@ from desc.grid import Grid, LinearGrid
 
 
 def compute_coords(equil, check_all_zeta=False):
-
+    """Computes coordinate values from a given equilibrium."""
     if equil.N == 0 and not check_all_zeta:
         Nz = 1
     else:
@@ -172,5 +172,35 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     Zr2 = coords["Zr_vmec"]
     Rv2 = coords["Rv_vmec"]
     Zv2 = coords["Zv_vmec"]
+    area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    return area_rho, area_theta
+
+
+def area_difference_desc(eq1, eq2, Nr=10, Nt=8, **kwargs):
+    """Compute average normalized area difference between two DESC equilibria.
+
+    Parameters
+    ----------
+    eq1, eq2 : Equilibrium
+        desc equilibria to compare
+    Nr : int, optional
+        number of radial surfaces to average over
+    Nt : int, optional
+        number of vartheta contours to compare
+
+    Returns
+    -------
+    area_rho : ndarray, shape(Nr, Nz)
+        normalized area difference of rho contours, computed as the symmetric
+        difference divided by the intersection
+    area_theta : ndarray, shape(Nt, Nz)
+        normalized area difference between vartheta contours, computed as the area
+        of the polygon created by closing the two vartheta contours divided by the
+        perimeter squared
+
+    """
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2)
+
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta

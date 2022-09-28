@@ -1,4 +1,4 @@
-# This is the DESC input file for a vacuum heliotron
+# This is the DESC input file for a heliotron with zero current and pressure
 
 # global parameters
 sym = 1
@@ -18,13 +18,18 @@ pert_order = 2
 ftol = 1e-2
 xtol = 1e-6
 gtol = 1e-6
-nfev = 50
+nfev = 100
 
 # solver methods
 optimizer         = lsq-exact
-objective         = vacuum
+objective         = force
 spectral_indexing = ansi
 node_pattern      = jacobi
+
+# pressure and rotational transform/current profiles
+l:   0	p =   0    c = 0
+l:   2	p =   0    c = 0
+l:   4	p =   0    c = 0
 
 # magnetic axis initial guess
 n:   0  R0 =  1.0E+1  Z0 =  0.0E+0

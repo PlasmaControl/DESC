@@ -1,6 +1,6 @@
-import unittest
 import numpy as np
 import pytest
+
 from desc.backend import jnp
 from desc.optimize import fmintr, lsqtr
 from desc.optimize.utils import make_spd, chol_U_update
@@ -10,6 +10,7 @@ from numpy.random import default_rng
 
 
 def fun(x, p):
+    """Example function to optimize."""
     a0 = x * p[0]
     a1 = jnp.exp(-(x ** 2) * p[1])
     a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
@@ -20,20 +21,26 @@ def fun(x, p):
     return a0 + a1 + 3 * a2 + a3
 
 
-class TestUtils(unittest.TestCase):
+class TestUtils:
+    """Tests for optimizer utility functions."""
+
+    @pytest.mark.unit
     def test_spd(self):
+        """Test making a matrix positive definite."""
         rando = default_rng(seed=0)
 
         n = 100
         A = rando.random((n, n))
         A = A + A.T - 5
         mineig = sorted(np.linalg.eig(A)[0])[0]
-        self.assertTrue(mineig < 0)
+        assert mineig < 0
         B = make_spd(A)
         mineig = sorted(np.linalg.eig(B)[0])[0]
-        self.assertTrue(mineig > 0)
+        assert mineig > 0
 
+    @pytest.mark.unit
     def test_chol_update(self):
+        """Test rank 1 update to cholesky factorization."""
         rando = default_rng(seed=0)
 
         n = 100
@@ -49,8 +56,12 @@ class TestUtils(unittest.TestCase):
         np.testing.assert_allclose(Uv, Uva)
 
 
-class TestFmin(unittest.TestCase):
+class TestFmin:
+    """Test for scalar minimization function."""
+
+    @pytest.mark.unit
     def test_rosenbrock_full_hess_dogleg(self):
+        """Test minimizing rosenbrock function using dogleg method with full hessian."""
         rando = default_rng(seed=1)
 
         x0 = rando.random(7)
@@ -72,7 +83,9 @@ class TestFmin(unittest.TestCase):
 
         np.testing.assert_allclose(out["x"], true_x)
 
+    @pytest.mark.unit
     def test_rosenbrock_full_hess_subspace(self):
+        """Test minimizing rosenbrock function using subspace method with full hessian."""
         rando = default_rng(seed=2)
 
         x0 = rando.random(7)
@@ -94,7 +107,9 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(out["x"], true_x)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_rosenbrock_bfgs_dogleg(self):
+        """Test minimizing rosenbrock function using dogleg method with BFGS hessian."""
         rando = default_rng(seed=3)
 
         x0 = rando.random(7)
@@ -115,7 +130,9 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(out["x"], true_x)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_rosenbrock_bfgs_subspace(self):
+        """Test minimizing rosenbrock function using subspace method with BFGS hessian."""
         rando = default_rng(seed=4)
 
         x0 = rando.random(7)
@@ -136,9 +153,12 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(out["x"], true_x)
 
 
-class TestLSQTR(unittest.TestCase):
-    def test_lsqtr_exact(self):
+class TestLSQTR:
+    """Tests for least squares optimizer."""
 
+    @pytest.mark.unit
+    def test_lsqtr_exact(self):
+        """Test minimizing least squares test function using svd and cholesky methods."""
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
         x = np.linspace(-1, 1, 100)
         y = fun(x, p)
@@ -174,6 +194,7 @@ class TestLSQTR(unittest.TestCase):
         np.testing.assert_allclose(out["x"], p)
 
 
+@pytest.mark.unit
 def test_no_iterations():
     """Make sure giving the correct answer works correctly"""
 

@@ -5,7 +5,7 @@
 ##############################
 Stellarator Equilibrium Solver
 ##############################
-|License| |DOI| |Docs| |Tests| |Codecov|
+|License| |DOI| |Docs| |UnitTests| |RegressionTests| |Codecov|
 |Issues| |Pypi|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
@@ -76,9 +76,13 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Tests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
     :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
-    :alt: Tests
+    :alt: UnitTests
+
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+    :alt: RegressionTests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/PlasmaControl/DESC

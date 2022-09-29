@@ -428,17 +428,16 @@ class LinearGrid(Grid):
             r = np.atleast_1d(rho)
             dr = np.zeros_like(r)
             if r.size > 1:
-                axis = np.isclose(r[0], 0)
-                # dr[0] = r[int(axis)]
-                # dr[1:-1] = (r[2:] - r[:-2]) / 2
-                # dr[-1] = 1 * r.size / (r.size - axis) - r[-1 - (not axis)]
-                # dr *= (r.size - axis) / r.size
-                # above works but I don't like it
-                # they are the same except that below has dr[1:-1] as r[next] - r[current]
-                if axis:
-                    dr = np.diff(r * (r.size - 1) / r.size, append=1)
-                else:
-                    dr = np.diff(r, prepend=0)
+                axis = r[0] == 0
+                dr[0] = r[int(axis)]
+                dr[1:-1] = (r[2:] - r[:-2]) / 2
+                dr[-1] = 1 * r.size / (r.size - axis) - r[-1 - (not axis)]
+                dr *= (r.size - axis) / r.size
+                # below is same as above except that below has dr[1:-1] as r[next] - r[current]
+                # if axis:
+                #     dr = np.diff(r * (r.size - 1) / r.size, append=1)
+                # else:
+                #     dr = np.diff(r, prepend=0)
             else:
                 dr = np.array([1.0])
 
@@ -464,7 +463,7 @@ class LinearGrid(Grid):
                 dt[0] = t[1] - t[0] / 2
                 dt[1:-1] = (t[2:] - t[:-2]) / 2
                 dt[-1] = 2 * np.pi - t[-1] + t[0] / 2
-                # maybe below 2 lines would be better than above 3 lines
+                # alternative for evenly spaced nodes
                 # dt = np.diff(t, append=2 * np.pi + t[0] / 2)
                 # dt[0] += t[0] / 2
                 dt *= (t.size - endpoint) / t.size
@@ -497,7 +496,7 @@ class LinearGrid(Grid):
                 dz[0] = z[1] - z[0] / 2
                 dz[1:-1] = (z[2:] - z[:-2]) / 2
                 dz[-1] = 2 * np.pi / self.NFP - z[-1] + z[0] / 2
-                # maybe below 2 lines would be better than above 3 lines
+                # alternative for evenly spaced nodes
                 # dz = np.diff(z, append=2 * np.pi / self.NFP + z[0] / 2)
                 # dz[0] += z[0] / 2
                 dz *= (z.size - endpoint) / z.size * self.NFP

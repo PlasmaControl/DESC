@@ -423,7 +423,6 @@ class LinearGrid(Grid):
             self._L = len(np.atleast_1d(rho))
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
-            # FIXME: endpoint
             dr = 1 / r.size * np.ones_like(r)
         else:
             r = np.atleast_1d(rho)
@@ -432,9 +431,6 @@ class LinearGrid(Grid):
                 dr[0] = r[1] - r[0]
                 dr[1:-1] = (r[2:] - r[:-2]) / 2
                 dr[-1] = 1 - r[-1]
-                if endpoint:
-                    dr[0] = dr[0] / 2
-                    dr[-1] = dr[0]
             else:
                 dr = np.array([1.0])
 
@@ -785,10 +781,8 @@ class ConcentricGrid(Grid):
         drho = np.zeros_like(rho)
         if rho.size > 1:
             # FIXME: I'd assume concentric grid has the same problem?
-            #    but maybe not if there is always a node at rho=1
             #    drho[0] = rho[1] - rho[0]
             #    drho[-1] = 1 - rho[-1]
-            #    endpoint weights
             drho[0] = (rho[0] + rho[1]) / 2
             drho[1:-1] = (rho[2:] - rho[:-2]) / 2
             drho[-1] = 1 - (rho[-2] + rho[-1]) / 2

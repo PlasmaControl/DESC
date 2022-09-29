@@ -1,4 +1,4 @@
-name: Dependency test - JAX
+name: Dependency test JAX
 
 on:
   pull_request:

@@ -3,7 +3,7 @@ name: Black formatting
 on: [pull_request, workflow_dispatch]
 
 jobs:
-  black_format:
+  Black format:
     
     runs-on: ubuntu-latest
     steps:

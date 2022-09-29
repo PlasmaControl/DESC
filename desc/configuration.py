@@ -1473,17 +1473,17 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = self.L
+            radial resolution to use for SFL equilibrium. Default = 1.5*self.L
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = self.M
+            poloidal resolution to use for SFL equilibrium. Default = 1.5*self.M
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = self.N
+            toroidal resolution to use for SFL equilibrium. Default = 1.5*self.N
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 4*self.L+1
+            radial spatial resolution to use for fit to new basis. Default = 2*L
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 4*self.M+1
+            poloidal spatial resolution to use for fit to new basis. Default = 2*M
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 4*self.N+1
+            toroidal spatial resolution to use for fit to new basis. Default = 2*N
         rcond : float, optional
             cutoff for small singular values in least squares fit.
         copy : bool, optional
@@ -1498,9 +1498,9 @@ class _Configuration(IOAble, ABC):
         L = L or int(1.5 * self.L)
         M = M or int(1.5 * self.M)
         N = N or int(1.5 * self.N)
-        L_grid = L_grid or L
-        M_grid = M_grid or M
-        N_grid = N_grid or N
+        L_grid = L_grid or int(2 * L)
+        M_grid = M_grid or int(2 * M)
+        N_grid = N_grid or int(2 * N)
 
         grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
         bdry_grid = LinearGrid(M=M, N=N, rho=1.0)

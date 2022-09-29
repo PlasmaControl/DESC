@@ -1,9 +1,9 @@
-import unittest
 import numpy as np
 import pytest
+
 from desc.backend import jnp
 from desc.optimize import fmintr, lsqtr
-from scipy.optimize import rosen, rosen_der, rosen_hess
+from scipy.optimize import rosen, rosen_der
 from desc.derivatives import Derivative
 from numpy.random import default_rng
 from scipy.optimize import BFGS
@@ -30,8 +30,12 @@ scalar_grad = Derivative(scalar_fun, mode="grad")
 scalar_hess = Derivative(scalar_fun, mode="hess")
 
 
-class TestFmin(unittest.TestCase):
+class TestFmin:
+    """Tests for scalar minimization routine."""
+    
+    @pytest.mark.unit
     def test_convex_full_hess_dogleg(self):
+        """Test minimizing convex test function using dogleg method."""
         rando = default_rng(seed=2)
 
         x0 = 10 * rando.random(2)
@@ -52,7 +56,9 @@ class TestFmin(unittest.TestCase):
         assert out["success"] is True
         np.testing.assert_allclose(scalar_grad(out["x"]), 0, atol=1e-12)
 
+    @pytest.mark.unit
     def test_convex_full_hess_subspace(self):
+        """Test minimizing convex test function using subspace method."""
         rando = default_rng(seed=2)
 
         x0 = rando.random(2)
@@ -74,7 +80,9 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(scalar_grad(out["x"]), 0, atol=1e-12)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_rosenbrock_bfgs_dogleg(self):
+        """Test minimizing rosenbrock function using dogleg method with BFGS hessian."""
         rando = default_rng(seed=3)
 
         x0 = rando.random(7)
@@ -95,7 +103,9 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(out["x"], true_x)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_rosenbrock_bfgs_subspace(self):
+        """Test minimizing rosenbrock function using subspace method with BFGS hessian."""
         rando = default_rng(seed=4)
 
         x0 = rando.random(7)
@@ -116,9 +126,12 @@ class TestFmin(unittest.TestCase):
         np.testing.assert_allclose(out["x"], true_x)
 
 
-class TestLSQTR(unittest.TestCase):
-    def test_lsqtr_exact(self):
+class TestLSQTR:
+    """Tests for least squares optimizer."""
 
+    @pytest.mark.unit
+    def test_lsqtr_exact(self):
+        """Test minimizing least squares test function using svd and cholesky methods."""
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
         x = np.linspace(-1, 1, 100)
         y = vector_fun(x, p)
@@ -154,13 +167,14 @@ class TestLSQTR(unittest.TestCase):
         np.testing.assert_allclose(out["x"], p)
 
 
+@pytest.mark.unit
 def test_no_iterations():
     """Make sure giving the correct answer works correctly"""
 
     np.random.seed(0)
     A = np.random.random((20, 10))
     b = np.random.random(20)
-    x0 = np.linalg.lstsq(A, b)[0]
+    x0 = np.linalg.lstsq(A, b, rcond=None)[0]
 
     vecfun = lambda x: A @ x - b
     vecjac = Derivative(vecfun)

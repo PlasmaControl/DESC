@@ -29,11 +29,10 @@ Table Of Contents
 I don’t want to read this whole thing I just have a question!!!
 ***************************************************************
 
-   **Note:** Please don’t file an issue to ask a question.
-
-If you just want to ask a question, the simplest method for now is to
-just contact the authors (Daniel Dudt & Rory Conlin) directly (If you’re
-reading this, you probably know who we are and how to get in touch).
+If you just want to ask a question, the simplest method is to `create an issue
+on github <https://github.com/PlasmaControl/DESC/issues/new>`__ and begin the 
+subject line with ``Question:`` That way it will be seen by all developers, and 
+the answer will be viewable by other users.
 
 As the user base expands and more people start using and contributing to
 the code, we may set up some sort of user group Slack or Discord or
@@ -85,6 +84,7 @@ Provide more context by answering these questions:
 Include details about your configuration and environment:
 
 -  **Which version of DESC are you using?**
+-  **Which version of JAX (and other dependencies) are you using**
 -  **What’s the name and version of the OS you’re using**?
 -  **Are you running DESC in a virtual machine?** If so, which VM
    software are you using and which operating systems and versions are
@@ -145,6 +145,18 @@ through these ``good first issue`` and ``help wanted`` issues:
 -  `Good first issues <https://github.com/PlasmaControl/DESC/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22>`__ - issues which should only require a few lines of code, and a test or two.
 -  `Help wanted issues <https://github.com/PlasmaControl/DESC/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22>`__ - issues which should be a bit more involved than beginner issues.
 
+Pull Requests
+*************
+
+Once you've made your changes on a local branch, `open a pull request <https://github.com/PlasmaControl/DESC/pulls>`_ 
+on github. In the description, give a summary of what is being changed and why. Try to keep pull requests small and atomic,
+with each PR focused on a adding or fixing a single thing. Large PRs will generally take much longer to review and approve.
+
+Opening a PR will trigger a suite of tests and style/formatting checks that must pass before new code can be merged.
+We also require approval from at least one (ideally multiple) of the main DESC developers, who may have suggested changes
+or edits to your PR.
+
+
 Styleguides
 ^^^^^^^^^^^
 
@@ -201,7 +213,14 @@ almost identical to ``numpy``.
 ``pytest``
 ----------
 
-The testing suite in DESC is based on `pytest <https://docs.pytest.org/>`__, and makes use of several plugins for specialized testing. You can install all the necessary tools with ``pip install -r tests/requirements.txt``. You can run the tests from the root of the repository with ``pytest --mpl --cov`` (It should take 10-15 mins on a standard laptop). The ``--mpl`` flag tells it to also compare the output of plotting functions with saved baseline images in ``tests/baseline/`` using `pytest-mpl <https://pypi.org/project/pytest-mpl/>`__. These baseline images can be regenerated with ``pytest -k plotting --mpl-generate-path=tests/baseline/``. The ``--cov`` flag will tell it to also report how much of the code is covered by tests using `pytest-cov <https://pytest-cov.readthedocs.io/en/latest/>`__. A summary of the coverage is printed to the terminal at the end of the tests, and detailed information is saved to a ``.coverage`` file, which can then be turned into a simple HTML page with ``coverage html``. This will create a ``htmlcov/`` directory in the root of the repository that can be viewed in a browser to see line by line coverage.
+The testing suite in DESC is based on `pytest <https://docs.pytest.org/>`__, and makes use of several plugins for specialized testing. You can install all the necessary tools with ``pip install -r devtools/dev-requirements.txt``. You can run the tests from the root of the repository with ``pytest -m unit`` for unit tests or ``pytest -m regression`` for full regression tests (unit tests should take ~1hr on a standard laptop, regression tests may take several hours). To only run selected tests you can use ``pytest -k foo`` which will only run tests that have ``foo`` in the test or file name.
+
+**Note**: when adding new tests to DESC, they **must** either be marked with ``@pytest.mark.unit`` or ``@pytest.mark.regression``, otherwise they will not be run as part of the automatic CI testing.
+
+Additional useful flags include:
+
+- ``--mpl`` tells pytest to also compare the output of plotting functions with saved baseline images in ``tests/baseline/`` using `pytest-mpl <https://pypi.org/project/pytest-mpl/>`__. These baseline images can be regenerated with ``pytest -k plotting --mpl-generate-path=tests/baseline/``. 
+- ``--cov`` will tell it to also report how much of the code is covered by tests using `pytest-cov <https://pytest-cov.readthedocs.io/en/latest/>`__. A summary of the coverage is printed to the terminal at the end of the tests, and detailed information is saved to a ``.coverage`` file, which can then be turned into a simple HTML page with ``coverage html``. This will create a ``htmlcov/`` directory in the root of the repository that can be viewed in a browser to see line by line coverage.
 
 
 `Git Commit Messages <https://chris.beams.io/posts/git-commit/>`__

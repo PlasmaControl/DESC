@@ -5,8 +5,9 @@
 ##############################
 Stellarator Equilibrium Solver
 ##############################
-|License| |DOI| |Docs| |Tests| |Codecov|
-|Issues| |Pypi|
+|License| |DOI| |Issues| |Pypi|
+
+|Docs| |UnitTests| |RegressionTests| |Codecov|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
 It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.
@@ -76,9 +77,13 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Tests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml
-    :alt: Tests
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
+    :alt: UnitTests
+
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+    :alt: RegressionTests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/PlasmaControl/DESC

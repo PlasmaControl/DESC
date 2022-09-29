@@ -76,8 +76,8 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Tests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml
+.. |Tests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
     :alt: Tests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg

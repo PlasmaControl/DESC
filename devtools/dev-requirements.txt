@@ -21,10 +21,11 @@ nbmake
 pytest >= 5.0.0
 pytest-benchmark
 pytest-cov >= 2.6.0
-pytest-mpl == 0.16.1
-shapely >= 1.8.2
 pytest-monitor
+pytest-mpl == 0.16.1
+pytest-split
 qsc
+shapely >= 1.8.2
 
 # building
 build

@@ -12,10 +12,17 @@ def write_ascii(fname, eq):
         dictionary of equilibrium parameters.
 
     """
-    if eq.pressure.__class__.__name__ != "PowerSeriesProfile":
-        raise TypeError("Equilibrium must have power series profiles for ascii io")
-    if eq.iota.__class__.__name__ != "PowerSeriesProfile":
-        raise TypeError("Equilibrium must have power series profiles for ascii io")
+    # can't import other stuff in io due to circular imports, so have to check by name
+    assert (
+        eq.pressure.__class__.__name__ == "PowerSeriesProfile"
+        and eq.iota.__class__.__name__ == "PowerSeriesProfile"
+    ), "Equilibrium must have power series profiles for ascii io"
+
+    pressure = eq.pressure
+    iota = eq.iota
+    L = max(pressure.basis.L, iota.basis.L)
+    pressure.change_resolution(L)
+    iota.change_resolution(L)
 
     # open file
     file = open(fname, "w+")
@@ -54,12 +61,14 @@ def write_ascii(fname, eq):
             )
 
     # profile coefficients
-    nprof = len(np.nonzero(np.abs(eq.p_l) + np.abs(eq.i_l))[0])
+    nprof = len(np.nonzero(np.abs(pressure.params) + np.abs(iota.params))[0])
     file.write("Nprof = {:3d}\n".format(nprof))
-    for k, (l, m, n) in enumerate(eq.pressure.basis.modes):
-        if (eq.p_l[k] != 0) or (eq.i_l[k] != 0):
+    for k, (l, m, n) in enumerate(pressure.basis.modes):
+        if (pressure.params[k] != 0) or (iota.params[k] != 0):
             file.write(
-                "l: {:3d} cP = {:16.8E} cI = {:16.8E}\n".format(k, eq.p_l[k], eq.i_l[k])
+                "l: {:3d} cP = {:16.8E} cI = {:16.8E}\n".format(
+                    k, pressure.params[k], iota.params[k]
+                )
             )
 
     # R, Z & L Fourier-Zernike coefficients
@@ -177,6 +186,7 @@ def read_ascii(filename):
     else:
         eq["sym"] = False
 
+    eq["spectral_indexing"] = "ansi" if eq["L"] == eq["M"] else "fringe"
     equil = Equilibrium(**eq)
     equil.R_lmn = copy_coeffs(cR, zern_idx, equil.R_basis.modes)
     equil.Z_lmn = copy_coeffs(cZ, zern_idx, equil.Z_basis.modes)

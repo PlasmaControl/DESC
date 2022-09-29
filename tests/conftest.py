@@ -174,8 +174,26 @@ def HELIOTRON(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
-def HELIOTRON_vacuum(tmpdir_factory):
-    """Run HELIOTRON vacuum (fixed current) example."""
+def HELIOTRON_ex(tmpdir_factory):
+    """Saved HELIOTRON fixed rotational transform example."""
+    input_path = ".//tests//inputs//HELIOTRON"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = ".//desc//examples//HELIOTRON_output.h5"
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
+
+    HELIOTRON_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_vac(tmpdir_factory):
+    """Run HELIOTRON vacuum (vacuum) example."""
     input_path = ".//tests//inputs//HELIOTRON_vacuum"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_vacuum_out.h5")
@@ -187,7 +205,7 @@ def HELIOTRON_vacuum(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running HELIOTRON vacuum (fixed current) test.")
+    print("Running HELIOTRON vacuum (vacuum) test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -202,6 +220,64 @@ def HELIOTRON_vacuum(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return HELIOTRON_vacuum_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_vac2(tmpdir_factory):
+    """Run HELIOTRON vacuum (fixed current) example."""
+    input_path = ".//tests//inputs//HELIOTRON_vacuum2"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_vacuum2_out.h5")
+    desc_nc_path = output_dir.join("HELIOTRON_vacuum2_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum2.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_vacuum2_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON vacuum (fixed current) test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    HELIOTRON_vacuum2_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_vacuum2_out
+
+
+@pytest.fixture(scope="session")
+def precise_QH(tmpdir_factory):
+    """Fun initial condition for precise QH optimization."""
+    input_path = ".//tests//inputs//precise_QH"
+    output_dir = tmpdir_factory.mktemp("result")
+    initial_h5_path = output_dir.join("precise_QH_output.h5")
+    truth_path = ".//tests//inputs//precise_QH_step0.h5"
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running precise QH test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(initial_h5_path), input_filename, "-vv"]
+    main(args)
+
+    precise_QH_out = {
+        "input_path": input_path,
+        "desc_h5_path": initial_h5_path,
+        "output_path": truth_path,
+    }
+    return precise_QH_out
 
 
 @pytest.fixture(scope="session")

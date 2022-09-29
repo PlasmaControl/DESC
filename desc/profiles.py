@@ -78,7 +78,7 @@ class Profile(IOAble, ABC):
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values on specified nodes, default to using self.params."""
 
-    def to_powerseries(self, order=6, xs=100, rcond=None, w=None):
+    def to_powerseries(self, order=6, xs=100, sym="auto", rcond=None, w=None):
         """Convert this profile to a PowerSeriesProfile.
 
         Parameters
@@ -88,6 +88,8 @@ class Profile(IOAble, ABC):
         xs : int or ndarray
             x locations to use for fit. If an integer, uses that many points linearly
             spaced between 0,1
+        sym : bool or "auto"
+            Whether to enforce explicit even parity
         rcond : float
             Relative condition number of the fit. Singular values smaller than this
             relative to the largest singular value will be ignored. The default value
@@ -106,7 +108,7 @@ class Profile(IOAble, ABC):
         if np.isscalar(xs):
             xs = np.linspace(0, 1, xs)
         fs = self.compute(grid=xs)
-        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w)
+        p = PowerSeriesProfile.from_values(xs, fs, order, rcond=rcond, w=w, sym=sym)
         p.grid = self.grid
         p.name = self.name
         return p

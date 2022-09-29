@@ -116,6 +116,7 @@ class ObjectiveFunction(IOAble):
             self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
             )
+        looped = False
         if self._deriv_mode == "batched":
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
@@ -131,7 +132,8 @@ class ObjectiveFunction(IOAble):
         if use_jit:
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
-            self.jac = jit(self.jac)
+            if not looped:
+                self.jac = jit(self.jac)
             self.hess = jit(self.hess)
             self.grad = jit(self.grad)
             self.jvp = jit(self.jvp)

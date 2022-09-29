@@ -410,19 +410,21 @@ class TestGetSurfaces:
     def test_get_rho_surface(self):
         """Test getting a constant rho surface."""
         eq = Equilibrium()
-        surf = eq.get_surface_at(rho=0.5)
+        R0 = 10
+        rho = 0.5
+        surf = eq.get_surface_at(rho=rho)
+        assert surf.rho == rho
         np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi ** 2 * 10 * 0.5
+            surf.compute_surface_area(), 4 * np.pi ** 2 * R0 * rho
         )
-        assert surf.rho == 0.5
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
         """Test getting a constant zeta surface."""
         eq = Equilibrium()
         surf = eq.get_surface_at(zeta=np.pi)
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * (1.0) ** 2)
         assert surf.zeta == np.pi
+        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * 1 ** 2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):

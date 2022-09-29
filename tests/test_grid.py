@@ -70,23 +70,34 @@ class TestGrid:
     def test_linear_grid_spacing(self):
         """Test linear grid spacing is consistent."""
 
-        def test(NFP, endpoint):
-            nrho = 1  # TODO: test with > 1 on grid2 to enter grid.py line 430
+        def test(endpoint=False, axis=True):
+            nrho = 5
             ntheta = 5
             nzeta = 4
+            NFP = 3
             grid1 = LinearGrid(
-                rho=nrho, theta=ntheta, zeta=nzeta, NFP=NFP, endpoint=endpoint
+                rho=nrho,
+                theta=ntheta,
+                zeta=nzeta,
+                NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
             )
             grid2 = LinearGrid(
+                rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
                 theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
                 zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
                 NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
             )
             np.testing.assert_allclose(grid1.nodes, grid2.nodes)
             np.testing.assert_allclose(grid1.spacing, grid2.spacing)
 
-        test(NFP=3, endpoint=False)
-        test(NFP=3, endpoint=True)
+        test(endpoint=False)
+        test(endpoint=True)
+        test(axis=False)
+        test(axis=True)
 
     @pytest.mark.unit
     def test_concentric_grid(self):

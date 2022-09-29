@@ -5,7 +5,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.colors import LogNorm, Normalize
 
 from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.basis import DoubleFourierSeries
 from desc.transform import Transform
 from desc.compute import (
@@ -26,24 +26,24 @@ ZBS = np.linspace(-0.05, 0.05, dim)
 eq = Equilibrium.load("data/initial.h5")
 
 grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, sym=False, rho=1.0)
-
-R_transform = Transform(grid, eq.R_basis, derivs=3)
-Z_transform = Transform(grid, eq.Z_basis, derivs=3)
-L_transform = Transform(grid, eq.L_basis, derivs=3)
+qgrid = QuadratureGrid(M=3 * eq.M + 1, N=3 * eq.N + 1,L=3*eq.L+1, NFP=eq.NFP)
+R_transform = Transform(qgrid, eq.R_basis, derivs=3)
+Z_transform = Transform(qgrid, eq.Z_basis, derivs=3)
+L_transform = Transform(qgrid, eq.L_basis, derivs=3)
 B_transform = Transform(
-    grid,
+    qgrid,
     DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
     derivs=0,
     build_pinv=True,
 )
 w_transform = Transform(
-    grid,
+    qgrid,
     DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP),
     derivs=1,
 )
 
 iota = eq.iota.copy()
-iota.grid = grid
+iota.grid = qgrid
 
 
 def qs_errors(eq):

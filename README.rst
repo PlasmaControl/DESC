@@ -5,8 +5,9 @@
 ##############################
 Stellarator Equilibrium Solver
 ##############################
-|License| |DOI| |Docs| |UnitTests| |RegressionTests| |Codecov|
-|Issues| |Pypi|
+|License| |DOI| |Issues| |Pypi|
+
+|Docs| |UnitTests| |RegressionTests| |Codecov|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
 It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.

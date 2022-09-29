@@ -110,6 +110,8 @@ def perturb(
         deltas["c_l"] = dc
     if dPsi is not None and np.any(dPsi):
         deltas["Psi"] = dPsi
+    if dIGphi is not None and np.any(dIGphi):
+        deltas["IGphi_mn"] = dIGphi
     if dRb is not None and np.any(dRb):
         deltas["Rb_lmn"] = dRb
     if dZb is not None and np.any(dZb):
@@ -125,7 +127,7 @@ def perturb(
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective.args + ["IGphi_mn"]
+        constraints, extra_args=objective.args
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -297,7 +299,7 @@ def perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective.args + ["IGphi_mn"]
+        constraints, extra_args=objective.args
     )
 
     # update other attributes
@@ -488,7 +490,7 @@ def optimal_perturb(
             constraint.build(eq, verbose=verbose)
 
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective_f.args + ["IGphi_mn"]
+        constraints, extra_args=objective_f.args
     )
 
     # state vector
@@ -691,7 +693,7 @@ def optimal_perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective_f.args + ["IGphi_mn"]
+        constraints, extra_args=objective_f.args
     )
 
     # update other attributes

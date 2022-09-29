@@ -63,6 +63,7 @@ class TestConstrainCurrent:
                 L_transform=L_transform,
                 iota=None,
                 current=_ExactValueProfile(eq, grid),
+                orientation=eq.orientation,
             )
             benchmark_data = eq.compute("iota_r", grid)
 

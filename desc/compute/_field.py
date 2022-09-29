@@ -88,6 +88,7 @@ def compute_contravariant_magnetic_field(
         L_transform,
         iota,
         current,
+        orientation,
         data=data,
     )
 
@@ -1101,10 +1102,10 @@ def compute_boozer_magnetic_field(
     )
 
     if check_derivs("I", R_transform, Z_transform, L_transform):
-        data["I"] = surface_averages(grid, data["B_theta"])
+        data["I"] = orientation * surface_averages(grid, data["B_theta"])
         data["current"] = 2 * jnp.pi / mu_0 * data["I"]
     if check_derivs("I_r", R_transform, Z_transform, L_transform):
-        data["I_r"] = surface_averages(grid, data["B_theta_r"])
+        data["I_r"] = orientation * surface_averages(grid, data["B_theta_r"])
         data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
     if check_derivs("G", R_transform, Z_transform, L_transform):
         data["G"] = surface_averages(grid, data["B_zeta"])

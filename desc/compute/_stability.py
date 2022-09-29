@@ -31,6 +31,7 @@ def compute_mercier_stability(
     pressure,
     iota,
     current,
+    orientation,
     data=None,
 ):
     """Compute the Mercier stability criterion.
@@ -68,6 +69,8 @@ def compute_mercier_stability(
         Transforms i_l coefficients to real space.
     current : Profile
         Transforms c_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -94,6 +97,7 @@ def compute_mercier_stability(
         L_transform,
         iota,
         current,
+        orientation,
         data=data,
     )
     data = compute_boozer_magnetic_field(
@@ -108,6 +112,7 @@ def compute_mercier_stability(
         L_transform,
         iota,
         current,
+        orientation,
         data,
     )
     data = compute_contravariant_current_density(
@@ -122,6 +127,7 @@ def compute_mercier_stability(
         L_transform,
         iota,
         current,
+        orientation,
         data,
     )
 
@@ -189,6 +195,7 @@ def compute_magnetic_well(
     pressure,
     iota,
     current,
+    orientation,
     data=None,
 ):
     """Compute the magnetic well proxy for MHD stability.
@@ -226,6 +233,8 @@ def compute_magnetic_well(
         Transforms i_l coefficients to real space.
     current : Profile
         Transforms c_l coefficients to real space.
+    orientation : {-1, 1}
+        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
 
     Returns
     -------
@@ -248,6 +257,7 @@ def compute_magnetic_well(
         L_transform,
         iota,
         current,
+        orientation,
         data=data,
     )
 

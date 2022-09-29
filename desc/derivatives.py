@@ -306,7 +306,7 @@ class AutoDiffDerivative(_Derivative):
             self._compute = self._compute_jvp
         elif self._mode == "looped":
             self._compute = self._jac_looped
-            
+
 
 class FiniteDiffDerivative(_Derivative):
     """Computes derivatives using 2nd order centered finite differences.

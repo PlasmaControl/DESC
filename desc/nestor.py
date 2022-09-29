@@ -990,23 +990,21 @@ def compute_vacuum_magnetic_field(
 
     Btot["B^theta"] = (h_zz * Btot["B_theta"] - h_tz * Btot["B_zeta"]) * det
     Btot["B^zeta"] = (-h_tz * Btot["B_theta"] + jacobian["g_tt"] * Btot["B_zeta"]) * det
-    Btot["|B|^2"] = (
-        Btot["B_theta"] * Btot["B^theta"] + Btot["B_zeta"] * Btot["B^zeta"]
-    ) / 2.0
+    Btot["|B|^2"] = Btot["B_theta"] * Btot["B^theta"] + Btot["B_zeta"] * Btot["B^zeta"]
     Btot["Bex^theta"] = (h_zz * Btot["Bex_theta"] - h_tz * Btot["Bex_zeta"]) * det
     Btot["Bex^zeta"] = (
         -h_tz * Btot["Bex_theta"] + jacobian["g_tt"] * Btot["Bex_zeta"]
     ) * det
     Btot["|Bex|^2"] = (
         Btot["Bex_theta"] * Btot["Bex^theta"] + Btot["Bex_zeta"] * Btot["Bex^zeta"]
-    ) / 2.0
+    )
     Btot["Bpot^theta"] = (h_zz * Btot["Bpot_theta"] - h_tz * Btot["Bpot_zeta"]) * det
     Btot["Bpot^zeta"] = (
         -h_tz * Btot["Bpot_theta"] + jacobian["g_tt"] * Btot["Bpot_zeta"]
     ) * det
     Btot["|Bpot|^2"] = (
         Btot["Bpot_theta"] * Btot["Bpot^theta"] + Btot["Bpot_zeta"] * Btot["Bpot^zeta"]
-    ) / 2.0
+    )
 
     # compute cylindrical components B^R, B^\phi, B^Z
     Btot["BR"] = coords["R_t"] * Btot["B^theta"] + coords["R_z"] * Btot["B^zeta"]

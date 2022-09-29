@@ -74,6 +74,7 @@ class MercierStability(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._pressure = eq.pressure.copy()
         self._pressure.grid = self.grid
         if eq.iota is not None:
@@ -153,6 +154,7 @@ class MercierStability(_Objective):
             self._pressure,
             self._iota,
             self._current,
+            self._orientation,
         )
         return self._shift_scale(compress(self.grid, data["D_Mercier"]))
 
@@ -221,6 +223,7 @@ class MagneticWell(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._orientation = eq.orientation
         self._pressure = eq.pressure.copy()
         self._pressure.grid = self.grid
         if eq.iota is not None:
@@ -300,5 +303,6 @@ class MagneticWell(_Objective):
             self._pressure,
             self._iota,
             self._current,
+            self._orientation,
         )
         return self._shift_scale(compress(self.grid, data["magnetic well"]))

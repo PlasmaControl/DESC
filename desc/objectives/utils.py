@@ -45,7 +45,7 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
         FixBoundaryZ(fixed_boundary=True),
         FixLambdaGauge(),
         FixPsi(),
-        FixSurfaceCurrent(),
+        # FixSurfaceCurrent(),
     )
     if profiles:
         constraints += (FixPressure(),)

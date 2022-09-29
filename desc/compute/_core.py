@@ -266,6 +266,7 @@ def compute_rotational_transform(
     L_transform,
     iota,
     current,
+    orientation,
     data=None,
     **kwargs,
 ):
@@ -341,7 +342,7 @@ def compute_rotational_transform(
             den = data["g_tt"] / data["sqrt(g)"]
             num_avg = surface_averages(grid, num)
             den_avg = surface_averages(grid, den)
-            data["iota"] = (current_term + num_avg) / den_avg
+            data["iota"] = orientation * (current_term + num_avg) / den_avg
 
         if check_derivs("iota_r", R_transform, Z_transform, L_transform):
             current_term_r = (
@@ -361,8 +362,10 @@ def compute_rotational_transform(
             num_avg_r = surface_averages(grid, num_r)
             den_avg_r = surface_averages(grid, den_r)
             data["iota_r"] = (
-                current_term_r + num_avg_r - data["iota"] * den_avg_r
-            ) / den_avg
+                orientation
+                * (current_term_r + num_avg_r - data["iota"] * den_avg_r)
+                / den_avg
+            )
 
     return data
 

@@ -586,25 +586,25 @@ def test_vector_signs():
 
     grid = LinearGrid(rho=0.5, M=15, N=15)
     # toroidal current sign
-    assert np.sign(eqmmm.compute("I", grid=grid)["I"]) == 1.0
-    assert np.sign(eqmmp.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqmpm.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqmpp.compute("I", grid=grid)["I"]) == 1.0
-    assert np.sign(eqpmm.compute("I", grid=grid)["I"]) == 1.0
-    assert np.sign(eqpmp.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqppm.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqppp.compute("I", grid=grid)["I"]) == 1.0
+    assert np.sign(eqmmm.compute("I", grid=grid)["I"][-1]) == 1.0
+    assert np.sign(eqmmp.compute("I", grid=grid)["I"][-1]) == -1.0
+    assert np.sign(eqmpm.compute("I", grid=grid)["I"][-1]) == -1.0
+    assert np.sign(eqmpp.compute("I", grid=grid)["I"][-1]) == 1.0
+    assert np.sign(eqpmm.compute("I", grid=grid)["I"][-1]) == 1.0
+    assert np.sign(eqpmp.compute("I", grid=grid)["I"][-1]) == -1.0
+    assert np.sign(eqppm.compute("I", grid=grid)["I"][-1]) == -1.0
+    assert np.sign(eqppp.compute("I", grid=grid)["I"][-1]) == 1.0
 
     grid = LinearGrid(rho=0.5, M=15, N=15)
     # poloidal current sign
-    assert np.sign(eqmmm.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqmmp.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqmpm.compute("G", grid=grid)["G"]) == 1.0
-    assert np.sign(eqmpp.compute("G", grid=grid)["G"]) == 1.0
-    assert np.sign(eqpmm.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqpmp.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqppm.compute("G", grid=grid)["G"]) == 1.0
-    assert np.sign(eqppp.compute("G", grid=grid)["G"]) == 1.0
+    assert np.sign(eqmmm.compute("G", grid=grid)["G"][-1]) == -1.0
+    assert np.sign(eqmmp.compute("G", grid=grid)["G"][-1]) == -1.0
+    assert np.sign(eqmpm.compute("G", grid=grid)["G"][-1]) == 1.0
+    assert np.sign(eqmpp.compute("G", grid=grid)["G"][-1]) == 1.0
+    assert np.sign(eqpmm.compute("G", grid=grid)["G"][-1]) == -1.0
+    assert np.sign(eqpmp.compute("G", grid=grid)["G"][-1]) == -1.0
+    assert np.sign(eqppm.compute("G", grid=grid)["G"][-1]) == 1.0
+    assert np.sign(eqppp.compute("G", grid=grid)["G"][-1]) == 1.0
 
     # for positive jacobian
     pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 3]]))
@@ -679,8 +679,8 @@ def test_vector_signs():
             err_msg=key,
         )
 
+
 def test_compute_grad_p_volume_avg():
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
-

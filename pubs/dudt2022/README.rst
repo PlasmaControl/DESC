@@ -1,7 +1,7 @@
 This folder contains the files necessary to reproduce the figures in the paper "The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization".
 A copy of this paper is included as `dudt2022optimization.pdf`.
 
-In order to run the following code, checkout version `0.4.12+245.g0fcc708`.
+In order to run the following code, checkout version `0.4.12+245.g0fcc708` of desc.
 
 `driver.py` is a Python script that performs the optimizations in Section III B.
 There are two optimization parameters that can be set in lines 46 and 47 of the script.

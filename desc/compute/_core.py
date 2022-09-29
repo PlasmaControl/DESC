@@ -318,6 +318,7 @@ def compute_rotational_transform(
         data = {}
 
     grid = R_transform.grid
+
     if iota is not None:
         data["iota"] = iota.compute(i_l, dr=0)
         data["iota_r"] = iota.compute(i_l, dr=1)
@@ -342,7 +343,6 @@ def compute_rotational_transform(
             num_avg = surface_averages(grid, num)
             den_avg = surface_averages(grid, den)
             data["iota"] = (current_term + num_avg) / den_avg
-
         if check_derivs("iota_r", R_transform, Z_transform, L_transform):
             current_term_r = (
                 mu_0 / (2 * jnp.pi) * current.compute(c_l, dr=1) / data["psi_r"]

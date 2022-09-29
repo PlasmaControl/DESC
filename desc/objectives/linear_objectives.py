@@ -260,17 +260,12 @@ class FixBoundaryZ(_Objective):
             for i, (l, m, n) in enumerate(eq.Z_basis.modes):
                 if eq.bdry_mode == "lcfs":
                     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-<<<<<<< HEAD
-                self._A[j, i] = 1
-            #self._A = self._A[modes_idx]
-=======
                     surf = (
                         eq.surface.rho
                         if self._surface_label is None
                         else self._surface_label
                     )
                     self._A[j, i] = zernike_radial(surf, l, m)
->>>>>>> master
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 

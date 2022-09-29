@@ -430,7 +430,7 @@ class FiniteDiffDerivative(_Derivative):
             nargs = len(argnum,)
         v = (v,) if not isinstance(v, tuple) else v
         v = v[:-1] + (jnp.array(v[-1]),)
-        print("v is " + str(v))
+        #print("v is " + str(v))
         args = args[:-1] + (jnp.array(args[-1]),)
         varr, vtreedef, vidx = cls._tree2arr(v)
         xarr, xtreedef, xidx = cls._tree2arr(args)

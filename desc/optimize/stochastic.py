@@ -121,9 +121,10 @@ def stoch(
     x = x0.copy()
     step = 0.05
     
+    bound = 0.22
 
     for i in range(maxiter):
-        
+        step = 0.05 
         f = fun(x, *args)
         m = f.size
         nfev += 1
@@ -137,9 +138,14 @@ def stoch(
             success = True
             break
         print("x is " + str(x))
+        print("g is " + str(g))
         print("g/gnorm is " + str(g/gnorm))
         
-        x_new = x - step*g/gnorm
+        #x_new = x - step*g/gnorm
+        while np.any(np.abs(x - step*g) > bound*np.ones(len(x))):
+            print("hit bound!")
+            step = step / 100
+        x_new = x - step*g
         #f_new = fun(x_new,*args)
         #if (f_new-f)/f < -0.05:
         #    x_new = x - 2*step*g/gnorm

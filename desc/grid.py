@@ -423,14 +423,18 @@ class LinearGrid(Grid):
             self._L = len(np.atleast_1d(rho))
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
+            # FIXME: endpoint
             dr = 1 / r.size * np.ones_like(r)
         else:
             r = np.atleast_1d(rho)
             dr = np.zeros_like(r)
             if r.size > 1:
-                dr[0] = (r[0] + r[1]) / 2
+                dr[0] = r[1] - r[0]
                 dr[1:-1] = (r[2:] - r[:-2]) / 2
-                dr[-1] = 1 - (r[-2] + r[-1]) / 2
+                dr[-1] = 1 - r[-1]
+                if endpoint:
+                    dr[0] = dr[0] / 2
+                    dr[-1] = dr[0]
             else:
                 dr = np.array([1.0])
 
@@ -446,32 +450,42 @@ class LinearGrid(Grid):
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
             if self.sym:
                 t += t[1] / 2
+            # FIXME: endpoint
             dt = 2 * np.pi / t.size * np.ones_like(t)
         else:
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
             if t.size > 1:
-                dt[0] = (t[0] + t[1]) / 2
+                dt[0] = t[1] - t[0]
                 dt[1:-1] = (t[2:] - t[:-2]) / 2
-                dt[-1] = 2 * np.pi - (t[-2] + t[-1]) / 2
+                dt[-1] = 2 * np.pi - t[-1]
+                if endpoint:
+                    dt[0] = dt[0] / 2
+                    dt[-1] = dt[0]
             else:
                 dt = np.array([2 * np.pi])
 
         # zeta
+        # note: dz spacing should not depend on NFP
         if self.N is not None:
             zeta = 2 * self.N + 1
         else:
             self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
+            # FIXME: endpoint
             dz = 2 * np.pi / z.size * np.ones_like(z)
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
             if z.size > 1:
-                dz[0] = (z[0] + z[1]) / 2
+                dz[0] = z[1] - z[0]
                 dz[1:-1] = (z[2:] - z[:-2]) / 2
-                dz[-1] = 2 * np.pi - (z[-2] + z[-1]) / 2
+                dz[-1] = 2 * np.pi / self.NFP - z[-1]
+                dz *= self.NFP
+                if endpoint:
+                    dz[0] = dz[0] / 2
+                    dz[-1] = dz[0]
             else:
                 dz = np.array([2 * np.pi])
 
@@ -770,6 +784,11 @@ class ConcentricGrid(Grid):
 
         drho = np.zeros_like(rho)
         if rho.size > 1:
+            # FIXME: I'd assume concentric grid has the same problem?
+            #    but maybe not if there is always a node at rho=1
+            #    drho[0] = rho[1] - rho[0]
+            #    drho[-1] = 1 - rho[-1]
+            #    endpoint weights
             drho[0] = (rho[0] + rho[1]) / 2
             drho[1:-1] = (rho[2:] - rho[:-2]) / 2
             drho[-1] = 1 - (rho[-2] + rho[-1]) / 2

@@ -454,14 +454,7 @@ class LinearGrid(Grid):
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
             if self.sym:
                 t += t[1] / 2
-            # When endpoint is True, the theta = 0 node is duplicated at 2 pi.
-            # To avoid double counting its weight, we half the spacing of
-            # both the theta = 0 and theta = 2 pi nodes.
-            dt = 2 * np.pi / max(1, t.size - endpoint) * np.ones_like(t)
-            # if endpoint:
-            #     # done by scale weights
-            #     dt[0] /= 2
-            #     dt[-1] /= 2
+            dt = 2 * np.pi / t.size * np.ones_like(t)
 
         else:
             t = np.atleast_1d(theta)
@@ -474,6 +467,7 @@ class LinearGrid(Grid):
                 # maybe below 2 lines would be better than above 3 lines
                 # dt = np.diff(t, append=2 * np.pi + t[0] / 2)
                 # dt[0] += t[0] / 2
+                dt *= (t.size - endpoint) / t.size
                 if dt[-1] == 0:
                     # assert endpoint and t[-1] == 2 * np.pi and t[0] == 0
                     # The theta = 0 node is duplicated at 2 pi.
@@ -494,14 +488,7 @@ class LinearGrid(Grid):
             self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
-            # When endpoint is True, the zeta = 0 node is duplicated at 2 pi.
-            # To avoid double counting its weight, we half the spacing of
-            # both the zeta = 0 and zeta = 2 pi nodes.
-            dz = 2 * np.pi / max(1, z.size - endpoint) * np.ones_like(z)
-            # if endpoint:
-            #     # done by scale weights
-            #     dz[0] /= 2
-            #     dz[-1] /= 2
+            dz = 2 * np.pi / z.size * np.ones_like(z)
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
@@ -513,7 +500,7 @@ class LinearGrid(Grid):
                 # maybe below 2 lines would be better than above 3 lines
                 # dz = np.diff(z, append=2 * np.pi / self.NFP + z[0] / 2)
                 # dz[0] += z[0] / 2
-                dz *= self.NFP
+                dz *= (z.size - endpoint) / z.size * self.NFP
                 if dz[-1] == 0:
                     # assert endpoint and z[-1] == 2 * np.pi / self.NFP and z[0] == 0
                     # The zeta = 0 node is duplicated at 2 pi.

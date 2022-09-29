@@ -90,8 +90,8 @@ jobs:
           files: ./cov.xml
           fail_ci_if_error: true # optional (default = false)
           verbose: true # optional (default = false)
-      - name: Upload coverage4
-        id : codecov4
+      - name: Upload coverage5
+        id : codecov5
         continue-on-error: true
         if: steps.codecov4.outcome=='failure'         # check the step outcome, retry 4th time
         uses: codecov/codecov-action@v2

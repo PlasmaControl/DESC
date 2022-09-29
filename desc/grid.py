@@ -470,8 +470,7 @@ class LinearGrid(Grid):
                 # dt[0] += t[0] / 2
                 if dt[-1] == 0:
                     # When endpoint is True, the theta = 0 node is duplicated at 2 pi.
-                    # To avoid double counting its weight, we half the spacing of
-                    # both the theta = 0 and theta = 2 pi nodes.
+                    # We split the weight evenly for consistency with above method.
                     dt[0] /= 2
                     dt[-1] = dt[0]
             else:

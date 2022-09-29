@@ -71,7 +71,7 @@ class TestGrid:
         """Test linear grid spacing is consistent."""
 
         def test(NFP, endpoint):
-            nrho = 1  # TODO: test with > 1 on grid2 to enter grid.py line 429
+            nrho = 1  # TODO: test with > 1 on grid2 to enter grid.py line 430
             ntheta = 5
             nzeta = 4
             grid1 = LinearGrid(

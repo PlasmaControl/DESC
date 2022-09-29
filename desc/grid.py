@@ -428,9 +428,12 @@ class LinearGrid(Grid):
             r = np.atleast_1d(rho)
             dr = np.zeros_like(r)
             if r.size > 1:
-                dr[0] = r[1] - r[0]
+                # FIXME?
+                #    drho[0] = rho[1] - rho[0]
+                #    drho[-1] = 1 - rho[-1]
+                dr[0] = (r[0] + r[1]) / 2
                 dr[1:-1] = (r[2:] - r[:-2]) / 2
-                dr[-1] = 1 - r[-1]
+                dr[-1] = 1 - (r[-2] + r[-1]) / 2
             else:
                 dr = np.array([1.0])
 
@@ -446,44 +449,76 @@ class LinearGrid(Grid):
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
             if self.sym:
                 t += t[1] / 2
-            # FIXME: endpoint
             dt = 2 * np.pi / t.size * np.ones_like(t)
+            if endpoint and t.size > 2:
+                # When endpoint is True, the theta = 0 node is duplicated at 2 pi.
+                # To avoid double counting its weight, we half the spacing of
+                # both the theta = 0 and theta = 2 pi nodes.
+                dt *= t.size / (t.size - 1)  # dt = 2pi / (t exclude endpoint).size
+                dt[0] /= 2
+                dt[-1] /= 2
         else:
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
             if t.size > 1:
-                dt[0] = t[1] - t[0]
+                # in case t[0] != 0, we add it evenly between dt[0] and dt[-1]
+                dt[0] = t[1] - t[0] / 2
                 dt[1:-1] = (t[2:] - t[:-2]) / 2
-                dt[-1] = 2 * np.pi - t[-1]
-                if endpoint:
-                    dt[0] = dt[0] / 2
+                dt[-1] = 2 * np.pi - t[-1] + t[0] / 2
+                # maybe below 2 lines would be better than above 3 lines
+                # dt = np.diff(t, append=2 * np.pi + t[0] / 2)
+                # dt[0] += t[0] / 2
+                if dt[-1] == 0:
+                    # When endpoint is True, the theta = 0 node is duplicated at 2 pi.
+                    # To avoid double counting its weight, we half the spacing of
+                    # both the theta = 0 and theta = 2 pi nodes.
+                    dt[0] /= 2
                     dt[-1] = dt[0]
             else:
                 dt = np.array([2 * np.pi])
 
+        assert np.isclose(np.sum(dt), 2 * np.pi)
+
         # zeta
         # note: dz spacing should not depend on NFP
+        # spacing corresponds to a node's weight in an integral --
+        # such as integral = sum(dz * data["B"]) -- not the node's coordinates
         if self.N is not None:
             zeta = 2 * self.N + 1
         else:
             self._N = len(np.atleast_1d(zeta))
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
-            # FIXME: endpoint
             dz = 2 * np.pi / z.size * np.ones_like(z)
+            if endpoint and z.size > 2:
+                # When endpoint is True, the zeta = 0 node is duplicated at 2 pi.
+                # To avoid double counting its weight, we half the spacing of
+                # both the theta = 0 and theta = 2 pi nodes.
+                dz *= z.size / (z.size - 1)  # dz = 2pi / (z exclude endpoint).size
+                dz[0] /= 2
+                dz[-1] /= 2
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
             if z.size > 1:
-                dz[0] = z[1] - z[0]
+                # in case z[0] != 0, we add it evenly between dz[0] and dz[-1]
+                dz[0] = z[1] - z[0] / 2
                 dz[1:-1] = (z[2:] - z[:-2]) / 2
-                dz[-1] = 2 * np.pi / self.NFP - z[-1]
+                dz[-1] = 2 * np.pi / self.NFP - z[-1] + z[0] / 2
+                # maybe below 2 lines would be better than above 3 lines
+                # dz = np.diff(z, append=2 * np.pi / self.NFP + z[0] / 2)
+                # dz[0] += z[0] / 2
                 dz *= self.NFP
-                if endpoint:
-                    dz[0] = dz[0] / 2
+                if dz[-1] == 0:
+                    # assert endpoint and z[-1] == 2 * np.pi / self.NFP
+                    # When endpoint is True, the zeta = 0 node is duplicated at 2 pi.
+                    # We split the weight evenly for consistency with above method.
+                    dz[0] /= 2
                     dz[-1] = dz[0]
             else:
                 dz = np.array([2 * np.pi])
+
+        assert np.isclose(np.sum(dz), 2 * np.pi)
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()
@@ -780,9 +815,7 @@ class ConcentricGrid(Grid):
 
         drho = np.zeros_like(rho)
         if rho.size > 1:
-            # FIXME: I'd assume concentric grid has the same problem?
-            #    drho[0] = rho[1] - rho[0]
-            #    drho[-1] = 1 - rho[-1]
+            # FIXME?
             drho[0] = (rho[0] + rho[1]) / 2
             drho[1:-1] = (rho[2:] - rho[:-2]) / 2
             drho[-1] = 1 - (rho[-2] + rho[-1]) / 2

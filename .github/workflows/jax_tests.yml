@@ -1,4 +1,4 @@
-name: JAX version tests
+name: Dependency test - JAX
 
 on:
   pull_request:

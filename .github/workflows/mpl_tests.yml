@@ -1,4 +1,4 @@
-name: matplotlib version tests
+name: Dependecy test - Matplotlib
 
 on:
   pull_request:

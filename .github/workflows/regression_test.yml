@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Regression tests:
+  regression_tests:
 
     runs-on: ubuntu-latest
     strategy:

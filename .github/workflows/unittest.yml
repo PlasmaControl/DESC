@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  Unit tests:
+  unit_tests:
 
     runs-on: ubuntu-latest
     strategy:

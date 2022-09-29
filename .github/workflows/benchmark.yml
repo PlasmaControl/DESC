@@ -13,7 +13,7 @@ on:
 
 
 jobs:
-  build:
+  benchmark:
     if: ${{ github.event.label.name == 'run_benchmarks' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
 

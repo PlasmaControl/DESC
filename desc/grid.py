@@ -394,7 +394,7 @@ class LinearGrid(Grid):
         sym : bool
             True for stellarator symmetry, False otherwise (Default = False).
         axis : bool
-            True to include a point at rho=0 (default).
+            True to include a point at rho=0 (default), False for rho[0] = rho[1]/2.
         endpoint : bool
             If True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT. (Default = False).
@@ -423,21 +423,17 @@ class LinearGrid(Grid):
             self._L = len(np.atleast_1d(rho))
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
+            # choose dr such that each node has the same weight
             dr = 1 / r.size * np.ones_like(r)
         else:
             r = np.atleast_1d(rho)
             dr = np.zeros_like(r)
             if r.size > 1:
-                axis = r[0] == 0
-                dr[0] = r[int(axis)]
+                # choose dr such that cumulative sums of dr[] are node midpoints
+                # and the total sum is 1
+                dr[0] = (r[0] + r[1]) / 2
                 dr[1:-1] = (r[2:] - r[:-2]) / 2
-                dr[-1] = 1 * r.size / (r.size - axis) - r[-1 - (not axis)]
-                dr *= (r.size - axis) / r.size
-                # below is same as above except that below has dr[1:-1] as r[next] - r[current]
-                # if axis:
-                #     dr = np.diff(r * (r.size - 1) / r.size, append=1)
-                # else:
-                #     dr = np.diff(r, prepend=0)
+                dr[-1] = 1 - (r[-2] + r[-1]) / 2
             else:
                 dr = np.array([1.0])
 
@@ -454,26 +450,29 @@ class LinearGrid(Grid):
             if self.sym:
                 t += t[1] / 2
             dt = 2 * np.pi / t.size * np.ones_like(t)
+            if endpoint:
+                # FIXME: dt already has the correct weights
+                #     _scale_weights() function is about to mess it up
+                #     can test with endpoint = True, ntheta = 3
+                pass
 
         else:
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
             if t.size > 1:
-                # in case t[0] != 0, we add it evenly between dt[0] and dt[-1]
-                dt[0] = t[1] - t[0] / 2
-                dt[1:-1] = (t[2:] - t[:-2]) / 2
-                dt[-1] = 2 * np.pi - t[-1] + t[0] / 2
-                # alternative for evenly spaced nodes
-                # dt = np.diff(t, append=2 * np.pi + t[0] / 2)
-                # dt[0] += t[0] / 2
-                dt *= (t.size - endpoint) / t.size
-                if dt[-1] == 0:
-                    # assert endpoint and t[-1] == 2 * np.pi and t[0] == 0
-                    # The theta = 0 node is duplicated at 2 pi.
-                    # We split the weight evenly for consistency with above method.
-                    # dt[0] /= 2  # done by scale weights
+                # choose dt to be half the cyclic distance of the surrounding two nodes
+                SUP = 2 * np.pi  # supremum
+                dt[0] = t[1] + (SUP - (t[-1] % SUP)) % SUP
+                dt[1:-1] = t[2:] - t[:-2]
+                dt[-1] = t[0] + (SUP - (t[-2] % SUP)) % SUP
+                dt /= 2
+                if t.size == 2:
                     dt[-1] = dt[0]
-
+                if endpoint and dt[0] == (dt[-1] % SUP):
+                    # FIXME: dt already has the correct spacing
+                    #     _scale_weights() function is about to mess it up
+                    #     can test with endpoint = True, ntheta = 3
+                    pass
             else:
                 dt = np.array([2 * np.pi])
 
@@ -488,24 +487,29 @@ class LinearGrid(Grid):
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
+            if endpoint:
+                # FIXME: dz already has the correct spacing
+                #     _scale_weights function() is about to mess it up
+                #     can test with endpoint = True, nzeta = 3
+                pass
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
             if z.size > 1:
-                # in case z[0] != 0, we add it evenly between dz[0] and dz[-1]
-                dz[0] = z[1] - z[0] / 2
-                dz[1:-1] = (z[2:] - z[:-2]) / 2
-                dz[-1] = 2 * np.pi / self.NFP - z[-1] + z[0] / 2
-                # alternative for evenly spaced nodes
-                # dz = np.diff(z, append=2 * np.pi / self.NFP + z[0] / 2)
-                # dz[0] += z[0] / 2
-                dz *= (z.size - endpoint) / z.size * self.NFP
-                if dz[-1] == 0:
-                    # assert endpoint and z[-1] == 2 * np.pi / self.NFP and z[0] == 0
-                    # The zeta = 0 node is duplicated at 2 pi.
-                    # We split the weight evenly for consistency with above method.
-                    # dz[0] /= 2  # done by scale weights
+                # choose dz to be half the cyclic distance of the surrounding two nodes
+                SUP = 2 * np.pi / self.NFP  # supremum
+                dz[0] = z[1] + (SUP - (z[-1] % SUP)) % SUP
+                dz[1:-1] = z[2:] - z[:-2]
+                dz[-1] = z[0] + (SUP - (z[-2] % SUP)) % SUP
+                dz /= 2
+                dz *= self.NFP
+                if z.size == 2:
                     dz[-1] = dz[0]
+                if endpoint and dz[0] == (dz[-1] % (SUP * self.NFP)):
+                    # FIXME: dz already has the correct spacing
+                    #     _scale_weights function() is about to mess it up
+                    #     can test with endpoint = True, nzeta = 3
+                    pass
             else:
                 dz = np.array([2 * np.pi])
 
@@ -804,7 +808,6 @@ class ConcentricGrid(Grid):
 
         drho = np.zeros_like(rho)
         if rho.size > 1:
-            # FIXME?
             drho[0] = (rho[0] + rho[1]) / 2
             drho[1:-1] = (rho[2:] - rho[:-2]) / 2
             drho[-1] = 1 - (rho[-2] + rho[-1]) / 2

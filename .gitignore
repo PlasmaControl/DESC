@@ -19,3 +19,4 @@ matlab/
 *.output
 *.pdf
 *.pyc
+.pymon

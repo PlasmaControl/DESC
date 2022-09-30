@@ -93,7 +93,7 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
     curr = eq.get_profile("current")
-    np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), atol=1e-8)
+    np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), 0, atol=1e-8)
 
 
 @pytest.mark.regression

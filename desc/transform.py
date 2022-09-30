@@ -55,6 +55,16 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
+        if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
+            warnings.warn(
+                colored(
+                    "Unequal number of field periods for grid {} and basis {}.".format(
+                        self.grid.NFP, self.basis.NFP
+                    ),
+                    "yellow",
+                )
+            )
+
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
         self._method = method

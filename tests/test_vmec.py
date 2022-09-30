@@ -1,4 +1,3 @@
-import unittest
 import pytest
 import numpy as np
 from netCDF4 import Dataset
@@ -16,9 +15,10 @@ from desc.vmec_utils import (
 )
 
 
-class TestVMECIO(unittest.TestCase):
+class TestVMECIO:
     """Tests VMECIO class"""
 
+    @pytest.mark.unit
     def test_ptolemy_identity_fwd(self):
         """Tests forward implementation of Ptolemy's identity."""
         a0 = 3
@@ -44,6 +44,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
         np.testing.assert_allclose(x, x_correct, atol=1e-8)
 
+    @pytest.mark.unit
     def test_ptolemy_identity_rev(self):
         """Tests reverse implementation of Ptolemy's identity."""
         a0 = 3
@@ -70,6 +71,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(s, s_correct, atol=1e-8)
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
 
+    @pytest.mark.unit
     def test_fourier_to_zernike(self):
         """Test conversion from radial-Fourier series to Fourier-Zernike polynomials."""
         M = 1
@@ -101,6 +103,7 @@ class TestVMECIO(unittest.TestCase):
 
         np.testing.assert_allclose(x_lmn, x_lmn_correct, atol=1e-8)
 
+    @pytest.mark.unit
     def test_zernike_to_fourier(self):
         """Test conversion from Fourier-Zernike polynomials to radial-Fourier series."""
         M = 1
@@ -141,6 +144,7 @@ class TestVMECIO(unittest.TestCase):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
 
@@ -168,6 +172,7 @@ def test_load_then_save(TmpDir):
     file2.close()
 
 
+@pytest.mark.unit
 def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""
 
@@ -176,6 +181,7 @@ def test_vmec_save_asym(TmpDir):
     VMECIO.save(eq, output_path)
 
 
+@pytest.mark.unit
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
@@ -309,6 +315,7 @@ def test_vmec_save_1(VMEC_save):
     )
 
 
+@pytest.mark.unit
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
@@ -543,6 +550,8 @@ def test_vmec_save_2(VMEC_save):
     # FIXME: not testing J^zeta * sqrt(g)
 
 
+@pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=1)
 def test_plot_vmec_comparison(SOLOVEV):
     """Test that DESC and VMEC flux surface plots match."""
@@ -552,6 +561,7 @@ def test_plot_vmec_comparison(SOLOVEV):
     return fig
 
 
+@pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
 

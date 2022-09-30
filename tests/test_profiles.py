@@ -1,20 +1,24 @@
 import numpy as np
-import unittest
 import pytest
+
 from desc.io import InputReader
 from desc.profiles import PowerSeriesProfile, FourierZernikeProfile
 from desc.equilibrium import Equilibrium
 from .utils import compute_coords, area_difference
 
 
-class TestProfiles(unittest.TestCase):
+class TestProfiles:
+    """Tests for Profile classes."""
+
     @pytest.mark.slow
+    @pytest.mark.regression
+    @pytest.mark.solve
     def test_same_result(self):
+        """Test that different representations of the same profile give the same eq."""
         input_path = "./tests/inputs/SOLOVEV"
         ir = InputReader(input_path)
 
         eq1 = Equilibrium(**ir.inputs[-1])
-        print(eq1.pressure)
         eq2 = eq1.copy()
         eq2.pressure = eq1.pressure.to_spline()
         eq2.iota = eq1.iota.to_spline()
@@ -28,11 +32,10 @@ class TestProfiles(unittest.TestCase):
         np.testing.assert_allclose(rho_err, 0, atol=1e-7)
         np.testing.assert_allclose(theta_err, 0, atol=2e-11)
 
-        assert True
-
+    @pytest.mark.unit
     @pytest.mark.slow
     def test_close_values(self):
-
+        """Test that different forms of the same profile give similar values."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
         )
@@ -62,8 +65,9 @@ class TestProfiles(unittest.TestCase):
         sp4 = mp.to_spline()
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
 
+    @pytest.mark.unit
     def test_repr(self):
-
+        """Test string representation of profile classes."""
         pp = PowerSeriesProfile(modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]))
         sp = pp.to_spline()
         mp = pp.to_mtanh(order=4, ftol=1e-4, xtol=1e-4)
@@ -76,8 +80,9 @@ class TestProfiles(unittest.TestCase):
         assert "ProductProfile" in str(pp * zp)
         assert "ScaledProfile" in str(2 * zp)
 
+    @pytest.mark.unit
     def test_get_set(self):
-
+        """Test getting/setting of profile attributes."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
         )
@@ -101,7 +106,9 @@ class TestProfiles(unittest.TestCase):
         zp.change_resolution(L=0)
         assert len(zp.params) == 1
 
+    @pytest.mark.unit
     def test_auto_sym(self):
+        """Test that even parity is enforced automatically."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -113,7 +120,9 @@ class TestProfiles(unittest.TestCase):
         assert pp.sym is False
         assert pp.basis.num_modes == 5
 
+    @pytest.mark.unit
     def test_sum_profiles(self):
+        """Test adding two profiles together."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -134,7 +143,9 @@ class TestProfiles(unittest.TestCase):
         f.grid = x
         np.testing.assert_allclose(f(), 4 * (pp(x)), atol=1e-3)
 
+    @pytest.mark.unit
     def test_product_profiles(self):
+        """Test multiplying two profiles together."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -155,7 +166,9 @@ class TestProfiles(unittest.TestCase):
         f.grid = x
         np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
 
+    @pytest.mark.unit
     def test_scaled_profiles(self):
+        """Test scaling profiles by a constant."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
@@ -182,7 +195,9 @@ class TestProfiles(unittest.TestCase):
         np.testing.assert_allclose(pp.params, [1, -2, 1])
         np.testing.assert_allclose(f(), 8 * (pp(x)), atol=1e-3)
 
+    @pytest.mark.unit
     def test_profile_errors(self):
+        """Test error checking when creating and working with profiles."""
         pp = PowerSeriesProfile(
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )

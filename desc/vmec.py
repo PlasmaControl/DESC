@@ -129,7 +129,7 @@ class VMECIO:
         constraints = (FixBoundaryR(), FixBoundaryZ())
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, extra_args=objective.args
+            constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():

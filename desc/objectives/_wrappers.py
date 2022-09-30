@@ -69,8 +69,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
-            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity),
-            iota=eq.iota is not None,
+            iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+            and self._eq.iota is not None
         )
 
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
@@ -108,9 +108,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(
-            self._constraints, extra_args=self._eq_objective.args
-        )
+        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:

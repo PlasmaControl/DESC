@@ -440,7 +440,7 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
-                profiles=objective != "vacuum", iota=self.iota is not None
+                iota=objective != "vacuum" and self.iota is not None
             )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
@@ -992,8 +992,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
             constraints = get_fixed_boundary_constraints(
-                profiles=self.inputs[ii]["objective"] != "vacuum",
-                iota="iota" in self.inputs[ii],
+                iota=self.inputs[ii]["objective"] != "vacuum"
+                and "iota" in self.inputs[ii]
             )
 
             if ii == start_from:

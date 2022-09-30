@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import block_diag, null_space
 
 from desc.utils import Timer
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import Equilibrium
 from desc.objectives import (
     ObjectiveFunction,
     FixedBoundaryR,
@@ -47,16 +47,14 @@ qs = "B"
 order = 1
 name = "f{}_or{}".format(qs, order)
 
-path = "/projects/EKOLEMEN/QS/STELLOPT_QS/"
-input_path = path + "RBC-5E-02_ZBS-4E-02/output.h5"
-output_path = path + "data/eq_" + name + ".h5"
+input_path = "data/initial.h5"
+output_path = "data/eq_" + name + ".h5"
 
 timer = Timer()
 timer.start("Total")
 
 # equilibrium
-eqf = EquilibriaFamily.load(input_path)
-eq = eqf[-1]
+eq = Equilibrium.load(input_path)
 
 # XXX: remove
 eq.surface.R_basis._create_idx()
@@ -97,7 +95,7 @@ eq = eq.optimize(
     verbose=2,
     perturb_options=perturb_options,
     solve_options=solve_options,
-    name=name,
+    # name=name,
 )
 eq.save(output_path)
 

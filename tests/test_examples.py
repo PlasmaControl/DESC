@@ -124,7 +124,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     iota2 = eq2.get_profile("iota")
     np.testing.assert_allclose(curr1(np.linspace(0, 1, 20)), 0, atol=1e-8)
     np.testing.assert_allclose(curr2(np.linspace(0, 1, 20)), 0, atol=1e-8)
-    np.testing.assert_allclose(iota1.params, iota2.params)
+    np.testing.assert_allclose(iota1.params, iota2.params, rtol=1e-1, atol=1e-1)
 
 
 @pytest.mark.regression

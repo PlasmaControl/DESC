@@ -473,7 +473,7 @@ def optimal_perturb(
         )
 
     # FIXME: generalize to other constraints
-    constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
+    constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
     for constraint in constraints:
         if not constraint.built:
             constraint.build(eq, verbose=verbose)

@@ -92,6 +92,8 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
     rho_err, theta_err = area_difference_vmec(eq, HELIOTRON_vac["vmec_nc_path"])
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
+    curr = eq.get_profile("current")
+    np.testing.assert_allclose(curr(np.linspace(0, 1, 20)), atol=1e-8)
 
 
 @pytest.mark.regression
@@ -116,6 +118,13 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     rho_err, theta_err = area_difference_desc(eq1, eq2)
     np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    curr1 = eq1.get_profile("current")
+    curr2 = eq2.get_profile("current")
+    iota1 = eq1.get_profile("iota")
+    iota2 = eq2.get_profile("iota")
+    np.testing.assert_allclose(curr1(np.linspace(0, 1, 20)), 0, atol=1e-8)
+    np.testing.assert_allclose(curr2(np.linspace(0, 1, 20)), 0, atol=1e-8)
+    np.testing.assert_allclose(iota1.params, iota2.params)
 
 
 @pytest.mark.regression

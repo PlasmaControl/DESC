@@ -325,12 +325,12 @@ eq1.set_initial_guess(surf)
 eq1.surface = surf
 
 eq1.change_resolution(
-    veq.L // 2,
-    veq.M // 2,
-    veq.N // 2,
-    veq.L_grid // 2,
-    veq.M_grid // 2,
-    veq.N_grid // 2,
+    veq.L // 3,
+    veq.M // 3,
+    veq.N // 3,
+    veq.L_grid // 3,
+    veq.M_grid // 3,
+    veq.N_grid // 3,
 )
 eq1.solve(ftol=1e-2, verbose=3)
 
@@ -359,30 +359,38 @@ def print_error_summary(eqis):
 
 eq1s = [eq1]
 
-# for i in range(30):
-#     eq_temp = optimal_perturb(
-#     eq1s[-1],
-#     fb_objective,
-#     bc_objective,
-#     dRb=True,
-#     dZb=True,
-#     subspace=None,
-#     order=2,
-#     tr_ratio=[0.01, 0.1],
-#     cutoff=1e-6,
-#     verbose=3,
-#     copy=True,
-#         )[0]
-#     eq1s.append(eq_temp)
-#     eq1s[-1].solve(maxiter=50)
-#     print_error_summary(eq1s)
+for i in range(10):
+    eq_temp = optimal_perturb(
+        eq1s[-1],
+        fb_objective,
+        bc_objective,
+        dRb=True,
+        dZb=True,
+        subspace=None,
+        order=2,
+        tr_ratio=[0.01, 0.1],
+        cutoff=1e-6,
+        verbose=3,
+        copy=True,
+    )[0]
+    eq1s.append(eq_temp)
+    eq1s[-1].solve(maxiter=50)
+    print_error_summary(eq1s)
 
-# with open("run___nestor_out1.pkl", "wb+") as f:
-#     pickle.dump(eq1s, f)
+with open("run___nestor_out1.pkl", "wb+") as f:
+    pickle.dump(eq1s, f)
+
 
 eq2 = eq1s[-1].copy()
 
-eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq2.change_resolution(
+    veq.L // 3 * 2,
+    veq.M // 3 * 2,
+    veq.N // 3 * 2,
+    veq.L_grid // 3 * 2,
+    veq.M_grid // 3 * 2,
+    veq.N_grid // 3 * 2,
+)
 eq2.solve(ftol=1e-2, verbose=3)
 
 bc_objective = ObjectiveFunction(BoundaryErrorNESTOR(ext_field))
@@ -401,7 +409,7 @@ def print_error_summary(eqis):
 
 eq2s = [eq2]
 
-for i in range(30):
+for i in range(10):
     eq_temp = optimal_perturb(
         eq2s[-1],
         fb_objective,
@@ -421,3 +429,89 @@ for i in range(30):
 
 with open("run___nestor_out2.pkl", "wb+") as f:
     pickle.dump(eq2s, f)
+
+
+eq3 = eq2s[-1].copy()
+
+eq3.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq3.solve(ftol=1e-2, verbose=3)
+
+bc_objective = ObjectiveFunction(BoundaryErrorNESTOR(ext_field))
+fb_objective = ObjectiveFunction(ForceBalance())
+
+fb_objective.build(eq3)
+bc_objective.build(eq3)
+
+
+def print_error_summary(eqis):
+    for eqi in eqis:
+        f = fb_objective.compute_scalar(fb_objective.x(eqi))
+        b = bc_objective.compute_scalar(bc_objective.x(eqi))
+        print("F^2: {:.4e}      B^2: {:.4e}".format(f, b))
+
+
+eq3s = [eq3]
+
+for i in range(10):
+    eq_temp = optimal_perturb(
+        eq3s[-1],
+        fb_objective,
+        bc_objective,
+        dRb=True,
+        dZb=True,
+        subspace=None,
+        order=2,
+        tr_ratio=[0.01, 0.1],
+        cutoff=1e-6,
+        verbose=3,
+        copy=True,
+    )[0]
+    eq3s.append(eq_temp)
+    eq3s[-1].solve(maxiter=50)
+    print_error_summary(eq3s)
+
+with open("run___nestor_out3.pkl", "wb+") as f:
+    pickle.dump(eq3s, f)
+
+
+eqv = veq.copy()
+
+eqv.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eqv.solve(ftol=1e-2, verbose=3)
+
+bc_objective = ObjectiveFunction(BoundaryErrorNESTOR(ext_field))
+fb_objective = ObjectiveFunction(ForceBalance())
+
+fb_objective.build(eqv)
+bc_objective.build(eqv)
+
+
+def print_error_summary(eqis):
+    for eqi in eqis:
+        f = fb_objective.compute_scalar(fb_objective.x(eqi))
+        b = bc_objective.compute_scalar(bc_objective.x(eqi))
+        print("F^2: {:.4e}      B^2: {:.4e}".format(f, b))
+
+
+eqvs = [eqv]
+
+for i in range(10):
+    eq_temp = optimal_perturb(
+        eqvs[-1],
+        fb_objective,
+        bc_objective,
+        dRb=True,
+        dZb=True,
+        subspace=None,
+        order=2,
+        tr_ratio=[0.01, 0.1],
+        cutoff=1e-6,
+        verbose=3,
+        copy=True,
+    )[0]
+    eqvs.append(eq_temp)
+    eqvs[-1].solve(maxiter=50)
+    print_error_summary(eqvs)
+
+with open("run___nestor_outv.pkl", "wb+") as f:
+    pickle.dump(eqvs, f)

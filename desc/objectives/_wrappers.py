@@ -64,6 +64,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self,
         objective,
         eq_objective=None,
+        linear_objective=None,
         eq=None,
         use_jit=False,
         verbose=1,
@@ -73,6 +74,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self._objective = objective
         self._eq_objective = eq_objective
+        self._linear_objective = linear_objective
         self._perturb_options = perturb_options
         self._solve_options = solve_options
         self._use_jit = use_jit
@@ -104,8 +106,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             iota=eq.iota is not None,
         )
 
+        if self._linear_objective is None:
+            self._linear_objective = ObjectiveFunction(self._constraints)
+
+
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+        self._linear_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         for constraint in self._constraints:
             constraint.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         self._objectives = self._objective.objectives
@@ -142,6 +149,24 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._constraints, extra_args=self._eq_objective.args
         )
+
+        (
+            xpl,
+            Al,
+            self._Ainvl,
+            bl,
+            self._Zl,
+            self._unfixed_idxl,
+            self._projectl,
+            self._recoverl,
+        ) = factorize_linear_constraints(
+            self._linear_objective.objectives, extra_args=self._args
+        )
+        print("constraint args are " + str(self._args))
+        print("obj args are " + str(self._objective.args))
+        print("The size of xp is " + str(xp.shape))
+        print("The size of xpl is " + str(xpl.shape))
+        print("The projection is " + str(self._projectl(xpl)))
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -206,7 +231,30 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
     def jac(self, x):
 
         self._update_equilibrium(x)
-
+        
+        # dx/dc linear
+        print("x_idx is " + str(self._linear_objective.x_idx))
+        x_idxl = np.concatenate(
+            [
+                self._objective.x_idx[arg]
+                for arg in ["p_l", "i_l", "c_l", "Psi"]
+                if arg in self._linear_objective.args
+            ]
+        )
+        x_idxl.sort(kind="mergesort")
+        dxdcl = np.eye(self._objective.dim_x)[:, x_idxl]
+        dxdRbl = (
+            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Rb_lmn"]]
+            @ self._Ainvl["Rb_lmn"]
+        )
+        dxdcl = np.hstack((dxdcl, dxdRbl))
+        dxdZbl = (
+            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Zb_lmn"]]
+            @ self._Ainvl["Zb_lmn"]
+        )
+        dxdcl = np.hstack((dxdcl, dxdZbl))
+        print("The shape of dxdcl is " + str(dxdcl.shape))
+        print("The shape of Zl is " + str(self._Zl.shape))
         # dx/dc
         x_idx = np.concatenate(
             [
@@ -227,7 +275,14 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             @ self._Ainv["Z_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdZb))
+        print("The shape of dxdc is " + str(dxdc.shape))
         print("The shape of Ainv is " + str(self._Ainv["R_lmn"].shape))
+        pr = 0
+        for i in range(len(dxdc)):
+            if self._projectl(dxdc[i,:])[0] != 0:
+                print(self._projectl(dxdc[i,:]))
+            pr = pr + self._projectl(dxdc[i,:])[0]
+        print("total pr is " + str(pr))
         # state vectors
         xf = self._eq_objective.x(self._eq)
         xg = self._objective.x(self._eq)
@@ -649,6 +704,7 @@ class GXWrapper(_Objective):
         #qflux = ds['Fluxes/qflux']
         #qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
         #print(qflux_avg)
+        
         om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
         gamma = np.zeros(len(om))
         for i in range(len(gamma)):

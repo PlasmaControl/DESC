@@ -1,4 +1,4 @@
-name: matplotlib version tests
+name: Dependecy test Matplotlib
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  mpl_tests:
     if: ${{ github.event.label.name == 'test_mpl' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}  
     runs-on: ubuntu-latest
     strategy:

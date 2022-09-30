@@ -1,19 +1,19 @@
 This folder contains the files necessary to reproduce the figures in the paper "The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization".
 A copy of this paper is included as `dudt2022optimization.pdf`.
 
-In order to run the following code, checkout version `0.4.12+245.g0fcc708` of desc.
+In order to run the following code, checkout version `0fcc708` of desc.
 
 `driver.py` is a Python script that performs the optimizations in Section III B.
 There are two optimization parameters that can be set in lines 46 and 47 of the script.
 `qs` is a character that sets the quasi-symmetry objective function, and can be either "B"`, `"C"`, or `"T"`.
 These correspond to the options detailed in Section II C.
-`order` is an interger that specifies the order of the perturbation used, according to the theory explained in Section II B. It can be either `1` or `2`.
+`order` is an integer that specifies the order of the perturbation used, according to the theory explained in Section II B. It can be either `1` or `2`.
 
 `plotter.py` is a Python script that generates the plots shown in Figures 1-5.
 The following plots are all saved in the `data` sub-folder:
 - `f_B.png` corresponds to Figure 1
 - `f_C.png` corresponds to Figure 2
-- `f_R.png` corresponds to Figure 3
+- `f_T.png` corresponds to Figure 3
 - `Booz.png` corresponds to Figure 4
 - `errors.png` corresponds to Figure 5
 

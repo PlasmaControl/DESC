@@ -23,4 +23,4 @@ from .utils import get_fixed_boundary_constraints, get_equilibrium_objective
 from ._wrappers import WrappedEquilibriumObjective
 
 # from ._gx import GXWrapper
-# from ._neo import NEOWrapper
+from ._neo import NEOWrapper

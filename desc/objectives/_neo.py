@@ -38,7 +38,7 @@ class NEOWrapper(_Objective):
         self.iota = eq.iota
 
         # wout parameters
-        self.ns = 256
+        self.ns = 8
 
         # booz parameters
         self.M_booz = 2 * eq.M

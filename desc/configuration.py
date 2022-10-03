@@ -12,6 +12,7 @@ import desc.compute as compute_funs
 from desc.backend import jnp, jit, put, while_loop
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import arg_order, data_index, compute_jacobian
+from desc.compute.utils import compress
 from desc.geometry import (
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
@@ -20,7 +21,7 @@ from desc.geometry import (
 )
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.io import IOAble, load
-from desc.profiles import Profile, PowerSeriesProfile
+from desc.profiles import Profile, PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import copy_coeffs, Index
 
@@ -395,6 +396,13 @@ class _Configuration(IOAble, ABC):
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
+    def _set_up(self):
+        """Called after loading, to ensure object has all properties needed for current DESC version.
+        Allows for backwards-compatibility with equilibria saved/ran with older DESC versions"""
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
+
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
@@ -856,6 +864,32 @@ class _Configuration(IOAble, ABC):
                 )
             )
 
+    def get_profile(self, name, grid=None, **kwargs):
+        """Return a SplineProfile of the desired quantity
+
+        Parameters
+        ----------
+        name : str
+            Name of the quantity to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+            Note profile will only be a function of the radial coordinate.
+
+        Returns
+        -------
+        profile : SplineProfile
+            Radial profile of the desired quantity.
+
+        """
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        data = self.compute(name, grid, **kwargs)
+        x = data[name]
+        x = compress(grid, x, surface_label="rho")
+        return SplineProfile(
+            x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
+        )
+
     @property
     def surface(self):
         """Geometric surface defining boundary conditions."""
@@ -1057,7 +1091,7 @@ class _Configuration(IOAble, ABC):
 
     @iota.setter
     def iota(self, new):
-        if isinstance(new, Profile):
+        if isinstance(new, Profile) or (new is None):
             self._iota = new
         else:
             raise TypeError(
@@ -1084,7 +1118,7 @@ class _Configuration(IOAble, ABC):
 
     @current.setter
     def current(self, new):
-        if isinstance(new, Profile):
+        if isinstance(new, Profile) or (new is None):
             self._current = new
         else:
             raise TypeError(
@@ -1439,17 +1473,17 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = self.L
+            radial resolution to use for SFL equilibrium. Default = 1.5*self.L
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = self.M
+            poloidal resolution to use for SFL equilibrium. Default = 1.5*self.M
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = self.N
+            toroidal resolution to use for SFL equilibrium. Default = 1.5*self.N
         L_grid : int, optional
-            radial spatial resolution to use for fit to new basis. Default = 4*self.L+1
+            radial spatial resolution to use for fit to new basis. Default = 2*L
         M_grid : int, optional
-            poloidal spatial resolution to use for fit to new basis. Default = 4*self.M+1
+            poloidal spatial resolution to use for fit to new basis. Default = 2*M
         N_grid : int, optional
-            toroidal spatial resolution to use for fit to new basis. Default = 4*self.N+1
+            toroidal spatial resolution to use for fit to new basis. Default = 2*N
         rcond : float, optional
             cutoff for small singular values in least squares fit.
         copy : bool, optional
@@ -1464,9 +1498,9 @@ class _Configuration(IOAble, ABC):
         L = L or int(1.5 * self.L)
         M = M or int(1.5 * self.M)
         N = N or int(1.5 * self.N)
-        L_grid = L_grid or L
-        M_grid = M_grid or M
-        N_grid = N_grid or N
+        L_grid = L_grid or int(2 * L)
+        M_grid = M_grid or int(2 * M)
+        N_grid = N_grid or int(2 * N)
 
         grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
         bdry_grid = LinearGrid(M=M, N=N, rho=1.0)

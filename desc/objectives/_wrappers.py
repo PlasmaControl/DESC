@@ -69,8 +69,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
-            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity),
-            iota=eq.iota is not None,
+            iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+            and self._eq.iota is not None
         )
 
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
@@ -108,9 +108,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(
-            self._constraints, extra_args=self._eq_objective.args
-        )
+        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -118,13 +116,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self.history = {}
         for arg in self._full_args:
-            self.history[arg] = list(np.atleast_1d(getattr(self._eq, arg)))
+            self.history[arg] = [np.atleast_1d(getattr(self._eq, arg))]
 
         self._built = True
 
     def _update_equilibrium(self, x):
         """Update the internal equilibrium with new boundary, profile etc."""
-        if jnp.all(x == self._x_old):
+        if jnp.allclose(x, self._x_old, rtol=1e-14, atol=1e-14):
             pass
         else:
             x_dict = self.unpack_state(x)
@@ -180,7 +178,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         x_idx = np.concatenate(
             [
                 self._eq_objective.x_idx[arg]
-                for arg in ["p_l", "i_l", "Psi"]
+                for arg in ["p_l", "i_l", "c_l", "Psi"]
                 if arg in self._eq_objective.args
             ]
         )

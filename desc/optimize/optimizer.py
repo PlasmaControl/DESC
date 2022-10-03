@@ -498,7 +498,7 @@ class Optimizer(IOAble):
             timer.disp("Solution time")
             timer.pretty_print(
                 "Avg time per step",
-                timer["Solution time"] / result.get("nit", result.get("nfev")),
+                timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
             )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)

@@ -1,6 +1,4 @@
 import numpy as np
-import warnings
-from termcolor import colored
 
 from desc.io import IOAble
 from scipy import special
@@ -788,7 +786,7 @@ class ConcentricGrid(Grid):
                 # ensure an odd number of nodes on each surface
                 ntheta += 1
             if self.sym:
-                # for symmetry we want M+1 nodes on outer surface, so (2M+1+1)
+                # for symmetry, we want M+1 nodes on outer surface, so (2M+1+1)
                 # for now, cut in half in _enforce_symmetry
                 ntheta += 1
             dtheta = 2 * np.pi / ntheta
@@ -953,6 +951,6 @@ def most_rational(a, b):  # pragma: no cover
     f = 1
     while True:
         dec = cf_to_dec(np.append(a_cf[0:idx], f))
-        if dec >= a and dec <= b:
+        if a <= dec <= b:
             return dec * s
         f += 1

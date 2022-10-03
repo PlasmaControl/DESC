@@ -1,20 +1,20 @@
-import unittest
 import pytest
 import numpy as np
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import surface_averages, compress
+from desc.compute.utils import compress, surface_averages, surface_integrals
 from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
 from desc.transform import Transform
 
 
-class TestGrid(unittest.TestCase):
+class TestGrid:
     """Test Grid classes."""
 
+    @pytest.mark.unit
     def test_custom_grid(self):
-
+        """Test creating a grid with custom set of nodes."""
         nodes = np.array(
             [
                 [0, 0, 0],
@@ -32,10 +32,11 @@ class TestGrid(unittest.TestCase):
         weights_ref = np.array([w, w, w / 2, w / 2, w, w])
 
         np.testing.assert_allclose(weights, weights_ref)
-        self.assertAlmostEqual(np.sum(grid.weights), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(np.sum(grid.weights), (2 * np.pi) ** 2)
 
+    @pytest.mark.unit
     def test_linear_grid(self):
-
+        """Test node placement in a LinearGrid."""
         L, M, N, NFP, axis, endpoint = 8, 5, 3, 2, True, False
         g = LinearGrid(L, M, N, NFP, sym=False, axis=axis, endpoint=endpoint)
 
@@ -63,10 +64,11 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(g.nodes, nodes)
         # spacing.prod == weights for linear grids (not true for concentric)
         np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
-        self.assertAlmostEqual(g.weights.sum(), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
 
+    @pytest.mark.unit
     def test_concentric_grid(self):
-
+        """Test node placement in ConcentricGrid."""
         M = 2
         N = 0
         NFP = 1
@@ -113,10 +115,11 @@ class TestGrid(unittest.TestCase):
 
         np.testing.assert_allclose(grid_ansi.nodes, ansi_nodes, err_msg="ansi")
         np.testing.assert_allclose(grid_fringe.nodes, fringe_nodes, err_msg="fringe")
-        self.assertAlmostEqual(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(grid_ansi.weights.sum(), (2 * np.pi) ** 2)
 
+    @pytest.mark.unit
     def test_quadrature_grid(self):
-
+        """Test node placement in QuadratureGrid."""
         L = 2
         M = 2
         N = 0
@@ -140,12 +143,14 @@ class TestGrid(unittest.TestCase):
         np.testing.assert_allclose(grid_quad.spacing.prod(axis=1), grid_quad.weights)
         np.testing.assert_allclose(grid_quad.nodes, quadrature_nodes)
 
+    @pytest.mark.unit
     def test_concentric_grid_high_res(self):
-        # need to make sure this builds without crashing, as in GH issue #207
+        """Test that we can create high resolution grids without crashing, as in GH issue #207."""
         grid = ConcentricGrid(L=32, M=28, N=30)
 
+    @pytest.mark.unit
     def test_quad_grid_volume_integration(self):
-
+        """Test that quadrature grid gives correct volume integrals."""
         r = 1
         R = 10
         vol = 2 * (np.pi ** 2) * (r ** 2) * R
@@ -169,10 +174,11 @@ class TestGrid(unittest.TestCase):
         g = eq.compute("sqrt(g)", grid)
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
-        self.assertAlmostEqual(vol, vol_quad)
+        np.testing.assert_allclose(vol, vol_quad)
 
+    @pytest.mark.unit
     def test_repr(self):
-
+        """Test string representations of grid objects."""
         qg = ConcentricGrid(2, 3, 4)
         s = str(qg)
         assert "ConcentricGrid" in s
@@ -181,8 +187,9 @@ class TestGrid(unittest.TestCase):
         assert "M=3" in s
         assert "N=4" in s
 
+    @pytest.mark.unit
     def test_change_resolution(self):
-
+        """Test changing grid resolution."""
         lg = LinearGrid(1, 2, 3)
         lg.change_resolution(2, 3, 4)
         assert lg.L == 2
@@ -201,7 +208,26 @@ class TestGrid(unittest.TestCase):
         assert cg.M == 4
         assert cg.N == 5
 
+    @pytest.mark.unit
+    def test_enforce_symmetry(self):
+        """Test that enforce_symmetry spaces theta nodes correctly."""
+
+        def test(grid):
+            # check if theta nodes cover the circumference of the theta curve
+            dtheta_sums = surface_integrals(grid, q=1 / grid.spacing[:, 2])
+            np.testing.assert_allclose(dtheta_sums, 2 * np.pi * grid.num_zeta)
+
+        # Before enforcing symmetry,
+        # this grid has 2 surfaces near axis lacking theta > pi nodes.
+        # These edge cases should be handled correctly.
+        # Otherwise, a dimension mismatch / broadcast error should be raised.
+        test(ConcentricGrid(L=20, M=3, N=2, sym=True))
+        test(LinearGrid(L=20, M=3, N=2, sym=True))
+
+    @pytest.mark.unit
     def test_symmetry_1(self):
+        """Test surface averages of a smooth function."""
+
         def test(grid, err_msg):
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
@@ -236,7 +262,10 @@ class TestGrid(unittest.TestCase):
         test(QuadratureGrid(L, M, N, NFP), "QuadratureGrid")
         test(ConcentricGrid(L, M, N, NFP, sym), "ConcentricGrid")
 
+    @pytest.mark.unit
     def test_symmetry_2(self):
+        """Tests that surface averages are correct using specified basis."""
+
         def test(grid, basis, err_msg, true_avg=1):
             transform = Transform(grid, basis)
 

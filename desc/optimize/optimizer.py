@@ -12,7 +12,6 @@ from desc.objectives import (
     HelicalForceBalance,
     CurrentDensity,
     WrappedEquilibriumObjective,
-    # GXWrapper,
     FixIota,
     FixCurrent,
 )

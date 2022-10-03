@@ -22,7 +22,7 @@ class NEOWrapper(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=False, verbose=1):
-        self._args = ["R_lmn", "Z_lmn", "L_lmn", "i_l", "p_l", "Psi"]
+        self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
         self._dim_f = 1
 
         self.path = "/u/ddudt/DESC/"
@@ -36,6 +36,7 @@ class NEOWrapper(_Objective):
         self.spectral_indexing = eq.spectral_indexing
         self.pressure = eq.pressure
         self.iota = eq.iota
+        self.current = eq.current
 
         # wout parameters
         self.ns = 8
@@ -57,15 +58,18 @@ class NEOWrapper(_Objective):
 
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi):
-        args = (R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi)
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi):
+        args = (R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi)
         return self.neo_compute.bind(*args)
 
     def compute_impl(self, *args):
-        (R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi) = args
+        (R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi) = args
 
         self.pressure.params = p_l
-        self.iota.params = i_l
+        if self.iota is not None:
+            self.iota.params = i_l
+        else:
+            self.current.params = c_l
         eq = Equilibrium(
             sym=self.sym,
             L=self.L,
@@ -78,6 +82,7 @@ class NEOWrapper(_Objective):
             L_lmn=L_lmn,
             pressure=self.pressure,
             iota=self.iota,
+            current=self.current,
             Psi=float(Psi),
         )
         eq.surface = eq.get_surface_at(rho=1)
@@ -96,7 +101,7 @@ class NEOWrapper(_Objective):
         return self._shift_scale(jnp.atleast_1d(eps_eff_32))
 
     def compute_neo_jvp(self, values, tangents):
-        R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi = values
+        R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi = values
         primal_out = jnp.atleast_1d(0.0)
 
         n = len(values)
@@ -119,9 +124,12 @@ class NEOWrapper(_Objective):
             L_lmn = values[2][i]
             p_l = values[3][i]
             i_l = values[4][i]
-            Psi = values[5][i]
+            c_l = values[5][i]
+            Psi = values[6][i]
 
-            res = jnp.vstack([res, self.compute(R_lmn, Z_lmn, L_lmn, p_l, i_l, Psi)])
+            res = jnp.vstack(
+                [res, self.compute(R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi)]
+            )
 
         res = res[1:]
 

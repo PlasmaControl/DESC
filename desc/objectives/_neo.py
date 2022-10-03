@@ -17,8 +17,9 @@ class NEOWrapper(_Objective):
     _scalar = False
     _linear = False
 
-    def __init__(self, eq=None, target=0, weight=1, name="NEO"):
+    def __init__(self, eq=None, target=0, weight=1, name="NEO", verbose=0):
 
+        self.verbose = verbose
         super().__init__(eq=eq, target=target, weight=weight, name=name)
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -88,7 +89,8 @@ class NEOWrapper(_Objective):
         eq.surface = eq.get_surface_at(rho=1)
         eq.solved = True
 
-        print("Saving VMEC wout file")
+        if self.verbose > 0:
+            print("Saving VMEC wout file")
         VMECIO.save(eq, self.path + "wout_desc.nc", surfs=self.ns, verbose=0)
 
         self.write_booz()
@@ -137,7 +139,8 @@ class NEOWrapper(_Objective):
 
     def write_booz(self):
         """Write BOOZ_XFORM input file."""
-        print("Writing BOOZ_XFORM input file")
+        if self.verbose > 0:
+            print("Writing BOOZ_XFORM input file")
         f = open(self.path + "in_booz.desc", "w")
         f.write("{} {}\n".format(self.M_booz, self.N_booz))
         f.write("'desc'\n")
@@ -146,7 +149,8 @@ class NEOWrapper(_Objective):
 
     def write_neo(self):
         """Write NEO input file."""
-        print("Writing NEO input file")
+        if self.verbose > 0:
+            print("Writing NEO input file")
         f = open(self.path + "neo_in.desc", "w")
         f.write("'#'\n'#'\n'#'\n")
         f.write("boozmn_desc.nc\n")
@@ -162,7 +166,8 @@ class NEOWrapper(_Objective):
 
     def read_neo(self):
         """Read NEO output file."""
-        print("Reading NEO output file")
+        if self.verbose > 0:
+            print("Reading NEO output file")
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
         f = open(self.path + "neo_out.desc", "r")
         f.seek(0)
@@ -174,7 +179,8 @@ class NEOWrapper(_Objective):
 
     def run_booz(self):
         """Run BOOZ_XFORM."""
-        print("Running BOOZ_XFORM")
+        if self.verbose > 0:
+            print("Running BOOZ_XFORM")
         f = open("booz.out", "w")
         cmd = ["xbooz_xform", "in_booz.desc"]
         p = subprocess.run(cmd, stdout=f)
@@ -182,7 +188,8 @@ class NEOWrapper(_Objective):
 
     def run_neo(self):
         """Run NEO."""
-        print("Running NEO")
+        if self.verbose > 0:
+            print("Running NEO")
         f = open("neo.out", "w")
         cmd = ["xneo", "desc"]
         p = subprocess.run(cmd, stdout=f)

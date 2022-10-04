@@ -115,7 +115,7 @@ Objective Functions
     desc.objectives.HelicalForceBalance
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
-    desc.objectives.ObjectiveFunction   
+    desc.objectives.ObjectiveFunction
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
@@ -159,7 +159,8 @@ Plotting
     desc.plotting.plot_basis
     desc.plotting.plot_boozer_modes
     desc.plotting.plot_boozer_surface
-    desc.plotting.plot_coefficients	   
+    desc.plotting.plot_boundary
+    desc.plotting.plot_coefficients
     desc.plotting.plot_comparison
     desc.plotting.plot_fsa
     desc.plotting.plot_grid

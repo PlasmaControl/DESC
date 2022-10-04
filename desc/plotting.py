@@ -22,6 +22,7 @@ __all__ = [
     "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_boundary",
     "plot_coefficients",
     "plot_comparison",
     "plot_fsa",
@@ -1282,7 +1283,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_boundary(eq, zeta=None, axis=True, ax=None, **kwargs):
+def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
     """Plot stellarator boundary at multiple toroidal coordinates.
 
     Parameters
@@ -1293,8 +1294,8 @@ def plot_boundary(eq, zeta=None, axis=True, ax=None, **kwargs):
         Values of zeta to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
-    axis : bool
-        Whether or not to plot the magnetic axis locations. Default is True.
+    plot_axis : bool
+        Whether or not to plot the magnetic axis locations. Default is False.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     **kwargs : fig,ax and plotting properties
@@ -1347,15 +1348,9 @@ def plot_boundary(eq, zeta=None, axis=True, ax=None, **kwargs):
     ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
 
     if zeta is None:
-        if eq.N == 0:
-            zeta = 1
-        else:
-            zeta = 4
+        zeta = 1 if eq.N == 0 else 4
     zeta = zeta + 1  # include zeta = 2*pi
-    if axis:
-        rho = np.array([0.0, 1.0])
-    else:
-        rho = np.array([1.0])
+    rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
     grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": zeta}
     grid = _get_grid(**grid_kwargs)

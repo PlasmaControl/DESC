@@ -304,7 +304,7 @@ def test_plot_surfaces_no_theta(DSHAPE_current):
 def test_plot_boundary():
     """Test plotting boundary."""
     eq = get("W7-X")
-    fig, ax = plot_boundary(eq, figsize=(6, 6))
+    fig, ax = plot_boundary(eq, plot_axis=True)
     return fig
 
 

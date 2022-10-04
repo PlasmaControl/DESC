@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 
+from desc.examples import get
 from desc.plotting import (
     plot_1d,
     plot_2d,
@@ -8,6 +9,7 @@ from desc.plotting import (
     plot_fsa,
     plot_section,
     plot_surfaces,
+    plot_boundary,
     plot_comparison,
     plot_logo,
     plot_grid,
@@ -294,6 +296,15 @@ def test_plot_surfaces_no_theta(DSHAPE_current):
     """Test plotting flux surfaces without theta contours."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax = plot_surfaces(eq, theta=False)
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_boundary():
+    """Test plotting boundary."""
+    eq = get("W7-X")
+    fig, ax = plot_boundary(eq, plot_axis=True)
     return fig
 
 

@@ -130,7 +130,7 @@ class ObjectiveFunction(IOAble):
             self.grad = jit(self.grad)
             self.jvp = jit(self.jvp)
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -143,7 +143,8 @@ class ObjectiveFunction(IOAble):
             Level of output.
 
         """
-        self._use_jit = use_jit
+        if use_jit is None:
+            self._use_jit = use_jit
         timer = Timer()
         timer.start("Objective build")
 

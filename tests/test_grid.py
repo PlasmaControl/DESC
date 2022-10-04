@@ -1,11 +1,11 @@
-import pytest
 import numpy as np
+import pytest
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
 from desc.compute.utils import compress, surface_averages, surface_integrals
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
+from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.transform import Transform
 
 
@@ -98,6 +98,21 @@ class TestGrid:
         # test(endpoint=True)  # _scale_weights() will mess this up
         test(axis=False)
         test(axis=True)
+
+    @pytest.mark.unit
+    def test_linear_grid_spacing_two_nodes(self):
+        """Test that 2 node grids assign equal spacing to nodes."""
+        node_count = 2
+        NFP = 7  # any integer > 1 is good candidate for test
+        endpoint = False  # TODO: fix endpoint = True issue later
+        lg = LinearGrid(
+            theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
+            zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
+            NFP=NFP,
+            endpoint=endpoint,
+        )
+        spacing = np.tile([1, np.pi, np.pi], (node_count * node_count, 1))
+        np.testing.assert_allclose(lg.spacing, spacing)
 
     @pytest.mark.unit
     def test_concentric_grid(self):

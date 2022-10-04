@@ -1,3 +1,4 @@
+import numpy as np
 import scipy.optimize
 import warnings
 from termcolor import colored
@@ -17,7 +18,12 @@ from desc.objectives import (
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
-from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
+from .utils import (
+    check_termination,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+    find_matching_inds,
+)
 
 
 class Optimizer(IOAble):
@@ -477,6 +483,16 @@ class Optimizer(IOAble):
             )
 
         if wrapped:
+            # history from objective includes steps the optimizer didn't accept
+            # need to find where the optimizer actually stepped and only take those
+            wrapped_allx = objective._allx
+            projected_wrapped_allx = []
+            for i, x in enumerate(wrapped_allx):
+                projected_wrapped_allx.append(project(x))
+            optim_allx = result["allx"]
+            match_inds = find_matching_inds(optim_allx, projected_wrapped_allx)
+            for key, val in objective.history.items():
+                objective.history[key] = np.asarray(val)[match_inds]
             result["history"] = objective.history
         else:
             result["history"] = {}

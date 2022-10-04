@@ -113,9 +113,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         for arg in self.args:
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
+        self._allx = [self._x_old]
         self.history = {}
         for arg in self._full_args:
-            self.history[arg] = [np.atleast_1d(getattr(self._eq, arg))]
+            self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
 
@@ -142,8 +143,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 **self._solve_options
             )
             self._x_old = x
+            self._allx.append(x)
+
             for arg in self._full_args:
-                self.history[arg].append(getattr(self._eq, arg))
+                self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
 
     def compute(self, x):
         """Compute the objective function.

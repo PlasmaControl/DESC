@@ -296,7 +296,6 @@ def evaluate_quadratic(J, g, s, diag=None):
 
 def find_matching_inds(arr1, arr2):
     """Find indices into arr2 that match rows of arr1.
-    
     Parameters
     ----------
     arr1 : ndarray, shape(m,n)

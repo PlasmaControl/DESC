@@ -295,7 +295,20 @@ def evaluate_quadratic(J, g, s, diag=None):
 
 
 def find_matching_inds(arr1, arr2):
-    """Find indices into arr2 that match rows of arr1."""
+    """Find indices into arr2 that match rows of arr1.
+    
+    Parameters
+    ----------
+    arr1 : ndarray, shape(m,n)
+        Array to look for matches in.
+    arr2 : ndarray, shape(k,n)
+        Array to look for indices in.
+        
+    Returns
+    -------
+    inds : ndarray of int
+        indices into arr2 of rows that also exist in arr1.
+    """
     arr1, arr2 = map(np.atleast_2d, (arr1, arr2))
     inds = []
     for i, a in enumerate(arr2):

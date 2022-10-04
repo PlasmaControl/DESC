@@ -22,6 +22,7 @@ __all__ = [
     "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_boundary",
     "plot_coefficients",
     "plot_comparison",
     "plot_fsa",
@@ -1278,6 +1279,126 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi)),
             fontsize=title_font_size,
         )
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
+    """Plot stellarator boundary at multiple toroidal coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    zeta : int or array-like or None
+        Values of zeta to plot boundary surface at.
+        If an integer, plot that many contours linearly spaced in [0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
+    plot_axis : bool
+        Whether or not to plot the magnetic axis locations. Default is False.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        cmap : colormap to use for plotting, discretized into len(zeta) colors
+        colors: array of colors to use for each zeta angle
+        ls : array of line styles to use for each zeta angle
+        lw : array of line widths to use for each zeta angle
+        marker: str, marker style to use for the axis plotted points
+        size: float, marker size to use for the axis plotted points
+        label_fontsize: float, fontsize of the x and y labels
+        legend_fontsize: float, fontsize of the legend
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
+    Examples
+    --------
+
+    .. image:: ../../_static/images/plotting/plot_boundary.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boundary
+        fig, ax = plot_boundary(eq)
+
+    """
+    figsize = kwargs.pop("figsize", None)
+    cmap = kwargs.pop("cmap", "rainbow")
+    colors = kwargs.pop("colors", None)
+    ls = kwargs.pop("ls", None)
+    lw = kwargs.pop("lw", None)
+    marker = kwargs.pop("marker", "x")
+    size = kwargs.pop("size", 36)
+    label_fontsize = kwargs.pop("label_fontsize", None)
+    legend_fontsize = kwargs.pop("legend_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+
+    if zeta is None:
+        zeta = 1 if eq.N == 0 else 4
+    zeta = zeta + 1  # include zeta = 2*pi
+    rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
+
+    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": zeta}
+    grid = _get_grid(**grid_kwargs)
+
+    if colors is None:
+        colors = matplotlib.cm.get_cmap(cmap, grid.num_zeta - 1)(
+            np.linspace(0, 1, grid.num_zeta - 1)
+        )
+    if lw is None:
+        lw = 1
+    if isinstance(lw, int):
+        lw = [lw for i in range(grid.num_zeta - 1)]
+    if ls is None:
+        ls = "-"
+    if isinstance(ls, str):
+        ls = [ls for i in range(grid.num_zeta - 1)]
+
+    coords = eq.compute("R", grid)
+    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+
+    fig, ax = _format_ax(ax, figsize=figsize, equal=True)
+
+    for i in range(grid.num_zeta - 1):
+        ax.plot(
+            R[:, -1, i],
+            Z[:, -1, i],
+            color=colors[i],
+            linestyle=ls[i],
+            lw=lw[i],
+            label="$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
+                grid.NFP * grid.nodes[grid.unique_zeta_idx[i], 2] / (2 * np.pi)
+            ),
+        )
+        if rho[0] == 0:
+            ax.scatter(
+                R[0, 0, i],
+                Z[0, 0, i],
+                color=colors[i],
+                marker=marker,
+                s=size,
+            )
+
+    ax.set_xlabel(_axis_labels_RPZ[0], fontsize=label_fontsize)
+    ax.set_ylabel(_axis_labels_RPZ[2], fontsize=label_fontsize)
+    ax.tick_params(labelbottom=True, labelleft=True)
+
+    fig.legend(fontsize=legend_fontsize)
     fig.set_tight_layout(True)
     return fig, ax
 

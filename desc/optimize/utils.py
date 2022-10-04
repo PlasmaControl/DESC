@@ -302,7 +302,6 @@ def find_matching_inds(arr1, arr2):
         Array to look for matches in.
     arr2 : ndarray, shape(k,n)
         Array to look for indices in.
-        
     Returns
     -------
     inds : ndarray of int

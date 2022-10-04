@@ -42,7 +42,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._perturb_options = perturb_options
         self._solve_options = solve_options
         self._built = False
-        self._compiled = False
+        # need compiled=True to avoid calling objective.compile which calls
+        # compute with all zeros, leading to error in perturb/resolve
+        self._compiled = True
 
         if eq is not None:
             self.build(eq, verbose=verbose)

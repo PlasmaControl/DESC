@@ -22,8 +22,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Equilibrium objective to enforce.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
-    use_jit : bool, optional
-        Whether to just-in-time compile the objectives and derivatives.
     verbose : int, optional
         Level of output.
 
@@ -34,7 +32,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
-        use_jit=True,
         verbose=1,
         perturb_options={},
         solve_options={},
@@ -44,15 +41,14 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._eq_objective = eq_objective
         self._perturb_options = perturb_options
         self._solve_options = solve_options
-        self._use_jit = use_jit
         self._built = False
-        self._compiled = True
+        self._compiled = False
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
+            self.build(eq, verbose=verbose)
 
     # TODO: add timing and verbose statements
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -61,6 +57,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+            Note: unused by this class, should pass to sub-objectives directly.
         verbose : int, optional
             Level of output.
 
@@ -73,10 +70,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             and self._eq.iota is not None
         )
 
-        self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
-        self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+        self._objective.build(self._eq, verbose=verbose)
+        self._eq_objective.build(self._eq, verbose=verbose)
         for constraint in self._constraints:
-            constraint.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+            constraint.build(self._eq, verbose=verbose)
         self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f

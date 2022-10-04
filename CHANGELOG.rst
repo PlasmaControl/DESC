@@ -1,6 +1,141 @@
 Changelog
 =========
 
+v0.6.0
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.5.2...v0.6.0>`_
+
+
+Major changes
+
+- Can now solve equilibria with fixed toroidal current, as opposed to fixed rotational transform.
+
+  * input file now accepts ``c`` parameter for toroidal current profile (in Amps - note it should be an even polynomial and 0 on axis)
+  
+  * ``Equilibrium`` now has attribute ``current`` which can be set to any ``Profile`` type (or ``None`` if using rotational transform)
+	
+  * Default ``Equilibrium`` is now fixed zero current rather than zero rotational transform.
+	
+  * For equilibria with both ``iota`` and ``current`` assigned, which to fix should be specified manually by using either ``FixIota`` or ``FixCurrent`` constraints
+	
+  * Note that computing ``iota`` from fixed current requires flux surface averages, so more oversampling in real space may be required to get correct values.
+
+- Near axis interface:
+
+  * ``Equilibrium.from_near_axis`` allows users to load in a solution from ``pyQSC`` or ``pyQIC``.
+
+  * ``FourierRZToroidalSurface.from_near_axis`` allows users to create boundary surfaces that are approximately QP/QI based on an unpublished analytic model shared by Matt Landreman.
+  
+Minor changes
+
+- Plotting:
+
+  *  Document kwargs, according to `matplotlib-style documentation <https://stackoverflow.com/questions/62511086/how-to-document-kwargs-according-to-numpy-style-docstring>`_
+  
+  *  Add kwargs to plotting functions missing sensible/useful kwargs
+	
+  *  Add check for unused kwargs to most plotting functions
+	
+  * Add ``norm_F`` option to ``plot_fsa``
+
+- Transform:
+
+  * Modifies ``Transform.fit`` to use the inverse of the forward method transform method (ie, ``direct1``, ``direct2``, ``fft``) rather than always the full matrix inverse as in ``direct1``
+	
+  * Removes weighting from ``transform.fit``, to ensure that the inverse transform is the actual inverse of the forward transform.
+
+- Profiles:
+
+  * Add methods and classes for adding, subtracting, multiplying, scaling profiles
+	
+  * Add class for anisotropic profiles using Fourier-Zernike basis (though the compute functions don't make use of the anisotropy yet)
+
+- Input/Output:
+
+  * VMEC input conversion now allows for:
+	
+    + comma-separated lists of numbers, such as: ``AC = 1.0, 0.5, 0.2``
+		
+    + non-stellarator symmetric axis initial guesses using the inputs ``RAXIS_CS`` and ``ZAXIS_CC``
+	
+  * Add the Boozer currents ``I`` and ``G`` and the Mercier stability fields to VMEC outputs.
+	
+  * Make DESC input file reader agnostic to the case of the input options (i.e. ``spectral_indexing=ANSI`` in the input file will work now and register as ``ansi`` internally)
+
+- Misc:
+
+  * Allow applying boundary conditions on interior surfaces: Adds a ``surface_label`` arg to ``FixBoundaryR`` and ``FixBoundaryZ``, defaulting to the label of the given surface. That surface is fixed, instead of always the rho=1 surface.
+	
+  * Remove ``use_jit`` from ``Derivative`` class in favor of ``jit``ing attributes of ``ObjectiveFunction``
+	
+  * Add ``jit`` to ``ObjectiveFunction.jvp``, to hopefully speed up perturbations a bit
+	
+  * Enforce odd number of theta nodes for ``ConcentricGrid``, to ensure correct flux surface averages
+	
+  * Remove ``ConcentricGrid`` ``rotation`` option, as this was generally unused and caused some issues with surface averages.
+
+Bug fixes
+
+- Fix bug in derivative of abs(``sqrt(g)``) (thanks to Matt Landreman for reporting). Affected quantities are ``V_rr(r)``, ``D_well``, ``D_Mercier``, ``magnetic well``
+
+- Fix a bug with using ``Transform.fit()`` for double Fourier series on multiple surfaces simultaneously. Performing the fit one surface at a time corrects this, but there could be room for speed improvements.
+
+- Rescale the Jacobian saved as ``gmnc`` & ``gmns`` when saving a VMEC output to reflect the VMEC radial coordinate convention of ``s = rho^2``.
+
+v0.5.2
+#######
+
+`Github Commits <https://github.com/PlasmaControl/DESC/compare/v0.5.1...v0.5.2>`_
+
+Major Changes
+
+- New objectives for ``MercierStability`` and ``MagneticWell``
+
+- Change ``LinearGrid`` API to be more consistent with other ``Grid`` classes:
+
+  * L, M, N now correspond to the grid spectral resolution, rather than the number of grid points
+    
+  * rho, theta, zeta can be passed as integers to specify the number of grid points (functionality that used to belong to L, M, N)
+  
+  * rho, theta, zeta still retain their functionality of specifying coordinate values if they are not integers
+    
+  * Other code that depends on ``LinearGrid`` was updated accordingly to use the new syntax
+
+- Poloidal grid points are now shifted when ``sym=True`` to give correct averages over a flux surface.
+
+- Added default continuation steps to converted VMEC input files
+
+Minor Changes
+
+- add option to ``plot_comparison`` and ``plot_surfaces`` to not plot vartheta contours
+
+- Add better warnings for gpu and jax issues
+
+- add volume avg force and pressure gradient to the compute functions
+
+- change ``is_nested`` function to use jacobian sign instead of looking for intersections between surfaces
+
+- Allow alternate computation of multi-objective derivatives, computing individual jacobians and blocking together rather than computing all at once.
+
+Bug Fixes
+
+- Fix nfev=1 and Some scalar solver Issues
+
+- Fix some formula errors in second derivatives of certain magnetic field components, caused by some hanging expressions.
+
+- fix bug where node pattern is always jacobi when force is used as objective
+
+- Allow hdf5 to store None attributes correctly
+
+- Fix profile parity and Z axis coefficients in ``VMECIO.save``
+
+- Ensure axis coefficients are updated correctly after solving equilibrium
+
+New Contributors
+
+- @unalmis made their first contribution in https://github.com/PlasmaControl/DESC/pull/247
+
 v0.5.1
 #######
 

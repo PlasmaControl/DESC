@@ -143,7 +143,7 @@ class ObjectiveFunction(IOAble):
             Level of output.
 
         """
-        if use_jit is None:
+        if use_jit is not None:
             self._use_jit = use_jit
         timer = Timer()
         timer.start("Objective build")

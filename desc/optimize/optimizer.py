@@ -263,7 +263,6 @@ class Optimizer(IOAble):
                 eq_objective=ObjectiveFunction(nonlinear_constraints),
                 perturb_options=perturb_options,
                 solve_options=solve_options,
-                use_jit=False,
             )
 
         # setting use_jit=False for GX

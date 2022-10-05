@@ -424,7 +424,8 @@ class TestGetSurfaces:
         eq = Equilibrium()
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * 1 ** 2)
+        rho = 1
+        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho ** 2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):

@@ -450,10 +450,6 @@ class LinearGrid(Grid):
             if self.sym:
                 t += t[1] / 2
             dt = 2 * np.pi / t.size * np.ones_like(t)
-            # if endpoint:
-            #     FIXME: dt already has the correct weights
-            #         _scale_weights() function is about to mess it up
-            #         can test with endpoint = True, ntheta = 3
 
         else:
             t = np.atleast_1d(theta)
@@ -467,10 +463,6 @@ class LinearGrid(Grid):
                 dt /= 2
                 if t.size == 2:
                     dt[-1] = dt[0]
-                # if endpoint and dt[0] == (dt[-1] % SUP):
-                #     FIXME: dt already has the correct spacing
-                #         _scale_weights() function is about to mess it up
-                #         can test with endpoint = True, ntheta = 3
             else:
                 dt = np.array([2 * np.pi])
 
@@ -485,10 +477,6 @@ class LinearGrid(Grid):
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
-            # if endpoint:
-            #     FIXME: dz already has the correct spacing
-            #         _scale_weights function() is about to mess it up
-            #         can test with endpoint = True, nzeta = 3
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
@@ -502,10 +490,6 @@ class LinearGrid(Grid):
                 dz *= self.NFP
                 if z.size == 2:
                     dz[-1] = dz[0]
-                # if endpoint and dz[0] == (dz[-1] % (SUP * self.NFP)):
-                #     FIXME: dz already has the correct spacing
-                #         _scale_weights function() is about to mess it up
-                #         can test with endpoint = True, nzeta = 3
             else:
                 dz = np.array([2 * np.pi])
 

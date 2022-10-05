@@ -21,6 +21,7 @@ class NEOWrapper(_Objective):
 
         self.verbose = verbose
         super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "Effective ripple: {:10.3e}"
 
     def build(self, eq, use_jit=False, verbose=1):
         self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]

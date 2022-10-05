@@ -925,7 +925,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
 
-    def solve_continuation(self, start_from=0, verbose=None, checkpoint_path=None):
+    def solve_continuation(self, verbose=None, checkpoint_path=None):
         """Solve for an equilibrium by continuation method.
 
             1. Creates an initial guess from the given inputs
@@ -935,8 +935,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         Parameters
         ----------
-        start_from : integer
-            start solution from the given index
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -953,7 +951,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             verbose = self.inputs[0]["verbose"]
         timer.start("Total time")
 
-        for ii in range(start_from, len(self.inputs)):
+        for ii in range(len(self.inputs)):
             timer.start("Iteration {} total".format(ii + 1))
 
             # TODO: make this more efficient (minimize re-building)
@@ -964,7 +962,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 and "iota" in self.inputs[ii]
             )
 
-            if ii == start_from:
+            if ii == 0:
                 equil = self[ii]
                 if verbose > 0:
                     _print_iteration_summary(

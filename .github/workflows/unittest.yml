@@ -54,7 +54,7 @@ jobs:
       - name: Upload coverage
         continue-on-error: true
         id : codecov1
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           name: codecov-umbrella # optional
           files: ./cov.xml
@@ -64,7 +64,7 @@ jobs:
         id : codecov2
         continue-on-error: true
         if: steps.codecov1.outcome=='failure'         # check the step outcome, retry 1st time
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           name: codecov-umbrella # optional
           files: ./cov.xml
@@ -74,7 +74,7 @@ jobs:
         id : codecov3
         continue-on-error: true
         if: steps.codecov2.outcome=='failure'         # check the step outcome, retry 2nd time
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           name: codecov-umbrella # optional
           files: ./cov.xml
@@ -84,7 +84,7 @@ jobs:
         id : codecov4
         continue-on-error: true
         if: steps.codecov3.outcome=='failure'         # check the step outcome, retry 3rd time
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           name: codecov-umbrella # optional
           files: ./cov.xml
@@ -94,7 +94,7 @@ jobs:
         id : codecov5
         continue-on-error: true
         if: steps.codecov4.outcome=='failure'         # check the step outcome, retry 4th time
-        uses: codecov/codecov-action@v2
+        uses: codecov/codecov-action@v3
         with:
           name: codecov-umbrella # optional
           files: ./cov.xml

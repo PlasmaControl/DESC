@@ -238,8 +238,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         pr = 0
         for i in range(len(dxdc)):
-            if self._projectl(dxdc[i, :])[0] != 0:
-                print(self._projectl(dxdc[i, :]))
             pr = pr + self._projectl(dxdc[i, :])[0]
 
         # state vectors

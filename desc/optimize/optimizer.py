@@ -261,6 +261,7 @@ class Optimizer(IOAble):
             objective = WrappedEquilibriumObjective(
                 objective,
                 eq_objective=ObjectiveFunction(nonlinear_constraints),
+                linear_objective=ObjectiveFunction(linear_constraints),
                 perturb_options=perturb_options,
                 solve_options=solve_options,
             )

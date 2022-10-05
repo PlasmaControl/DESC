@@ -845,22 +845,37 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     Parameters
     ----------
-    inputs : dict or list
-        either a dictionary of inputs or list of dictionaries. For more information
-        see inputs required by ``'Equilibrium'``.
-        If solving using continuation method, a list should be given.
+    args : Equilibrium, dict or list of dict
+        Should be either:
+          * An Equilibrium (or several)
+          * A dictionary of inputs (or several) to create a equilibria
+          * A single list of dictionaries, one for each equilibrium in a continuation.
+          * Nothing, to create an empty family.
+        For more information see inputs required by ``'Equilibrium'``.
+        If solving using continuation method, a list of dict should be given.
 
     """
 
     _io_attrs_ = ["_equilibria"]
 
-    def __init__(self, inputs):
-        # did we get 1 set of inputs or several?
-        if isinstance(inputs, (list, tuple)):
-            self.equilibria = [Equilibrium(**inputs[0])]
+    def __init__(self, *args):
+
+        self.equilibria = []
+        self.inputs = None
+        if len(args) == 1 and isinstance(args[0], list):
+            inputs = args[0]
+            self.equilibria.append(Equilibrium(**inputs[0]))
+            self.inputs = inputs
         else:
-            self.equilibria = [Equilibrium(**inputs)]
-        self.inputs = inputs
+            for arg in args:
+                if isinstance(arg, Equilibrium):
+                    self.equilibria.append(arg)
+                elif isinstance(arg, dict):
+                    self.equilibria.append(Equilibrium(**arg))
+                else:
+                    raise TypeError(
+                        "Args to create EquilibriaFamily should either be Equilibrium or dictionary"
+                    )
 
     @staticmethod
     def _format_deltas(inputs, equil):
@@ -925,7 +940,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
 
-    def solve_continuation(self, verbose=None, checkpoint_path=None):
+    def solve_continuation(self, inputs=None, verbose=None, checkpoint_path=None):
         """Solve for an equilibrium by continuation method.
 
             1. Creates an initial guess from the given inputs
@@ -935,6 +950,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
         Parameters
         ----------
+        inputs : list of dict
+            dictionaries with input parameters for each continuation step.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -946,49 +963,46 @@ class EquilibriaFamily(IOAble, MutableSequence):
         """
         from desc.continuation import _print_iteration_summary
 
+        if inputs is None:
+            inputs = self.inputs
         timer = Timer()
         if verbose is None:
-            verbose = self.inputs[0]["verbose"]
+            verbose = inputs[0]["verbose"]
         timer.start("Total time")
 
-        for ii in range(len(self.inputs)):
+        for ii in range(len(inputs)):
             timer.start("Iteration {} total".format(ii + 1))
 
             # TODO: make this more efficient (minimize re-building)
-            optimizer = Optimizer(self.inputs[ii]["optimizer"])
-            objective = get_equilibrium_objective(self.inputs[ii]["objective"])
+            optimizer = Optimizer(inputs[ii]["optimizer"])
+            objective = get_equilibrium_objective(inputs[ii]["objective"])
             constraints = get_fixed_boundary_constraints(
-                iota=self.inputs[ii]["objective"] != "vacuum"
-                and "iota" in self.inputs[ii]
+                iota=inputs[ii]["objective"] != "vacuum" and "iota" in inputs[ii]
             )
 
             if ii == 0:
                 equil = self[ii]
                 if verbose > 0:
-                    _print_iteration_summary(
-                        ii, len(self.inputs), equil, **self.inputs[ii]
-                    )
+                    _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
 
             else:
                 equil = self[ii - 1].copy()
                 self.insert(ii, equil)
 
                 equil.change_resolution(
-                    L=self.inputs[ii]["L"],
-                    M=self.inputs[ii]["M"],
-                    N=self.inputs[ii]["N"],
-                    L_grid=self.inputs[ii]["L_grid"],
-                    M_grid=self.inputs[ii]["M_grid"],
-                    N_grid=self.inputs[ii]["N_grid"],
+                    L=inputs[ii]["L"],
+                    M=inputs[ii]["M"],
+                    N=inputs[ii]["N"],
+                    L_grid=inputs[ii]["L_grid"],
+                    M_grid=inputs[ii]["M_grid"],
+                    N_grid=inputs[ii]["N_grid"],
                 )
 
                 if verbose > 0:
-                    _print_iteration_summary(
-                        ii, len(self.inputs), equil, **self.inputs[ii]
-                    )
+                    _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
 
                 # figure out if we need perturbations
-                deltas = self._format_deltas(self.inputs[ii], equil)
+                deltas = self._format_deltas(inputs[ii], equil)
 
                 if len(deltas) > 0:
                     if verbose > 0:
@@ -998,7 +1012,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         objective=objective,
                         constraints=constraints,
                         **deltas,
-                        order=self.inputs[ii]["pert_order"],
+                        order=inputs[ii]["pert_order"],
                         verbose=verbose,
                         copy=False,
                     )
@@ -1010,11 +1024,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 optimizer=optimizer,
                 objective=objective,
                 constraints=constraints,
-                ftol=self.inputs[ii]["ftol"],
-                xtol=self.inputs[ii]["xtol"],
-                gtol=self.inputs[ii]["gtol"],
+                ftol=inputs[ii]["ftol"],
+                xtol=inputs[ii]["xtol"],
+                gtol=inputs[ii]["gtol"],
                 verbose=verbose,
-                maxiter=self.inputs[ii]["nfev"],
+                maxiter=inputs[ii]["nfev"],
             )
 
             if checkpoint_path is not None:
@@ -1054,7 +1068,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil = equil.tolist()
         elif not isinstance(equil, list):
             equil = [equil]
-        if not np.all([isinstance(eq, Equilibrium) for eq in equil]):
+        if len(equil) and not all([isinstance(eq, Equilibrium) for eq in equil]):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )

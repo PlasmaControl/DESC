@@ -1405,7 +1405,7 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
             Does so by checking coordianate jacobian (sqrt(g)) sign.
@@ -1421,6 +1421,8 @@ class _Configuration(IOAble, ABC):
             Grid on which to evaluate the coordinate jacobian and check for the sign. (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
             spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
+        msg : {None, "auto", "manual"}
+            Warning to throw if unnested.
 
         Returns
         -------
@@ -1448,7 +1450,27 @@ class _Configuration(IOAble, ABC):
             Z_transform,
         )
 
-        return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        if not nested:
+            if msg == "auto":
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early. "
+                        + "Automatic continuation method failed, consider specifying "
+                        + "continuation steps manually",
+                        "yellow",
+                    )
+                )
+            elif msg == "manual":
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
+                        "yellow",
+                    )
+                )
+        return nested
 
     def to_sfl(
         self,

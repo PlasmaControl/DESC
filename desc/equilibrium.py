@@ -953,22 +953,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             verbose = self.inputs[0]["verbose"]
         timer.start("Total time")
 
-        if (
-            not (
-                isalmostequal([inp["bdry_ratio"] for inp in self.inputs])
-                and isalmostequal([inp["pres_ratio"] for inp in self.inputs])
-            )
-            and not use_jax
-        ):
-            warnings.warn(
-                colored(
-                    "Computing perturbations with finite differences can be "
-                    + "highly inaccurate, consider using JAX or setting all "
-                    + "perturbation ratios to 1",
-                    "yellow",
-                )
-            )
-
         for ii in range(start_from, len(self.inputs)):
             timer.start("Iteration {} total".format(ii + 1))
 
@@ -995,10 +979,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     L=self.inputs[ii]["L"],
                     M=self.inputs[ii]["M"],
                     N=self.inputs[ii]["N"],
+                    L_grid=self.inputs[ii]["L_grid"],
+                    M_grid=self.inputs[ii]["M_grid"],
+                    N_grid=self.inputs[ii]["N_grid"],
                 )
-                equil.L_grid = self.inputs[ii]["L_grid"]
-                equil.M_grid = self.inputs[ii]["M_grid"]
-                equil.N_grid = self.inputs[ii]["N_grid"]
 
                 if verbose > 0:
                     _print_iteration_summary(
@@ -1021,19 +1005,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         copy=False,
                     )
 
-            if not equil.is_nested():
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller perturbation/resolution steps "
-                        + "or reducing trust radius",
-                        "yellow",
-                    )
-                )
-                if checkpoint_path is not None:
-                    if verbose > 0:
-                        print("Saving latest state")
-                    self.save(checkpoint_path)
+            if not equil.is_nested(msg="manual"):
                 break
 
             equil.solve(
@@ -1055,25 +1027,21 @@ class EquilibriaFamily(IOAble, MutableSequence):
             if verbose > 1:
                 timer.disp("Iteration {} total".format(ii + 1))
 
-            if not equil.is_nested():
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller perturbation/resolution steps "
-                        + "or reducing trust radius",
-                        "yellow",
-                    )
-                )
+            if not equil.is_nested(msg="manual"):
                 break
 
         timer.stop("Total time")
-        print("====================")
-        print("Done")
+        if verbose > 0:
+            print("====================")
+            print("Done")
         if verbose > 1:
             timer.disp("Total time")
         if checkpoint_path is not None:
-            print("Output written to {}".format(checkpoint_path))
-        print("====================")
+            if verbose > 0:
+                print("Output written to {}".format(checkpoint_path))
+            self.save(checkpoint_path)
+        if verbose:
+            print("====================")
 
     @property
     def equilibria(self):

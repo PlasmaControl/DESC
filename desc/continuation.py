@@ -1,5 +1,9 @@
 import numpy as np
+import warnings
+from termcolor import colored
+
 from desc.equilibrium import Equilibrium
+from desc.utils import Timer
 
 
 def solve_continuation(
@@ -24,6 +28,8 @@ def solve_continuation(
     xtol=1e-4,
     gtol=1e-6,
     nfev=100,
+    verbose=1,
+    checkpoint_path=None,
 ):
     """Solve for an equilibrium using an automatic continuation method.
 
@@ -70,6 +76,9 @@ def solve_continuation(
         final desired configuration,
 
     """
+
+    timer = Timer()
+    timer.start("Total time")
 
     surf_i = surface.copy()
     pres_i = pressure.copy()
@@ -185,9 +194,31 @@ def solve_continuation(
             xtol,
             nfev,
         )
-        eqi.perturb(**deltas, order=pert_order)
-        eqi.solve(objective, optimizer, ftol, xtol, gtol, nfev)
         eqfam.append(eqi)
+        eqfam[-1].perturb(**deltas, order=pert_order)
+        if not eqi.is_nested(msg="auto"):
+            break
+
+        eqfam[-1].solve(objective, optimizer, ftol, xtol, gtol, nfev)
+        if not eqi.is_nested(msg="auto"):
+            break
+        if checkpoint_path is not None:
+            if verbose > 0:
+                print("Saving latest iteration")
+            eqfam.save(checkpoint_path)
+
+    timer.stop("Total time")
+    if verbose > 0:
+        print("====================")
+        print("Done")
+    if verbose > 1:
+        timer.disp("Total time")
+    if checkpoint_path is not None:
+        if verbose > 0:
+            print("Output written to {}".format(checkpoint_path))
+        eqfam.save(checkpoint_path)
+    if verbose:
+        print("====================")
 
     return eqfam
 

@@ -1,7 +1,6 @@
 import numpy as np
-from scipy.linalg import block_diag
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, block_diag
 from desc.utils import svd_inv_null
 from desc.compute import arg_order
 from .objective_funs import ObjectiveFunction
@@ -11,6 +10,7 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixIota,
+    FixCurrent,
     FixPsi,
 )
 from ._equilibrium import (
@@ -22,13 +22,15 @@ from ._equilibrium import (
 )
 
 
-def get_fixed_boundary_constraints(profiles=True):
+def get_fixed_boundary_constraints(profiles=True, iota=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
     ----------
     profiles : bool
         Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
 
     Returns
     -------
@@ -43,7 +45,12 @@ def get_fixed_boundary_constraints(profiles=True):
         FixPsi(),
     )
     if profiles:
-        constraints = constraints + (FixPressure(), FixIota())
+        constraints += (FixPressure(),)
+
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
     return constraints
 
 
@@ -52,9 +59,9 @@ def get_equilibrium_objective(mode="force"):
 
     Parameters
     ----------
-    mode : {"force", "force2", "energy", "vacuum"}
+    mode : {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
-        "force2" uses two different grids for radial and helical forces. "energy" is
+        "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
 
     Returns
@@ -67,7 +74,7 @@ def get_equilibrium_objective(mode="force"):
         objectives = Energy()
     elif mode == "force":
         objectives = ForceBalance()
-    elif mode == "force2":
+    elif mode == "forces":
         objectives = (RadialForceBalance(), HelicalForceBalance())
     elif mode == "vacuum":
         objectives = CurrentDensity()
@@ -76,7 +83,7 @@ def get_equilibrium_objective(mode="force"):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, extra_args=[]):
+def factorize_linear_constraints(constraints, objective_args):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -88,9 +95,8 @@ def factorize_linear_constraints(constraints, extra_args=[]):
     ----------
     constraints : tuple of Objectives
         linear objectives/constraints to factorize for projection method.
-    extra_args : list of str
-        names of extra arguments that are not constrained but may need to be included
-        for indexing etc. Should generally include all args to all objectives.
+    objective_args : list of str
+        names of all arguments used by the desired objective.
 
     Returns
     -------
@@ -112,12 +118,13 @@ def factorize_linear_constraints(constraints, extra_args=[]):
     """
     # set state vector
     args = np.concatenate([obj.args for obj in constraints])
-    args = np.concatenate((args, extra_args))
+    args = np.concatenate((args, objective_args))
+    # this is all args used by both constraints and objective
     args = [arg for arg in arg_order if arg in args]
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
-    for arg in args:
+    for arg in objective_args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
 
@@ -133,6 +140,8 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
         arg = obj.args[0]
+        if arg not in objective_args:
+            continue
         constraint_args.append(arg)
         if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
@@ -172,7 +181,7 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):
-        """Recover the full state vector from the reducted optimization vector."""
+        """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 

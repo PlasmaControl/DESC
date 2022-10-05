@@ -1,11 +1,19 @@
-import unittest
 import numpy as np
+import pytest
+
 from desc.equilibrium import Equilibrium
-from desc.basis import FourierZernikeBasis
-from desc.objectives import FixLambdaGauge
+from desc.geometry import FourierRZToroidalSurface
+from desc.objectives import (
+    FixLambdaGauge,
+    FixCurrent,
+    FixIota,
+)
+from desc.profiles import PowerSeriesProfile
 
 
+@pytest.mark.unit
 def test_LambdaGauge_axis_sym(DummyStellarator):
+    """Test that lambda at axis is fixed correctly for symmetric equilibrium."""
     # symmetric cases only have the axis constraint
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
@@ -20,7 +28,9 @@ def test_LambdaGauge_axis_sym(DummyStellarator):
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
 
+@pytest.mark.unit
 def test_LambdaGauge_asym():
+    """Test that lambda gauge is fixed correctly for asymmetric equilibrium."""
     # just testing the gauge condition
     inputs = {
         "sym": False,
@@ -60,3 +70,33 @@ def test_LambdaGauge_asym():
     np.testing.assert_array_equal(
         lam_con._A[0:3, 0 : eq.L_basis.num_modes], correct_constraint_matrix
     )
+
+
+@pytest.mark.unit
+def test_bc_on_interior_surfaces():
+    """Test applying boundary conditions on internal surface."""
+    surf = FourierRZToroidalSurface(rho=0.5)
+    iota = PowerSeriesProfile([1, 0, 0.5])
+    eq = Equilibrium(L=4, M=4, N=0, surface=surf, iota=iota)
+    eq.solve(verbose=0)
+    surf5 = eq.get_surface_at(0.5)
+
+    np.testing.assert_allclose(surf.R_lmn, surf5.R_lmn, atol=1e-12)
+    np.testing.assert_allclose(surf.Z_lmn, surf5.Z_lmn, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_constrain_asserts():
+    """Test error checking for incompatible constraints."""
+    # nonexistent toroidal current can't be constrained
+    eq = Equilibrium(iota=PowerSeriesProfile(0, 0))
+    with pytest.raises(RuntimeError):
+        eq.solve(constraints=FixCurrent())
+    # nonexistent rotational transform can't be constrained
+    eq = Equilibrium(current=PowerSeriesProfile(0))
+    with pytest.raises(RuntimeError):
+        eq.solve(constraints=FixIota())
+    # toroidal current and rotational transform can't be constrained simultaneously
+    eq = Equilibrium(current=PowerSeriesProfile(0))
+    with pytest.raises(ValueError):
+        eq.solve(constraints=(FixCurrent(), FixIota()))

@@ -75,7 +75,6 @@ Name,Label,Units,Description,Compute function
 ``p_r``,:math:`\partial_{\rho} p`,Pascal,"Pressure, first radial derivative",``compute_pressure``
 ``iota``,:math:`\iota`,None,Rotational transform,``compute_rotational_transform``
 ``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform, first radial derivative",``compute_rotational_transform``
-``iota_rr``,:math:`\partial_{\rho\rho} \iota`,None,"Rotational transform, second radial derivative",``compute_rotational_transform``
 ``e_rho``,:math:`\mathbf{e}_{\rho}`,meters,Covariant radial basis vector,``compute_covariant_basis``
 ``e_theta``,:math:`\mathbf{e}_{\theta}`,meters,Covariant poloidal basis vector,``compute_covariant_basis``
 ``e_zeta``,:math:`\mathbf{e}_{\zeta}`,meters,Covariant toroidal basis vector,``compute_covariant_basis``
@@ -126,6 +125,8 @@ Name,Label,Units,Description,Compute function
 ``g_rt``,:math:`g_{\rho\theta}`,square meters,Radial/Poloidal element of covariant metric tensor,``compute_covariant_metric_coefficients``
 ``g_rz``,:math:`g_{\rho\zeta}`,square meters,Radial/Toroidal element of covariant metric tensor,``compute_covariant_metric_coefficients``
 ``g_tz``,:math:`g_{\theta\zeta}`,square meters,Poloidal/Toroidal element of covariant metric tensor,``compute_covariant_metric_coefficients``
+``g_tt_r``,:math:`\partial_{\rho} g_{\theta\theta}`,square meters,"Poloidal/Poloidal element of covariant metric tensor, derivative wrt rho",``compute_covariant_metric_coefficients``
+``g_tz_r``,:math:`\partial_{\rho} g_{\theta\zeta}`,square meters,"Poloidal/Toroidal element of covariant metric tensor, derivative wrt rho",``compute_covariant_metric_coefficients``
 ``g^rr``,:math:`g^{\rho\rho}`,inverse square meters,Radial/Radial element of contravariant metric tensor,``compute_contravariant_metric_coefficients``
 ``g^tt``,:math:`g^{\theta\theta}`,inverse square meters,Poloidal/Poloidal element of contravariant metric tensor,``compute_contravariant_metric_coefficients``
 ``g^zz``,:math:`g^{\zeta\zeta}`,inverse square meters,Toroidal/Toroidal element of contravariant metric tensor,``compute_contravariant_metric_coefficients``
@@ -210,7 +211,9 @@ Name,Label,Units,Description,Compute function
 ``(B*grad(|B|))_t``,:math:`\partial_{\theta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``compute_B_dot_gradB``
 ``(B*grad(|B|))_z``,:math:`\partial_{\zeta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``compute_B_dot_gradB``
 ``I``,:math:`I`,Tesla * meters,Boozer toroidal current,``compute_boozer_magnetic_field``
+``current``,:math:`\frac{2\pi}{\mu_0} I`,Amperes,Net toroidal current,``compute_boozer_magnetic_field``
 ``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Boozer toroidal current, derivative wrt radial coordinate",``compute_boozer_magnetic_field``
+``current_r``,:math:`\frac{2\pi}{\mu_0} \partial_{\rho} I`,Amperes,"Net toroidal current, derivative wrt radial coordinate",``compute_boozer_magnetic_field``
 ``G``,:math:`G`,Tesla * meters,Boozer poloidal current,``compute_boozer_magnetic_field``
 ``G_r``,:math:`\partial_{\rho} G`,Tesla * meters,"Boozer poloidal current, derivative wrt radial coordinate",``compute_boozer_magnetic_field``
 ``J^rho``,:math:`J^{\rho}`,Amperes / cubic meter,Contravariant radial component of plasma current density,``compute_contravariant_current_density``

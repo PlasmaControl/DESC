@@ -116,9 +116,9 @@ The parameter vector :math:`\mathbf{c}` contains the spectral coefficients of th
 .. math::
   \mathbf{c} = [R^b_{mn} \\ Z^b_{mn} \\ p_l \\ \iota_l \\ \psi_a]^T
 
-The equations :math:`\mathbf{f}` are the force error residuals at a series of collocation points, as well as additional equations to enforce the boundary condition: 
+The equations :math:`\mathbf{f}` are the force error residuals at a series of collocation points: 
 
 .. math::
-  \mathbf{f} = [f_\rho \\ f_\beta \\ BC]^T
+  \mathbf{f} = [f_\rho \\ f_\beta]^T
 
-DESC allows flexibility in the choice of optimization algorithm used to solve this system of equations; popular approaches include Newton-Raphson methods and least-squares minimization. 
+DESC allows flexibility in the choice of optimization algorithm used to solve this system of equations; popular approaches include Newton-Raphson methods and least-squares minimization (as the collocation grids are often oversampled, which has been found to improve convergence and robustness). 

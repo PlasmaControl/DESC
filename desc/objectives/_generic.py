@@ -21,7 +21,7 @@ class GenericObjective(_Objective):
     Parameters
     ----------
     f : str
-        Name of the quatity to compute.
+        Name of the quantity to compute.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
@@ -117,8 +117,17 @@ class GenericObjective(_Objective):
                 self.inputs[arg] = eq.pressure.copy()
                 self.inputs[arg].grid = self.grid
             elif arg == "iota":
-                self.inputs[arg] = eq.iota.copy()
-                self.inputs[arg].grid = self.grid
+                if eq.iota is not None:
+                    self.inputs[arg] = eq.iota.copy()
+                    self.inputs[arg].grid = self.grid
+                else:
+                    self.inputs[arg] = None
+            elif arg == "current":
+                if eq.current is not None:
+                    self.inputs[arg] = eq.current.copy()
+                    self.inputs[arg].grid = self.grid
+                else:
+                    self.inputs[arg] = None
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -198,8 +207,14 @@ class ToroidalCurrent(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["I"]["R_derivs"], build=True
@@ -220,7 +235,7 @@ class ToroidalCurrent(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current.
 
         Parameters
@@ -233,6 +248,8 @@ class ToroidalCurrent(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -247,11 +264,13 @@ class ToroidalCurrent(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
+            self._current,
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
         return self._shift_scale(I)

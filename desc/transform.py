@@ -55,6 +55,16 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
+        if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
+            warnings.warn(
+                colored(
+                    "Unequal number of field periods for grid {} and basis {}.".format(
+                        self.grid.NFP, self.basis.NFP
+                    ),
+                    "yellow",
+                )
+            )
+
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
         self._method = method
@@ -393,14 +403,37 @@ class Transform(IOAble):
         """Build the pseudoinverse for fitting."""
         if self.built_pinv:
             return
-        A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
-        # for weighted least squares
-        A = self.grid.weights[:, np.newaxis] * A
         rcond = None if self.rcond == "auto" else self.rcond
-        if A.size:
-            self._matrices["pinv"] = scipy.linalg.pinv(A, rcond=rcond)
-        else:
-            self._matrices["pinv"] = np.zeros_like(A.T)
+        if self.method == "direct1":
+            A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
+            self._matrices["pinv"] = (
+                scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
+            )
+        elif self.method == "direct2":
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            temp_modes = np.hstack(
+                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
+            )
+            B = self.basis.evaluate(
+                self.dft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            self.matrices["pinvA"] = (
+                scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
+            )
+            self.matrices["pinvB"] = (
+                scipy.linalg.pinv(B, rcond=rcond) if B.size else np.zeros_like(B.T)
+            )
+        elif self.method == "fft":
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            self.matrices["pinvA"] = (
+                scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
+            )
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
@@ -512,11 +545,27 @@ class Transform(IOAble):
             raise RuntimeError(
                 "Transform must be precomputed with transform.build_pinv() before being used"
             )
-        if x.ndim > 1:
-            weights = self.grid.weights.reshape((-1, 1))
-        else:
-            weights = self.grid.weights
-        return jnp.matmul(self.matrices["pinv"], weights * x)
+
+        if self.method == "direct1":
+            Ainv = self.matrices["pinv"]
+            c = jnp.matmul(Ainv, x)
+        elif self.method == "direct2":
+            Ainv = self.matrices["pinvA"]
+            Binv = self.matrices["pinvB"]
+            yy = jnp.matmul(Ainv, x.reshape((-1, self.num_z_nodes), order="F"))
+            c = jnp.matmul(Binv, yy.T).T.flatten()[self.fft_index]
+        elif self.method == "fft":
+            Ainv = self.matrices["pinvA"]
+            c_fft = jnp.matmul(Ainv, x.reshape((Ainv.shape[1], -1), order="F"))
+            c_cplx = jnp.fft.fft(c_fft)
+            c_real = c_cplx[:, 1 : c_cplx.shape[1] // 2 + 1]
+            c_unpad = c_real[:, : c_real.shape[1] - self.pad_dim]
+            c0 = c_cplx[:, :1].real / self.num_z_nodes
+            c2 = c_unpad.real / (self.num_z_nodes / 2)
+            c1 = -c_unpad.imag[:, ::-1] / (self.num_z_nodes / 2)
+            c_diff = jnp.hstack([c1, c0, c2])
+            c = c_diff.flatten()[self.fft_index]
+        return c
 
     def project(self, y):
         """Project vector y onto basis.

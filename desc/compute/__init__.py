@@ -30,4 +30,4 @@ from ._qs import compute_boozer_coordinates, compute_quasisymmetry_error
 from ._stability import compute_mercier_stability, compute_magnetic_well
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi", "Rb_lmn", "Zb_lmn")
+arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")

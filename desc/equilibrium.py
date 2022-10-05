@@ -925,24 +925,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
 
-    def _print_iteration(self, ii, equil):
-        print("================")
-        print("Step {}/{}".format(ii + 1, len(self.inputs)))
-        print("================")
-        equil.resolution_summary()
-        print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
-        print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
-        if "current" in self.inputs[ii]:
-            print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
-        print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-        print("Objective: {}".format(self.inputs[ii]["objective"]))
-        print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
-        print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
-        print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
-        print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
-        print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
-        print("================")
-
     def solve_continuation(self, start_from=0, verbose=None, checkpoint_path=None):
         """Solve for an equilibrium by continuation method.
 
@@ -964,6 +946,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             file to save checkpoint data (Default value = None)
 
         """
+        from desc.continuation import _print_iteration_summary
+
         timer = Timer()
         if verbose is None:
             verbose = self.inputs[0]["verbose"]
@@ -999,7 +983,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
             if ii == start_from:
                 equil = self[ii]
                 if verbose > 0:
-                    self._print_iteration(ii, equil)
+                    _print_iteration_summary(
+                        ii, len(self.inputs), equil, **self.inputs[ii]
+                    )
 
             else:
                 equil = self[ii - 1].copy()
@@ -1015,7 +1001,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.N_grid = self.inputs[ii]["N_grid"]
 
                 if verbose > 0:
-                    self._print_iteration(ii, equil)
+                    _print_iteration_summary(
+                        ii, len(self.inputs), equil, **self.inputs[ii]
+                    )
 
                 # figure out if we need perturbations
                 deltas = self._format_deltas(self.inputs[ii], equil)

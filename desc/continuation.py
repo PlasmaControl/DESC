@@ -19,10 +19,11 @@ def solve_continuation(
     spectral_indexing="ansi",
     objective="force",
     optimizer="lsq-exact",
+    pert_order=2,
     ftol=1e-2,
     xtol=1e-4,
     gtol=1e-6,
-    maxiter=100,
+    nfev=100,
 ):
     """Solve for an equilibrium using an automatic continuation method.
 
@@ -55,10 +56,12 @@ def solve_continuation(
         function to solve for equilibrium solution
     optimizer : str or Optimzer (optional)
         optimizer to use
+    pert_order : int
+        order of perturbations to use.
     ftol, xtol, gtol : float
         stopping tolerances for subproblem at each step.
-    maxiter : int
-        maximum number of iterations of the equilibrium subproblem.
+    nfev : int
+        maximum number of function evaluations in each equilibrium subproblem.
 
     Returns
     -------
@@ -95,9 +98,11 @@ def solve_continuation(
         if (pressure(np.linspace(0, 1, 20)) == 0).all()
         else int(np.ceil(1 / pres_step))
     )
-    bdry_steps = 0 if surface.N == 0 else int(np.ceil(1 / bdry_step))
+    bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
 
     eqfam = []
+
+    bdry_ratio = pres_ratio = curr_ratio = 0
 
     surf_i.change_resolution(Li, Mi, Ni)
     pres_i.change_resolution(Li)
@@ -124,18 +129,19 @@ def solve_continuation(
         spectral_indexing,
     )
 
-    eq_init.solve(objective, optimizer, ftol, xtol, gtol, maxiter)
+    eq_init.solve(objective, optimizer, ftol, xtol, gtol, nfev)
     ii = 0
-    while ii < (res_steps + pres_steps + bdry_steps):
+    nn = res_steps + pres_steps + bdry_steps
+    for ii in range(nn):
         # TODO : print iteration summary
         eqi = eqfam[-1].copy()
         if ii < res_steps:
             # increase resolution of vacuum soln
             Mi = min(Mi + res_step, M)
             Li = 2 * Mi if spectral_indexing == "fringe" else Mi
-            L_gridi = L_grid / L * Li
-            M_gridi = M_grid / M * Mi
-            N_gridi = N_grid / N * Ni
+            L_gridi = np.ceil(L_grid / L * Li).astype(int)
+            M_gridi = np.ceil(M_grid / M * Mi).astype(int)
+            N_gridi = np.ceil(N_grid / N * Ni).astype(int)
 
             surf_i2 = surface.copy()
             surf_i2.change_resolution(Li, Mi, Ni)
@@ -145,20 +151,14 @@ def solve_continuation(
                 {"surface": [surf_i, surf_i2], "iota": [iota_i, iota_i2]}
             )
             eqi.change_resolution(Li, Mi, Ni, L_gridi, M_gridi, N_gridi)
-            eqi.perturb(**deltas)
-            eqi.solve(objective, optimizer)
-            eqfam.append(eqi)
-            ii += 1
             surf_i = surf_i2
             iota_i = iota_i2
         if ii > res_steps and ii < res_steps + pres_steps:
             # increase pressure
             deltas = _get_deltas({"pressure": [eqfam[res_steps].pressure, pressure]})
             deltas["p_l"] *= pres_step
-            eqi.perturb(**deltas)
-            eqi.solve(objective, optimizer)
-            eqfam.append(eqi)
-            ii += 1
+            pres_ratio += pres_step
+
         if ii > res_steps + pres_steps:
             # boundary perturbations
             # TODO: do we want to jump to full N? or maybe step that up too?
@@ -168,10 +168,26 @@ def solve_continuation(
             )
             deltas["Rb_lmn"] *= bdry_step
             deltas["Zb_lmn"] *= bdry_step
-            eqi.perturb(**deltas)
-            eqi.solve(objective, optimizer)
-            eqfam.append(eqi)
-            ii += 1
+            bdry_ratio += bdry_step
+
+        _print_iteration_summary(
+            ii,
+            nn,
+            eqi,
+            bdry_ratio,
+            pres_ratio,
+            curr_ratio,
+            pert_order,
+            objective,
+            optimizer,
+            ftol,
+            gtol,
+            xtol,
+            nfev,
+        )
+        eqi.perturb(**deltas, order=pert_order)
+        eqi.solve(objective, optimizer, ftol, xtol, gtol, nfev)
+        eqfam.append(eqi)
 
     return eqfam
 
@@ -179,7 +195,6 @@ def solve_continuation(
 def _get_deltas(things):
 
     deltas = {}
-    n = len(things)
     if "surface" in things:
         s1 = things["surface"][0].copy()
         s2 = things["surface"][1].copy()
@@ -193,6 +208,12 @@ def _get_deltas(things):
 
         i1.change_resolution(i2.L)
         deltas["i_l"] = i2.params - i1.params
+    if "current" in things:
+        c1 = things["current"][0].copy()
+        c2 = things["current"][1].copy()
+
+        c1.change_resolution(c2.L)
+        deltas["c_l"] = c2.params - c1.params
     if "pressure" in things:
         p1 = things["pressure"][0].copy()
         p2 = things["pressure"][1].copy()
@@ -201,3 +222,37 @@ def _get_deltas(things):
         deltas["p_l"] = p2.params - p1.params
 
     return deltas
+
+
+def _print_iteration_summary(
+    ii,
+    nn,
+    eq,
+    bdry_ratio,
+    pres_ratio,
+    curr_ratio,
+    pert_order,
+    objective,
+    optimizer,
+    ftol,
+    gtol,
+    xtol,
+    nfev,
+    **kwargs
+):
+    print("================")
+    print("Step {}/{}".format(ii + 1, nn))
+    print("================")
+    eq.resolution_summary()
+    print("Boundary ratio = {}".format(bdry_ratio))
+    print("Pressure ratio = {}".format(pres_ratio))
+    if eq.current is not None:
+        print("Current ratio = {}".format(curr_ratio))
+    print("Perturbation Order = {}".format(pert_order))
+    print("Objective: {}".format(objective))
+    print("Optimizer: {}".format(optimizer))
+    print("Function tolerance = {}".format(ftol))
+    print("Gradient tolerance = {}".format(gtol))
+    print("State vector tolerance = {}".format(xtol))
+    print("Max function evaluations = {}".format(nfev))
+    print("================")

@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 import desc.io
 from desc.compute import data_index
@@ -25,7 +26,9 @@ class _ExactValueProfile:
 class TestConstrainCurrent:
     """Tests for running DESC with a fixed current profile."""
 
-    def test_compute_rotational_transform(self, DSHAPE, HELIOTRON):
+    @pytest.mark.unit
+    @pytest.mark.solve
+    def test_compute_rotational_transform(self, DSHAPE_current, HELIOTRON_vac):
         """
         Test that compute_rotational_transform recovers iota and iota_r
         when the current is fixed to the current computed on an equilibrium
@@ -83,5 +86,5 @@ class TestConstrainCurrent:
 
         for e in ("quadrature", "concentric", "linear"):
             # works with any stellarators in desc/examples
-            test(DSHAPE, e)
-            test(HELIOTRON, e)
+            test(DSHAPE_current, e)
+            test(HELIOTRON_vac, e)

@@ -721,15 +721,29 @@ class CurrentDensity(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 3 * self.grid.num_nodes
 

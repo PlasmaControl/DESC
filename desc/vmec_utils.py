@@ -2,7 +2,7 @@ import numpy as np
 from scipy.linalg import block_diag, null_space
 
 from desc.backend import sign
-from desc.basis import zernike_radial_poly
+from desc.basis import zernike_radial
 
 
 def ptolemy_identity_fwd(m_0, n_0, s, c):
@@ -184,7 +184,7 @@ def fourier_to_zernike(m, n, x_mn, basis):
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):
-            A = zernike_radial_poly(
+            A = zernike_radial(
                 rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
             )
             c = np.linalg.lstsq(A, x_mn[:, k], rcond=None)[0]
@@ -229,7 +229,7 @@ def zernike_to_fourier(x_lmn, basis, rho):
     for k in range(len(m)):
         idx = np.where((basis.modes[:, 1:] == [m[k], n[k]]).all(axis=1))[0]
         if len(idx):
-            A = zernike_radial_poly(
+            A = zernike_radial(
                 rho[:, np.newaxis], basis.modes[idx, 0], basis.modes[idx, 1]
             )
             x_mn[:, k] = np.matmul(A, x_lmn[idx])

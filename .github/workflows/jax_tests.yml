@@ -1,4 +1,4 @@
-name: JAX version tests
+name: Dependency test JAX
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  jax_tests:
     if: ${{ github.event.label.name == 'test_jax' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}  
     runs-on: ubuntu-latest
     strategy:

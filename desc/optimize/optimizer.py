@@ -266,9 +266,9 @@ class Optimizer(IOAble):
                 solve_options=solve_options,
             )
 
-        # setting use_jit=False for GX
+        # FIXME: use_jit=False is hard-coded for NEO wrapper
         if not objective.built:
-            objective.build(eq, verbose=verbose, use_jit=False)
+            objective.build(eq, use_jit=False, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
             objective.compile(mode, verbose)

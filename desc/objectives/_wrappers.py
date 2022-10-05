@@ -77,7 +77,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._linear_objective is None:
             self._linear_objective = ObjectiveFunction(self._constraints)
 
-        self._objective.build(self._eq, verbose=verbose)
+        # FIXME: use_jit=False is hard-coded for NEO wrapper
+        self._objective.build(self._eq, use_jit=False, verbose=verbose)
         self._eq_objective.build(self._eq, verbose=verbose)
         self._linear_objective.build(self._eq, verbose=verbose)
         for constraint in self._constraints:

@@ -22,8 +22,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Equilibrium objective to enforce.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
-    use_jit : bool, optional
-        Whether to just-in-time compile the objectives and derivatives.
     verbose : int, optional
         Level of output.
 
@@ -34,7 +32,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
-        use_jit=True,
         verbose=1,
         perturb_options={},
         solve_options={},
@@ -44,15 +41,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._eq_objective = eq_objective
         self._perturb_options = perturb_options
         self._solve_options = solve_options
-        self._use_jit = use_jit
         self._built = False
+        # need compiled=True to avoid calling objective.compile which calls
+        # compute with all zeros, leading to error in perturb/resolve
         self._compiled = True
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
+            self.build(eq, verbose=verbose)
 
     # TODO: add timing and verbose statements
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -61,6 +59,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+            Note: unused by this class, should pass to sub-objectives directly.
         verbose : int, optional
             Level of output.
 
@@ -69,14 +68,14 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
-            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity),
-            iota=eq.iota is not None,
+            iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+            and self._eq.iota is not None
         )
 
-        self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
-        self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+        self._objective.build(self._eq, verbose=verbose)
+        self._eq_objective.build(self._eq, verbose=verbose)
         for constraint in self._constraints:
-            constraint.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+            constraint.build(self._eq, verbose=verbose)
         self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f
@@ -108,17 +107,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(
-            self._constraints, extra_args=self._eq_objective.args
-        )
+        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
+        self._allx = [self._x_old]
         self.history = {}
         for arg in self._full_args:
-            self.history[arg] = [np.atleast_1d(getattr(self._eq, arg))]
+            self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
 
@@ -145,8 +143,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 **self._solve_options
             )
             self._x_old = x
+            self._allx.append(x)
+
             for arg in self._full_args:
-                self.history[arg].append(getattr(self._eq, arg))
+                self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
 
     def compute(self, x):
         """Compute the objective function.

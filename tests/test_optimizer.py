@@ -4,7 +4,6 @@ import pytest
 from desc.backend import jnp
 from scipy.optimize import BFGS
 from desc.optimize import fmintr, lsqtr, Optimizer
-from desc.optimize.utils import make_spd, chol_U_update
 from scipy.optimize import rosen, rosen_der, rosen_hess
 from desc.derivatives import Derivative
 from numpy.random import default_rng
@@ -33,9 +32,31 @@ def vector_fun(x, p):
     return a0 + a1 + 3 * a2 + a3
 
 
+A0 = 1
+B0 = 2
+C0 = -1
+A1 = 4
+B1 = 8
+C1 = -1
+SCALAR_FUN_SOLN = np.array(
+    [
+        (-B0 + np.sqrt(B0 ** 2 - 4 * A0 * C0)) / (2 * A0),
+        (-B1 + np.sqrt(B1 ** 2 - 4 * A1 * C1)) / (2 * A1),
+    ]
+)
+
+
 def scalar_fun(x):
-    """Simple convex function for testing scalar minimization."""
-    return x[0] ** 2 + x[1] ** 2 - jnp.log(x[0] + 2) + 10 - jnp.log(x[1] + 2)
+    """Simple convex function for testing scalar minimization.
+
+    Gradient is 2 uncoupled quadratic equations.
+    """
+    return (
+        A0 / 2 * x[0] ** 2
+        + A1 / 2 * x[1] ** 2
+        + C0 * jnp.log(x[0] + B0 / A0)
+        + C1 * jnp.log(x[1] + B1 / A1)
+    )
 
 
 scalar_grad = Derivative(scalar_fun, mode="grad")
@@ -44,20 +65,18 @@ scalar_hess = Derivative(scalar_fun, mode="hess")
 
 class TestFmin:
     """Tests for scalar minimization routine."""
-    
+
     @pytest.mark.unit
     def test_convex_full_hess_dogleg(self):
         """Test minimizing convex test function using dogleg method."""
-        rando = default_rng(seed=2)
-
-        x0 = 10 * rando.random(2)
+        x0 = np.ones(2)
 
         out = fmintr(
             scalar_fun,
             x0,
             scalar_grad,
             scalar_hess,
-            verbose=1,
+            verbose=3,
             method="dogleg",
             x_scale="hess",
             ftol=0,
@@ -65,15 +84,12 @@ class TestFmin:
             gtol=1e-12,
             options={"ga_accept_threshold": 0},
         )
-        assert out["success"] is True
-        np.testing.assert_allclose(scalar_grad(out["x"]), 0, atol=1e-12)
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
     @pytest.mark.unit
     def test_convex_full_hess_subspace(self):
         """Test minimizing convex test function using subspace method."""
-        rando = default_rng(seed=2)
-
-        x0 = rando.random(2)
+        x0 = np.ones(2)
 
         out = fmintr(
             scalar_fun,
@@ -88,8 +104,7 @@ class TestFmin:
             gtol=1e-12,
             options={"ga_accept_threshold": 1},
         )
-        assert out["success"] is True
-        np.testing.assert_allclose(scalar_grad(out["x"]), 0, atol=1e-12)
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
     @pytest.mark.slow
     @pytest.mark.unit

@@ -1,9 +1,104 @@
 import numpy as np
-from desc.backend import jnp
+from desc.backend import jnp, jit, put, fori_loop, cond
+
+
+@jit
+def _cholmod(A):
+    """Modified Cholesky factorization of indefinite matrix
+
+    If matrix is positive definite, returns the regular Cholesky factorization,
+    otherwise performs a modified factorization to ensure the factors are positive
+    definite.
+
+    Algorithm adapted from https://www.cs.umd.edu/users/oleary/tr/tr4807.pdf
+
+    Note this is much slower than the built in cholesky factorization, so should
+    only be used when the matrix is known to be indefinite.
+
+    Parameters
+    ----------
+    A : ndarray
+        Matrix to factorize. Should be hermitian. No checking is done.
+
+    Returns
+    -------
+    L : ndarray
+        Lower triangular cholesky factor, such that L@L.T ~ A
+
+    """
+
+    A = jnp.asarray(A)
+    n = A.shape[0]
+
+    delta = jnp.finfo(A.dtype).eps * jnp.linalg.norm(A, "fro")
+    xi = jnp.max(jnp.abs(A - jnp.diag(jnp.diag(A))))
+    eta = jnp.max(jnp.abs(jnp.diag(A)))
+    beta = jnp.sqrt(jnp.asarray([eta, xi / n, jnp.finfo(A.dtype).eps]).max())
+
+    L = jnp.zeros_like(A)
+    D = jnp.zeros(n)
+    c = jnp.zeros_like(A)
+
+    def sum_slice(D, L, i, j, kmax):
+        s = 0
+        bodyfun = lambda k, s: s + D[k] * L[i, k] * L[j, k]
+        return fori_loop(0, kmax, bodyfun, s)
+
+    def inner_loop(j, cLDi):
+        c, L, D, i = cLDi
+        s = sum_slice(D, L, i, j, j)
+        c = put(c, (i, j), A[i, j] - s)
+
+        def truefun(args):
+            i, c, D = args
+            theta = jnp.max(jnp.abs(c[i, :]))
+            D = put(D, i, jnp.asarray([abs(c[i, i]), (theta / beta) ** 2, delta]).max())
+            return i, c, D
+
+        def falsefun(args):
+            return args
+
+        i, c, D = cond(i == j, truefun, falsefun, (i, c, D))
+        L = put(L, (i, j), c[i, j] / D[j])
+
+        return c, L, D, i
+
+    def outer_loop(i, cLD):
+        c, L, D = cLD
+        c, L, D, i = fori_loop(0, i + 1, inner_loop, (c, L, D, i))
+        return c, L, D
+
+    c, L, D = fori_loop(0, n, outer_loop, (c, L, D))
+    return L * jnp.sqrt(D)
+
+
+@jit
+def chol(A):
+    """Cholesky factorization of possibly indefinite matrix
+
+    If matrix is positive definite, returns the regular Cholesky factorization,
+    otherwise performs a modified factorization to ensure the factors are positive
+    definite.
+
+    Parameters
+    ----------
+    A : ndarray
+        Matrix to factorize. Should be hermitian. No checking is done.
+
+    Returns
+    -------
+    L : ndarray
+        Lower triangular cholesky factor, such that L@L.T = A
+
+    """
+    L = jnp.linalg.cholesky(A)
+    L = cond(jnp.any(jnp.isnan(L)), lambda A: _cholmod(A), lambda A: L, A)
+    return L
 
 
 def evaluate_quadratic_form_hess(x, f, g, H, scale=None):
     """Compute values of a quadratic function arising in trust region subproblem.
+
     The function is 0.5 * x.T * H * x + g.T * x + f.
 
     Parameters
@@ -233,4 +328,3 @@ def find_matching_inds(arr1, arr2):
         if len(j):
             inds.append(i)
     return np.asarray(inds)
-

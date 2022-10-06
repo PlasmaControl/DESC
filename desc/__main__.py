@@ -39,7 +39,7 @@ def main(cl_args=sys.argv[1:]):
             print("Initial guess from {}".format(ir.args.guess))
         equil_fam[0].set_initial_guess(ir.args.guess)
     # solve equilibrium
-    equil_fam.solve_continuation(
+    equil_fam.solve_continuation_manual(
         verbose=ir.args.verbose, checkpoint_path=ir.output_path
     )
 

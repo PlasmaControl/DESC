@@ -877,7 +877,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         "Args to create EquilibriaFamily should either be Equilibrium or dictionary"
                     )
 
-    def solve_continuation(self, inputs=None, verbose=None, checkpoint_path=None):
+    # TODO: should this be a class method / constructor?
+    def solve_continuation_manual(
+        self, inputs=None, verbose=None, checkpoint_path=None
+    ):
         """Solve for an equilibrium by continuation method.
 
             1. Creates an initial guess from the given inputs
@@ -897,107 +900,130 @@ class EquilibriaFamily(IOAble, MutableSequence):
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
 
+        Returns
+        -------
+        eqfam : EquilibriaFamily
+            family of equilibria for the intermediate steps, where the last member is the
+            final desired configuration,
+
+
         """
-        from desc.continuation import _print_iteration_summary, _get_deltas
+        from desc.continuation import solve_continuation_manual
 
         if inputs is None:
             inputs = self.inputs
-        timer = Timer()
-        if verbose is None:
-            verbose = inputs[0]["verbose"]
-        timer.start("Total time")
+        return solve_continuation_manual(inputs, verbose, checkpoint_path, self)
 
-        for ii in range(len(inputs)):
-            timer.start("Iteration {} total".format(ii + 1))
+    # TODO: should this be a class method / constructor?
+    def solve_continuation_automatic(
+        self,
+        L,
+        M,
+        N,
+        surface,
+        pressure,
+        iota=None,
+        current=None,
+        NFP=1,
+        Psi=1.0,
+        sym=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+        node_pattern="jacobi",
+        spectral_indexing="ansi",
+        objective="force",
+        optimizer="lsq-exact",
+        pert_order=2,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        nfev=100,
+        verbose=1,
+        checkpoint_path=None,
+    ):
+        """Solve for an equilibrium using an automatic continuation method.
 
-            # TODO: make this more efficient (minimize re-building)
-            optimizer = Optimizer(inputs[ii]["optimizer"])
-            objective = get_equilibrium_objective(inputs[ii]["objective"])
-            constraints = get_fixed_boundary_constraints(
-                iota=inputs[ii]["objective"] != "vacuum" and "iota" in inputs[ii]
-            )
+        By default, the method first solves for a vacuum tokamak, then a finite beta
+        tokamak, then a finite beta stellarator. Currently hard coded to take a fixed
+        number of perturbation steps based on conservative estimates and testing. In the
+        future, continuation stepping will be done adaptively.
 
-            if ii == 0:
-                equil = self[ii]
-                if verbose > 0:
-                    _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
+        Parameters
+        ----------
+        L, M, N : int
+            desired spectral resolution of the final equilibrium
+        surface : Surface
+            desired surface of the final equilibrium
+        pressure, iota, current : Profile
+            desired profiles of the final equilibrium. Must specify pressure and either
+            iota or current
+        NFP : int
+            number of field periods
+        Psi : float (optional)
+            total toroidal flux (in Webers) within LCFS. Default 1.0
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry. Default surface.sym or False.
+        L_grid, M_grid, N_grid : int
+            desired real space resolution of the final equilibrium
+        node_pattern : str (optional)
+            pattern of nodes in real space. Default is ``'jacobi'``
+        spectral_indexing : str (optional)
+            Type of Zernike indexing scheme to use. Default ``'ansi'``
+        objective : str or ObjectiveFunction (optional)
+            function to solve for equilibrium solution
+        optimizer : str or Optimzer (optional)
+            optimizer to use
+        pert_order : int
+            order of perturbations to use.
+        ftol, xtol, gtol : float
+            stopping tolerances for subproblem at each step.
+        nfev : int
+            maximum number of function evaluations in each equilibrium subproblem.
+        verbose : integer
+            * 0: no output
+            * 1: summary of each iteration
+            * 2: as above plus timing information
+            * 3: as above plus detailed solver output
+        checkpoint_path : str or path-like
+            file to save checkpoint data (Default value = None)
 
-            else:
-                equil = self[ii - 1].copy()
-                self.insert(ii, equil)
+        Returns
+        -------
+        eqfam : EquilibriaFamily
+            family of equilibria for the intermediate steps, where the last member is the
+            final desired configuration,
 
-                equil.change_resolution(
-                    L=inputs[ii]["L"],
-                    M=inputs[ii]["M"],
-                    N=inputs[ii]["N"],
-                    L_grid=inputs[ii]["L_grid"],
-                    M_grid=inputs[ii]["M_grid"],
-                    N_grid=inputs[ii]["N_grid"],
-                )
+        """
+        from desc.continuation import solve_continuation_automatic
 
-                if verbose > 0:
-                    _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
-
-                # figure out if we need perturbations
-                things = {
-                    "surface": (equil.surface, inputs[ii].get("surface")),
-                    "iota": (equil.iota, inputs[ii].get("iota")),
-                    "current": (equil.current, inputs[ii].get("current")),
-                    "pressure": (equil.pressure, inputs[ii].get("pressure")),
-                    "Psi": (equil.Psi, inputs[ii].get("Psi")),
-                }
-                deltas = _get_deltas(things)
-
-                if len(deltas) > 0:
-                    if verbose > 0:
-                        print("Perturbing equilibrium")
-                    # TODO: pass Jx if available
-                    equil.perturb(
-                        objective=objective,
-                        constraints=constraints,
-                        **deltas,
-                        order=inputs[ii]["pert_order"],
-                        verbose=verbose,
-                        copy=False,
-                    )
-
-            if not equil.is_nested(msg="manual"):
-                break
-
-            equil.solve(
-                optimizer=optimizer,
-                objective=objective,
-                constraints=constraints,
-                ftol=inputs[ii]["ftol"],
-                xtol=inputs[ii]["xtol"],
-                gtol=inputs[ii]["gtol"],
-                verbose=verbose,
-                maxiter=inputs[ii]["nfev"],
-            )
-
-            if checkpoint_path is not None:
-                if verbose > 0:
-                    print("Saving latest iteration")
-                self.save(checkpoint_path)
-            timer.stop("Iteration {} total".format(ii + 1))
-            if verbose > 1:
-                timer.disp("Iteration {} total".format(ii + 1))
-
-            if not equil.is_nested(msg="manual"):
-                break
-
-        timer.stop("Total time")
-        if verbose > 0:
-            print("====================")
-            print("Done")
-        if verbose > 1:
-            timer.disp("Total time")
-        if checkpoint_path is not None:
-            if verbose > 0:
-                print("Output written to {}".format(checkpoint_path))
-            self.save(checkpoint_path)
-        if verbose:
-            print("====================")
+        return solve_continuation_automatic(
+            L,
+            M,
+            N,
+            surface,
+            pressure,
+            iota,
+            current,
+            NFP,
+            Psi,
+            sym,
+            L_grid,
+            M_grid,
+            N_grid,
+            node_pattern,
+            spectral_indexing,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            nfev,
+            verbose,
+            checkpoint_path,
+            self,
+        )
 
     @property
     def equilibria(self):

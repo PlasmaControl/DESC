@@ -3,15 +3,22 @@ import numpy as np
 from desc.backend import jnp
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.utils import Timer
+from desc.optimize import Optimizer
+from desc.objectives import (
+    ObjectiveFunction,
+    get_equilibrium_objective,
+    get_fixed_boundary_constraints,
+)
 
 
-def solve_continuation(
-    surface,
-    pressure,
-    iota,
+def solve_continuation_automatic(
     L,
     M,
     N,
+    surface,
+    pressure,
+    iota=None,
+    current=None,
     NFP=1,
     Psi=1.0,
     sym=None,
@@ -29,6 +36,7 @@ def solve_continuation(
     nfev=100,
     verbose=1,
     checkpoint_path=None,
+    eqfam=None,
 ):
     """Solve for an equilibrium using an automatic continuation method.
 
@@ -39,12 +47,13 @@ def solve_continuation(
 
     Parameters
     ----------
-    surface : Surface
-        desired surface of the final equilibrium
-    pressure, iota : Profile
-        desired profiles of the final equilibrium
     L, M, N : int
         desired spectral resolution of the final equilibrium
+    surface : Surface
+        desired surface of the final equilibrium
+    pressure, iota, current : Profile
+        desired profiles of the final equilibrium. Must specify pressure and either
+        iota or current
     NFP : int
         number of field periods
     Psi : float (optional)
@@ -74,21 +83,26 @@ def solve_continuation(
         * 3: as above plus detailed solver output
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
+    eqfam : EquilibriaFamily
+        Family object to store results in. If None, a new one is created.
 
     Returns
     -------
-    eqf : EquilibriaFamily
+    eqfam : EquilibriaFamily
         family of equilibria for the intermediate steps, where the last member is the
         final desired configuration,
 
     """
 
+    assert (
+        iota is None or current is None
+    ), "Can only specify iota or current, not both."
     timer = Timer()
     timer.start("Total time")
 
-    surf_i = surface.copy()
-    pres_i = pressure.copy()
-    iota_i = iota.copy()
+    surface.change_resolution(L, M, N)
+    surf_axisym = surface.copy()
+    pres_vac = pressure.copy()
 
     L_grid = L_grid or 2 * L
     M_grid = M_grid or 2 * M
@@ -100,9 +114,9 @@ def solve_continuation(
     Mi = min(M // 2, res_step)
     Li = 2 * Mi if spectral_indexing == "fringe" else Mi
     Ni = 0
-    L_gridi = L_grid / L * Li
-    M_gridi = M_grid / M * Mi
-    N_gridi = N_grid / N * Ni
+    L_gridi = np.ceil(L_grid / L * Li).astype(int)
+    M_gridi = np.ceil(M_grid / M * Mi).astype(int)
+    N_gridi = np.ceil(N_grid / N * Ni).astype(int)
 
     # first we solve vacuum until we reach full L,M
     # then pressure
@@ -110,7 +124,7 @@ def solve_continuation(
     res_steps = max(M // res_step, 1)
     pres_steps = (
         0
-        if (pressure(np.linspace(0, 1, 20)) == 0).all()
+        if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all()
         else int(np.ceil(1 / pres_step))
     )
     bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
@@ -118,12 +132,12 @@ def solve_continuation(
     deltas = {}
     nn = res_steps + pres_steps + bdry_steps
 
-    surf_i.change_resolution(Li, Mi, Ni)
+    surf_axisym.change_resolution(L, M, 0)
 
     # start with zero pressure
-    pres_i.params *= 0
+    pres_vac.params *= 0
 
-    eq_init = Equilibrium(
+    eqi = Equilibrium(
         Psi,
         NFP,
         Li,
@@ -133,21 +147,23 @@ def solve_continuation(
         M_gridi,
         N_gridi,
         node_pattern,
-        pres_i,
-        iota_i,
-        surf_i,
+        pres_vac.copy(),
+        iota,
+        current,
+        surf_axisym.copy(),
         None,
         sym,
         spectral_indexing,
     )
+    optimizer = Optimizer(optimizer)
 
-    eq_init.solve(objective, optimizer, ftol, xtol, gtol, nfev)
-    eqfam = EquilibriaFamily(eq_init)
+    if eqfam is None:
+        eqfam = EquilibriaFamily()
 
     for ii in range(nn):
-        # TODO : print iteration summary
-        eqi = eqfam[-1].copy()
-        if ii < res_steps:
+        timer.start("Iteration {} total".format(ii + 1))
+
+        if ii < res_steps and ii > 0:
             # increase resolution of vacuum soln
             Mi = min(Mi + res_step, M)
             Li = 2 * Mi if spectral_indexing == "fringe" else Mi
@@ -162,21 +178,26 @@ def solve_continuation(
             deltas = _get_deltas({"surface": [surf_i, surf_i2]})
             surf_i = surf_i2
 
-        if ii > res_steps and ii < res_steps + pres_steps:
+        if ii >= res_steps and ii < res_steps + pres_steps:
+            # make sure its at full radial/poloidal resolution
+            eqi.change_resolution(L=L, M=M, L_grid=L_grid, M_grid=M_grid)
             # increase pressure
-            deltas = _get_deltas({"pressure": [eqfam[res_steps].pressure, pressure]})
-            deltas["p_l"] *= pres_step
+            deltas = _get_deltas(
+                {"pressure": [eqfam[res_steps - 1].pressure, pressure]}
+            )
+            deltas["dp"] *= pres_step
             pres_ratio += pres_step
 
-        if ii > res_steps + pres_steps:
+        if ii >= res_steps + pres_steps:
             # boundary perturbations
             # TODO: do we want to jump to full N? or maybe step that up too?
             eqi.change_resolution(L, M, N, L_grid, M_grid, N_grid)
-            deltas = _get_deltas(
-                {"surface": [eqfam[res_steps + pres_steps].surface, surface]}
-            )
-            deltas["Rb_lmn"] *= bdry_step
-            deltas["Zb_lmn"] *= bdry_step
+            surf_axisym.change_resolution(L, M, N)
+            deltas = _get_deltas({"surface": [surf_axisym, surface]})
+            if "dRb" in deltas:
+                deltas["dRb"] *= bdry_step
+            if "dZb" in deltas:
+                deltas["dZb"] *= bdry_step
             bdry_ratio += bdry_step
 
         _print_iteration_summary(
@@ -194,14 +215,17 @@ def solve_continuation(
             xtol,
             nfev,
         )
-        eqfam.append(eqi)
+        objective_ = get_equilibrium_objective(objective)
+        constraints_ = get_fixed_boundary_constraints(
+            iota=objective != "vacuum" and iota is not None
+        )
+
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
-                # TODO: pass Jx if available
-            eqfam[-1].perturb(
-                objective=objective,
-                constraints=constraints,
+            eqi.perturb(
+                objective=objective_,
+                constraints=constraints_,
                 **deltas,
                 order=pert_order,
                 verbose=verbose,
@@ -212,13 +236,19 @@ def solve_continuation(
         if not eqi.is_nested(msg="auto"):
             break
 
-        eqfam[-1].solve(objective, optimizer, ftol, xtol, gtol, nfev)
+        eqi.solve(objective_, constraints_, optimizer, ftol, xtol, gtol, nfev)
         if not eqi.is_nested(msg="auto"):
             break
+
+        eqfam.append(eqi)
+        eqi = eqfam[-1].copy()
         if checkpoint_path is not None:
             if verbose > 0:
                 print("Saving latest iteration")
             eqfam.save(checkpoint_path)
+        timer.stop("Iteration {} total".format(ii + 1))
+        if verbose > 1:
+            timer.disp("Iteration {} total".format(ii + 1))
 
     timer.stop("Total time")
     if verbose > 0:
@@ -233,6 +263,137 @@ def solve_continuation(
     if verbose:
         print("====================")
 
+    return eqfam
+
+
+def solve_continuation_manual(inputs, verbose=None, checkpoint_path=None, eqfam=None):
+    """Solve for an equilibrium by continuation method.
+
+        1. Creates an initial guess from the given inputs
+        2. Find equilibrium flux surfaces by minimizing the objective function.
+        3. Step up to higher resolution and perturb the previous solution
+        4. Repeat 2 and 3 until at desired resolution
+
+    Parameters
+    ----------
+    inputs : list of dict
+        dictionaries with input parameters for each continuation step, eg, from InputReader
+    verbose : integer
+        * 0: no output
+        * 1: summary of each iteration
+        * 2: as above plus timing information
+        * 3: as above plus detailed solver output
+    checkpoint_path : str or path-like
+        file to save checkpoint data (Default value = None)
+    eqfam : EquilibriaFamily
+        Family object to store results in. If None, a new one is created.
+
+    Returns
+    -------
+    eqfam : EquilibriaFamily
+        family of equilibria for the intermediate steps, where the last member is the
+        final desired configuration,
+
+    """
+    if eqfam is None:
+        eqfam = EquilibriaFamily(inputs)
+
+    timer = Timer()
+    if verbose is None:
+        verbose = inputs[0]["verbose"]
+    timer.start("Total time")
+
+    for ii in range(len(inputs)):
+        timer.start("Iteration {} total".format(ii + 1))
+
+        # TODO: make this more efficient (minimize re-building)
+        optimizer = Optimizer(inputs[ii]["optimizer"])
+        objective = get_equilibrium_objective(inputs[ii]["objective"])
+        constraints = get_fixed_boundary_constraints(
+            iota=inputs[ii]["objective"] != "vacuum" and "iota" in inputs[ii]
+        )
+
+        if ii == 0:
+            equil = eqfam[ii]
+            if verbose > 0:
+                _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
+
+        else:
+            equil = eqfam[ii - 1].copy()
+            eqfam.insert(ii, equil)
+
+            equil.change_resolution(
+                L=inputs[ii]["L"],
+                M=inputs[ii]["M"],
+                N=inputs[ii]["N"],
+                L_grid=inputs[ii]["L_grid"],
+                M_grid=inputs[ii]["M_grid"],
+                N_grid=inputs[ii]["N_grid"],
+            )
+
+            if verbose > 0:
+                _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
+
+            # figure out if we need perturbations
+            things = {
+                "surface": (equil.surface, inputs[ii].get("surface")),
+                "iota": (equil.iota, inputs[ii].get("iota")),
+                "current": (equil.current, inputs[ii].get("current")),
+                "pressure": (equil.pressure, inputs[ii].get("pressure")),
+                "Psi": (equil.Psi, inputs[ii].get("Psi")),
+            }
+            deltas = _get_deltas(things)
+
+            if len(deltas) > 0:
+                if verbose > 0:
+                    print("Perturbing equilibrium")
+                # TODO: pass Jx if available
+                equil.perturb(
+                    objective=objective,
+                    constraints=constraints,
+                    **deltas,
+                    order=inputs[ii]["pert_order"],
+                    verbose=verbose,
+                    copy=False,
+                )
+
+        if not equil.is_nested(msg="manual"):
+            break
+
+        equil.solve(
+            optimizer=optimizer,
+            objective=objective,
+            constraints=constraints,
+            ftol=inputs[ii]["ftol"],
+            xtol=inputs[ii]["xtol"],
+            gtol=inputs[ii]["gtol"],
+            verbose=verbose,
+            maxiter=inputs[ii]["nfev"],
+        )
+
+        if checkpoint_path is not None:
+            if verbose > 0:
+                print("Saving latest iteration")
+            eqfam.save(checkpoint_path)
+        timer.stop("Iteration {} total".format(ii + 1))
+        if verbose > 1:
+            timer.disp("Iteration {} total".format(ii + 1))
+
+        if not equil.is_nested(msg="manual"):
+            break
+
+    timer.stop("Total time")
+    if verbose > 0:
+        print("====================")
+        print("Done")
+    if verbose > 1:
+        timer.disp("Total time")
+    if checkpoint_path is not None:
+        if verbose > 0:
+            print("Output written to {}".format(checkpoint_path))
+        eqfam.save(checkpoint_path)
+    if verbose:
+        print("====================")
     return eqfam
 
 
@@ -370,8 +531,16 @@ def _print_iteration_summary(
     if eq.current is not None:
         print("Current ratio = {}".format(curr_ratio))
     print("Perturbation Order = {}".format(pert_order))
-    print("Objective: {}".format(objective))
-    print("Optimizer: {}".format(optimizer))
+    print(
+        "Objective: {}".format(
+            objective if isinstance(objective, str) else objective.objectives[0].name
+        )
+    )
+    print(
+        "Optimizer: {}".format(
+            optimizer if isinstance(optimizer, str) else optimizer.method
+        )
+    )
     print("Function tolerance = {}".format(ftol))
     print("Gradient tolerance = {}".format(gtol))
     print("State vector tolerance = {}".format(xtol))

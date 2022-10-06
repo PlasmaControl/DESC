@@ -1,10 +1,10 @@
 import numpy as np
 from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr
-from desc.utils import isalmostequal
+from .utils import chol
 
 
 def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
-    """Solve trust region subproblem the dog-leg method.
+    """Solve trust region subproblem using the dog-leg method.
 
     Parameters
     ----------
@@ -15,7 +15,7 @@ def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
     trust_radius : float
         We are allowed to wander only this far away from the origin.
     initial_alpha : float
-        initial guess for levenberg-marquadt parameter - unused by this method
+        initial guess for levenberg-marquadt parameter - unused by this method.
 
     Returns
     -------
@@ -24,20 +24,13 @@ def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
     hits_boundary : bool
         True if the proposed step is on the boundary of the trust region.
     alpha : float
-        "levenberg-marquadt" parameter - unused by this method
-
-    Notes
-    -----
-    The Hessian is required to be positive definite.
+        "levenberg-marquadt" parameter - unused by this method.
 
     """
-
+    L = chol(H)
     # This is the optimum for the quadratic model function.
     # If it is inside the trust radius then return this point.
-    L, lower = cho_factor(H)
-    if jnp.any(jnp.isnan(L)):
-        raise np.linalg.linalg.LinAlgError
-    p_newton = -cho_solve((L, lower), g)
+    p_newton = -cho_solve((L, True), g)
     if jnp.linalg.norm(p_newton) < trust_radius:
         hits_boundary = False
         return p_newton, hits_boundary, initial_alpha
@@ -68,7 +61,9 @@ def solve_trust_region_dogleg(g, H, trust_radius, initial_alpha=None, **kwargs):
 
 
 def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwargs):
-    """Solve a trust region problem over the 2d subspace spanned by the gradient
+    """Solve a trust region problem using 2d subspace method.
+
+    Minimizes model function over subspace spanned by the gradient
     and Newton direction
 
     Parameters
@@ -92,7 +87,9 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
         "levenberg-marquadt" parameter - unused by this method
 
     """
-    p_newton = -jnp.linalg.solve(H, g)
+    L = chol(H)
+    # This is the optimum for the quadratic model function.
+    p_newton = -cho_solve((L, True), g)
 
     S = np.vstack([g, p_newton]).T
     S, _ = qr(S, mode="economic")
@@ -132,12 +129,12 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 
 
 def trust_region_step_exact_svd(
-    f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
+    f, u, s, v, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
 ):
     """Solve a trust-region problem using a semi-exact method
 
     Solves problems of the form
-        min_p ||J*p + f||^2,  ||p|| < Delta
+        min_p ||J*p + f||^2,  ||p|| < trust_radius
 
     Parameters
     ----------
@@ -149,14 +146,14 @@ def trust_region_step_exact_svd(
         Singular values of J.
     v : ndarray
         Right singular vectors of J (eg transpose of VT).
-    Delta : float
+    trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional
         Initial guess for alpha, which might be available from a previous
         iteration. If None, determined automatically.
     rtol : float, optional
         Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - Delta) < rtol * Delta``.
+        solution ``p`` will satisfy ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
     max_iter : int, optional
         Maximum allowed number of iterations for the root-finding procedure.
     threshold : float
@@ -177,14 +174,14 @@ def trust_region_step_exact_svd(
     uf = u.T.dot(f)
     suf = s * uf
 
-    def phi_and_derivative(alpha, suf, s, Delta):
+    def phi_and_derivative(alpha, suf, s, trust_radius):
         """Function of which to find zero.
         It is defined as "norm of regularized (by alpha) least-squares
-        solution minus `Delta`".
+        solution minus `trust_radius`".
         """
         denom = s ** 2 + alpha
         p_norm = np.linalg.norm(suf / denom)
-        phi = p_norm - Delta
+        phi = p_norm - trust_radius
         phi_prime = -np.sum(suf ** 2 / denom ** 3) / p_norm
         return phi, phi_prime
 
@@ -198,10 +195,10 @@ def trust_region_step_exact_svd(
     s_inv[(~large,)] = 0
 
     p = -v.dot(uf * s_inv)
-    if np.linalg.norm(p) <= Delta:
+    if np.linalg.norm(p) <= trust_radius:
         return p, False, 0.0
 
-    alpha_upper = np.linalg.norm(suf) / Delta
+    alpha_upper = np.linalg.norm(suf) / trust_radius
     alpha_lower = 0.0
 
     if initial_alpha is None or initial_alpha == 0:
@@ -213,35 +210,35 @@ def trust_region_step_exact_svd(
         if alpha < alpha_lower or alpha > alpha_upper:
             alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
 
-        phi, phi_prime = phi_and_derivative(alpha, suf, s, Delta)
+        phi, phi_prime = phi_and_derivative(alpha, suf, s, trust_radius)
 
         if phi < 0:
             alpha_upper = alpha
 
         ratio = phi / phi_prime
         alpha_lower = max(alpha_lower, alpha - ratio)
-        alpha -= (phi + Delta) * ratio / Delta
+        alpha -= (phi + trust_radius) * ratio / trust_radius
 
-        if np.abs(phi) < rtol * Delta:
+        if np.abs(phi) < rtol * trust_radius:
             break
 
     p = -v.dot(suf / (s ** 2 + alpha))
 
-    # Make the norm of p equal to Delta; p is changed only slightly during this.
+    # Make the norm of p equal to trust_radius; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region
     # (which can cause problems later).
-    p *= Delta / np.linalg.norm(p)
+    p *= trust_radius / np.linalg.norm(p)
 
     return p, True, alpha
 
 
 def trust_region_step_exact_cho(
-    g, B, Delta, initial_alpha=None, rtol=0.01, max_iter=10
+    g, B, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
 ):
     """Solve a trust-region problem using a semi-exact method
 
     Solves problems of the form
-        (B + alpha*I)*p = -g,  ||p|| < Delta
+        (B + alpha*I)*p = -g,  ||p|| < trust_radius
     for symmetric positive definite B
 
     Parameters
@@ -250,14 +247,14 @@ def trust_region_step_exact_cho(
         gradient vector
     B : ndarray
         Hessian or approximate hessian
-    Delta : float
+    trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional
         Initial guess for alpha, which might be available from a previous
         iteration. If None, determined automatically.
     rtol : float, optional
         Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - Delta) < rtol * Delta``.
+        solution ``p`` will satisfy ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
     max_iter : int, optional
         Maximum allowed number of iterations for the root-finding procedure.
 
@@ -276,10 +273,10 @@ def trust_region_step_exact_cho(
     # try full newton step
     R, lower = cho_factor(B)
     p = cho_solve((R, lower), -g)
-    if np.linalg.norm(p) <= Delta:
+    if np.linalg.norm(p) <= trust_radius:
         return p, False, 0.0
 
-    alpha_upper = np.linalg.norm(g) / Delta
+    alpha_upper = np.linalg.norm(g) / trust_radius
     alpha_lower = 0.0
 
     if initial_alpha is None or initial_alpha == 0:
@@ -296,7 +293,7 @@ def trust_region_step_exact_cho(
         R, lower = cho_factor(Bi)
         p = cho_solve((R, lower), -g)
         p_norm = np.linalg.norm(p)
-        phi = p_norm - Delta
+        phi = p_norm - trust_radius
         if phi < 0:
             alpha_upper = alpha
         if phi > 0:
@@ -305,18 +302,18 @@ def trust_region_step_exact_cho(
         q = solve_triangular(R.T, p, lower=(not lower))
         q_norm = np.linalg.norm(q)
 
-        alpha += (p_norm / q_norm) ** 2 * phi / Delta
-        if np.abs(phi) < rtol * Delta:
+        alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
+        if np.abs(phi) < rtol * trust_radius:
             break
 
     Bi = B + alpha * jnp.eye(B.shape[0])
     R, lower = cho_factor(Bi)
     p = cho_solve((R, lower), -g)
 
-    # Make the norm of p equal to Delta; p is changed only slightly during this.
+    # Make the norm of p equal to trust_radius; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region
     # (which can cause problems later).
-    p *= Delta / np.linalg.norm(p)
+    p *= trust_radius / np.linalg.norm(p)
 
     return p, True, alpha
 

@@ -810,10 +810,7 @@ class _Configuration(IOAble, ABC):
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
             surface.grid = LinearGrid(
-                rho=rho,
-                M=2 * surface.M,
-                N=2 * surface.N,
-                endpoint=True,
+                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
             )
             return surface
 

@@ -176,7 +176,7 @@ def fmintr(
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
     init_tr_sp = np.linalg.norm(x * scale_inv)
-    init_tr_CG = np.sqrt((g_h @ g_h) / abs(g_h @ H_h @ g_h))
+    init_tr_CG = (g_h @ g_h) / abs(g_h @ H_h @ g_h)
     init_tr = np.sqrt(init_tr_CG * init_tr_sp)
     trust_radius = options.pop("initial_trust_radius", init_tr)
     trust_radius = init_tr_sp if trust_radius == "scipy" else trust_radius
@@ -185,8 +185,8 @@ def fmintr(
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
-    tr_increase_ratio = options.pop("tr_increase_ratio", 2)
-    tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
+    tr_increase_ratio = options.pop("tr_increase_ratio", 5)
+    tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.5)
 
     if trust_radius == 0:
         trust_radius = 1.0

@@ -1,8 +1,7 @@
 import numpy as np
-import warnings
-from termcolor import colored
 
-from desc.equilibrium import Equilibrium
+from desc.backend import jnp
+from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.utils import Timer
 
 
@@ -68,6 +67,13 @@ def solve_continuation(
         stopping tolerances for subproblem at each step.
     nfev : int
         maximum number of function evaluations in each equilibrium subproblem.
+    verbose : integer
+        * 0: no output
+        * 1: summary of each iteration
+        * 2: as above plus timing information
+        * 3: as above plus detailed solver output
+    checkpoint_path : str or path-like
+        file to save checkpoint data (Default value = None)
 
     Returns
     -------
@@ -108,14 +114,11 @@ def solve_continuation(
         else int(np.ceil(1 / pres_step))
     )
     bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
-
-    eqfam = []
-
     bdry_ratio = pres_ratio = curr_ratio = 0
+    deltas = {}
+    nn = res_steps + pres_steps + bdry_steps
 
     surf_i.change_resolution(Li, Mi, Ni)
-    pres_i.change_resolution(Li)
-    iota_i.change_resolution(Li)
 
     # start with zero pressure
     pres_i.params *= 0
@@ -139,8 +142,8 @@ def solve_continuation(
     )
 
     eq_init.solve(objective, optimizer, ftol, xtol, gtol, nfev)
-    ii = 0
-    nn = res_steps + pres_steps + bdry_steps
+    eqfam = EquilibriaFamily(eq_init)
+
     for ii in range(nn):
         # TODO : print iteration summary
         eqi = eqfam[-1].copy()
@@ -151,17 +154,14 @@ def solve_continuation(
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
             M_gridi = np.ceil(M_grid / M * Mi).astype(int)
             N_gridi = np.ceil(N_grid / N * Ni).astype(int)
+            eqi.change_resolution(Li, Mi, Ni, L_gridi, M_gridi, N_gridi)
 
+            surf_i = eqi.surface
             surf_i2 = surface.copy()
             surf_i2.change_resolution(Li, Mi, Ni)
-            iota_i2 = iota.copy()
-            iota_i2.change_resolution(Li)
-            deltas = _get_deltas(
-                {"surface": [surf_i, surf_i2], "iota": [iota_i, iota_i2]}
-            )
-            eqi.change_resolution(Li, Mi, Ni, L_gridi, M_gridi, N_gridi)
+            deltas = _get_deltas({"surface": [surf_i, surf_i2]})
             surf_i = surf_i2
-            iota_i = iota_i2
+
         if ii > res_steps and ii < res_steps + pres_steps:
             # increase pressure
             deltas = _get_deltas({"pressure": [eqfam[res_steps].pressure, pressure]})
@@ -195,7 +195,20 @@ def solve_continuation(
             nfev,
         )
         eqfam.append(eqi)
-        eqfam[-1].perturb(**deltas, order=pert_order)
+        if len(deltas) > 0:
+            if verbose > 0:
+                print("Perturbing equilibrium")
+                # TODO: pass Jx if available
+            eqfam[-1].perturb(
+                objective=objective,
+                constraints=constraints,
+                **deltas,
+                order=pert_order,
+                verbose=verbose,
+                copy=False,
+            )
+            deltas = {}
+
         if not eqi.is_nested(msg="auto"):
             break
 
@@ -224,35 +237,112 @@ def solve_continuation(
 
 
 def _get_deltas(things):
+    """Compute differences between parameters.
 
+    Parameters
+    ----------
+    things: dict
+        should be dictionary with keys "surface", "iota", "current", "pressure"
+        values should be a tuple of (current_thing, target_thing) where the _things are
+        either objects of the appropriate type (Surface, Profile, etc) or ndarray.
+        Finds deltas for a perturbation going from current to target.
+
+    Returns
+    -------
+    deltas : dict of ndarray
+        deltas to pass in to perturb
+
+    """
     deltas = {}
-    if "surface" in things:
+    if "surface" in things and things["surface"][0] is not None:
         s1 = things["surface"][0].copy()
         s2 = things["surface"][1].copy()
+        s2 = _arr2obj(s2, s1)
+        s2.change_resolution(s1.L, s1.M, s1.N)
+        if not np.allclose(s2.R_lmn, s1.R_lmn):
+            deltas["dRb"] = s2.R_lmn - s1.R_lmn
+        if not np.allclose(s2.Z_lmn, s1.Z_lmn):
+            deltas["dZb"] = s2.Z_lmn - s1.Z_lmn
 
-        s1.change_resolution(s2.L, s2.M, s2.N)
-        deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
-        deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
-    if "iota" in things:
+    if "iota" in things and things["iota"][0] is not None:
         i1 = things["iota"][0].copy()
         i2 = things["iota"][1].copy()
+        i2 = _arr2obj(i2, i1)
+        if hasattr(i2, "change_resolution") and hasattr(i1, "basis"):
+            i2.change_resolution(i1.basis.L)
+        if not np.allclose(i2.params, i1.params):
+            deltas["di"] = i2.params - i1.params
 
-        i1.change_resolution(i2.L)
-        deltas["i_l"] = i2.params - i1.params
-    if "current" in things:
+    if "current" in things and things["current"][0] is not None:
         c1 = things["current"][0].copy()
         c2 = things["current"][1].copy()
+        c2 = _arr2obj(c2, c1)
+        if hasattr(c2, "change_resolution") and hasattr(c1, "basis"):
+            c2.change_resolution(c1.basis.L)
+        if not np.allclose(c2.params, c1.params):
+            deltas["dc"] = c2.params - c1.params
 
-        c1.change_resolution(c2.L)
-        deltas["c_l"] = c2.params - c1.params
-    if "pressure" in things:
+    if "pressure" in things and things["pressure"][0] is not None:
         p1 = things["pressure"][0].copy()
         p2 = things["pressure"][1].copy()
+        p2 = _arr2obj(p2, p1)
+        if hasattr(p2, "change_resolution") and hasattr(p1, "basis"):
+            p2.change_resolution(p1.basis.L)
+        if not np.allclose(p2.params, p1.params):
+            deltas["dp"] = p2.params - p1.params
 
-        p1.change_resolution(p2.L)
-        deltas["p_l"] = p2.params - p1.params
+    if "Psi" in things and things["Psi"][0] is not None:
+        psi1 = things["Psi"][0]
+        psi2 = things["Psi"][1]
+        if not np.allclose(psi2, psi1):
+            deltas["dPsi"] = psi2 - psi1
 
     return deltas
+
+
+def _arr2obj(arr, obj):
+    """Convert array of parameters to object of the appropriate type (surface, profile etc)."""
+    if not isinstance(arr, (np.ndarray, jnp.ndarray)):
+        return arr
+    cls = obj.__class__
+    if arr.shape[1] == 2:
+        # treat it as a profile
+        return cls(arr[:, 1], arr[:, 0])
+    # treat it as a surface
+    return cls(
+        arr[:, 3],
+        arr[:, 4],
+        arr[:, 1:3].astype(int),
+        arr[:, 1:3].astype(int),
+        obj.NFP,
+        obj.sym,
+    )
+
+
+def _format_deltas(inputs, equil):
+    """Format the changes in continuation parameters.
+
+    Parameters
+    ----------
+    inputs : dict
+         Dictionary of continuation parameters for next step.
+    equil : Equilibrium
+        Equilibrium being perturbed.
+
+    Returns
+    -------
+    deltas : dict
+        Dictionary of changes in parameter values.
+
+    """
+
+    things = {
+        "surface": (equil.surface, inputs.get("surface")),
+        "iota": (equil.iota, inputs.get("iota")),
+        "current": (equil.current, inputs.get("current")),
+        "pressure": (equil.pressure, inputs.get("pressure")),
+    }
+    return _get_deltas(things)
 
 
 def _print_iteration_summary(

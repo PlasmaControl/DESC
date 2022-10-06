@@ -877,69 +877,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         "Args to create EquilibriaFamily should either be Equilibrium or dictionary"
                     )
 
-    @staticmethod
-    def _format_deltas(inputs, equil):
-        """Format the changes in continuation parameters.
-
-        Parameters
-        ----------
-        inputs : dict
-             Dictionary of continuation parameters for next step.
-        equil : Equilibrium
-            Equilibrium being perturbed.
-
-        Returns
-        -------
-        deltas : dict
-            Dictionary of changes in parameter values.
-
-        """
-        deltas = {}
-        if equil.bdry_mode == "lcfs":
-            s = FourierRZToroidalSurface(
-                inputs["surface"][:, 3],
-                inputs["surface"][:, 4],
-                inputs["surface"][:, 1:3].astype(int),
-                inputs["surface"][:, 1:3].astype(int),
-                equil.NFP,
-                equil.sym,
-            )
-            s.change_resolution(equil.L, equil.M, equil.N)
-            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
-        elif equil.bdry_mode == "poincare":
-            raise NotImplementedError(
-                f"Specifying poincare XS as BC is not implemented yet on main branch."
-            )
-
-        p_l = np.zeros_like(equil.pressure.params)
-        for l, p in inputs["pressure"]:
-            idx = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
-            p_l[idx] = p
-        if equil.iota is not None:
-            i_l = np.zeros_like(equil.iota.params)
-            for l, i in inputs["iota"]:
-                idx = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
-                i_l[idx] = i
-        if equil.current is not None:
-            c_l = np.zeros_like(equil.current.params)
-            for l, c in inputs["current"]:
-                idx = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
-                c_l[idx] = c
-
-        if not np.allclose(Rb_lmn, equil.Rb_lmn):
-            deltas["dRb"] = Rb_lmn - equil.Rb_lmn
-        if not np.allclose(Zb_lmn, equil.Zb_lmn):
-            deltas["dZb"] = Zb_lmn - equil.Zb_lmn
-        if not np.allclose(p_l, equil.p_l):
-            deltas["dp"] = p_l - equil.p_l
-        if equil.iota is not None and not np.allclose(i_l, equil.i_l):
-            deltas["di"] = i_l - equil.i_l
-        if equil.current is not None and not np.allclose(c_l, equil.c_l):
-            deltas["dc"] = c_l - equil.c_l
-        if not np.allclose(inputs["Psi"], equil.Psi):
-            deltas["dPsi"] = inputs["Psi"] - equil.Psi
-        return deltas
-
     def solve_continuation(self, inputs=None, verbose=None, checkpoint_path=None):
         """Solve for an equilibrium by continuation method.
 
@@ -961,7 +898,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             file to save checkpoint data (Default value = None)
 
         """
-        from desc.continuation import _print_iteration_summary
+        from desc.continuation import _print_iteration_summary, _get_deltas
 
         if inputs is None:
             inputs = self.inputs
@@ -1002,7 +939,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
 
                 # figure out if we need perturbations
-                deltas = self._format_deltas(inputs[ii], equil)
+                things = {
+                    "surface": (equil.surface, inputs[ii].get("surface")),
+                    "iota": (equil.iota, inputs[ii].get("iota")),
+                    "current": (equil.current, inputs[ii].get("current")),
+                    "pressure": (equil.pressure, inputs[ii].get("pressure")),
+                    "Psi": (equil.Psi, inputs[ii].get("Psi")),
+                }
+                deltas = _get_deltas(things)
 
                 if len(deltas) > 0:
                     if verbose > 0:

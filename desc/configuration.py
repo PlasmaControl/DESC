@@ -695,24 +695,12 @@ class _Configuration(IOAble, ABC):
         x_lmn = transform.fit(x)
         return x_lmn
 
-    @property
-    def parent(self):
-        """Pointer to the equilibrium this was derived from."""
-        return self.__dict__.setdefault("_parent", None)
-
-    @property
-    def children(self):
-        """List of configurations that were derived from this one."""
-        return self.__dict__.setdefault("_children", [])
-
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
         if deepcopy:
             new = copy.deepcopy(self)
         else:
             new = copy.copy(self)
-        new._parent = self
-        self.children.append(new)
         return new
 
     def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):

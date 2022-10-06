@@ -157,8 +157,7 @@ def solve_continuation_automatic(
     )
     optimizer = Optimizer(optimizer)
 
-    if eqfam is None:
-        eqfam = EquilibriaFamily()
+    eqfam = EquilibriaFamily() if eqfam is None else eqfam
 
     for ii in range(nn):
         timer.start("Iteration {} total".format(ii + 1))
@@ -295,13 +294,10 @@ def solve_continuation_manual(inputs, verbose=None, checkpoint_path=None, eqfam=
         final desired configuration,
 
     """
-    if eqfam is None:
-        eqfam = EquilibriaFamily(inputs)
-
     timer = Timer()
-    if verbose is None:
-        verbose = inputs[0]["verbose"]
     timer.start("Total time")
+    eqfam = EquilibriaFamily(inputs) if eqfam is None else eqfam
+    verbose = inputs[0]["verbose"] if verbose is None else verbose
 
     for ii in range(len(inputs)):
         timer.start("Iteration {} total".format(ii + 1))
@@ -478,32 +474,6 @@ def _arr2obj(arr, obj):
         obj.NFP,
         obj.sym,
     )
-
-
-def _format_deltas(inputs, equil):
-    """Format the changes in continuation parameters.
-
-    Parameters
-    ----------
-    inputs : dict
-         Dictionary of continuation parameters for next step.
-    equil : Equilibrium
-        Equilibrium being perturbed.
-
-    Returns
-    -------
-    deltas : dict
-        Dictionary of changes in parameter values.
-
-    """
-
-    things = {
-        "surface": (equil.surface, inputs.get("surface")),
-        "iota": (equil.iota, inputs.get("iota")),
-        "current": (equil.current, inputs.get("current")),
-        "pressure": (equil.pressure, inputs.get("pressure")),
-    }
-    return _get_deltas(things)
 
 
 def _print_iteration_summary(

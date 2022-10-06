@@ -305,16 +305,17 @@ def test_qh_optimization3():
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_ESTELL_results():
-    eq0 = desc.examples.get("ESTELL")
+def test_ATF_results(tmpdir_factory):
+    output_dir = tmpdir_factory.mktemp("result")
+    eq0 = desc.examples.get("ATF")
     eqf = EquilibriaFamily()
     eqf.solve_continuation_automatic(
         eq0.L,
         eq0.M,
         eq0.N,
-        eq0.surface,
+        eq0.get_surface_at(rho=1),
         eq0.pressure,
-        eq0.get_profile("iota"),  # use fixed iota to avoid zero current tokamak
+        eq0.iota,
         None,
         eq0.NFP,
         eq0.Psi,
@@ -324,10 +325,13 @@ def test_ESTELL_results():
         eq0.N_grid,
         eq0.node_pattern,
         eq0.spectral_indexing,
+        verbose=2,
+        checkpoint_path=output_dir.join("ATF.h5"),
     )
+    eqf = load(output_dir.join("ATF.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
-    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=5e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=4e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=5e-4)
 
 
 class TestGetExample:

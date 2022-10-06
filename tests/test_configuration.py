@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import warnings
 from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile, SplineProfile
@@ -469,6 +470,17 @@ def test_is_nested():
     eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
 
     assert not eq.is_nested(grid=grid)
+    with pytest.warns(Warning) as record:
+        assert not eq.is_nested(grid=grid, msg="auto")
+    assert len(record) == 1
+    assert "Automatic" in str(record[0].message)
+    with pytest.warns(Warning) as record:
+        assert not eq.is_nested(grid=grid, msg="manual")
+    assert len(record) == 1
+    assert "perturbation" in str(record[0].message)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert not eq.is_nested(grid=grid, msg=None)
 
 
 @pytest.mark.unit

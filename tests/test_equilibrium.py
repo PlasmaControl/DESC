@@ -7,6 +7,7 @@ from netCDF4 import Dataset
 from .utils import area_difference, compute_coords
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
+from desc.io import InputReader
 from desc.__main__ import main
 
 
@@ -216,3 +217,14 @@ def test_poincare_solve_not_implemented():
     )
     with pytest.raises(NotImplementedError):
         eq.solve()
+
+
+@pytest.mark.unit
+def test_equilibriafamily_constructor():
+    eq = Equilibrium()
+    ir = InputReader(["./tests/inputs/DSHAPE"])
+    eqf = EquilibriaFamily(eq, *ir.inputs)
+    assert len(eqf) == 4
+
+    with pytest.raises(TypeError):
+        eqf2 = EquilibriaFamily(4, 5, 6)

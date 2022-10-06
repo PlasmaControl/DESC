@@ -194,27 +194,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self._update_equilibrium(x)
 
-        # dx/dc linear
-        x_idxl = np.concatenate(
-            [
-                self._objective.x_idx[arg]
-                for arg in ["p_l", "i_l", "c_l", "Psi"]
-                if arg in self._linear_objective.args
-            ]
-        )
-        x_idxl.sort(kind="mergesort")
-        dxdcl = np.eye(self._objective.dim_x)[:, x_idxl]
-        dxdRbl = (
-            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Rb_lmn"]]
-            @ self._Ainvl["Rb_lmn"]
-        )
-        dxdcl = np.hstack((dxdcl, dxdRbl))
-        dxdZbl = (
-            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Zb_lmn"]]
-            @ self._Ainvl["Zb_lmn"]
-        )
-        dxdcl = np.hstack((dxdcl, dxdZbl))
-
         # dx/dc
         x_idx = np.concatenate(
             [
@@ -236,73 +215,34 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         )
         dxdc = np.hstack((dxdc, dxdZb))
 
-        pr = 0
-        for i in range(len(dxdc)):
-            pr = pr + self._projectl(dxdc[i, :])[0]
-
         # state vectors
         xf = self._eq_objective.x(self._eq)
         xg = self._objective.x(self._eq)
 
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
+        Gx = self._objective.jac(xg)
         Fx = {
             arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
         }
+        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
         for arg in self._eq_objective.args:
             if arg not in Fx.keys():
                 Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-
+            if arg not in Gx.keys():
+                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
         Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
+        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
+        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
         Fc = Fx @ dxdc
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
-        I = jnp.eye(len(xg), len(self._Z))
-        t = I @ self._Z @ Fx_reduced_inv @ Fc
+        Gc = Gx @ dxdc
+        GxFx = Gx_reduced @ Fx_reduced_inv
 
-        num_singular_values = 20
-
-        tnorm = jnp.linalg.norm(t, axis=0)
-        tnp = np.array(t)
-        tnorm_np = np.array(tnorm)
-        nonzero_col = tnorm_np > 0
-        tnp[:, nonzero_col] /= tnorm_np[nonzero_col]
-        t = jnp.array(tnp)
-
-        tU, tS, tV = jnp.linalg.svd(t)
-        tu1 = tU[:, : num_singular_values + 1]
-        tv1 = tV[: num_singular_values + 1, :]
-        ts1 = tS[: num_singular_values + 1]
-
-        GxFxFc = jnp.array([])
-        gx_eval = 0
-        for i in range(len(tu1[0])):
-            GxFxFc = jnp.hstack([GxFxFc, self._objective.jvp(tu1[:, i], xg)])
-            gx_eval = gx_eval + 1
-        GxFxFc = GxFxFc @ jnp.diag(ts1) @ tv1
-
-        num_singular_values = dxdc.shape[1]
-        dxdc_norm = jnp.linalg.norm(dxdc, axis=0)
-        dxdc_np = np.array(dxdc)
-        dxdc_norm_np = np.array(dxdc_norm)
-        nonzero_col = dxdc_norm_np > 0
-        dxdc_np[:, nonzero_col] /= dxdc_norm_np[nonzero_col]
-        dxdc = np.array(dxdc_np)
-
-        dxdc_U, dxdc_S, dxdc_V = jnp.linalg.svd(dxdc)
-        dxdc_u1 = dxdc_U[:, :num_singular_values]
-        dxdc_v1 = dxdc_V[:num_singular_values, :]
-        dxdc_s1 = dxdc_S[:num_singular_values]
-
-        Gc = jnp.array([])
-        for i in range(len(dxdc_u1[0])):
-            Gc = jnp.hstack([Gc, self._objective.jvp(dxdc_u1[:, i], xg)])
-            gx_eval = gx_eval + 1
-        Gc = Gc @ jnp.diag(dxdc_s1) @ dxdc_v1
-
-        LHS = jnp.atleast_2d(GxFxFc - Gc)
+        LHS = GxFx @ Fc - Gc
         return -LHS
 
     def hess(self, x):

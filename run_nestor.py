@@ -324,12 +324,12 @@ eq.set_initial_guess(surf)
 eq.surface = surf
 
 eq.change_resolution(
-    veq.L // 2,
-    veq.M // 2,
-    veq.N // 2,
-    veq.L_grid // 2,
-    veq.M_grid // 2,
-    veq.N_grid // 2,
+    veq.L // 3,
+    veq.M // 3,
+    veq.N // 3,
+    veq.L_grid // 3,
+    veq.M_grid // 3,
+    veq.N_grid // 3,
 )
 eq.solve(ftol=1e-2, verbose=3)
 
@@ -377,7 +377,7 @@ with open("run_nestor_out1.pkl", "wb+") as f:
 
 eq2 = eq1.copy()
 
-eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq2.change_resolution(veq.L//3*2, veq.M//3*2, veq.N//3*2, veq.L_grid//3*2, veq.M_grid//3*2, veq.N_grid//3*2)
 eq2.solve(ftol=1e-2, verbose=3)
 
 
@@ -413,6 +413,46 @@ eq2.save("run_nestor_out2.h5")
 with open("run_nestor_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
 
+
+
+eq3 = eq2.copy()
+
+eq3.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq3.solve(ftol=1e-2, verbose=3)
+
+
+bc_objective = BoundaryErrorNESTOR(ext_field)
+fb_objective = ForceBalance()
+
+objective = ObjectiveFunction(bc_objective)
+constraints = (
+    fb_objective,
+    FixPressure(),
+    FixIota(),
+    FixPsi(),
+)
+
+fb_objective.build(eq3)
+bc_objective.build(eq3)
+
+
+out = eq3.optimize(
+    objective,
+    constraints,
+    maxiter=60,
+    verbose=3,
+    options={
+        "perturb_options": {"order": 2},
+        "initial_trust_radius": 1e-1,
+        "ga_tr_ratio": 0,
+    },
+)
+
+
+eq3.save("run_nestor_out3.h5")
+with open("run_nestor_out3.pkl", "wb+") as f:
+    pickle.dump(out, f)
+    
 
 out = veq.optimize(
     objective,

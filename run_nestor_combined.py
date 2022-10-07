@@ -278,7 +278,7 @@ print(f["ntor"][:])
 
 
 veq = VMECIO.load("wout_test_beta.vmec.nc", spectral_indexing="fringe")
-veq.change_resolution(L=20, M=10, N=10, L_grid=20, M_grid=10, N_grid=10)
+veq.change_resolution(L=20, M=10, N=10, L_grid=20, M_grid=12, N_grid=12)
 
 pres = np.asarray(f.variables["presf"])
 sp = np.linspace(0, 1, pres.size)
@@ -305,6 +305,7 @@ ext_field = SplineMagneticField.from_mgrid(
 
 
 veq.resolution_summary()
+print("SOLVING VEQ")
 veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
@@ -331,6 +332,7 @@ eq.change_resolution(
     veq.M_grid // 2,
     veq.N_grid // 2,
 )
+print("SOLVING EQ0")
 eq.solve(ftol=1e-2, verbose=3)
 
 from desc.objectives import (
@@ -355,6 +357,7 @@ constraints = (
 objective.build(eq)
 
 eq1 = eq.copy()
+print("SOLVING EQ1")
 out = eq1.solve(
     objective,
     constraints,
@@ -388,7 +391,7 @@ constraints = (
 )
 
 objective.build(eq2)
-
+print("SOLVING EQ2")
 out = eq2.solve(
     objective,
     constraints,
@@ -405,7 +408,7 @@ eq2.save("run_nestor_combined_out2.h5")
 with open("run_nestor_combined_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
     
-
+print("SOLVING EQV")
 out = veq.solve(
     objective,
     constraints,

@@ -343,7 +343,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -382,7 +382,7 @@ eq2.change_resolution(veq.L//3*2, veq.M//3*2, veq.N//3*2, veq.L_grid//3*2, veq.M
 eq2.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -422,7 +422,7 @@ eq3.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
 eq3.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)

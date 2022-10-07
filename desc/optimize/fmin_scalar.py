@@ -175,11 +175,15 @@ def fmintr(
     # second is the norm of the scaled x, as used in scipy
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
-    init_tr_sp = np.linalg.norm(x * scale_inv)
-    init_tr_CG = (g_h @ g_h) / abs(g_h @ H_h @ g_h)
-    init_tr = np.sqrt(init_tr_CG * init_tr_sp)
-    trust_radius = options.pop("initial_trust_radius", init_tr)
-    trust_radius = init_tr_sp if trust_radius == "scipy" else trust_radius
+    init_tr = {
+        "scipy": np.linalg.norm(x * scale_inv),
+        "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
+        "mix": np.sqrt(
+            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * np.linalg.norm(x * scale_inv)
+        ),
+    }
+    trust_radius = options.pop("initial_trust_radius", "scipy")
+    trust_radius = init_tr.get(trust_radius, trust_radius)
 
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)

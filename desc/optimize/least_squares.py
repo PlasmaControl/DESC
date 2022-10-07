@@ -153,6 +153,15 @@ def lsqtr(
     # second is the norm of the scaled x, as used in scipy
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
+    init_tr = {
+        "scipy": np.linalg.norm(x * scale_inv),
+        "conngould": np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2),
+        "mix": np.sqrt(
+            np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
+        ),
+    }
+    trust_radius = options.pop("initial_trust_radius", "scipy")
+    trust_radius = init_tr.get(trust_radius, trust_radius)
 
     init_tr_sp = np.linalg.norm(x * scale_inv)
     init_tr_CG = np.sqrt(np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2))

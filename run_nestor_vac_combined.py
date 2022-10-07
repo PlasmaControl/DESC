@@ -269,7 +269,7 @@ class BoundaryErrorNESTOR(_Objective):
         data = compute_jacobian(R_lmn, Z_lmn, self.BR_transform, self.BZ_transform)
         w = self.BR_transform.grid.weights
         g = data["|e_theta x e_zeta|"]
-        return mu_0 * (bv - bp - self.Bp_profile([1.0])) * w * g
+        return (bv - bp - self.Bp_profile([1.0])) * w * g
 
 
 f = Dataset("wout_test_iota.vmec.nc")

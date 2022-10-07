@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from desc.equilibrium import EquilibriaFamily
 from desc.grid import ConcentricGrid
@@ -6,6 +7,9 @@ from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constr
 from desc.perturbations import perturb
 
 
+@pytest.mark.unit
+@pytest.mark.slow
+@pytest.mark.solve
 def test_perturbation_orders(SOLOVEV):
     """Test that higher-order perturbations are more accurate."""
 
@@ -64,9 +68,7 @@ def test_perturbation_orders(SOLOVEV):
     eqS.solve(objective=objective, ftol=1e-2, verbose=3)
 
     # evaluate equilibrium force balance
-    grid = ConcentricGrid(
-        2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, rotation=False, node_pattern="jacobi"
-    )
+    grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
     data0 = eq0.compute("|F|", grid)
     data1 = eq1.compute("|F|", grid)
     data2 = eq2.compute("|F|", grid)

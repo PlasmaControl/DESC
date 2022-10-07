@@ -3,10 +3,7 @@
 # spectral resolution
 M_pol = 6
 
-# pressure and rotational transform profiles
-l:   0  i =   1.61800000E+00
-
 # fixed-boundary surface shape
-m:   0  n:   0  R1 =   5.00000000E+00
-m:   1  n:   0  R1 =   1.00000000E+00
-m:  -1  n:   0  Z1 =   1.00000000E+00
+m:  0  n: 0  R1 = 5
+m:  1  n: 0  R1 = 1
+m: -1  n: 0  Z1 = 1

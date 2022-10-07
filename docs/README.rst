@@ -1,6 +1,6 @@
 To build the documentation locally, from the DESC directory:
 
-.. code-block:: bash
+.. code-block:: sh
 
     cd docs
     pip install sphinx

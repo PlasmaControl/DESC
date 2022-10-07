@@ -1,4 +1,4 @@
-name: nbtests
+name: Notebook tests
 
 on: 
   push:
@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  notebook_tests:
 
     runs-on: ubuntu-latest
     strategy:

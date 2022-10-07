@@ -2,44 +2,46 @@ import os
 import desc.io
 
 
-def get(name, which=None):
-    """Get example equilibria and data
+def get(name, data=None):
+    """Get example equilibria and data.
 
     Returns a solved equilibrium or selected attributes for one of several examples.
 
-    current examples include: dshape, solovev, atf, heliotron
+    Examples include: Solov'ev, D-shape, Heliotron, ATF, ESTELL, WISTELL-A, ARIES-CS,
+    QAS, NCSX, W7-X
 
     Parameters
     ----------
     name : str
-        name of the example equilibrium to load from, should be one from list above
-    which : {None, "all", "boundary", "pressure", "iota"}
-        what data to return. None returns the final solved equilibrium. "all" returns
-        the intermediate solutions from the continuation method as an EquilibriaFamily.
-        "boundary" returns a representation for the LCFS. "pressure" and "iota" return
-        profile objects.
+        Name of the example equilibrium to load from, should be one from list above.
+    data : {None, "all", "boundary", "pressure", "iota", "current"}
+        Data to return. None returns the final solved equilibrium. "all" returns the
+        intermediate solutions from the continuation method as an EquilibriaFamily.
+        "boundary" returns a representation for the last closed flux surface.
+        "pressure", "iota", and "current" return the profile objects.
 
     Returns
     -------
     data : varies
-        data requested, see "which" argument for more details
+        Data requested, see "data" argument for more details.
 
     """
-
-    assert which in {None, "all", "boundary", "pressure", "iota"}
+    assert data in {None, "all", "boundary", "pressure", "iota", "current"}
     here = os.path.abspath(os.path.dirname(__file__)) + "/"
     path = here + name.upper() + "_output.h5"
     if os.path.exists(path):
         eqf = desc.io.load(path)
     else:
         raise ValueError("example {} not found".format(path))
-    if which is None:
+    if data is None:
         return eqf[-1]
-    if which == "all":
+    if data == "all":
         return eqf
-    if which == "boundary":
+    if data == "boundary":
         return eqf[-1].get_surface_at(rho=1)
-    if which == "pressure":
+    if data == "pressure":
         return eqf[-1].pressure
-    if which == "iota":
+    if data == "iota":
         return eqf[-1].iota
+    if data == "current":
+        return eqf[-1].current

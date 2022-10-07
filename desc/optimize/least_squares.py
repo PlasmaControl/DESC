@@ -164,7 +164,7 @@ def lsqtr(
     trust_radius = init_tr.get(trust_radius, trust_radius)
 
     init_tr_sp = np.linalg.norm(x * scale_inv)
-    init_tr_CG = np.sqrt(np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2))
+    init_tr_CG = np.sqrt(np.sqrt(np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2)))
     init_tr = np.sqrt(init_tr_CG * init_tr_sp)
     trust_radius = options.pop("initial_trust_radius", init_tr)
     trust_radius = init_tr_sp if trust_radius == "scipy" else trust_radius
@@ -173,8 +173,8 @@ def lsqtr(
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
-    tr_increase_ratio = options.pop("tr_increase_ratio", 5)
-    tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.5)
+    tr_increase_ratio = options.pop("tr_increase_ratio", 2)
+    tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
 
     if trust_radius == 0:
         trust_radius = 1.0

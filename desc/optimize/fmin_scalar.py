@@ -189,8 +189,8 @@ def fmintr(
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
-    tr_increase_ratio = options.pop("tr_increase_ratio", 5)
-    tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.5)
+    tr_increase_ratio = options.pop("tr_increase_ratio", 2)
+    tr_decrease_ratio = options.pop("tr_decrease_ratio", 0.25)
 
     if trust_radius == 0:
         trust_radius = 1.0

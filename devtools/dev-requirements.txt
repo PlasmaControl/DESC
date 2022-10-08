@@ -13,6 +13,8 @@ black == 21.7b0
 click == 8.0.4
 flake8 >= 4.0.1
 pylint >= 2.12.2
+pydocstyle >= 2.0.0
+flake8-docstrings
 
 # testing and benchmarking
 codecov

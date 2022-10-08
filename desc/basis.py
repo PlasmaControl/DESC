@@ -1106,11 +1106,10 @@ def zernike_radial_coeffs(l, m, exact=True):
     coeffs : ndarray
 
 
-    Notes:
-        integer representation is exact up to l~54, so
-        leaving `exact` arg as False can speed up
-        evaluation with no loss in accuracy
-
+    Notes
+    -----
+    Integer representation is exact up to l~54, so leaving `exact` arg as False
+    can speed up evaluation with no loss in accuracy
     """
     l = np.atleast_1d(l).astype(int)
     m = np.atleast_1d(np.abs(m)).astype(int)

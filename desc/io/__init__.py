@@ -1,3 +1,5 @@
+"""Functions and classes for reading and writing DESC data."""
+
 from .input_reader import InputReader
 from .equilibrium_io import IOAble, load
 from .pickle_io import PickleReader, PickleWriter

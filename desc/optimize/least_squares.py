@@ -1,3 +1,5 @@
+"""Function for solving nonlinear least squares problems."""
+
 import numpy as np
 from termcolor import colored
 from desc.backend import jnp
@@ -17,7 +19,7 @@ from .tr_subproblems import (
 from scipy.optimize import OptimizeResult
 
 
-def lsqtr(
+def lsqtr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
@@ -32,7 +34,7 @@ def lsqtr(
     callback=None,
     options={},
 ):
-    """Solve a least squares problem using a (quasi)-Newton trust region method
+    """Solve a least squares problem using a (quasi)-Newton trust region method.
 
     Parameters
     ----------
@@ -120,7 +122,6 @@ def lsqtr(
     n = x0.size
     x = x0.copy()
     f = fun(x, *args)
-    m = f.size
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     J = jac(x, *args)
@@ -292,11 +293,9 @@ def lsqtr(
 
         # if reduction was enough, accept the step
         if actual_reduction > 0:
-            x_old = x
             x = x_new
             if return_all:
                 allx.append(x)
-            f_old = f
             f = f_new
             cost = cost_new
             J = jac(x, *args)

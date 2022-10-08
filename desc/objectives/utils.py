@@ -1,3 +1,5 @@
+"""Functions for getting common objectives and constraints."""
+
 import numpy as np
 
 from desc.backend import jnp, put, block_diag
@@ -113,7 +115,8 @@ def factorize_linear_constraints(constraints, objective_args):
     unfixed_idx : ndarray
         indices of x that correspond to non-fixed values
     project, recover : function
-        functions to project full vector x into reduced vector y, and recovering x from y.
+        functions to project full vector x into reduced vector y,
+        and recovering x from y.
 
     """
     # set state vector

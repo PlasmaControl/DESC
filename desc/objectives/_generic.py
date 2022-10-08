@@ -1,3 +1,5 @@
+"""Generic objectives that don't belong anywhere else."""
+
 from inspect import signature
 from scipy.constants import mu_0
 

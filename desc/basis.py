@@ -1,8 +1,10 @@
+"""Classes for spectral bases and functions for evaluation."""
+
 import numpy as np
 import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import flatten_list, copy_coeffs
+from desc.utils import flatten_list
 from desc.io import IOAble
 from desc.backend import jnp, jit, sign, fori_loop, gammaln
 
@@ -35,7 +37,7 @@ class Basis(IOAble, ABC):
         self._create_idx()
 
     def _set_up(self):
-        """Called after loading or changing resolution."""
+        """Do things after loading or changing resolution."""
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
@@ -181,7 +183,7 @@ class Basis(IOAble, ABC):
         return self.__dict__.setdefault("_spectral_indexing", "linear")
 
     def __repr__(self):
-        """String form of the object."""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -665,7 +667,6 @@ class ZernikePolynomial(Basis):
                 for d in range(0, L + 1, 2)
             ]
             if L > 2 * M:
-                Ladd = L - 2 * M
                 pol_posm += [
                     [(l - m, m) for m in range(0, M + 1)]
                     for l in range(2 * M, L + 1, 2)
@@ -882,7 +883,6 @@ class FourierZernikeBasis(Basis):
                 for d in range(0, L + 1, 2)
             ]
             if L > 2 * M:
-                Ladd = L - 2 * M
                 pol_posm += [
                     [(l - m, m) for m in range(0, M + 1)]
                     for l in range(2 * M, L + 1, 2)
@@ -1240,7 +1240,10 @@ def zernike_radial(r, l, m, dr=0):
         )
     else:
         raise NotImplementedError(
-            "Analytic radial derivatives of zernike polynomials for order>3 have not been implemented"
+            (
+                "Analytic radial derivatives of zernike polynomials for order>3 "
+                + "have not been implemented"
+            )
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)
 
@@ -1317,13 +1320,6 @@ def fourier(theta, m, NFP=1, dt=0):
     return m_abs ** dt * jnp.sin(m_abs * theta + shift)
 
 
-def _binom_body_fun(i, b_n):
-    b, n = b_n
-    num = n + 1 - i
-    den = i
-    return (b * num / den, n)
-
-
 @jit
 @jnp.vectorize
 def _binom(n, k):
@@ -1343,30 +1339,30 @@ def _binom(n, k):
     val : int, float, array-like
         number of possible combinations
     """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L68
+
     n, k = map(jnp.asarray, (n, k))
-    # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L68
+
+    def _binom_body_fun(i, b_n):
+        b, n = b_n
+        num = n + 1 - i
+        den = i
+        return (b * num / den, n)
+
     kx = k.astype(int)
     b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
     return b
 
 
-def _jacobi_body_fun(kk, d_p_a_b_x):
-    d, p, alpha, beta, x = d_p_a_b_x
-    k = kk + 1.0
-    t = 2 * k + alpha + beta
-    d = ((t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d) / (
-        2 * (k + alpha + 1) * (k + alpha + beta + 1) * t
-    )
-    p = d + p
-    return (d, p, alpha, beta, x)
-
-
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
-    """Jacobi polynomial evaluation
+    """Jacobi polynomial evaluation.
 
-    Implementation is only correct for non-negative integer coefficients, returns 0 otherwise
+    Implementation is only correct for non-negative integer coefficients,
+    returns 0 otherwise.
 
     Parameters
     ----------
@@ -1384,8 +1380,22 @@ def _jacobi(n, alpha, beta, x, dx=0):
     P : ndarray
         Values of the Jacobi polynomial
     """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L144
+
+    def _jacobi_body_fun(kk, d_p_a_b_x):
+        d, p, alpha, beta, x = d_p_a_b_x
+        k = kk + 1.0
+        t = 2 * k + alpha + beta
+        d = (
+            (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
+        ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
+        p = d + p
+        return (d, p, alpha, beta, x)
+
     n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
-    # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L144
+
     # coefficient for derivative
     c = (
         gammaln(alpha + beta + n + 1 + dx)

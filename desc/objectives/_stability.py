@@ -1,3 +1,5 @@
+"""Objectives for targeting MHD stability."""
+
 import numpy as np
 from desc.utils import Timer
 from desc.grid import LinearGrid

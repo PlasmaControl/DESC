@@ -1,3 +1,5 @@
+"""Module for getting precomputed example equilibria."""
+
 import os
 import desc.io
 

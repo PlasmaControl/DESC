@@ -159,9 +159,9 @@ def test_resolution():
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
     eq2 = Equilibrium()
 
-    assert eq1.resolution() != eq2.resolution()
-    eq2.change_resolution(**eq1.resolution())
-    assert eq1.resolution() == eq2.resolution()
+    assert eq1.resolution != eq2.resolution
+    eq2.change_resolution(**eq1.resolution)
+    assert eq1.resolution == eq2.resolution
 
     eq1.L = 2
     eq1.M = 3

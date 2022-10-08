@@ -1,3 +1,5 @@
+"""Legacy functions for reading and writing ascii format."""
+
 import numpy as np
 
 
@@ -106,7 +108,7 @@ def write_ascii(fname, eq):
 
 
 def read_ascii(filename):
-    """reads a previously generated DESC ascii output file
+    """Read a previously generated DESC ascii output file.
 
     Parameters
     ----------

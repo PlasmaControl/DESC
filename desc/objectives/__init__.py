@@ -1,3 +1,5 @@
+"""Classes defining objectives for equilibrium and optimization."""
+
 from .objective_funs import ObjectiveFunction
 from .linear_objectives import (
     FixBoundaryR,

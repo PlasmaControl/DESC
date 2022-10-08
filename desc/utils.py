@@ -1,9 +1,8 @@
+"""Utility functions, independent of the rest of DESC."""
+
 import numpy as np
 import warnings
 from termcolor import colored
-
-
-# Helper Classes -----------------------------------------------------------------------
 
 
 class Timer:
@@ -189,9 +188,6 @@ to return the index it is passed.
 copied from jax.ops.index to work with either backend
 """
 Index = _Indexable()
-
-
-# Helper Functions -----------------------------------------------------------
 
 
 def equals(a, b):

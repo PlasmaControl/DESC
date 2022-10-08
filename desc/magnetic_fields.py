@@ -1,3 +1,5 @@
+"""Classes for magnetic fields."""
+
 import numpy as np
 from abc import ABC, abstractmethod
 from netCDF4 import Dataset
@@ -7,12 +9,12 @@ from desc.io import IOAble
 from desc.grid import Grid
 from desc.interpolate import interp3d, _approx_df
 from desc.derivatives import Derivative
-from desc.geometry.utils import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
+from desc.geometry.utils import xyz2rpz, rpz2xyz_vec
 
 
 # TODO: vectorize this over multiple coils
 def biot_savart(eval_pts, coil_pts, current):
-    """Biot-Savart law following [1]
+    """Biot-Savart law following [1].
 
     Parameters
     ----------
@@ -57,7 +59,7 @@ def biot_savart(eval_pts, coil_pts, current):
 
 
 class MagneticField(IOAble, ABC):
-    """Base class for all magnetic fields
+    """Base class for all magnetic fields.
 
     Subclasses must implement the "compute_magnetic_field" method
 
@@ -88,7 +90,7 @@ class MagneticField(IOAble, ABC):
 
     @abstractmethod
     def compute_magnetic_field(self, coords, params={}, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -107,11 +109,12 @@ class MagneticField(IOAble, ABC):
         """
 
     def __call__(self, coords, params={}, basis="rpz"):
+        """Compute magnetic field at a set of points."""
         return self.compute_magnetic_field(coords, params, basis)
 
 
 class ScaledMagneticField(MagneticField):
-    """Magnetic field scaled by a scalar value
+    """Magnetic field scaled by a scalar value.
 
     ie B_new = scalar * B_old
 
@@ -137,7 +140,7 @@ class ScaledMagneticField(MagneticField):
         self._field = field
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -157,7 +160,7 @@ class ScaledMagneticField(MagneticField):
 
 
 class SumMagneticField(MagneticField):
-    """Sum of two or more magnetic field sources
+    """Sum of two or more magnetic field sources.
 
     Parameters
     ----------
@@ -176,7 +179,7 @@ class SumMagneticField(MagneticField):
         self._fields = fields
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -205,7 +208,7 @@ class SumMagneticField(MagneticField):
 
 
 class ToroidalMagneticField(MagneticField):
-    """Magnetic field purely in the toroidal (phi) direction
+    """Magnetic field purely in the toroidal (phi) direction.
 
     Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
     is the field strength on axis
@@ -227,7 +230,7 @@ class ToroidalMagneticField(MagneticField):
         self._R0 = R0
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -260,7 +263,7 @@ class ToroidalMagneticField(MagneticField):
 
 
 class VerticalMagneticField(MagneticField):
-    """Uniform magnetic field purely in the vertical (Z) direction
+    """Uniform magnetic field purely in the vertical (Z) direction.
 
     Parameters
     ----------
@@ -276,7 +279,7 @@ class VerticalMagneticField(MagneticField):
         self._B0 = B0
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -309,7 +312,7 @@ class VerticalMagneticField(MagneticField):
 
 
 class PoloidalMagneticField(MagneticField):
-    """Pure poloidal magnetic field (ie in theta direction)
+    """Pure poloidal magnetic field (ie in theta direction).
 
     Field strength is B0*iota*r/R0 where B0 is the toroidal field on axis,
     R0 is the major radius of the axis, iota is the desired rotational transform,
@@ -343,7 +346,7 @@ class PoloidalMagneticField(MagneticField):
         self._iota = iota
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -382,7 +385,7 @@ class PoloidalMagneticField(MagneticField):
 
 
 class SplineMagneticField(MagneticField):
-    """Magnetic field from precomputed values on a grid
+    """Magnetic field from precomputed values on a grid.
 
     Parameters
     ----------
@@ -457,7 +460,7 @@ class SplineMagneticField(MagneticField):
         return tempdict
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -474,7 +477,6 @@ class SplineMagneticField(MagneticField):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
-
         assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
@@ -534,7 +536,7 @@ class SplineMagneticField(MagneticField):
     def from_mgrid(
         cls, mgrid_file, extcur=1, method="cubic", extrap=False, period=None
     ):
-        """Create a SplineMagneticField from an "mgrid" file from MAKEGRID
+        """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
 
         Parameters
         ----------
@@ -595,7 +597,7 @@ class SplineMagneticField(MagneticField):
     def from_field(
         cls, field, R, phi, Z, params={}, method="cubic", extrap=False, period=None
     ):
-        """Create a splined magnetic field from another field for faster evaluation
+        """Create a splined magnetic field from another field for faster evaluation.
 
         Parameters
         ----------
@@ -633,7 +635,7 @@ class SplineMagneticField(MagneticField):
 
 
 class ScalarPotentialField(MagneticField):
-    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates
+    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates.
 
     Parameters
     ----------
@@ -651,7 +653,7 @@ class ScalarPotentialField(MagneticField):
         self._params = params
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -694,7 +696,7 @@ class ScalarPotentialField(MagneticField):
 def field_line_integrate(
     r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
-    """Trace field lines by integration
+    """Trace field lines by integration.
 
     Parameters
     ----------

@@ -1,3 +1,5 @@
+"""Functions for flux surface averages and vector algebra operations."""
+
 import numpy as np
 import warnings
 from termcolor import colored

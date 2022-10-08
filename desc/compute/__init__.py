@@ -1,3 +1,5 @@
+"""Functions for computing field and plasma quantities from an equilibrium."""
+
 from .data_index import data_index
 from ._core import (
     compute_flux_coords,

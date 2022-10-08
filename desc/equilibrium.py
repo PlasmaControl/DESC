@@ -1,3 +1,5 @@
+"""Core class representing MHD equilibrium."""
+
 import numpy as np
 import warnings
 import numbers
@@ -154,7 +156,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def L_grid(self):
-        """Radial resolution of grid in real space (int)."""
+        """int: Radial resolution of grid in real space."""
         if not hasattr(self, "_L_grid"):
             self._L_grid = (
                 self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
@@ -168,7 +170,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def M_grid(self):
-        """Poloidal resolution of grid in real space (int)."""
+        """int: Poloidal resolution of grid in real space."""
         if not hasattr(self, "_M_grid"):
             self._M_grid = 1
         return self._M_grid
@@ -180,7 +182,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def N_grid(self):
-        """Toroidal resolution of grid in real space (int)."""
+        """int: Toroidal resolution of grid in real space."""
         if not hasattr(self, "_N_grid"):
             self._N_grid = 0
         return self._N_grid
@@ -192,21 +194,23 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def node_pattern(self):
-        """Pattern for placement of nodes in curvilinear coordinates (str)."""
+        """str: Pattern for placement of nodes in curvilinear coordinates."""
         if not hasattr(self, "_node_pattern"):
             self._node_pattern = None
         return self._node_pattern
 
     @property
     def solved(self):
-        """Whether the equilibrium has been solved (bool)."""
+        """bool: Whether the equilibrium has been solved."""
         return self._solved
 
     @solved.setter
     def solved(self, solved):
         self._solved = solved
 
+    @property
     def resolution(self):
+        """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
             "L": self.L,
             "M": self.M,
@@ -465,7 +469,10 @@ class Equilibrium(_Configuration, IOAble):
             )
         if eq.bdry_mode == "poincare":
             raise NotImplementedError(
-                f"Solving equilibrium with poincare XS as BC is not supported yet on master branch."
+                (
+                    "Solving equilibrium with poincare XS as BC is not supported yet "
+                    + "on master branch."
+                )
             )
 
         result = optimizer.optimize(
@@ -893,7 +900,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
             raise NotImplementedError(
-                f"Specifying poincare XS as BC is not implemented yet on main branch."
+                "Specifying poincare XS as BC is not implemented yet on master branch."
             )
 
         p_l = np.zeros_like(equil.pressure.params)
@@ -943,7 +950,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
         print("================")
 
-    def solve_continuation(self, start_from=0, verbose=None, checkpoint_path=None):
+    def solve_continuation(  # noqa: C901 - FIXME: break this up into simpler pieces
+        self, start_from=0, verbose=None, checkpoint_path=None
+    ):
         """Solve for an equilibrium by continuation method.
 
             1. Creates an initial guess from the given inputs
@@ -1089,7 +1098,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     @property
     def equilibria(self):
-        """List of equilibria contained in the family (list)."""
+        """list: Equilibria contained in the family."""
         return self._equilibria
 
     @equilibria.setter
@@ -1125,6 +1134,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return len(self._equilibria)
 
     def insert(self, i, new_item):
+        """Insert a new Equilibrium into the family at position i."""
         if not isinstance(new_item, Equilibrium):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."

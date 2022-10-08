@@ -1,3 +1,5 @@
+"""Objectives for solving equilibrium problems."""
+
 from desc.backend import jnp
 from desc.utils import Timer
 from desc.grid import QuadratureGrid, ConcentricGrid
@@ -503,7 +505,8 @@ class Energy(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at. This will default to a QuadratureGrid
+        Collocation grid containing the nodes to evaluate at.
+        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str

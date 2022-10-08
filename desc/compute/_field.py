@@ -14,7 +14,7 @@ from ._core import (
 )
 
 
-def compute_contravariant_magnetic_field(
+def compute_contravariant_magnetic_field(  # noqa: C901
     R_lmn,
     Z_lmn,
     L_lmn,

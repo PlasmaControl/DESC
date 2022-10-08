@@ -367,7 +367,7 @@ def compute_rotational_transform(
     return data
 
 
-def compute_covariant_basis(
+def compute_covariant_basis(  # noqa: C901
     R_lmn,
     Z_lmn,
     R_transform,

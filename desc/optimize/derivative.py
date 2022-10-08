@@ -1,70 +1,76 @@
+"""Classes for handling derivatives needed for optimization."""
+
 import numpy as np
-import functools
 from abc import ABC, abstractmethod
 from termcolor import colored
 
-from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr, jit, use_jax
+from desc.backend import jnp, cho_solve
 from desc.optimize.utils import make_spd, chol_U_update, compute_jac_scale
-import scipy.linalg
 
 
 class OptimizerDerivative(ABC):
-    """Abstract base class for hessians and jacobians used in the optimizer"""
+    """Abstract base class for hessians and jacobians used in the optimizer."""
 
     @property
     @abstractmethod
     def shape(self):
+        """tuple: Shape of the internal array."""
         pass
 
     @property
     @abstractmethod
     def min_eig(self):
+        """float: estimate of the smallest eigenvalue of the matrix."""
         pass
 
     @property
     @abstractmethod
     def is_pos_def(self):
+        """bool: whether the matrix is positive definite."""
         pass
 
     @property
     @abstractmethod
     def negative_curvature_direction(self):
+        """ndarray: direction corresponding to a negative eigenvalue (if one exists)."""
         pass
 
     @abstractmethod
     def update(self, x_new, x_old, grad_new, grad_old):
-        """Update the internal matrix A"""
+        """Update the internal matrix A."""
 
     @abstractmethod
     def recompute(self, x):
-        """Recompute the full correct internal matrix at the point x"""
+        """Recompute the full correct internal matrix at the point x."""
 
     @abstractmethod
     def get_matrix(self):
-        """Return the internal matrix A"""
+        """Return the internal matrix A."""
 
     @abstractmethod
     def get_inverse(self):
-        """Return the inverse of the internal matrix A^-1"""
+        """Return the inverse of the internal matrix A^-1."""
 
     @abstractmethod
     def dot(self, x):
-        """Compute dot(A,x)"""
+        """Compute dot product between internal matrix and a vector."""
 
     @abstractmethod
     def solve(self, b):
-        """Solve A*x = b for x"""
+        """Solve A*x = b for x."""
 
     @abstractmethod
     def get_scale(self, prev_scale=None):
-        """Compute scaling vector"""
+        """Compute scaling vector."""
 
     @abstractmethod
     def quadratic(self, u, v):
-        """Evaluate quadratic form u.T * H * v"""
+        """Evaluate quadratic form u.T * H * v."""
 
 
 class CholeskyHessian(OptimizerDerivative):
+    """Hessian matrix stored internally as Cholesky factors."""
+
     def __init__(
         self,
         n,
@@ -133,25 +139,26 @@ class CholeskyHessian(OptimizerDerivative):
 
     @property
     def shape(self):
+        """tuple: shape of the internal matrix."""
         return self._shape
 
     @property
     def min_eig(self):
-        """an estimate for the minimum eigenvalue of the matrix"""
+        """float: estimate for the minimum eigenvalue of the matrix."""
         return self._min_eig
 
     @property
     def is_pos_def(self):
-        """whether the matrix is positive definite"""
+        """bool: whether the matrix is positive definite."""
         return self._is_pos_def
 
     @property
     def negative_curvature_direction(self):
-        """a direction corresponding to a negative eigenvalue"""
+        """ndarray: direction corresponding to a negative eigenvalue."""
         return self._negative_curvature_direction
 
     def _auto_scale_init(self, delta_x, delta_grad):
-        """Heuristic to scale matrix at first iteration"""
+        """Heuristic to scale matrix at first iteration."""
         # Described in Nocedal and Wright "Numerical Optimization"
         # p.143 formula (6.20).
         s_norm2 = np.dot(delta_x, delta_x)
@@ -165,13 +172,13 @@ class CholeskyHessian(OptimizerDerivative):
         self._initialized = True
 
     def recompute(self, x):
-        """recompute the full matrix at the current point"""
+        """Recompute the full matrix at the current point."""
         H = self._hessfun(x, *self._hessfun_args)
         H = make_spd(H, delta=self.min_curvature, tol=0.1)
         self._U = jnp.linalg.cholesky(H).T
 
     def update(self, x_new, x_old, grad_new, grad_old):
-        """Update internal matrix"""
+        """BFGS update of internal matrix."""
         x_new = np.asarray(x_new)
         x_old = np.asarray(x_old)
         grad_new = np.asarray(grad_new)
@@ -193,7 +200,7 @@ class CholeskyHessian(OptimizerDerivative):
         self._bfgs_update(delta_x, delta_grad)
 
     def _bfgs_update(self, delta_x, delta_grad):
-        """rank 2 update using BFGS rule"""
+        """Rank 2 update using BFGS rule."""
         if np.all(delta_x == 0.0):
             return
         if np.all(delta_grad == 0.0):
@@ -228,27 +235,27 @@ class CholeskyHessian(OptimizerDerivative):
         self._U = chol_U_update(np.asarray(self._U), v, beta)
 
     def get_matrix(self):
-        """get the current internal matrix"""
+        """Get the current internal matrix."""
         return jnp.dot(self._U.T, self._U)
 
     def get_inverse(self):
-        """get the inverse of the internal matrix"""
+        """Get the inverse of the internal matrix."""
         return cho_solve((self._U, False), jnp.eye(self._n))
 
     def dot(self, x):
-        """compute H@x"""
+        """Compute H@x."""
         return jnp.dot(self._U.T, jnp.dot(self._U, x))
 
     def solve(self, b):
-        """solve Hx=b for x"""
+        """Solve Hx=b for x."""
         return cho_solve((self._U, False), b)
 
     def get_scale(self, prev_scale=None):
-        """get diagonal scaling vector"""
+        """Get diagonal scaling vector."""
         return compute_jac_scale(self._U, prev_scale)
 
     def quadratic(self, u, v):
-        """evaluate quadratic form"""
+        """Evaluate quadratic form."""
         uu = jnp.dot(self._U, u)
         vv = jnp.dot(self._U, v)
         return jnp.dot(uu.T, vv)

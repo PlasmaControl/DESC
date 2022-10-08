@@ -1,3 +1,5 @@
+"""Utility functions needed for converting VMEC inputs/outputs."""
+
 import numpy as np
 from scipy.linalg import block_diag, null_space
 
@@ -237,7 +239,7 @@ def zernike_to_fourier(x_lmn, basis, rho):
     return m, n, x_mn
 
 
-def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):
+def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa: C901
     """Get optimization subspace corresponding to VMEC boundary modes.
 
     Parameters

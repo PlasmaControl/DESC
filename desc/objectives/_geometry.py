@@ -1,3 +1,5 @@
+"""Objectives for targeting geometrical quantities."""
+
 from desc.compute import (
     data_index,
     compute_geometry,

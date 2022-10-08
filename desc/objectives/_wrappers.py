@@ -1,3 +1,5 @@
+"""Wrappers for doing STELLOPT/SIMSOPT like optimization."""
+
 import numpy as np
 
 from desc.backend import jnp
@@ -167,13 +169,35 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         return self._objective.compute(x_obj)
 
     def grad(self, x):
+        """Compute gradient of the sum of squares of residuals.
 
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        g : ndarray
+            gradient vector.
+        """
         f = jnp.atleast_1d(self.compute(x))
         J = self.jac(x)
         return f.T @ J
 
     def jac(self, x):
+        """Compute Jacobian of the vector objective function.
 
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
         self._update_equilibrium(x)
 
         # dx/dc
@@ -228,6 +252,20 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         return -LHS
 
     def hess(self, x):
+        """Compute Hessian of the sum of squares of residuals.
 
+        Uses the "small residual approximation" where the Hessian is replaced by
+        the square of the Jacobian: H = J.T @ J
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        H : ndarray
+            Hessian matrix.
+        """
         J = self.jac(x)
         return J.T @ J

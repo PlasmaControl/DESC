@@ -1,3 +1,5 @@
+"""Base classes for objectives."""
+
 import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
@@ -73,7 +75,6 @@ class ObjectiveFunction(IOAble):
             Whether to just-in-time compile the objective and derivatives.
 
         """
-
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         for arg in self.args:
             self._derivatives["jac"][arg] = lambda x, arg=arg: jnp.vstack(
@@ -336,28 +337,28 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute_scalar(x).block_until_ready()
+            _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
-            g0 = self.grad(x).block_until_ready()
+            _ = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
             timer.start("Hessian compilation time")
-            H0 = self.hess(x).block_until_ready()
+            _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute(x).block_until_ready()
+            _ = self.compute(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            J0 = self.jac(x).block_until_ready()
+            _ = self.jac(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -379,19 +380,19 @@ class ObjectiveFunction(IOAble):
 
     @property
     def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
+        """bool: Whether default "compute" method is a scalar or vector."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._scalar
 
     @property
     def built(self):
-        """bool: Whether the objectives have been built (or not)."""
+        """bool: Whether the objectives have been built or not."""
         return self._built
 
     @property
     def compiled(self):
-        """bool: Whether the functions have been compiled (or not)."""
+        """bool: Whether the functions have been compiled or not."""
         return self._compiled
 
     @property
@@ -619,7 +620,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
+        """bool: Whether default "compute" method is a scalar or vector."""
         return self._scalar
 
     @property

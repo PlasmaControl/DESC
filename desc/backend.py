@@ -1,3 +1,5 @@
+"""Backend functions for DESC, with options for JAX or regular numpy."""
+
 import numpy as np
 import warnings
 import desc
@@ -28,19 +30,22 @@ else:
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
-                    "JAX failed to detect GPU, are you sure you installed JAX with GPU support?"
+                    (
+                        "JAX failed to detect GPU, are you sure you "
+                        + "installed JAX with GPU support?"
+                    )
                 )
                 set_device("cpu")
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
         print(
-            "DESC version {}, using JAX backend, jax version={}, jaxlib version={}, dtype={}".format(
-                desc.__version__, jax.__version__, jaxlib.__version__, y.dtype
-            )
+            f"DESC version {desc.__version__},"
+            + f"using JAX backend, jax version={jax.__version__}, "
+            + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
         )
         del x, y
-    except:
+    except ModuleNotFoundError:
         jnp = np
         x = jnp.linspace(0, 5)
         y = jnp.exp(x)
@@ -58,7 +63,7 @@ print(
     )
 )
 
-if use_jax:
+if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?
     jit = jax.jit
     fori_loop = jax.lax.fori_loop
     cond = jax.lax.cond
@@ -111,9 +116,15 @@ if use_jax:
 
 else:
     jit = lambda func, *args, **kwargs: func
-    from scipy.linalg import cho_factor, cho_solve, qr, solve_triangular, block_diag
-    from scipy.special import gammaln
-    from scipy.integrate import odeint
+    from scipy.linalg import (  # noqa: F401
+        cho_factor,
+        cho_solve,
+        qr,
+        solve_triangular,
+        block_diag,
+    )
+    from scipy.special import gammaln  # noqa: F401
+    from scipy.integrate import odeint  # noqa: F401
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -157,7 +168,7 @@ else:
         return y
 
     def fori_loop(lower, upper, body_fun, init_val):
-        """Loop from lower to upper, applying body_fun to init_val
+        """Loop from lower to upper, applying body_fun to init_val.
 
         This version is for the numpy backend, for jax backend see jax.lax.fori_loop
 

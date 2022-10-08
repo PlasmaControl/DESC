@@ -1,10 +1,12 @@
+"""Utility functions used in optimization problems."""
+
 import numpy as np
 from desc.backend import jnp
 import scipy.sparse
 
 
 def min_eig_est(A, tol=1e-2):
-    """Estimate the minimum eigenvalue of a matrix
+    """Estimate the minimum eigenvalue of a matrix.
 
     Uses Lanzcos method through scipy.sparse.linalg
 
@@ -23,12 +25,11 @@ def min_eig_est(A, tol=1e-2):
     v1 : ndarray
         approximate eigenvector corresponding to e1
     """
-
     return scipy.sparse.linalg.eigsh(A, k=1, which="SA", tol=tol)
 
 
 def make_spd(A, delta=1e-2, tol=1e-2):
-    """Modify a matrix to make it positive definite
+    """Modify a matrix to make it positive definite.
 
     Shifts the spectrum to make all eigenvalues > delta.
     Uses iterative Lanzcos method to approximate the smallest
@@ -49,7 +50,6 @@ def make_spd(A, delta=1e-2, tol=1e-2):
         A, but shifted by tau*I where tau is an approximation to
         the minimum eigenvalue
     """
-
     A = np.asarray(A)
     n = A.shape[0]
     eig_1, eigvec_1 = min_eig_est(A, tol)
@@ -59,7 +59,7 @@ def make_spd(A, delta=1e-2, tol=1e-2):
 
 
 def chol_U_update(U, x, alpha):
-    """Rank 1 update to a cholesky decomposition
+    """Rank 1 update to a cholesky decomposition.
 
     Given cholesky decomposition A = U.T * U
     compute cholesky decomposition to A + alpha*x.T*x where
@@ -95,6 +95,7 @@ def chol_U_update(U, x, alpha):
 
 def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
     """Compute values of a quadratic function arising in least squares.
+
     The function is 0.5 * x.T * H * x + g.T * x + f.
 
     Parameters
@@ -123,6 +124,7 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
 
 
 def print_header_nonlinear():
+    """Print a pretty header."""
     print(
         "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
             "Iteration",
@@ -138,6 +140,7 @@ def print_header_nonlinear():
 def print_iteration_nonlinear(
     iteration, nfev, cost, cost_reduction, step_norm, optimality
 ):
+    """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
         iteration = " " * 15
     else:
@@ -175,7 +178,7 @@ def print_iteration_nonlinear(
     )
 
 
-status_messages = {
+STATUS_MESSAGES = {
     "success": "Optimization terminated successfully.",
     "xtol": "`xtol` condition satisfied.",
     "ftol": "`ftol` condition satisfied.",
@@ -219,26 +222,26 @@ def check_termination(
     gtol_satisfied = g_norm < gtol
 
     if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
-        message = status_messages["success"]
+        message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:
-            message += "\n" + status_messages["ftol"]
+            message += "\n" + STATUS_MESSAGES["ftol"]
         if xtol_satisfied:
-            message += "\n" + status_messages["xtol"]
+            message += "\n" + STATUS_MESSAGES["xtol"]
         if gtol_satisfied:
-            message += "\n" + status_messages["gtol"]
+            message += "\n" + STATUS_MESSAGES["gtol"]
     elif iteration >= maxiter:
         success = False
-        message = status_messages["maxiter"]
+        message = STATUS_MESSAGES["maxiter"]
     elif nfev >= max_nfev:
         success = False
-        message = status_messages["max_nfev"]
+        message = STATUS_MESSAGES["max_nfev"]
     elif ngev >= max_ngev:
         success = False
-        message = status_messages["max_ngev"]
+        message = STATUS_MESSAGES["max_ngev"]
     elif nhev >= max_nhev:
         success = False
-        message = status_messages["max_nhev"]
+        message = STATUS_MESSAGES["max_nhev"]
     else:
         success = None
         message = None
@@ -247,6 +250,7 @@ def check_termination(
 
 
 def compute_jac_scale(A, prev_scale_inv=None):
+    """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
     scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
@@ -296,6 +300,7 @@ def evaluate_quadratic(J, g, s, diag=None):
 
 def find_matching_inds(arr1, arr2):
     """Find indices into arr2 that match rows of arr1.
+
     Parameters
     ----------
     arr1 : ndarray, shape(m,n)

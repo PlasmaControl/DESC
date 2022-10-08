@@ -1,3 +1,5 @@
+"""Class to transform from spectral basis to real space."""
+
 import numpy as np
 import scipy.linalg
 from itertools import permutations, combinations_with_replacement
@@ -543,7 +545,7 @@ class Transform(IOAble):
         """
         if not self.built_pinv:
             raise RuntimeError(
-                "Transform must be precomputed with transform.build_pinv() before being used"
+                "Transform must be built with transform.build_pinv() before being used"
             )
 
         if self.method == "direct1":
@@ -741,7 +743,7 @@ class Transform(IOAble):
 
     @property
     def matrices(self):
-        """dict of ndarray : transform matrices such that x=A*c."""
+        """dict: transform matrices such that x=A*c."""
         return self.__dict__.setdefault(
             "_matrices",
             {
@@ -756,12 +758,12 @@ class Transform(IOAble):
 
     @property
     def num_nodes(self):
-        """int : number of nodes in the collocation grid."""
+        """int: number of nodes in the collocation grid."""
         return self.grid.num_nodes
 
     @property
     def num_modes(self):
-        """int : number of modes in the spectral basis."""
+        """int: number of modes in the spectral basis."""
         return self.basis.num_modes
 
     @property
@@ -776,12 +778,12 @@ class Transform(IOAble):
 
     @property
     def built(self):
-        """bool : whether the transform matrices have been built."""
+        """bool: whether the transform matrices have been built."""
         return self.__dict__.setdefault("_built", False)
 
     @property
     def built_pinv(self):
-        """bool : whether the pseudoinverse matrix has been built."""
+        """bool: whether the pseudoinverse matrix has been built."""
         return self.__dict__.setdefault("_built_pinv", False)
 
     @property

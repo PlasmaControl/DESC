@@ -1,6 +1,7 @@
+"""Function for minimizing a scalar function of multiple variables."""
+
 import numpy as np
 from termcolor import colored
-from desc.backend import jnp
 from .derivative import CholeskyHessian
 from .utils import (
     check_termination,
@@ -17,7 +18,7 @@ from .tr_subproblems import (
 from scipy.optimize import OptimizeResult
 
 
-def fmintr(
+def fmintr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     grad,
@@ -33,7 +34,7 @@ def fmintr(
     callback=None,
     options={},
 ):
-    """Minimize a scalar function using a (quasi)-Newton trust region method
+    """Minimize a scalar function using a (quasi)-Newton trust region method.
 
     Parameters
     ----------
@@ -44,8 +45,8 @@ def fmintr(
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     hess : callable or ``'bfgs'``, optional:
-        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS method
-        will be used to approximate the hessian.
+        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
+        method will be used to approximate the hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
     method : ``'dogleg'`` or ``'subspace'``
@@ -102,7 +103,6 @@ def fmintr(
         Boolean flag indicating if the optimizer exited successfully.
 
     """
-
     nfev = 0
     ngev = 0
     nhev = 0
@@ -131,7 +131,6 @@ def fmintr(
     max_nhev = options.pop("max_nhev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    step_accept_threshold = options.pop("step_accept_threshold", 0.15)
     init_hess = options.pop("init_hess", "auto")
     hess_recompute_freq = options.pop(
         "hessian_recompute_interval", 1 if callable(hess) else 0

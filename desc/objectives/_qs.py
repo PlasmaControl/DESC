@@ -1,3 +1,5 @@
+"""Objectives for targeting quasisymmetry."""
+
 import numpy as np
 from desc.basis import DoubleFourierSeries
 from desc.compute import (

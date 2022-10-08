@@ -1,3 +1,5 @@
+"""DESC: a 3D MHD equilibrium solver and stellarator optimization suite."""
+
 import colorama
 import os
 import re
@@ -11,13 +13,13 @@ del get_versions
 colorama.init()
 
 _BANNER = r"""
- ____  ____  _____   ___ 
+ ____  ____  _____   ___
 |  _ \| ___|/  ___|/ ___|
 | | \ | |_  | (__ | |
 | | | |  _| \___ \| |
-| |_/ | |__  ___) | |___ 
+| |_/ | |__  ___) | |___
 |____/|____||____/ \____|
-                         
+
 """
 
 BANNER = colored(_BANNER, "magenta")
@@ -77,9 +79,14 @@ def set_device(kind="cpu"):
             # cuda visible devices = '' -> don't use any gpu
             warnings.warn(
                 colored(
-                    "CUDA_VISIBLE_DEVICES={} did not match any physical GPU (id={}), falling back to CPU".format(
-                        os.environ["CUDA_VISIBLE_DEVICES"],
-                        [dev["index"] for dev in devices],
+                    (
+                        "CUDA_VISIBLE_DEVICES={} ".format(
+                            os.environ["CUDA_VISIBLE_DEVICES"]
+                        )
+                        + "did not match any physical GPU "
+                        + "(id={}), falling back to CPU".format(
+                            [dev["index"] for dev in devices]
+                        )
                     ),
                     "yellow",
                 )

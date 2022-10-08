@@ -1,3 +1,5 @@
+"""Classes for representing flux coordinates."""
+
 import numpy as np
 
 from desc.io import IOAble

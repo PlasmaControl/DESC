@@ -1,3 +1,5 @@
+"""Tests for profile classes."""
+
 import numpy as np
 import pytest
 

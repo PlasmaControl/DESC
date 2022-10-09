@@ -1,3 +1,5 @@
+"""Tests for computing iota from fixed current profile and vice versa."""
+
 import numpy as np
 import pytest
 
@@ -29,9 +31,9 @@ class TestConstrainCurrent:
     @pytest.mark.unit
     @pytest.mark.solve
     def test_compute_rotational_transform(self, DSHAPE_current, HELIOTRON_vac):
-        """
-        Test that compute_rotational_transform recovers iota and iota_r
-        when the current is fixed to the current computed on an equilibrium
+        """Test that compute_rotational_transform recovers iota and iota_r.
+
+        When the current is fixed to the current computed on an equilibrium
         solved with iota fixed.
 
         This tests that compute_rotational_transform is correct, among other things.

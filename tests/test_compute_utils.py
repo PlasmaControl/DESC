@@ -1,3 +1,5 @@
+"""Tests for surface averaging etc."""
+
 import numpy as np
 import pytest
 
@@ -46,6 +48,8 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
 
 
 class TestComputeUtils:
+    """Tests for grid operations, surface averages etc."""
+
     @pytest.mark.unit
     def test_compress_expand_inverse_op(self):
         """Test that compress & expand are inverse operations for surface functions."""
@@ -136,8 +140,8 @@ class TestComputeUtils:
     @pytest.mark.unit
     @pytest.mark.solve
     def test_surface_averages_homomorphism(self, DSHAPE_current, HELIOTRON_vac):
-        """
-        Test that surface averages of flux surface functions are additive homomorphisms.
+        """Test that surface averages of flux functions are additive homomorphisms.
+
         Meaning average(a + b) = average(a) + average(b).
         """
 

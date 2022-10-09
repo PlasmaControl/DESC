@@ -1,3 +1,5 @@
+"""Tests for Grid classes."""
+
 import pytest
 import numpy as np
 from scipy import special
@@ -145,8 +147,11 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_concentric_grid_high_res(self):
-        """Test that we can create high resolution grids without crashing, as in GH issue #207."""
-        grid = ConcentricGrid(L=32, M=28, N=30)
+        """Test that we can create high resolution grids without crashing.
+
+        Verifies solution to GH issue #207.
+        """
+        _ = ConcentricGrid(L=32, M=28, N=30)
 
     @pytest.mark.unit
     def test_quad_grid_volume_integration(self):

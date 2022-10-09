@@ -1,3 +1,5 @@
+"""Tests for Surface classes."""
+
 import numpy as np
 import pytest
 
@@ -109,6 +111,7 @@ class TestFourierRZToroidalSurface:
         )
 
     def test_from_near_axis(self):
+        """Test constructing approximate QI surface from near axis parameters."""
         surf = FourierRZToroidalSurface.from_near_axis(10, 4, 0.3, 0.2)
         np.testing.assert_allclose(
             surf.R_lmn,

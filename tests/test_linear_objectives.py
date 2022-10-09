@@ -1,3 +1,5 @@
+"""Tests for linear constraints and objectives."""
+
 import numpy as np
 import pytest
 

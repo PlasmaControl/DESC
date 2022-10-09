@@ -1,3 +1,5 @@
+"""Tests for geometry util functions for converting coordinates."""
+
 import numpy as np
 import pytest
 

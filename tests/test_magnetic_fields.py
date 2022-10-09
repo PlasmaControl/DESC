@@ -1,3 +1,5 @@
+"""Tests for magnetic field classes."""
+
 import numpy as np
 import pytest
 

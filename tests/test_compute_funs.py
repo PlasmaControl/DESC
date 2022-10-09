@@ -1,3 +1,5 @@
+"""Tests for compute functions."""
+
 import numpy as np
 import pytest
 from scipy.signal import convolve2d
@@ -17,7 +19,6 @@ FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
 @pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
-
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -30,7 +31,7 @@ def test_total_volume(DummyStellarator):
 
 @pytest.mark.unit
 def test_enclosed_volumes():
-    """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
+    """Test that the volume enclosed by flux surfaces matches analytic formulas."""
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
@@ -63,6 +64,7 @@ def test_surface_areas():
 # TODO: remove or combine with above
 @pytest.mark.unit
 def test_surface_areas_2():
+    """Alternate test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()
 
     grid_r = LinearGrid(rho=1, theta=10, zeta=10)
@@ -91,9 +93,7 @@ def test_surface_areas_2():
 @pytest.mark.slow
 @pytest.mark.unit
 def test_magnetic_field_derivatives(DummyStellarator):
-    """Test that the partial derivatives of B and |B| match with numerical derivatives
-    for a dummy stellarator example."""
-
+    """Test that the derivatives of B and |B| are close to numerical derivatives."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -334,9 +334,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
 @pytest.mark.slow
 @pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
-    """Test that the components of grad(|B|^2)) match with numerical gradients
-    for a dummy stellarator example."""
-
+    """Test that the components of grad(|B|^2)) match with numerical gradients."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -388,7 +386,6 @@ def test_magnetic_pressure_gradient(DummyStellarator):
 @pytest.mark.solve
 def test_currents(DSHAPE_current):
     """Test that different methods for computing I and G agree."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
@@ -406,10 +403,8 @@ def test_currents(DSHAPE_current):
 
 @pytest.mark.slow
 @pytest.mark.unit
-def test_quasisymmetry(DummyStellarator):
-    """Test that the components of grad(B*grad(|B|)) match with numerical gradients
-    for a dummy stellarator example."""
-
+def test_BdotgradB(DummyStellarator):
+    """Test that the components of grad(B*grad(|B|)) match with numerical gradients."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -446,7 +441,6 @@ def test_quasisymmetry(DummyStellarator):
 @pytest.mark.solve
 def test_boozer_transform(DSHAPE_current):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)

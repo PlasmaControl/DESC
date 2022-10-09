@@ -1,3 +1,11 @@
+"""Tests for objective functions.
+
+These generally don't test the accuracy of the computation for realistic examples,
+that is done in test_compute_functions or regression tests.
+
+This module primarily tests the constructing/building/calling methods.
+"""
+
 import numpy as np
 import pytest
 

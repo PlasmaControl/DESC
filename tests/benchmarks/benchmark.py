@@ -1,3 +1,5 @@
+"""Benchmarks for timing comparison."""
+
 import numpy as np
 import os
 import pytest

@@ -1,4 +1,4 @@
-"""Reads benchmarks stored in .benchmarks folder and saves a commit msg with the comparison between the latest commit and the master branch"""
+"""Reads benchmark times and computes differences to comment on PR."""
 import json
 import numpy as np
 import os
@@ -73,8 +73,8 @@ print(latest_commit_index)
 print(master_commit_index)
 commit_msg_lines = [
     "```diff",
-    f"| {'benchmark_name':^31} | {'dt(%)':^19} | {'dt(s)':^19} | {'t_new(s)':^18} | {'t_old(s)':^18} | ",
-    "| ------------------------------- | ------------------- | ------------------- | ------------------ | ------------------ |",
+    f"| {'benchmark_name':^31} | {'dt(%)':^19} | {'dt(s)':^19} | {'t_new(s)':^18} | {'t_old(s)':^18} | ",  # noqa: E501
+    "| ------------------------------- | ------------------- | ------------------- | ------------------ | ------------------ |",  # noqa: E501
 ]
 
 for i, (dt, dpct, sdt, sdpct) in enumerate(
@@ -84,7 +84,7 @@ for i, (dt, dpct, sdt, sdpct) in enumerate(
     line = f"{colors[i]:>1}{test_names[i]:<32} | "
     line += f"{dpct:+.2e}+/-{sdpct:.1e} | "
     line += f"{dt:+.2e}+/-{sdt:.1e} | "
-    line += f"{times[i, latest_commit_index]:.2e}+/-{stddevs[i, latest_commit_index]:.1e} | "
+    line += f"{times[i, latest_commit_index]:.2e}+/-{stddevs[i, latest_commit_index]:.1e} | "  # noqa: E501
     line += (
         f"{times[i, master_commit_index]:.2e}+/-{stddevs[i, master_commit_index]:.1e} |"
     )

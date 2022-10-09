@@ -1,3 +1,5 @@
+"""Tests for basis classes and evaluation functions."""
+
 import pytest
 import numpy as np
 import mpmath

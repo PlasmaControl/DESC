@@ -1,3 +1,5 @@
+"""Regression tests for plotting functions, by comparing to saved baseline images."""
+
 import pytest
 import numpy as np
 
@@ -384,6 +386,7 @@ def test_plot_gradpsi(DSHAPE_current):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_normF_2d(DSHAPE_current):
+    """Test 2d plot of normalized force."""
     grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax = plot_2d(eq, "|F|", norm_F=True, figsize=(4, 4), grid=grid)
@@ -394,6 +397,7 @@ def test_plot_normF_2d(DSHAPE_current):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_normF_section(DSHAPE_current):
+    """Test Poincare section plot of normalized force on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
     return fig
@@ -520,10 +524,6 @@ class TestPlotFieldLines:
         test_point = grid.nodes[0, :] + epsilon
         idx = _find_idx(*test_point, grid=grid)
         assert idx == 0
-
-    @pytest.mark.unit
-    def test_field_line_Rbf(self):
-        pass
 
     @pytest.mark.unit
     @pytest.mark.solve

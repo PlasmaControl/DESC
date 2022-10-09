@@ -1,3 +1,9 @@
+"""Regression tests to verify that DESC agrees with VMEC and itself.
+
+Computes several benchmark equilibria and compares the solutions by measuring the
+difference in areas between constant theta and rho contours.
+"""
+
 import numpy as np
 import pytest
 
@@ -30,7 +36,6 @@ from desc.vmec_utils import vmec_boundary_subspace
 @pytest.mark.solve
 def test_SOLOVEV_vacuum(SOLOVEV_vac):
     """Tests that the SOLOVEV vacuum example gives no rotational transform."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV_vac["desc_h5_path"]))[-1]
     data = eq.compute("|J|")
 
@@ -42,7 +47,6 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 @pytest.mark.solve
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
@@ -54,7 +58,6 @@ def test_SOLOVEV_results(SOLOVEV):
 @pytest.mark.solve
 def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
     np.testing.assert_allclose(rho_err, 0, atol=2e-3)
@@ -65,7 +68,6 @@ def test_DSHAPE_results(DSHAPE):
 @pytest.mark.solve
 def test_DSHAPE_current_results(DSHAPE_current):
     """Tests that the DSHAPE with fixed current gives the same results as VMEC."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, DSHAPE_current["vmec_nc_path"])
     np.testing.assert_allclose(rho_err, 0, atol=2e-3)
@@ -76,7 +78,6 @@ def test_DSHAPE_current_results(DSHAPE_current):
 @pytest.mark.solve
 def test_HELIOTRON_results(HELIOTRON):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
-
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
@@ -87,7 +88,6 @@ def test_HELIOTRON_results(HELIOTRON):
 @pytest.mark.solve
 def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
-
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, HELIOTRON_vac["vmec_nc_path"])
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
@@ -100,7 +100,6 @@ def test_HELIOTRON_vac_results(HELIOTRON_vac):
 @pytest.mark.solve
 def test_precise_QH_results(precise_QH):
     """Tests that the precise QH initial solve gives the same results as a base case."""
-
     eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
@@ -112,7 +111,6 @@ def test_precise_QH_results(precise_QH):
 @pytest.mark.solve
 def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     """Tests that the 2 methods for solving vacuum give the same results."""
-
     eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
@@ -193,7 +191,6 @@ def test_1d_optimization(SOLOVEV):
 @pytest.mark.solve
 def test_1d_optimization_old(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     eq._optimize(
@@ -210,6 +207,7 @@ def test_1d_optimization_old(SOLOVEV):
 
 
 def run_qh_step(n, eq):
+    """Run 1 step of the precise QH optimization example from Landreman & Paul."""
     grid = LinearGrid(
         M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
     )

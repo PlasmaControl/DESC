@@ -1,3 +1,5 @@
+"""Tests for Equilibrium class."""
+
 import os
 import numpy as np
 import pytest
@@ -45,7 +47,6 @@ def test_compute_geometry(DSHAPE_current):
 @pytest.mark.solve
 def test_compute_theta_coords(DSHAPE_current):
     """Test root finding for theta(theta*,lambda(theta))."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
@@ -72,7 +73,6 @@ def test_compute_theta_coords(DSHAPE_current):
 @pytest.mark.solve
 def test_compute_flux_coords(DSHAPE_current):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)

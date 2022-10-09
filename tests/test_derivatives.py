@@ -1,3 +1,5 @@
+"""Tests for jax autodiff wrappers and finite differences."""
+
 import numpy as np
 import pytest
 
@@ -8,7 +10,7 @@ from numpy.random import default_rng
 
 
 class TestDerivative:
-    """Tests Derivative classes"""
+    """Tests Derivative classes."""
 
     @pytest.mark.unit
     def test_finite_diff_vec(self):

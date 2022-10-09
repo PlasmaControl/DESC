@@ -162,11 +162,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._linear_objective.objectives, extra_args=self._args
         )
-        print("constraint args are " + str(self._args))
-        print("obj args are " + str(self._objective.args))
-        print("The size of xp is " + str(xp.shape))
-        print("The size of xpl is " + str(xpl.shape))
-        print("The projection is " + str(self._projectl(xpl)))
+        
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -233,28 +229,27 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._update_equilibrium(x)
         
         # dx/dc linear
-        print("x_idx is " + str(self._linear_objective.x_idx))
-        x_idxl = np.concatenate(
-            [
-                self._objective.x_idx[arg]
-                for arg in ["p_l", "i_l", "c_l", "Psi"]
-                if arg in self._linear_objective.args
-            ]
-        )
-        x_idxl.sort(kind="mergesort")
-        dxdcl = np.eye(self._objective.dim_x)[:, x_idxl]
-        dxdRbl = (
-            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Rb_lmn"]]
-            @ self._Ainvl["Rb_lmn"]
-        )
-        dxdcl = np.hstack((dxdcl, dxdRbl))
-        dxdZbl = (
-            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Zb_lmn"]]
-            @ self._Ainvl["Zb_lmn"]
-        )
-        dxdcl = np.hstack((dxdcl, dxdZbl))
-        print("The shape of dxdcl is " + str(dxdcl.shape))
-        print("The shape of Zl is " + str(self._Zl.shape))
+#        print("x_idx is " + str(self._linear_objective.x_idx))
+#        x_idxl = np.concatenate(
+#            [
+#                self._objective.x_idx[arg]
+#                for arg in ["p_l", "i_l", "c_l", "Psi"]
+#                if arg in self._linear_objective.args
+#            ]
+#        )
+#        x_idxl.sort(kind="mergesort")
+#        dxdcl = np.eye(self._objective.dim_x)[:, x_idxl]
+#        dxdRbl = (
+#            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Rb_lmn"]]
+#            @ self._Ainvl["Rb_lmn"]
+#        )
+#        dxdcl = np.hstack((dxdcl, dxdRbl))
+#        dxdZbl = (
+#            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Zb_lmn"]]
+#            @ self._Ainvl["Zb_lmn"]
+#        )
+#        dxdcl = np.hstack((dxdcl, dxdZbl))
+        
         # dx/dc
         x_idx = np.concatenate(
             [
@@ -275,14 +270,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             @ self._Ainv["Z_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdZb))
-        print("The shape of dxdc is " + str(dxdc.shape))
-        print("The shape of Ainv is " + str(self._Ainv["R_lmn"].shape))
-        pr = 0
-        for i in range(len(dxdc)):
-            if self._projectl(dxdc[i,:])[0] != 0:
-                print(self._projectl(dxdc[i,:]))
-            pr = pr + self._projectl(dxdc[i,:])[0]
-        print("total pr is " + str(pr))
+        
+                 
         # state vectors
         xf = self._eq_objective.x(self._eq)
         xg = self._objective.x(self._eq)
@@ -314,7 +303,37 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 #        GxFx = Gx_reduced @ Fx_reduced_inv
 
 #        LHS  = GxFx @ Fc - Gc
+        print("The shape of dxdc is " + str(dxdc.shape))
+        print("unfixed idxl is " + str(self._unfixed_idxl))
+        tang = jnp.array([])
+        for i in range(len(dxdc)):
+            ti = self._projectl(dxdc[i,:])
+            if np.abs(ti[0]) > 0.00001:
+                print("ti is " + str(ti))
+            tang = jnp.hstack([tang,ti])
+        tang = jnp.atleast_2d(0.001*tang).T
+        #print("tangents are " + str(tang))
+       
+
+        print("computing fx")
+        fx = self._objective.compute(xg)
+        args = (fx,)
+        Gc = jnp.array([])
+        for i in range(len(tang[0])):
+            print("tangent is " + str(tang[:,i]))
+            Gc = jnp.hstack([Gc,self._objective.jvp(tang[:,i],xg)])
         
+        print("Gc new proj is " + str(Gc))
+        Gc = self._recoverl(Gc)
+        print("Gc new is " + str(Gc))
+        
+        #Gc = jnp.array([])
+        #for i in range(len(dxdc[0])):
+        #    Gc = jnp.hstack([Gc,self._objective.jvp(dxdc[:,i],xg)])
+        #print("Gc old is " + str(Gc))
+        #print("Gc old proj is " + str(self._projectl(Gc)))
+
+
         I = jnp.eye(len(xg),len(self._Z))
         #print("The shape of I is " + str(I.shape))
         #print("The shape of Z is " + str(self._Z.shape))
@@ -324,16 +343,17 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         t = I @ self._Z @ Fx_reduced_inv @ Fc
         print("The shape of t is " + str(t.shape))
         
-        num_singular_values = 20
+        num_singular_values = 9
 
         tnorm = jnp.linalg.norm(t,axis=0)
         #print("t is " + str(t))
         #print("tnorm is " + str(tnorm))
-        tnp = np.array(t)
-        tnorm_np = np.array(tnorm)
-        nonzero_col = tnorm_np > 0
-        tnp[:,nonzero_col] /= tnorm_np[nonzero_col]
-        t = jnp.array(tnp)
+        #tnp = np.array(t)
+        #tnorm_np = np.array(tnorm)
+        #nonzero_col = tnorm_np > 0
+        #tnp[:,nonzero_col] /= tnorm_np[nonzero_col]
+        #t = jnp.array(tnp)
+        
         #t = jnp.asarray(t).at([:,nonzero_col]).set(t[:,nonzero_col]/tnorm[nonzero_col])
         
 
@@ -348,50 +368,52 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         print("ts1 is " + str(ts1))
         GxFxFc = jnp.array([])
         gx_eval = 0
+        print("tu1 is " + str(tu1))
         for i in range(len(tu1[0])):
             GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(tu1[:,i],xg)])
             gx_eval = gx_eval + 1
         GxFxFc = GxFxFc @ jnp.diag(ts1) @ tv1
-        #GxFxFc = self._objective.jvp(tu1,xg)*ts1*tv1
+        print("GxFxFc proj is " + str(self._projectl(GxFxFc)))
+        #GxFxFc = self._objective.jvp(tu1.T,xg)*ts1*tv1
 
         #GxFxFc = jnp.array([])
         #for i in range(len(t[0])):
         #    GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(t[:,i],xg)])
         #GxFxFc = self._objective.jvp(t,xg)
 
-        num_singular_values = dxdc.shape[1]
-        dxdc_norm = jnp.linalg.norm(dxdc,axis=0)
-        #print("dxdc is " + str(dxdc))
-        #print("dxdc_norm is " + str(dxdc_norm))
-        dxdc_np = np.array(dxdc)
-        dxdc_norm_np = np.array(dxdc_norm)
-        nonzero_col = dxdc_norm_np > 0
-        dxdc_np[:,nonzero_col] /= dxdc_norm_np[nonzero_col]
-        dxdc = np.array(dxdc_np)
-        #dxdc = jnp.asarray(dxdc).at([:,nonzero_col]).set(dxdc[:,nonzero_col]/dxdc_norm[nonzero_col])
-
-        dxdc_U, dxdc_S, dxdc_V = jnp.linalg.svd(dxdc)
-        #print("The singular values of dxdc are " + str(dxdc_S))
-        dxdc_u1 = dxdc_U[:,:num_singular_values]
-        dxdc_v1 = dxdc_V[:num_singular_values,:]
-        dxdc_s1 = dxdc_S[:num_singular_values]
-        Gc = jnp.array([])
-        for i in range(len(dxdc_u1[0])):
-            Gc = jnp.hstack([Gc,self._objective.jvp(dxdc_u1[:,i],xg)])
-            gx_eval = gx_eval + 1
-        Gc = Gc @ jnp.diag(dxdc_s1) @ dxdc_v1
+#        num_singular_values = dxdc.shape[1]
+#        dxdc_norm = jnp.linalg.norm(dxdc,axis=0)
+#        dxdc_np = np.array(dxdc)
+#        dxdc_norm_np = np.array(dxdc_norm)
+#        nonzero_col = dxdc_norm_np > 0
+#        dxdc_np[:,nonzero_col] /= dxdc_norm_np[nonzero_col]
+#        dxdc = np.array(dxdc_np)
+#
+#        dxdc_U, dxdc_S, dxdc_V = jnp.linalg.svd(dxdc)
+#        #print("The singular values of dxdc are " + str(dxdc_S))
+#        dxdc_u1 = dxdc_U[:,:num_singular_values]
+#        dxdc_v1 = dxdc_V[:num_singular_values,:]
+#        dxdc_s1 = dxdc_S[:num_singular_values]
+#        Gc = jnp.array([])
+#        for i in range(len(dxdc_u1[0])):
+#            Gc = jnp.hstack([Gc,self._objective.jvp(dxdc_u1[:,i],xg)])
+#            gx_eval = gx_eval + 1
+#        Gc = Gc @ jnp.diag(dxdc_s1) @ dxdc_v1
         #Gc = self._objective.jvp(dxdc_u1,xg)*dxdc_s1*dxdc_v1
+        
+
 
         #Gc = jnp.array([])
-        #print("The shape of xg is " + str(xg.shape))
-        print("The shape of dxdc is " + str(dxdc.shape))
-        #print("THE NUMBER OF GX EVALS IS " + str(gx_eval))
         #for i in range(len(dxdc[0])):
         #    Gc = jnp.hstack([Gc,self._objective.jvp(dxdc[:,i],xg)])
         #Gc = self._objective.jvp(dxdc,xg)
 
+        
+        #print("Gc is " + str(Gc))
+        print("GxFxFc is " + str(GxFxFc))
         LHS = jnp.atleast_2d(GxFxFc - Gc)
         #print("The shape of LHS is " + str(LHS))
+        #LHS = jnp.atleast_2d(-Gc)
         return -LHS
 
     def hess(self, x):
@@ -698,18 +720,18 @@ class GXWrapper(_Objective):
         #self.write_input()
         
         self.run_gx()
-        #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
-        ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
+        ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
+        #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         
-        #qflux = ds['Fluxes/qflux']
-        #qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
-        #print(qflux_avg)
+        qflux = ds['Fluxes/qflux']
+        qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
+        print(qflux_avg)
         
-        om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
-        gamma = np.zeros(len(om))
-        for i in range(len(gamma)):
-            gamma[i] = om[i][0][1]
-        print(max(gamma))
+        #om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
+        #gamma = np.zeros(len(om))
+        #for i in range(len(gamma)):
+        #    gamma[i] = om[i][0][1]
+        #print(max(gamma))
         
         #t = str(time.time())
         #nm = 'gx' + t + '.nc'
@@ -719,14 +741,13 @@ class GXWrapper(_Objective):
         
         
 
-        os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
+        os.rename('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
 
         #gamma = 1.0
         #print(gamma)
-        return self._shift_scale(jnp.atleast_1d(max(gamma)))
-        #return self._shift_scale(jnp.atleast_1d(qflux_avg))
-
+        #return self._shift_scale(jnp.atleast_1d(max(gamma)))
+        return self._shift_scale(jnp.atleast_1d(qflux_avg))
     
     def compute_gx_jvp(self,values,tangents):
         print("AT WRAPPER JVP")
@@ -735,12 +756,12 @@ class GXWrapper(_Objective):
         R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi = values
         #primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         primal_out = jnp.atleast_1d(0.0)
-        
+
         n = len(values) 
         argnum = np.arange(0,n,1)
         #fd = FiniteDiffDerivative(self.compute,argnum)
         
-        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-4)
+        jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
         
         return (primal_out, jvp)
 
@@ -1000,7 +1021,7 @@ class GXWrapper(_Objective):
         fs = open('stdout.out','w')
         path = '/home/pk2354/src/gx/'
         #cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
-        cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
+        cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx_nl.in']
         #process = []
         #print(cmd)
         p = subprocess.run(cmd,stdout=fs)

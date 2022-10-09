@@ -443,10 +443,10 @@ class FiniteDiffDerivative(_Derivative):
             print("len(x[3]) is" +  str(len(x[3])))
             return fun(*x)
 
-        fx = fwrap(xarr)
+        #fx = fwrap(xarr)
         
-        #return (fwrap(xarr + h*varr) - fwrap(xarr - h*varr))/(2*h)
-        return (fwrap(xarr+h*varr)-fx)/h
+        return (fwrap(xarr + h*varr) - fwrap(xarr - h*varr))/(2*h)
+        #return (fwrap(xarr+h*varr)-fx)/h
 
     @classmethod
     def _tree2arr(cls, tree):

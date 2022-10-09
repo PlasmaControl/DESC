@@ -297,6 +297,7 @@ class ObjectiveFunction(IOAble):
             Optimization variables.
 
         """
+
         if not isinstance(v, tuple):
             v = (v,)
         if len(v) == 1:

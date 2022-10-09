@@ -331,6 +331,7 @@ class Optimizer(IOAble):
         def jac_wrapped(x_reduced):
             x = recover(x_reduced)
             df = objective.jac(x)
+#            print("df sliced is " + str(df[:,unfixed_idx]))
             return df[:, unfixed_idx] @ Z
 
         if self.method in Optimizer._scipy_scalar_methods:

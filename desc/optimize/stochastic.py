@@ -17,6 +17,9 @@ from .tr_subproblems import (
 from scipy.optimize import OptimizeResult
 
 
+def calc_grad(fun,x,dx):
+    return (fun(x+dx) - fun(x-dx))/np.linalg.norm(dx)
+
 def stoch(
     fun,
     x0,
@@ -119,19 +122,23 @@ def stoch(
 
     n = x0.size
     x = x0.copy()
-    step = 0.05
+    step = 0.00001
     
-    bound = 0.22
-
+    bound = 0.20
+    J = 0
+    delta = np.zeros(len(x))
+    alpha = 0.75
     for i in range(maxiter):
-        step = 0.05 
+        step = 0.00025 
         f = fun(x, *args)
         m = f.size
         nfev += 1
         cost = 0.5 * jnp.dot(f, f)
-        J = jac(x, *args)
+        dx = 0.01*np.ones(len(x))
+        g = calc_grad(fun,x,dx)
+        #J = jac(x, *args)
         njev += 1
-        g = jnp.dot(J.T, f)
+        #g = jnp.dot(J.T, f)
         
         gnorm = np.linalg.norm(g)
         if gnorm < gtol:
@@ -142,15 +149,18 @@ def stoch(
         print("g/gnorm is " + str(g/gnorm))
         
         #x_new = x - step*g/gnorm
-        while np.any(np.abs(x - step*g) > bound*np.ones(len(x))):
+        while np.any(np.abs(x - step*g) > np.abs(bound*np.ones(len(x)))):
             print("hit bound!")
-            step = step / 100
-        x_new = x - step*g
+            step = step / 5
+        x_new = x - step*g + delta
+        delta = alpha*(delta - step*g)
+
         #f_new = fun(x_new,*args)
         #if (f_new-f)/f < -0.05:
         #    x_new = x - 2*step*g/gnorm
         x = x_new
         print("x_new is " + str(x))
+        print("delta is " + str(delta))
         iteration += 1
 
         print("outer loop iteration is " + str(iteration))

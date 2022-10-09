@@ -34,7 +34,7 @@ dependencies:
     - pydocstyle >= 2.0.0
     - flake8-docstrings
     - flake8-eradicate
-
+    - flake8-isort
 
   # testing and benchmarking
   - codecov

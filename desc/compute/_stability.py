@@ -275,7 +275,4 @@ def compute_magnetic_well(
             data["V(r)"] * (dp_drho + dB2_avg_drho) / (data["V_r(r)"] * B2_avg)
         )
 
-        # equivalent method (besides scaling factor) that avoids computing the volume
-        # data["magnetic well"] = data["rho"] * (dp_drho + dB2_avg_drho) / B2_avg
-
     return data

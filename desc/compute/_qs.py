@@ -124,7 +124,7 @@ def compute_boozer_coordinates(
     w_t = w_transform.transform(w_mn, dr=0, dt=1, dz=0)
     w_z = w_transform.transform(w_mn, dr=0, dt=0, dz=1)
 
-    # nu = zeta_Boozer - zeta
+    # nu = zeta_Boozer - zeta   # noqa: E800
     GI = data["G"] + data["iota"] * data["I"]
     data["nu"] = (w - data["I"] * data["lambda"]) / GI
     data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI

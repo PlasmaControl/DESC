@@ -54,19 +54,19 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     x = np.zeros((s.shape[0], m_1.size))
 
     for k in range(len(m_0)):
-        # sin(m*theta)*cos(n*phi)
+        # sin(m*theta)*cos(n*phi)  # noqa: E800
         sin_mn_1 = np.where((mn_1 == [-np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1))[0][
             0
         ]
-        # cos(m*theta)*sin(n*phi)
+        # cos(m*theta)*sin(n*phi)  # noqa: E800
         sin_mn_2 = np.where((mn_1 == [np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1))[0][
             0
         ]
-        # cos(m*theta)*cos(n*phi)
+        # cos(m*theta)*cos(n*phi)  # noqa: E800
         cos_mn_1 = np.where((mn_1 == [np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1))[0][
             0
         ]
-        # sin(m*theta)*sin(n*phi)
+        # sin(m*theta)*sin(n*phi)  # noqa: E800
         cos_mn_2 = np.where((mn_1 == [-np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1))[
             0
         ][0]
@@ -353,28 +353,3 @@ def vmec_boundary_subspace(eq, RBC=None, ZBS=None, RBS=None, ZBC=None):  # noqa:
     boundary_subspace = block_diag(Rb_subspace, Zb_subspace)
     opt_subspace = null_space(boundary_subspace)
     return opt_subspace
-
-
-"""
-# an alternative version of ptolemy_identity_fwd
-def ptolemy_identity_fwd(modes, xm, xn, mns, mnc):
-    f = np.zeros((modes.shape[0],))
-    for i in range(len(xm)):
-        m = xm[i]
-        n = xn[i]
-        if np.sum(mns.shape):
-            if m != 0:  # sin(m*t) * cos(n*p)
-                idx = np.where((modes == [0, -np.abs(m), np.abs(n)]).all(axis=1))[0]
-                f[idx] += np.sign(m) * mns[i]
-            if n != 0:  # cos(m*t) * sin(n*p)
-                idx = np.where((modes == [0, np.abs(m), -np.abs(n)]).all(axis=1))[0]
-                f[idx] += -np.sign(n) * mns[i]
-        if np.sum(mnc.shape):
-            # cos(m*t) * cos(n*p)
-            idx = np.where((modes == [0, np.abs(m), np.abs(n)]).all(axis=1))[0]
-            f[idx] += mnc[i]
-            if m != 0 and n != 0:  # sin(m*t) * sin(n*p)
-                idx = np.where((modes == [0, -np.abs(m), -np.abs(n)]).all(axis=1))[0]
-                f[idx] += np.sign(m) * np.sign(n) * mnc[i]
-    return f
-"""

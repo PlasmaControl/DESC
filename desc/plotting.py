@@ -2248,11 +2248,7 @@ def plot_basis(basis, **kwargs):
         t = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta))
         z = grid.nodes[:, 2].reshape((grid.num_theta, grid.num_zeta))
         fig = plt.figure(
-            # 2 * mmax + 1,
-            # 2 * nmax + 1,
             figsize=kwargs.get("figsize", (nmax * 4 + 1, mmax * 4 + 1)),
-            # sharex=True,
-            # sharey=True,
         )
         wratios = np.ones(2 * nmax + 2)
         wratios[-1] = kwargs.get("cbar_ratio", 0.25)

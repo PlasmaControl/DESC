@@ -59,7 +59,7 @@ def compute_toroidal_flux(
     """
     data = compute_flux_coords(grid, data=data)
 
-    # psi = Psi / 2*pi
+    # psi = Psi / 2*pi  # noqa: E800
     data["psi"] = Psi * data["rho"] ** 2 / (2 * jnp.pi)
     data["psi_r"] = 2 * Psi * data["rho"] / (2 * jnp.pi)
     data["psi_rr"] = 2 * Psi * jnp.ones_like(data["rho"]) / (2 * jnp.pi)

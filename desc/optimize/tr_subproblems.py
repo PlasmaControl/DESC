@@ -121,7 +121,7 @@ def solve_trust_region_2d_subspace(
 
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]
-    # p = Sq
+    # p = Sq                    # noqa: E800
 
     try:
         R, lower = cho_factor(B)
@@ -415,8 +415,8 @@ def get_boundaries_intersections(z, d, trust_radius):
 
     # The following calculation is mathematically
     # equivalent to:
-    # ta = (-b - sqrt_discriminant) / (2*a)
-    # tb = (-b + sqrt_discriminant) / (2*a)
+    # ta = (-b - sqrt_discriminant) / (2*a)    # noqa: E800
+    # tb = (-b + sqrt_discriminant) / (2*a)    # noqa: E800
     # but produce smaller round off errors.
     # Look at Matrix Computation p.97
     # for a better justification.

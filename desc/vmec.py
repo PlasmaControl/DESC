@@ -901,7 +901,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
-        # J^theta * sqrt(g)
+        # J^theta * sqrt(g)   # noqa: E800
         timer.start("J^theta")
         if verbose > 0:
             print("Saving J^theta")
@@ -951,7 +951,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^theta")
 
-        # J^zeta * sqrt(g)
+        # J^zeta * sqrt(g)   # noqa: E800
         timer.start("J^zeta")
         if verbose > 0:
             print("Saving J^zeta")

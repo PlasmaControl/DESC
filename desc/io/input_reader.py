@@ -1149,7 +1149,7 @@ class InputReader:
                     warnings.warn(colored("m is negative!", "yellow"))
                     m = abs(m)
                 RBC = numbers[2]
-                # RBC*cos(m*t)*cos(n*p)
+                # RBC*cos(m*t)*cos(n*p)  # noqa: E800
                 m_idx = np.where(inputs["surface"][:, 0] == m)[0]
                 n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
@@ -1247,7 +1247,7 @@ class InputReader:
                     warnings.warn(colored("m is negative!", "yellow"))
                     m = abs(m)
                 ZBC = numbers[2]
-                # ZBC*cos(m*t)*cos(n*p)
+                # ZBC*cos(m*t)*cos(n*p)  # noqa: E800
                 m_idx = np.where(inputs["surface"][:, 0] == m)[0]
                 n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]

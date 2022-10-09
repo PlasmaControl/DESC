@@ -33,6 +33,7 @@ dependencies:
   - pip:
     - pydocstyle >= 2.0.0
     - flake8-docstrings
+    - flake8-eradicate
 
 
   # testing and benchmarking

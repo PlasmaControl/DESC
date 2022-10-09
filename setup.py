@@ -62,7 +62,7 @@ setup(
     entry_points={"console_scripts": ["desc=desc.__main__:main"]},
     project_urls={
         "Issues Tracker": "https://github.com/PlasmaControl/DESC/issues",
-        "Contributing": "https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst", # noqa: E501
+        "Contributing": "https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst",  # noqa: E501
         "Source Code": "https://github.com/PlasmaControl/DESC/",
         "Documentation": "https://desc-docs.readthedocs.io/",
     },

@@ -2682,8 +2682,8 @@ def plot_field_lines_sfl(
     )  # list of nodes in (rho,theta,phi) corresponding to each (rho,vartheta,phi)
     print(
         (
-            "Calculating field line (rho,theta,zeta) coordinates corresponding ",
-            +"to sfl coordinates",
+            "Calculating field line (rho,theta,zeta) coordinates corresponding "
+            + "to sfl coordinates",
         )
     )
     for vartheta_list in varthetas:

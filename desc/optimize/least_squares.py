@@ -12,12 +12,12 @@ from .tr_subproblems import (
     update_tr_radius,
 )
 from .utils import (
+    STATUS_MESSAGES,
     check_termination,
     compute_jac_scale,
     evaluate_quadratic,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    status_messages,
 )
 
 
@@ -187,7 +187,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
         if g_norm < gtol:
             success = True
-            message = status_messages["gtol"]
+            message = STATUS_MESSAGES["gtol"]
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration, nfev, cost, actual_reduction, step_norm, g_norm
@@ -312,7 +312,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 stop = callback(np.copy(x), *args)
                 if stop:
                     success = False
-                    message = status_messages["callback"]
+                    message = STATUS_MESSAGES["callback"]
                     break
 
         else:

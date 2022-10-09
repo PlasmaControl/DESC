@@ -165,7 +165,11 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
-        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (len(args) == 0), (
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or (len(args) == 0)
+        ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
             + "positional arguments or only keyword arguments."
         )
@@ -696,7 +700,11 @@ class ZernikeRZToroidalSection(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
-        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (len(args) == 0), (
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or (len(args) == 0)
+        ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
             + "positional arguments or only keyword arguments."
         )

@@ -7,7 +7,7 @@ from desc.backend import put, sign
 
 
 @pytest.mark.unit
-def test_put(self):
+def test_put():
     """Test put function as replacement for fancy array indexing."""
     a = np.array([0, 0, 0])
     b = np.array([1, 2, 3])
@@ -18,7 +18,7 @@ def test_put(self):
 
 
 @pytest.mark.unit
-def test_sign(self):
+def test_sign():
     """Test modified sign function to return +1 for x=0."""
     assert sign(4) == 1
     assert sign(0) == 1

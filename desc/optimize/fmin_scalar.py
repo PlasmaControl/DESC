@@ -11,11 +11,11 @@ from .tr_subproblems import (
     update_tr_radius,
 )
 from .utils import (
+    STATUS_MESSAGES,
     check_termination,
     evaluate_quadratic_form,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    status_messages,
 )
 
 
@@ -257,7 +257,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
             except np.linalg.linalg.LinAlgError:
                 success = False
-                message = status_messages["err"]
+                message = STATUS_MESSAGES["err"]
                 break
 
             # geodesic acceleration
@@ -354,7 +354,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
                 stop = callback(np.copy(x), *args)
                 if stop:
                     success = False
-                    message = status_messages["callback"]
+                    message = STATUS_MESSAGES["callback"]
                     break
 
             if return_all:

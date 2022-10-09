@@ -87,7 +87,7 @@ class TestInputReader:
             pathlib.Path("./" + self.argv2[0]).resolve()
         ), "Path to input file is incorrect."
         # Test defaults
-        assert ir.args.plot is False, "plot is not default False"
+        assert ir.args.plot == 0, "plot is not default 0"
         assert ir.args.quiet is False, "quiet is not default False"
         assert ir.args.verbose == 1, "verbose is not default 1"
         assert ir.args.numpy is False, "numpy is not default False"

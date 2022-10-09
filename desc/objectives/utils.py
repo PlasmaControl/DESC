@@ -2,26 +2,27 @@
 
 import numpy as np
 
-from desc.backend import jnp, put, block_diag
-from desc.utils import svd_inv_null
+from desc.backend import block_diag, jnp, put
 from desc.compute import arg_order
-from .objective_funs import ObjectiveFunction
+from desc.utils import svd_inv_null
+
+from ._equilibrium import (
+    CurrentDensity,
+    Energy,
+    ForceBalance,
+    HelicalForceBalance,
+    RadialForceBalance,
+)
 from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
+    FixCurrent,
+    FixIota,
     FixLambdaGauge,
     FixPressure,
-    FixIota,
-    FixCurrent,
     FixPsi,
 )
-from ._equilibrium import (
-    Energy,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
-    CurrentDensity,
-)
+from .objective_funs import ObjectiveFunction
 
 
 def get_fixed_boundary_constraints(profiles=True, iota=True):

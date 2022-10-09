@@ -1,13 +1,14 @@
 """Test fixtures for computing equilibria etc."""
 
-import pytest
 import os
+
 import h5py
 import numpy as np
+import pytest
 from netCDF4 import Dataset
 
-from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.__main__ import main
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.vmec import VMECIO
 
 

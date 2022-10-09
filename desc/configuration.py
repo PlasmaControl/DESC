@@ -11,21 +11,21 @@ import numpy as np
 from termcolor import colored
 
 import desc.compute as compute_funs
-from desc.backend import jnp, jit, put, while_loop
+from desc.backend import jit, jnp, put, while_loop
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-from desc.compute import arg_order, data_index, compute_jacobian
+from desc.compute import arg_order, compute_jacobian, data_index
 from desc.compute.utils import compress
 from desc.geometry import (
-    FourierRZToroidalSurface,
-    ZernikeRZToroidalSection,
     FourierRZCurve,
+    FourierRZToroidalSurface,
     Surface,
+    ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import IOAble, load
-from desc.profiles import Profile, PowerSeriesProfile, SplineProfile
+from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
 from desc.transform import Transform
-from desc.utils import copy_coeffs, Index
+from desc.utils import Index, copy_coeffs
 
 
 class _Configuration(IOAble, ABC):

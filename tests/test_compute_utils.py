@@ -4,7 +4,6 @@ import numpy as np
 import pytest
 
 import desc.io
-from desc.grid import ConcentricGrid, LinearGrid
 from desc.compute.utils import (
     _get_grid_surface,
     compress,
@@ -12,6 +11,7 @@ from desc.compute.utils import (
     surface_averages,
     surface_integrals,
 )
+from desc.grid import ConcentricGrid, LinearGrid
 
 
 def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):

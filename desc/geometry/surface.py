@@ -1,16 +1,19 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
-import numpy as np
-import warnings
 import numbers
-from desc.backend import jnp, sign, put
-from desc.utils import copy_coeffs
-from desc.grid import Grid, LinearGrid
+import warnings
+
+import numpy as np
+
+from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.transform import Transform
+from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
+from desc.transform import Transform
+from desc.utils import copy_coeffs
+
 from .core import Surface
-from .utils import rpz2xyz_vec, rpz2xyz
+from .utils import rpz2xyz, rpz2xyz_vec
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 

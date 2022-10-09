@@ -5,10 +5,10 @@ import pytest
 
 from desc.geometry.utils import (
     rotation_matrix,
-    xyz2rpz,
-    xyz2rpz_vec,
     rpz2xyz,
     rpz2xyz_vec,
+    xyz2rpz,
+    xyz2rpz_vec,
 )
 
 

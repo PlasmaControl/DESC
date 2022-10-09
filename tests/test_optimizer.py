@@ -2,24 +2,24 @@
 
 import numpy as np
 import pytest
-
-from desc.backend import jnp
-from desc.optimize import fmintr, lsqtr, Optimizer
-from desc.optimize.utils import make_spd, chol_U_update
-from scipy.optimize import rosen, rosen_der, rosen_hess
-from desc.derivatives import Derivative
 from numpy.random import default_rng
+from scipy.optimize import rosen, rosen_der, rosen_hess
+
+import desc.examples
+from desc.backend import jnp
+from desc.derivatives import Derivative
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
     FixBoundaryR,
     FixBoundaryZ,
-    FixPressure,
     FixIota,
+    FixPressure,
     FixPsi,
+    ForceBalance,
+    ObjectiveFunction,
 )
 from desc.objectives.objective_funs import _Objective
-import desc.examples
+from desc.optimize import Optimizer, fmintr, lsqtr
+from desc.optimize.utils import chol_U_update, make_spd
 
 
 def fun(x, p):

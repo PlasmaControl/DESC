@@ -1,15 +1,17 @@
 """Functions for perturbing equilibria."""
 
-import numpy as np
 import warnings
+
+import numpy as np
 from termcolor import colored
-from desc.objectives.utils import factorize_linear_constraints
-from desc.backend import use_jax, put
-from desc.utils import Timer
+
+from desc.backend import put, use_jax
 from desc.compute import arg_order
-from desc.optimize.utils import evaluate_quadratic
-from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.objectives import get_fixed_boundary_constraints
+from desc.objectives.utils import factorize_linear_constraints
+from desc.optimize.tr_subproblems import trust_region_step_exact_svd
+from desc.optimize.utils import evaluate_quadratic
+from desc.utils import Timer
 
 __all__ = ["perturb", "optimal_perturb"]
 

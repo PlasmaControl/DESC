@@ -1,15 +1,16 @@
 """Classes for magnetic fields."""
 
-import numpy as np
 from abc import ABC, abstractmethod
+
+import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import jnp, jit, odeint
-from desc.io import IOAble
-from desc.grid import Grid
-from desc.interpolate import interp3d, _approx_df
+from desc.backend import jit, jnp, odeint
 from desc.derivatives import Derivative
-from desc.geometry.utils import xyz2rpz, rpz2xyz_vec
+from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
+from desc.grid import Grid
+from desc.interpolate import _approx_df, interp3d
+from desc.io import IOAble
 
 
 # TODO: vectorize this over multiple coils

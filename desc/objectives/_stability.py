@@ -1,11 +1,13 @@
 """Objectives for targeting MHD stability."""
 
 import numpy as np
-from desc.utils import Timer
+
+from desc.compute import compute_magnetic_well, compute_mercier_stability, data_index
+from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.transform import Transform
-from desc.compute.utils import compress
-from desc.compute import data_index, compute_mercier_stability, compute_magnetic_well
+from desc.utils import Timer
+
 from .objective_funs import _Objective
 
 

@@ -1,19 +1,19 @@
 """Tests for reading/writing/converting VMEC data."""
 
-import pytest
 import numpy as np
+import pytest
 from netCDF4 import Dataset
 
-from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
+    fourier_to_zernike,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
-    fourier_to_zernike,
-    zernike_to_fourier,
     vmec_boundary_subspace,
+    zernike_to_fourier,
 )
 
 

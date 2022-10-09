@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
+import desc.examples
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
-import desc.examples
 
 
 class TestFourierRZToroidalSurface:

@@ -7,16 +7,15 @@ Linear objective functions must be of the form `A*x-b`, where:
 """
 
 import warnings
+from abc import ABC
 
 import numpy as np
 from termcolor import colored
 
-from abc import ABC
-
 from desc.backend import jnp
-from desc.basis import zernike_radial_coeffs, zernike_radial
-from .objective_funs import _Objective
+from desc.basis import zernike_radial, zernike_radial_coeffs
 
+from .objective_funs import _Objective
 
 # TODO: need dim_x attribute
 

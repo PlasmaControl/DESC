@@ -3,14 +3,14 @@
 import numpy as np
 import pytest
 
-from desc.grid import Grid, LinearGrid, ConcentricGrid
 from desc.basis import (
-    PowerSeries,
-    FourierSeries,
     DoubleFourierSeries,
-    ZernikePolynomial,
+    FourierSeries,
     FourierZernikeBasis,
+    PowerSeries,
+    ZernikePolynomial,
 )
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
 

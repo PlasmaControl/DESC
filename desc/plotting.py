@@ -1,22 +1,23 @@
 """Functions for plotting and visualizing equilibria."""
 
-from matplotlib import rcParams, cycler
-import matplotlib
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import numpy as np
 import numbers
 import tkinter
-from termcolor import colored
 import warnings
-from scipy.interpolate import Rbf
-from scipy.integrate import solve_ivp
 
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import cycler, rcParams
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.integrate import solve_ivp
+from scipy.interpolate import Rbf
+from termcolor import colored
+
+from desc.basis import DoubleFourierSeries, fourier, zernike_radial_poly
+from desc.compute import data_index
 from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid, QuadratureGrid
-from desc.basis import zernike_radial_poly, fourier, DoubleFourierSeries
 from desc.transform import Transform
-from desc.compute import data_index
 from desc.utils import flatten_list
 
 __all__ = [

@@ -3,8 +3,9 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
+
 from .data_index import data_index
-from .utils import check_derivs, dot, cross, surface_averages, surface_integrals
+from .utils import check_derivs, cross, dot, surface_averages, surface_integrals
 
 
 def compute_flux_coords(

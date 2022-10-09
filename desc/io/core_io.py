@@ -1,7 +1,7 @@
 """Base classes for input/output readers and writers."""
 
-from abc import ABC, abstractmethod
 import os
+from abc import ABC, abstractmethod
 
 
 class IO(ABC):

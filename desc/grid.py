@@ -1,9 +1,9 @@
 """Classes for representing flux coordinates."""
 
 import numpy as np
+from scipy import special
 
 from desc.io import IOAble
-from scipy import special
 
 __all__ = ["Grid", "LinearGrid", "QuadratureGrid", "ConcentricGrid"]
 

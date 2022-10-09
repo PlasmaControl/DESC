@@ -1,8 +1,9 @@
 """Utility functions used in optimization problems."""
 
 import numpy as np
-from desc.backend import jnp
 import scipy.sparse
+
+from desc.backend import jnp
 
 
 def min_eig_est(A, tol=1e-2):

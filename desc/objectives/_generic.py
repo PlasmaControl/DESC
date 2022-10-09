@@ -1,19 +1,17 @@
 """Generic objectives that don't belong anywhere else."""
 
 from inspect import signature
+
 from scipy.constants import mu_0
 
+import desc.compute as compute_funs
 from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
-import desc.compute as compute_funs
-from desc.compute import (
-    arg_order,
-    data_index,
-    compute_quasisymmetry_error,
-)
-from desc.grid import QuadratureGrid, LinearGrid
+from desc.compute import arg_order, compute_quasisymmetry_error, data_index
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
+
 from .objective_funs import _Objective
 
 

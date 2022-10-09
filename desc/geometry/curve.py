@@ -1,14 +1,17 @@
 """Classes for parameterized 3D space curves."""
 
-import numpy as np
 import numbers
+
+import numpy as np
+
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from .core import Curve
-from .utils import xyz2rpz, rpz2xyz, xyz2rpz_vec, rpz2xyz_vec
-from desc.transform import Transform
 from desc.grid import Grid, LinearGrid
+from desc.transform import Transform
 from desc.utils import copy_coeffs
+
+from .core import Curve
+from .utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 __all__ = [
     "FourierRZCurve",

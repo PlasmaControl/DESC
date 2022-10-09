@@ -3,15 +3,16 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from .utils import check_derivs, dot, surface_averages
+
 from ._core import (
-    compute_toroidal_flux,
-    compute_rotational_transform,
-    compute_lambda,
-    compute_jacobian,
-    compute_covariant_metric_coefficients,
     compute_contravariant_metric_coefficients,
+    compute_covariant_metric_coefficients,
+    compute_jacobian,
+    compute_lambda,
+    compute_rotational_transform,
+    compute_toroidal_flux,
 )
+from .utils import check_derivs, dot, surface_averages
 
 
 def compute_contravariant_magnetic_field(  # noqa: C901

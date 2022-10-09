@@ -7,7 +7,7 @@ import desc.io
 from desc.compute import data_index
 from desc.compute._core import compute_rotational_transform
 from desc.compute.utils import compress
-from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
 

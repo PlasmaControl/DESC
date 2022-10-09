@@ -1,30 +1,32 @@
 """Class for wrapping a number of common optimization methods."""
 
+import warnings
+
 import numpy as np
 import scipy.optimize
-import warnings
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.utils import Timer
 from desc.io import IOAble
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
     CurrentDensity,
-    WrappedEquilibriumObjective,
-    FixIota,
     FixCurrent,
+    FixIota,
+    ForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+    RadialForceBalance,
+    WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
+from desc.utils import Timer
+
 from .utils import (
     check_termination,
+    find_matching_inds,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    find_matching_inds,
 )
 
 

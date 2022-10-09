@@ -1,7 +1,8 @@
 """Utility functions, independent of the rest of DESC."""
 
-import numpy as np
 import warnings
+
+import numpy as np
 from termcolor import colored
 
 

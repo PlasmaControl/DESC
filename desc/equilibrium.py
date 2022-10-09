@@ -1,29 +1,30 @@
 """Core class representing MHD equilibrium."""
 
-import numpy as np
-import warnings
 import numbers
-from termcolor import colored
+import warnings
 from collections.abc import MutableSequence
+
+import numpy as np
 from scipy import special
 from scipy.constants import mu_0
+from termcolor import colored
 
 from desc.backend import use_jax
-from desc.utils import Timer, isalmostequal
-from desc.io import IOAble
+from desc.basis import FourierZernikeBasis
 from desc.configuration import _Configuration
 from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
 from desc.grid import LinearGrid
-from desc.basis import FourierZernikeBasis
-from desc.transform import Transform
-from desc.optimize import Optimizer
+from desc.io import IOAble
 from desc.objectives import (
-    ObjectiveFunction,
     ForceBalance,
+    ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
 )
+from desc.optimize import Optimizer
 from desc.perturbations import perturb
+from desc.transform import Transform
+from desc.utils import Timer, isalmostequal
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -645,9 +646,10 @@ class Equilibrium(_Configuration, IOAble):
         """
         import inspect
         from copy import deepcopy
-        from desc.perturbations import optimal_perturb
-        from desc.optimize.utils import check_termination
+
         from desc.optimize.tr_subproblems import update_tr_radius
+        from desc.optimize.utils import check_termination
+        from desc.perturbations import optimal_perturb
 
         if constraint is None:
             constraint = get_equilibrium_objective()

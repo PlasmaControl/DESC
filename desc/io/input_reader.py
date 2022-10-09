@@ -1,14 +1,16 @@
 """Class for reading and writing DESC and VMEC input files."""
 
 import argparse
-import pathlib
-import warnings
-import os
-import re
 import io
-import numpy as np
+import os
+import pathlib
+import re
+import warnings
 from datetime import datetime
+
+import numpy as np
 from termcolor import colored
+
 from desc import set_device
 
 

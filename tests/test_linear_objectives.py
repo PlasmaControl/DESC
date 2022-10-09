@@ -5,11 +5,7 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.objectives import (
-    FixLambdaGauge,
-    FixCurrent,
-    FixIota,
-)
+from desc.objectives import FixCurrent, FixIota, FixLambdaGauge
 from desc.profiles import PowerSeriesProfile
 
 

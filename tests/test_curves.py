@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
 from desc.grid import LinearGrid
 
 

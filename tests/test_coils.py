@@ -2,9 +2,10 @@
 
 import numpy as np
 import pytest
-from desc.grid import LinearGrid, Grid
-from desc.coils import CoilSet, FourierRZCoil, FourierXYZCoil, FourierPlanarCoil
+
+from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
 from desc.geometry import FourierRZCurve
+from desc.grid import Grid, LinearGrid
 
 
 class TestCoil:

@@ -2,14 +2,15 @@
 
 import numpy as np
 import pytest
-from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.profiles import PowerSeriesProfile, SplineProfile
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.profiles import PowerSeriesProfile, SplineProfile
 
 
 class TestConstructor:

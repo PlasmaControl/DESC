@@ -1,9 +1,9 @@
 """Setup/build/install script for DESC."""
 
-import versioneer
-from setuptools import setup, find_packages
 import os
 
+import versioneer
+from setuptools import find_packages, setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 

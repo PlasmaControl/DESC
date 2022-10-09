@@ -1,10 +1,12 @@
 """Functions needed by other tests for computing differences between equilibria."""
 
 import os
+
 import numpy as np
 from shapely.geometry import Polygon
-from desc.vmec import VMECIO
+
 from desc.grid import Grid, LinearGrid
+from desc.vmec import VMECIO
 
 
 def compute_coords(equil, check_all_zeta=False):

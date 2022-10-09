@@ -22,9 +22,10 @@ def main(cl_args=sys.argv[1:]):
     if ir.args.verbose:
         print(desc.BANNER)
 
-    from desc.equilibrium import EquilibriaFamily
-    from desc.plotting import plot_surfaces, plot_section
     import matplotlib.pyplot as plt
+
+    from desc.equilibrium import EquilibriaFamily
+    from desc.plotting import plot_section, plot_surfaces
 
     if ir.args.verbose:
         print("Reading input from {}".format(ir.input_path))

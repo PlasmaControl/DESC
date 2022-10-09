@@ -1,7 +1,7 @@
 """Tests for backend functions."""
 
-import pytest
 import numpy as np
+import pytest
 
 from desc.backend import put, sign
 

@@ -1,10 +1,12 @@
 """DESC: a 3D MHD equilibrium solver and stellarator optimization suite."""
 
-import colorama
 import os
 import re
 import warnings
+
+import colorama
 from termcolor import colored
+
 from ._version import get_versions
 
 __version__ = get_versions()["version"]

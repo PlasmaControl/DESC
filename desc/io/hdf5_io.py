@@ -1,9 +1,11 @@
 """Classes for reading and writing HDF5 files."""
 
-import warnings
 import pydoc
-import numpy as np
+import warnings
+
 import h5py
+import numpy as np
+
 from .core_io import IO, Reader, Writer
 
 

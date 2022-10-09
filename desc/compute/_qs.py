@@ -1,13 +1,14 @@
 """Compute functions for quasisymmetry objectives."""
 
 from desc.backend import jnp, put, sign
-from .utils import check_derivs
+
 from ._field import (
-    compute_magnetic_field_magnitude,
-    compute_covariant_magnetic_field,
     compute_B_dot_gradB,
     compute_boozer_magnetic_field,
+    compute_covariant_magnetic_field,
+    compute_magnetic_field_magnitude,
 )
+from .utils import check_derivs
 
 
 def compute_boozer_coordinates(

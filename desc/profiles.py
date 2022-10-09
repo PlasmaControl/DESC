@@ -1,17 +1,18 @@
 """Profile objects for representing pressure, rotational transform, etc."""
 
-import numpy as np
 import warnings
 from abc import ABC, abstractmethod
+
+import numpy as np
 import scipy.optimize
 
-from desc.backend import jnp, jit, put, sign
-from desc.io import IOAble
-from desc.grid import Grid, LinearGrid
-from desc.interpolate import interp1d, _approx_df
-from desc.transform import Transform
-from desc.basis import PowerSeries, FourierZernikeBasis
+from desc.backend import jit, jnp, put, sign
+from desc.basis import FourierZernikeBasis, PowerSeries
 from desc.derivatives import Derivative
+from desc.grid import Grid, LinearGrid
+from desc.interpolate import _approx_df, interp1d
+from desc.io import IOAble
+from desc.transform import Transform
 from desc.utils import copy_coeffs
 
 

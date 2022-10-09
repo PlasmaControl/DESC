@@ -3,18 +3,14 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from .utils import (
-    check_derivs,
-    dot,
-    surface_averages,
-    surface_integrals,
-)
-from ._core import compute_pressure, compute_toroidal_flux_gradient, compute_geometry
+
+from ._core import compute_geometry, compute_pressure, compute_toroidal_flux_gradient
 from ._field import (
-    compute_magnetic_field_magnitude,
     compute_boozer_magnetic_field,
     compute_contravariant_current_density,
+    compute_magnetic_field_magnitude,
 )
+from .utils import check_derivs, dot, surface_averages, surface_integrals
 
 
 def compute_mercier_stability(

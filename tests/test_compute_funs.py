@@ -5,7 +5,7 @@ import pytest
 from scipy.signal import convolve2d
 
 from desc.compute.utils import compress
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 
 # convolve kernel is reverse of FD coeffs

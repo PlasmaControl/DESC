@@ -1,22 +1,24 @@
 """Function for solving nonlinear least squares problems."""
 
 import numpy as np
+from scipy.optimize import OptimizeResult
 from termcolor import colored
+
 from desc.backend import jnp
+
+from .tr_subproblems import (
+    trust_region_step_exact_cho,
+    trust_region_step_exact_svd,
+    update_tr_radius,
+)
 from .utils import (
     check_termination,
+    compute_jac_scale,
+    evaluate_quadratic,
     print_header_nonlinear,
     print_iteration_nonlinear,
     status_messages,
-    compute_jac_scale,
-    evaluate_quadratic,
 )
-from .tr_subproblems import (
-    trust_region_step_exact_svd,
-    trust_region_step_exact_cho,
-    update_tr_radius,
-)
-from scipy.optimize import OptimizeResult
 
 
 def lsqtr(  # noqa: C901 - FIXME: simplify this

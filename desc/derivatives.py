@@ -1,10 +1,11 @@
 """Wrapper classes for JAX automatic differentiation and finite differences."""
 
-import numpy as np
 from abc import ABC, abstractmethod
+
+import numpy as np
 from termcolor import colored
 
-from desc.backend import use_jax, put, jnp
+from desc.backend import jnp, put, use_jax
 
 if use_jax:
     import jax

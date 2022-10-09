@@ -1,15 +1,17 @@
 """Objectives for targeting quasisymmetry."""
 
 import numpy as np
+
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
-    data_index,
     compute_boozer_coordinates,
     compute_quasisymmetry_error,
+    data_index,
 )
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
+
 from .objective_funs import _Objective
 
 

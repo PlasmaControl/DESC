@@ -1,20 +1,20 @@
 """Tests for reading/writing intput/output, both ascii and binary."""
 
-import pytest
 import os
 import pathlib
-import h5py
 import shutil
-import numpy as np
 
-from desc.io import InputReader, load
-from desc.io import hdf5Writer, hdf5Reader
-from desc.io.ascii_io import write_ascii, read_ascii
-from desc.utils import equals
-from desc.grid import LinearGrid
+import h5py
+import numpy as np
+import pytest
+
 from desc.basis import FourierZernikeBasis
-from desc.transform import Transform
 from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
+from desc.io import InputReader, hdf5Reader, hdf5Writer, load
+from desc.io.ascii_io import read_ascii, write_ascii
+from desc.transform import Transform
+from desc.utils import equals
 
 
 @pytest.mark.unit

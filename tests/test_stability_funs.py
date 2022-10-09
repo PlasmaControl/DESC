@@ -4,11 +4,11 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 import desc.io
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
-import desc.examples
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2

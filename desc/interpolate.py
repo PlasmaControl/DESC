@@ -1,8 +1,9 @@
 """Functions for interpolating splines that are JAX differentiable."""
 
-import numpy as np
-from collections import OrderedDict
 import numbers
+from collections import OrderedDict
+
+import numpy as np
 
 from desc.backend import jnp
 

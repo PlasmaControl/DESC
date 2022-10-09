@@ -1,11 +1,12 @@
 """Classes for handling derivatives needed for optimization."""
 
-import numpy as np
 from abc import ABC, abstractmethod
+
+import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, cho_solve
-from desc.optimize.utils import make_spd, chol_U_update, compute_jac_scale
+from desc.backend import cho_solve, jnp
+from desc.optimize.utils import chol_U_update, compute_jac_scale, make_spd
 
 
 class OptimizerDerivative(ABC):

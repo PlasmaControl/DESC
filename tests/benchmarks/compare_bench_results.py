@@ -1,7 +1,8 @@
 """Reads benchmark times and computes differences to comment on PR."""
 import json
-import numpy as np
 import os
+
+import numpy as np
 
 cwd = os.getcwd()
 

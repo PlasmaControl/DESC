@@ -1,12 +1,14 @@
 """Classes for spectral bases and functions for evaluation."""
 
-import numpy as np
-import mpmath
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import flatten_list
+
+import mpmath
+import numpy as np
+
+from desc.backend import fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
-from desc.backend import jnp, jit, sign, fori_loop, gammaln
+from desc.utils import flatten_list
 
 __all__ = [
     "PowerSeries",

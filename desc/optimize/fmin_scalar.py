@@ -1,8 +1,15 @@
 """Function for minimizing a scalar function of multiple variables."""
 
 import numpy as np
+from scipy.optimize import OptimizeResult
 from termcolor import colored
+
 from .derivative import CholeskyHessian
+from .tr_subproblems import (
+    solve_trust_region_2d_subspace,
+    solve_trust_region_dogleg,
+    update_tr_radius,
+)
 from .utils import (
     check_termination,
     evaluate_quadratic_form,
@@ -10,12 +17,6 @@ from .utils import (
     print_iteration_nonlinear,
     status_messages,
 )
-from .tr_subproblems import (
-    solve_trust_region_dogleg,
-    solve_trust_region_2d_subspace,
-    update_tr_radius,
-)
-from scipy.optimize import OptimizeResult
 
 
 def fmintr(  # noqa: C901 - FIXME: simplify this

@@ -8,28 +8,29 @@ import numpy as np
 import pytest
 
 import desc.examples
-from .utils import area_difference_vmec, area_difference_desc
-from desc.io import load
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
-from desc.profiles import PowerSeriesProfile
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.io import load
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
-    QuasisymmetryTwoTerm,
     AspectRatio,
     FixBoundaryR,
     FixBoundaryZ,
-    FixPressure,
-    FixIota,
     FixCurrent,
+    FixIota,
+    FixPressure,
     FixPsi,
+    ForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+    QuasisymmetryTwoTerm,
+    RadialForceBalance,
 )
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
+from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
+
+from .utils import area_difference_desc, area_difference_vmec
 
 
 @pytest.mark.regression

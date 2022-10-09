@@ -1,15 +1,18 @@
 """Functions and methods for saving and loading equilibria and other objects."""
 
+import copy
 import os
 import pickle
-import copy
-import h5py
 import pydoc
 from abc import ABC
+
+import h5py
 from termcolor import colored
+
 from desc.utils import equals
-from .pickle_io import PickleReader, PickleWriter
+
 from .hdf5_io import hdf5Reader, hdf5Writer
+from .pickle_io import PickleReader, PickleWriter
 
 
 def load(load_from, file_format=None):

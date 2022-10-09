@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 
 from desc.backend import jnp
 from desc.io import IOAble
-from .utils import rotation_matrix, reflection_matrix
+
+from .utils import reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, ABC):

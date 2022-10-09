@@ -1,11 +1,14 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
-import numpy as np
-import warnings
-import desc
 import os
+import warnings
+
+import numpy as np
 from termcolor import colored
-from desc import set_device, config as desc_config
+
+import desc
+from desc import config as desc_config
+from desc import set_device
 
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
@@ -23,8 +26,8 @@ else:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             import jax
-            import jaxlib
             import jax.numpy as jnp
+            import jaxlib
             from jax.config import config as jax_config
 
             jax_config.update("jax_enable_x64", True)
@@ -69,9 +72,9 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     cond = jax.lax.cond
     switch = jax.lax.switch
     while_loop = jax.lax.while_loop
-    from jax.scipy.linalg import cho_factor, cho_solve, qr, solve_triangular, block_diag
-    from jax.scipy.special import gammaln
     from jax.experimental.ode import odeint
+    from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
+    from jax.scipy.special import gammaln
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -116,15 +119,15 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
 
 else:
     jit = lambda func, *args, **kwargs: func
+    from scipy.integrate import odeint  # noqa: F401
     from scipy.linalg import (  # noqa: F401
+        block_diag,
         cho_factor,
         cho_solve,
         qr,
         solve_triangular,
-        block_diag,
     )
     from scipy.special import gammaln  # noqa: F401
-    from scipy.integrate import odeint  # noqa: F401
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".

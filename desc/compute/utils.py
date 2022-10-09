@@ -1,11 +1,13 @@
 """Functions for flux surface averages and vector algebra operations."""
 
-import numpy as np
 import warnings
+
+import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
 from desc.grid import ConcentricGrid
+
 from .data_index import data_index
 
 

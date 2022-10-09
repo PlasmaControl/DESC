@@ -1,13 +1,13 @@
 """Tests for Grid classes."""
 
-import pytest
 import numpy as np
+import pytest
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
 from desc.compute.utils import compress, surface_averages, surface_integrals
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
 

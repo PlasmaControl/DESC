@@ -1,18 +1,21 @@
 """Objectives for solving equilibrium problems."""
 
-from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, ConcentricGrid
-from desc.transform import Transform
-from desc.compute import (
-    data_index,
-    compute_force_error,
-    compute_energy,
-    compute_contravariant_current_density,
-)
-from .objective_funs import _Objective
 import warnings
+
 from termcolor import colored
+
+from desc.backend import jnp
+from desc.compute import (
+    compute_contravariant_current_density,
+    compute_energy,
+    compute_force_error,
+    data_index,
+)
+from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.transform import Transform
+from desc.utils import Timer
+
+from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):

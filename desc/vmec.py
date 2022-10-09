@@ -2,29 +2,26 @@
 
 import os
 import warnings
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 from netCDF4 import Dataset, stringtochar
-from scipy import optimize, interpolate, integrate
+from scipy import integrate, interpolate, optimize
 
 from desc.backend import sign
-from desc.compute.utils import compress
-from desc.utils import Timer
-from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
-from desc.profiles import PowerSeriesProfile
+from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
-from desc.objectives import (
-    ObjectiveFunction,
-    FixBoundaryR,
-    FixBoundaryZ,
-)
+from desc.grid import Grid, LinearGrid
+from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
 from desc.objectives.utils import factorize_linear_constraints
+from desc.profiles import PowerSeriesProfile
+from desc.transform import Transform
+from desc.utils import Timer
 from desc.vmec_utils import (
+    fourier_to_zernike,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
-    fourier_to_zernike,
     zernike_to_fourier,
 )
 

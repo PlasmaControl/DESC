@@ -1,7 +1,8 @@
 """Functions for solving subproblems arising in trust region methods."""
 
 import numpy as np
-from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr
+
+from desc.backend import cho_factor, cho_solve, jnp, qr, solve_triangular
 
 
 def solve_trust_region_dogleg(

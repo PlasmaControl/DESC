@@ -1,16 +1,17 @@
 """Benchmarks for timing comparison."""
 
-import numpy as np
 import os
+
+import numpy as np
 import pytest
 
 from desc.__main__ import main
-from desc.grid import ConcentricGrid
 from desc.basis import FourierZernikeBasis
-from desc.transform import Transform
 from desc.equilibrium import EquilibriaFamily
+from desc.grid import ConcentricGrid
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.perturbations import perturb
+from desc.transform import Transform
 
 
 @pytest.fixture(scope="session")

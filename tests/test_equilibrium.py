@@ -1,15 +1,17 @@
 """Tests for Equilibrium class."""
 
 import os
+import pickle
+
 import numpy as np
 import pytest
-import pickle
 from netCDF4 import Dataset
 
-from .utils import area_difference, compute_coords
+from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
-from desc.__main__ import main
+
+from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit

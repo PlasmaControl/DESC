@@ -1,13 +1,15 @@
 """Classes for magnetic field coils."""
 
-import numpy as np
 from abc import ABC
 from collections.abc import MutableSequence
+
+import numpy as np
+
 from desc.backend import jnp
-from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
-from desc.geometry.utils import xyz2rpz_vec, rpz2xyz
-from desc.magnetic_fields import MagneticField, biot_savart
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry.utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import Grid
+from desc.magnetic_fields import MagneticField, biot_savart
 
 
 class Coil(MagneticField, ABC):

@@ -1,38 +1,38 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
 
-import pytest
 import numpy as np
+import pytest
 
+from desc.basis import (
+    DoubleFourierSeries,
+    FourierSeries,
+    FourierZernikeBasis,
+    PowerSeries,
+)
+from desc.coils import CoilSet, FourierXYZCoil
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.plotting import (
+    _find_idx,
     plot_1d,
     plot_2d,
     plot_3d,
-    plot_fsa,
-    plot_section,
-    plot_surfaces,
-    plot_boundary,
-    plot_comparison,
-    plot_logo,
-    plot_grid,
     plot_basis,
-    plot_coefficients,
-    _find_idx,
-    plot_field_lines_sfl,
     plot_boozer_modes,
     plot_boozer_surface,
-    plot_qs_error,
+    plot_boundary,
+    plot_coefficients,
     plot_coils,
+    plot_comparison,
+    plot_field_lines_sfl,
+    plot_fsa,
+    plot_grid,
+    plot_logo,
+    plot_qs_error,
+    plot_section,
+    plot_surfaces,
 )
-from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.basis import (
-    PowerSeries,
-    FourierSeries,
-    DoubleFourierSeries,
-    FourierZernikeBasis,
-)
-from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.coils import FourierXYZCoil, CoilSet
 
 tol_1d = 5
 tol_2d = 15

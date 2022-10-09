@@ -1,14 +1,15 @@
 """Base classes for objectives."""
 
-import numpy as np
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-from desc.backend import use_jax, jnp, jit, block_diag
-from desc.utils import Timer
-from desc.io import IOAble
-from desc.derivatives import Derivative
+import numpy as np
+
+from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
+from desc.derivatives import Derivative
+from desc.io import IOAble
+from desc.utils import Timer
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 

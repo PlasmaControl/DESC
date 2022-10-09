@@ -4,13 +4,14 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import arg_order
+
+from ._equilibrium import CurrentDensity
+from .objective_funs import ObjectiveFunction
 from .utils import (
+    factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
-    factorize_linear_constraints,
 )
-from .objective_funs import ObjectiveFunction
-from ._equilibrium import CurrentDensity
 
 
 class WrappedEquilibriumObjective(ObjectiveFunction):

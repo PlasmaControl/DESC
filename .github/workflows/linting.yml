@@ -4,7 +4,7 @@ on: [pull_request, workflow_dispatch]
 
 jobs:
   flake8_linting:
-    
+  name: Linting    
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -20,3 +20,4 @@ jobs:
         uses: reviewdog/action-flake8@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review

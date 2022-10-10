@@ -1,24 +1,24 @@
-import pytest
-import numpy as np
-import mpmath
+"""Tests for basis classes and evaluation functions."""
 
-from desc.grid import LinearGrid
+import mpmath
+import numpy as np
+import pytest
+
 from desc.basis import (
+    DoubleFourierSeries,
+    FourierSeries,
+    FourierZernikeBasis,
+    PowerSeries,
+    ZernikePolynomial,
+    fourier,
     polyder_vec,
     polyval_vec,
     powers,
     zernike_radial,
-    zernike_radial_poly,
     zernike_radial_coeffs,
-    fourier,
+    zernike_radial_poly,
 )
-from desc.basis import (
-    PowerSeries,
-    FourierSeries,
-    DoubleFourierSeries,
-    ZernikePolynomial,
-    FourierZernikeBasis,
-)
+from desc.grid import LinearGrid
 
 
 class TestBasis:

@@ -127,7 +127,6 @@ def solve_continuation_automatic(  # noqa: C901
     bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
     bdry_ratio = pres_ratio = curr_ratio = 0
     deltas = {}
-    nn = res_steps + pres_steps + bdry_steps
 
     surf_axisym.change_resolution(L, M, 0)
 
@@ -153,11 +152,21 @@ def solve_continuation_automatic(  # noqa: C901
         spectral_indexing,
     )
     optimizer = Optimizer(optimizer)
+    constraints_i = get_fixed_boundary_constraints(
+        iota=objective != "vacuum" and iota is not None
+    )
+    objective_i = get_equilibrium_objective(objective)
 
     eqfam = EquilibriaFamily() if eqfam is None else eqfam
 
-    for ii in range(nn):
+    ii = 0
+    nn = res_steps + pres_steps + bdry_steps
+    stop = False
+    while ii < nn and not stop:
         timer.start("Iteration {} total".format(ii + 1))
+
+        if ii > 0:
+            eqi = eqfam[-1].copy()
 
         if ii < res_steps and ii > 0:
             # increase resolution of vacuum soln
@@ -204,24 +213,25 @@ def solve_continuation_automatic(  # noqa: C901
             pres_ratio,
             curr_ratio,
             pert_order,
-            objective,
+            objective_i,
             optimizer,
             ftol,
             gtol,
             xtol,
             nfev,
         )
-        objective_ = get_equilibrium_objective(objective)
-        constraints_ = get_fixed_boundary_constraints(
-            iota=objective != "vacuum" and iota is not None
-        )
 
+        if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
+            constraints_i = get_fixed_boundary_constraints(
+                iota=objective != "vacuum" and iota is not None
+            )
+            objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
             eqi.perturb(
-                objective=objective_,
-                constraints=constraints_,
+                objective=objective_i,
+                constraints=constraints_i,
                 **deltas,
                 order=pert_order,
                 verbose=verbose,
@@ -230,14 +240,13 @@ def solve_continuation_automatic(  # noqa: C901
             deltas = {}
 
         if not eqi.is_nested(msg="auto"):
-            break
-
-        eqi.solve(objective_, constraints_, optimizer, ftol, xtol, gtol, nfev)
+            stop = True
+        if not stop:
+            eqi.solve(objective_i, constraints_i, optimizer, ftol, xtol, gtol, nfev)
         if not eqi.is_nested(msg="auto"):
-            break
-
+            stop = True
         eqfam.append(eqi)
-        eqi = eqfam[-1].copy()
+
         if checkpoint_path is not None:
             if verbose > 0:
                 print("Saving latest iteration")
@@ -245,6 +254,7 @@ def solve_continuation_automatic(  # noqa: C901
         timer.stop("Iteration {} total".format(ii + 1))
         if verbose > 1:
             timer.disp("Iteration {} total".format(ii + 1))
+        ii += 1
 
     timer.stop("Total time")
     if verbose > 0:
@@ -259,7 +269,7 @@ def solve_continuation_automatic(  # noqa: C901
     if verbose:
         print("====================")
 
-    return eqfam
+    return eqfam, objective_i, constraints_i
 
 
 def solve_continuation_manual(  # noqa: C901
@@ -299,25 +309,24 @@ def solve_continuation_manual(  # noqa: C901
     eqfam = EquilibriaFamily(inputs) if eqfam is None else eqfam
     verbose = inputs[0]["verbose"] if verbose is None else verbose
 
-    for ii in range(len(inputs)):
+    optimizer = Optimizer(inputs[0]["optimizer"])
+    objective_i = get_equilibrium_objective(inputs[0]["objective"])
+    constraints_i = get_fixed_boundary_constraints(
+        iota=inputs[0]["objective"] != "vacuum" and "iota" in inputs[0]
+    )
+
+    ii = 0
+    nn = len(inputs)
+    stop = False
+    while ii < nn and not stop:
         timer.start("Iteration {} total".format(ii + 1))
-
-        # TODO: make this more efficient (minimize re-building)
-        optimizer = Optimizer(inputs[ii]["optimizer"])
-        objective = get_equilibrium_objective(inputs[ii]["objective"])
-        constraints = get_fixed_boundary_constraints(
-            iota=inputs[ii]["objective"] != "vacuum" and "iota" in inputs[ii]
-        )
-
         if ii == 0:
             equil = eqfam[ii]
             if verbose > 0:
                 _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
-
+            deltas = {}
         else:
-            equil = eqfam[ii - 1].copy()
-            eqfam.insert(ii, equil)
-
+            equil = eqfam[-1].copy()
             equil.change_resolution(
                 L=inputs[ii]["L"],
                 M=inputs[ii]["M"],
@@ -340,32 +349,47 @@ def solve_continuation_manual(  # noqa: C901
             }
             deltas = _get_deltas(things)
 
-            if len(deltas) > 0:
-                if verbose > 0:
-                    print("Perturbing equilibrium")
-                # TODO: pass Jx if available
-                equil.perturb(
-                    objective=objective,
-                    constraints=constraints,
-                    **deltas,
-                    order=inputs[ii]["pert_order"],
-                    verbose=verbose,
-                    copy=False,
-                )
+        # maybe rebuild objective if resolution changed.
+        if eqfam[-1].resolution != equil.resolution:
+            objective_i = get_equilibrium_objective(inputs[0]["objective"])
+            constraints_i = get_fixed_boundary_constraints(
+                iota=inputs[0]["objective"] != "vacuum" and "iota" in inputs[0]
+            )
+
+        if len(deltas) > 0:
+            if verbose > 0:
+                print("Perturbing equilibrium")
+            # TODO: pass Jx if available
+            equil.perturb(
+                objective=objective_i,
+                constraints=constraints_i,
+                **deltas,
+                order=inputs[ii]["pert_order"],
+                verbose=verbose,
+                copy=False,
+            )
+            deltas = {}
 
         if not equil.is_nested(msg="manual"):
-            break
+            stop = True
 
-        equil.solve(
-            optimizer=optimizer,
-            objective=objective,
-            constraints=constraints,
-            ftol=inputs[ii]["ftol"],
-            xtol=inputs[ii]["xtol"],
-            gtol=inputs[ii]["gtol"],
-            verbose=verbose,
-            maxiter=inputs[ii]["nfev"],
-        )
+        if not stop:
+            equil.solve(
+                optimizer=optimizer,
+                objective=objective_i,
+                constraints=constraints_i,
+                ftol=inputs[ii]["ftol"],
+                xtol=inputs[ii]["xtol"],
+                gtol=inputs[ii]["gtol"],
+                verbose=verbose,
+                maxiter=inputs[ii]["nfev"],
+            )
+
+        if not equil.is_nested(msg="manual"):
+            stop = True
+        if ii > 0:
+            # the fam starts with iteration 0 already in it, dont want to add it again
+            eqfam.append(equil)
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -374,9 +398,7 @@ def solve_continuation_manual(  # noqa: C901
         timer.stop("Iteration {} total".format(ii + 1))
         if verbose > 1:
             timer.disp("Iteration {} total".format(ii + 1))
-
-        if not equil.is_nested(msg="manual"):
-            break
+        ii += 1
 
     timer.stop("Total time")
     if verbose > 0:

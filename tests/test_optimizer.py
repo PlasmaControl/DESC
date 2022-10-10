@@ -1,23 +1,25 @@
+"""Tests for optimizers and Optimizer class."""
+
 import numpy as np
 import pytest
-
-from desc.backend import jnp
-from desc.optimize import fmintr, lsqtr, Optimizer
-from desc.optimize.utils import make_spd, chol_U_update
-from scipy.optimize import rosen, rosen_der, rosen_hess
-from desc.derivatives import Derivative
 from numpy.random import default_rng
+from scipy.optimize import rosen, rosen_der, rosen_hess
+
+import desc.examples
+from desc.backend import jnp
+from desc.derivatives import Derivative
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
     FixBoundaryR,
     FixBoundaryZ,
-    FixPressure,
     FixIota,
+    FixPressure,
     FixPsi,
+    ForceBalance,
+    ObjectiveFunction,
 )
 from desc.objectives.objective_funs import _Objective
-import desc.examples
+from desc.optimize import Optimizer, fmintr, lsqtr
+from desc.optimize.utils import chol_U_update, make_spd
 
 
 def fun(x, p):
@@ -96,7 +98,7 @@ class TestFmin:
 
     @pytest.mark.unit
     def test_rosenbrock_full_hess_subspace(self):
-        """Test minimizing rosenbrock function using subspace method with full hessian."""
+        """Test minimizing rosenbrock function using subspace method with full hess."""
         rando = default_rng(seed=2)
 
         x0 = rando.random(7)
@@ -120,7 +122,7 @@ class TestFmin:
     @pytest.mark.slow
     @pytest.mark.unit
     def test_rosenbrock_bfgs_dogleg(self):
-        """Test minimizing rosenbrock function using dogleg method with BFGS hessian."""
+        """Test minimizing rosenbrock function using dogleg method with BFGS hess."""
         rando = default_rng(seed=3)
 
         x0 = rando.random(7)
@@ -143,7 +145,7 @@ class TestFmin:
     @pytest.mark.slow
     @pytest.mark.unit
     def test_rosenbrock_bfgs_subspace(self):
-        """Test minimizing rosenbrock function using subspace method with BFGS hessian."""
+        """Test minimizing rosenbrock function using subspace method with BFGS hess."""
         rando = default_rng(seed=4)
 
         x0 = rando.random(7)
@@ -169,7 +171,10 @@ class TestLSQTR:
 
     @pytest.mark.unit
     def test_lsqtr_exact(self):
-        """Test minimizing least squares test function using svd and cholesky methods."""
+        """Test minimizing least squares test function using exact trust region.
+
+        Uses both "svd" and "cholesky" methods for factorizing jacobian.
+        """
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
         x = np.linspace(-1, 1, 100)
         y = fun(x, p)
@@ -207,8 +212,7 @@ class TestLSQTR:
 
 @pytest.mark.unit
 def test_no_iterations():
-    """Make sure giving the correct answer works correctly"""
-
+    """Make sure giving the correct answer works correctly."""
     np.random.seed(0)
     A = np.random.random((20, 10))
     b = np.random.random(20)

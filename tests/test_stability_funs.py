@@ -1,12 +1,14 @@
+"""Tests for Mercier stability functions."""
+
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 import desc.io
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
-import desc.examples
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
@@ -17,9 +19,7 @@ MAX_SIGN_DIFF = 5
 def all_close(
     y1, y2, rho, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
 ):
-    """
-    Test that the values of y1 and y2, over the indices defined by the given range,
-    are closer than the given tolerance.
+    """Test that the values of y1 and y2, over a given range are close enough.
 
     Parameters
     ----------
@@ -43,7 +43,8 @@ def all_close(
 
 
 def get_vmec_data(stellarator, quantity):
-    """
+    """Get data from a VMEC wout.nc file.
+
     Parameters
     ----------
     stellarator : str

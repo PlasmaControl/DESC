@@ -1,13 +1,15 @@
+"""Tests for magnetic field classes."""
+
 import numpy as np
 import pytest
 
 from desc.backend import jnp
 from desc.magnetic_fields import (
+    PoloidalMagneticField,
+    ScalarPotentialField,
+    SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
-    PoloidalMagneticField,
-    SplineMagneticField,
-    ScalarPotentialField,
     field_line_integrate,
 )
 

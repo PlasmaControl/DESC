@@ -1,16 +1,21 @@
-from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, ConcentricGrid
-from desc.transform import Transform
-from desc.compute import (
-    data_index,
-    compute_force_error,
-    compute_energy,
-    compute_contravariant_current_density,
-)
-from .objective_funs import _Objective
+"""Objectives for solving equilibrium problems."""
+
 import warnings
+
 from termcolor import colored
+
+from desc.backend import jnp
+from desc.compute import (
+    compute_contravariant_current_density,
+    compute_energy,
+    compute_force_error,
+    data_index,
+)
+from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.transform import Transform
+from desc.utils import Timer
+
+from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):
@@ -503,7 +508,8 @@ class Energy(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at. This will default to a QuadratureGrid
+        Collocation grid containing the nodes to evaluate at.
+        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str

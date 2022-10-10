@@ -1,23 +1,25 @@
+"""Function for minimizing a scalar function of multiple variables."""
+
 import numpy as np
+from scipy.optimize import OptimizeResult
 from termcolor import colored
-from desc.backend import jnp
+
 from .derivative import CholeskyHessian
+from .tr_subproblems import (
+    solve_trust_region_2d_subspace,
+    solve_trust_region_dogleg,
+    update_tr_radius,
+)
 from .utils import (
+    STATUS_MESSAGES,
     check_termination,
     evaluate_quadratic_form,
     print_header_nonlinear,
     print_iteration_nonlinear,
-    status_messages,
 )
-from .tr_subproblems import (
-    solve_trust_region_dogleg,
-    solve_trust_region_2d_subspace,
-    update_tr_radius,
-)
-from scipy.optimize import OptimizeResult
 
 
-def fmintr(
+def fmintr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     grad,
@@ -33,7 +35,7 @@ def fmintr(
     callback=None,
     options={},
 ):
-    """Minimize a scalar function using a (quasi)-Newton trust region method
+    """Minimize a scalar function using a (quasi)-Newton trust region method.
 
     Parameters
     ----------
@@ -44,8 +46,8 @@ def fmintr(
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     hess : callable or ``'bfgs'``, optional:
-        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS method
-        will be used to approximate the hessian.
+        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
+        method will be used to approximate the hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
     method : ``'dogleg'`` or ``'subspace'``
@@ -102,7 +104,6 @@ def fmintr(
         Boolean flag indicating if the optimizer exited successfully.
 
     """
-
     nfev = 0
     ngev = 0
     nhev = 0
@@ -131,7 +132,6 @@ def fmintr(
     max_nhev = options.pop("max_nhev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    step_accept_threshold = options.pop("step_accept_threshold", 0.15)
     init_hess = options.pop("init_hess", "auto")
     hess_recompute_freq = options.pop(
         "hessian_recompute_interval", 1 if callable(hess) else 0
@@ -257,7 +257,7 @@ def fmintr(
 
             except np.linalg.linalg.LinAlgError:
                 success = False
-                message = status_messages["err"]
+                message = STATUS_MESSAGES["err"]
                 break
 
             # geodesic acceleration
@@ -354,7 +354,7 @@ def fmintr(
                 stop = callback(np.copy(x), *args)
                 if stop:
                     success = False
-                    message = status_messages["callback"]
+                    message = STATUS_MESSAGES["callback"]
                     break
 
             if return_all:

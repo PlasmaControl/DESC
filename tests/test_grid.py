@@ -1,3 +1,5 @@
+"""Tests for Grid classes."""
+
 import numpy as np
 import pytest
 from scipy import special
@@ -5,7 +7,7 @@ from scipy import special
 from desc.basis import FourierZernikeBasis
 from desc.compute.utils import compress, surface_averages, surface_integrals
 from desc.equilibrium import Equilibrium
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
 
@@ -95,7 +97,6 @@ class TestGrid:
             np.testing.assert_allclose(grid1.spacing, grid2.spacing)
 
         test(endpoint=False)
-        # test(endpoint=True)  # _scale_weights() will mess this up
         test(axis=False)
         test(axis=True)
 
@@ -193,8 +194,11 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_concentric_grid_high_res(self):
-        """Test that we can create high resolution grids without crashing, as in GH issue #207."""
-        grid = ConcentricGrid(L=32, M=28, N=30)
+        """Test that we can create high resolution grids without crashing.
+
+        Verifies solution to GH issue #207.
+        """
+        _ = ConcentricGrid(L=32, M=28, N=30)
 
     @pytest.mark.unit
     def test_quad_grid_volume_integration(self):

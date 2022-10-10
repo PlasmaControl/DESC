@@ -1,13 +1,17 @@
+"""Tests for Equilibrium class."""
+
 import os
+import pickle
+
 import numpy as np
 import pytest
-import pickle
 from netCDF4 import Dataset
 
-from .utils import area_difference, compute_coords
+from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
-from desc.__main__ import main
+
+from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
@@ -45,7 +49,6 @@ def test_compute_geometry(DSHAPE_current):
 @pytest.mark.solve
 def test_compute_theta_coords(DSHAPE_current):
     """Test root finding for theta(theta*,lambda(theta))."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
@@ -72,7 +75,6 @@ def test_compute_theta_coords(DSHAPE_current):
 @pytest.mark.solve
 def test_compute_flux_coords(DSHAPE_current):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
@@ -159,9 +161,9 @@ def test_resolution():
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
     eq2 = Equilibrium()
 
-    assert eq1.resolution() != eq2.resolution()
-    eq2.change_resolution(**eq1.resolution())
-    assert eq1.resolution() == eq2.resolution()
+    assert eq1.resolution != eq2.resolution
+    eq2.change_resolution(**eq1.resolution)
+    assert eq1.resolution == eq2.resolution
 
     eq1.L = 2
     eq1.M = 3

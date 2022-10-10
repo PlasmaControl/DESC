@@ -1,22 +1,24 @@
-import pytest
+"""Tests for reading/writing/converting VMEC data."""
+
 import numpy as np
+import pytest
 from netCDF4 import Dataset
 
-from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
+    fourier_to_zernike,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
-    fourier_to_zernike,
-    zernike_to_fourier,
     vmec_boundary_subspace,
+    zernike_to_fourier,
 )
 
 
 class TestVMECIO:
-    """Tests VMECIO class"""
+    """Tests VMECIO class."""
 
     @pytest.mark.unit
     def test_ptolemy_identity_fwd(self):
@@ -31,8 +33,10 @@ class TestVMECIO:
         s = np.array([0, a0, a1, a3, 0])
         c = np.array([a0, 0, a2, 0, a3])
 
-        # a0*sin(-z) + a1*sin(t+z) + a3*sin(t) = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
-        # a0 + a2*cos(t+z) + a3*cos(t-z) = a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)
+        # a0*sin(-z) + a1*sin(t+z) + a3*sin(t)                          # noqa: E800
+        #    = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
+        # a0 + a2*cos(t+z) + a3*cos(t-z)                                # noqa: E800
+        #    = a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)
 
         m_1_correct = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
         n_1_correct = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
@@ -56,8 +60,10 @@ class TestVMECIO:
         n_1 = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
         x = np.array([[a3 - a2, a3, a1, -a0, a0, 0, a1, 0, a2 + a3]])
 
-        # -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t) = a0*sin(-z) + a1*sin(t+z) + a3*sin(t)
-        # a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z) = a0 + a2*cos(t+z) + a3*cos(t-z)
+        # -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)   # noqa: E800
+        #   = a0*sin(-z) + a1*sin(t+z) + a3*sin(t)
+        # a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)             # noqa: E800
+        #    = a0 + a2*cos(t+z) + a3*cos(t-z)
 
         m_0_correct = np.array([0, 0, 1, 1, 1])
         n_0_correct = np.array([0, 1, -1, 0, 1])
@@ -147,7 +153,6 @@ class TestVMECIO:
 @pytest.mark.unit
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
-
     input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
@@ -175,7 +180,6 @@ def test_load_then_save(TmpDir):
 @pytest.mark.unit
 def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""
-
     output_path = str(TmpDir.join("output.nc"))
     eq = Equilibrium(L=2, M=2, N=2, NFP=3, pressure=np.array([[2, 0]]), sym=False)
     VMECIO.save(eq, output_path)
@@ -185,7 +189,6 @@ def test_vmec_save_asym(TmpDir):
 @pytest.mark.slow
 def test_vmec_save_1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
-
     vmec, desc = VMEC_save
     # parameters
     assert vmec.variables["version_"][:] == desc.variables["version_"][:]
@@ -319,7 +322,6 @@ def test_vmec_save_1(VMEC_save):
 @pytest.mark.slow
 def test_vmec_save_2(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
-
     vmec, desc = VMEC_save
 
     # straight field-line grid to compare quantities in full volume
@@ -555,7 +557,6 @@ def test_vmec_save_2(VMEC_save):
 @pytest.mark.mpl_image_compare(tolerance=1)
 def test_plot_vmec_comparison(SOLOVEV):
     """Test that DESC and VMEC flux surface plots match."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
     return fig
@@ -564,7 +565,6 @@ def test_plot_vmec_comparison(SOLOVEV):
 @pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
-
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )

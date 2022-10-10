@@ -1,7 +1,9 @@
+"""Tests for different Curve classes."""
+
 import numpy as np
 import pytest
 
-from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
 from desc.grid import LinearGrid
 
 
@@ -134,6 +136,8 @@ class TestRZCurve:
 
 
 class TestXYZCurve:
+    """Tests for FourierXYZCurve class."""
+
     @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
@@ -238,6 +242,8 @@ class TestXYZCurve:
 
 
 class TestPlanarCurve:
+    """Tests for FourierPlanarCurve class."""
+
     @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""

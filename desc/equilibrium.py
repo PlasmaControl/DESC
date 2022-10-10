@@ -1,27 +1,29 @@
-import numpy as np
-import warnings
+"""Core class representing MHD equilibrium."""
+
 import numbers
-from termcolor import colored
+import warnings
 from collections.abc import MutableSequence
+
+import numpy as np
 from scipy import special
 from scipy.constants import mu_0
+from termcolor import colored
 
-from desc.backend import use_jax
-from desc.utils import Timer, isalmostequal
-from desc.io import IOAble
-from desc.configuration import _Configuration
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
-from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
-from desc.transform import Transform
-from desc.optimize import Optimizer
+from desc.configuration import _Configuration
+from desc.geometry import FourierRZCurve
+from desc.grid import LinearGrid
+from desc.io import IOAble
 from desc.objectives import (
-    ObjectiveFunction,
     ForceBalance,
+    ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
 )
+from desc.optimize import Optimizer
 from desc.perturbations import perturb
+from desc.transform import Transform
+from desc.utils import Timer
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -154,7 +156,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def L_grid(self):
-        """Radial resolution of grid in real space (int)."""
+        """int: Radial resolution of grid in real space."""
         if not hasattr(self, "_L_grid"):
             self._L_grid = (
                 self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
@@ -168,7 +170,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def M_grid(self):
-        """Poloidal resolution of grid in real space (int)."""
+        """int: Poloidal resolution of grid in real space."""
         if not hasattr(self, "_M_grid"):
             self._M_grid = 1
         return self._M_grid
@@ -180,7 +182,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def N_grid(self):
-        """Toroidal resolution of grid in real space (int)."""
+        """int: Toroidal resolution of grid in real space."""
         if not hasattr(self, "_N_grid"):
             self._N_grid = 0
         return self._N_grid
@@ -192,21 +194,23 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def node_pattern(self):
-        """Pattern for placement of nodes in curvilinear coordinates (str)."""
+        """str: Pattern for placement of nodes in curvilinear coordinates."""
         if not hasattr(self, "_node_pattern"):
             self._node_pattern = None
         return self._node_pattern
 
     @property
     def solved(self):
-        """Whether the equilibrium has been solved (bool)."""
+        """bool: Whether the equilibrium has been solved."""
         return self._solved
 
     @solved.setter
     def solved(self, solved):
         self._solved = solved
 
+    @property
     def resolution(self):
+        """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
             "L": self.L,
             "M": self.M,
@@ -465,7 +469,10 @@ class Equilibrium(_Configuration, IOAble):
             )
         if eq.bdry_mode == "poincare":
             raise NotImplementedError(
-                f"Solving equilibrium with poincare XS as BC is not supported yet on master branch."
+                (
+                    "Solving equilibrium with poincare XS as BC is not supported yet "
+                    + "on master branch."
+                )
             )
 
         result = optimizer.optimize(
@@ -638,9 +645,10 @@ class Equilibrium(_Configuration, IOAble):
         """
         import inspect
         from copy import deepcopy
-        from desc.perturbations import optimal_perturb
-        from desc.optimize.utils import check_termination
+
         from desc.optimize.tr_subproblems import update_tr_radius
+        from desc.optimize.utils import check_termination
+        from desc.perturbations import optimal_perturb
 
         if constraint is None:
             constraint = get_equilibrium_objective()
@@ -874,7 +882,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self.equilibria.append(Equilibrium(**arg))
                 else:
                     raise TypeError(
-                        "Args to create EquilibriaFamily should either be Equilibrium or dictionary"
+                        (
+                            "Args to create EquilibriaFamily should either be "
+                            + "Equilibrium or dictionary"
+                        )
                     )
 
     # TODO: should this be a class method / constructor?
@@ -903,8 +914,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         Returns
         -------
         eqfam : EquilibriaFamily
-            family of equilibria for the intermediate steps, where the last member is the
-            final desired configuration,
+            family of equilibria for the intermediate steps, where the last member is
+            the final desired configuration,
 
 
         """
@@ -991,8 +1002,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         Returns
         -------
         eqfam : EquilibriaFamily
-            family of equilibria for the intermediate steps, where the last member is the
-            final desired configuration,
+            family of equilibria for the intermediate steps, where the last member is
+            the final desired configuration,
 
         """
         from desc.continuation import solve_continuation_automatic
@@ -1027,7 +1038,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     @property
     def equilibria(self):
-        """List of equilibria contained in the family (list)."""
+        """list: Equilibria contained in the family."""
         return self._equilibria
 
     @equilibria.setter
@@ -1063,6 +1074,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return len(self._equilibria)
 
     def insert(self, i, new_item):
+        """Insert a new Equilibrium into the family at position i."""
         if not isinstance(new_item, Equilibrium):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."

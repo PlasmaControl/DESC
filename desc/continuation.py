@@ -1,17 +1,15 @@
+"""Functions for solving for equilibria with multigrid continuation method."""
+
 import numpy as np
 
 from desc.backend import jnp
-from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.utils import Timer
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
-from desc.objectives import (
-    ObjectiveFunction,
-    get_equilibrium_objective,
-    get_fixed_boundary_constraints,
-)
+from desc.utils import Timer
 
 
-def solve_continuation_automatic(
+def solve_continuation_automatic(  # noqa: C901
     L,
     M,
     N,
@@ -93,7 +91,6 @@ def solve_continuation_automatic(
         final desired configuration,
 
     """
-
     assert (
         iota is None or current is None
     ), "Can only specify iota or current, not both."
@@ -265,7 +262,9 @@ def solve_continuation_automatic(
     return eqfam
 
 
-def solve_continuation_manual(inputs, verbose=None, checkpoint_path=None, eqfam=None):
+def solve_continuation_manual(  # noqa: C901
+    inputs, verbose=None, checkpoint_path=None, eqfam=None
+):
     """Solve for an equilibrium by continuation method.
 
         1. Creates an initial guess from the given inputs
@@ -276,7 +275,8 @@ def solve_continuation_manual(inputs, verbose=None, checkpoint_path=None, eqfam=
     Parameters
     ----------
     inputs : list of dict
-        dictionaries with input parameters for each continuation step, eg, from InputReader
+        dictionaries with input parameters for each continuation step,
+        eg, from InputReader
     verbose : integer
         * 0: no output
         * 1: summary of each iteration
@@ -458,7 +458,7 @@ def _get_deltas(things):
 
 
 def _arr2obj(arr, obj):
-    """Convert array of parameters to object of the appropriate type (surface, profile etc)."""
+    """Convert array of parameters to object of the appropriate type."""
     if not isinstance(arr, (np.ndarray, jnp.ndarray)):
         return arr
     cls = obj.__class__

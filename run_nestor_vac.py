@@ -306,6 +306,7 @@ ext_field = SplineMagneticField.from_mgrid(
 
 
 veq.resolution_summary()
+print("==========SOLVING VEQ==========")
 veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
@@ -332,6 +333,7 @@ eq.change_resolution(
     veq.M_grid // 3,
     veq.N_grid // 3,
 )
+print("==========SOLVING EQ0==========")
 eq.solve(ftol=1e-2, verbose=3)
 
 from desc.objectives import (
@@ -343,7 +345,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=12)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -359,6 +361,7 @@ bc_objective.build(eq)
 
 
 eq1 = eq.copy()
+print("==========OPTIMIZING EQ1==========")
 out = eq1.optimize(
     objective,
     constraints,
@@ -378,11 +381,19 @@ with open("run_nestor_vac_out1.pkl", "wb+") as f:
 
 eq2 = eq1.copy()
 
-eq2.change_resolution(veq.L//3*2, veq.M//3*2, veq.N//3*2, veq.L_grid//3*2, veq.M_grid//3*2, veq.N_grid//3*2)
+eq2.change_resolution(
+    veq.L // 3 * 2,
+    veq.M // 3 * 2,
+    veq.N // 3 * 2,
+    veq.L_grid // 3 * 2,
+    veq.M_grid // 3 * 2,
+    veq.N_grid // 3 * 2,
+)
+print("==========SOLVING EQ2==========")
 eq2.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=18)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -396,7 +407,7 @@ constraints = (
 fb_objective.build(eq2)
 bc_objective.build(eq2)
 
-
+print("==========OPTIMIZING EQ2==========")
 out = eq2.optimize(
     objective,
     constraints,
@@ -415,10 +426,10 @@ with open("run_nestor_vac_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
 
 
-
 eq3 = eq2.copy()
 
 eq3.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+print("==========SOLVING EQ3==========")
 eq3.solve(ftol=1e-2, verbose=3)
 
 
@@ -436,7 +447,7 @@ constraints = (
 fb_objective.build(eq3)
 bc_objective.build(eq3)
 
-
+print("==========OPTIMIZING EQ3==========")
 out = eq3.optimize(
     objective,
     constraints,
@@ -453,8 +464,8 @@ out = eq3.optimize(
 eq3.save("run_nestor_vac_out3.h5")
 with open("run_nestor_vac_out3.pkl", "wb+") as f:
     pickle.dump(out, f)
-    
 
+print("==========OPTIMIZING VEQ==========")
 out = veq.optimize(
     objective,
     constraints,

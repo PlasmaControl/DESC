@@ -305,8 +305,8 @@ ext_field = SplineMagneticField.from_mgrid(
 
 
 veq.resolution_summary()
-print("SOLVING VEQ")
-veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
+# print("==========SOLVING VEQ==========")
+# veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
 surf = veq.get_surface_at(1)
@@ -332,8 +332,8 @@ eq.change_resolution(
     veq.M_grid // 2,
     veq.N_grid // 2,
 )
-print("SOLVING EQ0")
-eq.solve(ftol=1e-2, verbose=3)
+# print("==========SOLVING EQ0==========")
+# eq.solve(ftol=1e-2, verbose=3)
 
 from desc.objectives import (
     ObjectiveFunction,
@@ -344,7 +344,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=18)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction((fb_objective, bc_objective))
@@ -357,12 +357,14 @@ constraints = (
 objective.build(eq)
 
 eq1 = eq.copy()
-print("SOLVING EQ1")
+print("==========SOLVING EQ1==========")
 out = eq1.solve(
     objective,
     constraints,
     maxiter=60,
     verbose=3,
+    ftol=1e-8,
+    xtol=1e-12,
     options={
         "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
@@ -377,7 +379,7 @@ with open("run_nestor_vac_combined_out1.pkl", "wb+") as f:
 eq2 = eq1.copy()
 
 eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
-eq2.solve(ftol=1e-2, verbose=3)
+# eq2.solve(ftol=1e-2, verbose=3)
 
 
 bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
@@ -391,12 +393,14 @@ constraints = (
 )
 
 objective.build(eq2)
-print("SOLVING EQ2")
+print("==========SOLVING EQ2==========")
 out = eq2.solve(
     objective,
     constraints,
     maxiter=60,
     verbose=3,
+    ftol=1e-8,
+    xtol=1e-12,
     options={
         "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
@@ -407,13 +411,15 @@ out = eq2.solve(
 eq2.save("run_nestor_vac_combined_out2.h5")
 with open("run_nestor_vac_combined_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
-    
-print("SOLVING EQV")
+
+print("==========SOLVING EQV==========")
 out = veq.solve(
     objective,
     constraints,
     maxiter=60,
     verbose=3,
+    ftol=1e-8,
+    xtol=1e-12,
     options={
         "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,

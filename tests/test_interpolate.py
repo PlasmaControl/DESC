@@ -1,3 +1,5 @@
+"""Tests for interpolation functions."""
+
 import numpy as np
 import pytest
 
@@ -54,6 +56,8 @@ class TestInterp1D:
 
 
 class TestInterp2D:
+    """Tests for interp2d function."""
+
     @pytest.mark.unit
     def test_interp2d(self):
         """Test accuracy of different 2d interpolation methods."""
@@ -77,6 +81,8 @@ class TestInterp2D:
 
 
 class TestInterp3D:
+    """Tests for interp3d function."""
+
     @pytest.mark.unit
     def test_interp3d(self):
         """Test accuracy of different 3d interpolation methods."""

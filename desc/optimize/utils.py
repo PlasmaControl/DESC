@@ -1,10 +1,13 @@
+"""Utility functions used in optimization problems."""
+
 import numpy as np
-from desc.backend import jnp, jit, put, fori_loop, cond
+
+from desc.backend import cond, fori_loop, jit, jnp, put
 
 
 @jit
 def _cholmod(A):
-    """Modified Cholesky factorization of indefinite matrix
+    """Modified Cholesky factorization of indefinite matrix.
 
     If matrix is positive definite, returns the regular Cholesky factorization,
     otherwise performs a modified factorization to ensure the factors are positive
@@ -26,7 +29,6 @@ def _cholmod(A):
         Lower triangular cholesky factor, such that L@L.T ~ A
 
     """
-
     A = jnp.asarray(A)
     n = A.shape[0]
 
@@ -74,7 +76,7 @@ def _cholmod(A):
 
 @jit
 def chol(A):
-    """Cholesky factorization of possibly indefinite matrix
+    """Cholesky factorization of possibly indefinite matrix.
 
     If matrix is positive definite, returns the regular Cholesky factorization,
     otherwise performs a modified factorization to ensure the factors are positive
@@ -166,6 +168,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
 
 
 def print_header_nonlinear():
+    """Print a pretty header."""
     print(
         "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
             "Iteration",
@@ -181,6 +184,7 @@ def print_header_nonlinear():
 def print_iteration_nonlinear(
     iteration, nfev, cost, cost_reduction, step_norm, optimality
 ):
+    """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
         iteration = " " * 15
     else:
@@ -218,7 +222,7 @@ def print_iteration_nonlinear(
     )
 
 
-status_messages = {
+STATUS_MESSAGES = {
     "success": "Optimization terminated successfully.",
     "xtol": "`xtol` condition satisfied.",
     "ftol": "`ftol` condition satisfied.",
@@ -262,26 +266,26 @@ def check_termination(
     gtol_satisfied = g_norm < gtol
 
     if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
-        message = status_messages["success"]
+        message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:
-            message += "\n" + status_messages["ftol"]
+            message += "\n" + STATUS_MESSAGES["ftol"]
         if xtol_satisfied:
-            message += "\n" + status_messages["xtol"]
+            message += "\n" + STATUS_MESSAGES["xtol"]
         if gtol_satisfied:
-            message += "\n" + status_messages["gtol"]
+            message += "\n" + STATUS_MESSAGES["gtol"]
     elif iteration >= maxiter:
         success = False
-        message = status_messages["maxiter"]
+        message = STATUS_MESSAGES["maxiter"]
     elif nfev >= max_nfev:
         success = False
-        message = status_messages["max_nfev"]
+        message = STATUS_MESSAGES["max_nfev"]
     elif ngev >= max_ngev:
         success = False
-        message = status_messages["max_ngev"]
+        message = STATUS_MESSAGES["max_ngev"]
     elif nhev >= max_nhev:
         success = False
-        message = status_messages["max_nhev"]
+        message = STATUS_MESSAGES["max_nhev"]
     else:
         success = None
         message = None
@@ -290,6 +294,7 @@ def check_termination(
 
 
 def compute_jac_scale(A, prev_scale_inv=None):
+    """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
     scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
@@ -299,6 +304,7 @@ def compute_jac_scale(A, prev_scale_inv=None):
 
 
 def compute_hess_scale(H, prev_scale_inv=None):
+    """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
     scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
@@ -309,12 +315,14 @@ def compute_hess_scale(H, prev_scale_inv=None):
 
 def find_matching_inds(arr1, arr2):
     """Find indices into arr2 that match rows of arr1.
+
     Parameters
     ----------
     arr1 : ndarray, shape(m,n)
         Array to look for matches in.
     arr2 : ndarray, shape(k,n)
         Array to look for indices in.
+
     Returns
     -------
     inds : ndarray of int

@@ -1,5 +1,9 @@
+"""Functions for solving subproblems arising in trust region methods."""
+
 import numpy as np
-from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr
+
+from desc.backend import cho_factor, cho_solve, jnp, qr, solve_triangular
+
 from .utils import chol
 
 
@@ -98,7 +102,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]
-    # p = Sq
+    # p = Sq                    # noqa: E800
 
     try:
         R, lower = cho_factor(B)
@@ -131,7 +135,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
 def trust_region_step_exact_svd(
     f, u, s, v, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
 ):
-    """Solve a trust-region problem using a semi-exact method
+    """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
         min_p ||J*p + f||^2,  ||p|| < trust_radius
@@ -153,7 +157,8 @@ def trust_region_step_exact_svd(
         iteration. If None, determined automatically.
     rtol : float, optional
         Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
     max_iter : int, optional
         Maximum allowed number of iterations for the root-finding procedure.
     threshold : float
@@ -170,12 +175,12 @@ def trust_region_step_exact_svd(
         Sometimes called Levenberg-Marquardt parameter.
 
     """
-
     uf = u.T.dot(f)
     suf = s * uf
 
     def phi_and_derivative(alpha, suf, s, trust_radius):
         """Function of which to find zero.
+
         It is defined as "norm of regularized (by alpha) least-squares
         solution minus `trust_radius`".
         """
@@ -235,7 +240,7 @@ def trust_region_step_exact_svd(
 def trust_region_step_exact_cho(
     g, B, trust_radius, initial_alpha=None, rtol=0.01, max_iter=10
 ):
-    """Solve a trust-region problem using a semi-exact method
+    """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
         (B + alpha*I)*p = -g,  ||p|| < trust_radius
@@ -254,7 +259,8 @@ def trust_region_step_exact_cho(
         iteration. If None, determined automatically.
     rtol : float, optional
         Stopping tolerance for the root-finding procedure. Namely, the
-        solution ``p`` will satisfy ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
+        solution ``p`` will satisfy
+        ``abs(norm(p) - trust_radius) < rtol * trust_radius``.
     max_iter : int, optional
         Maximum allowed number of iterations for the root-finding procedure.
 
@@ -269,7 +275,6 @@ def trust_region_step_exact_cho(
         Sometimes called Levenberg-Marquardt parameter.
 
     """
-
     # try full newton step
     R, lower = cho_factor(B)
     p = cho_solve((R, lower), -g)
@@ -350,9 +355,11 @@ def update_tr_radius(
     min_tr : float
         minimum allowed trust region radius
     increase_threshold, increase_ratio : float
-        if ratio > inrease_threshold, trust radius is increased by a factor of increase_ratio
+        if ratio > inrease_threshold, trust radius is increased by a factor
+        of increase_ratio
     decrease_threshold, decrease_ratio : float
-        if ratio < decrease_threshold, trust radius is decreased by a factor of decrease_ratio
+        if ratio < decrease_threshold, trust radius is decreased by a factor
+        of decrease_ratio
 
     Returns
     -------
@@ -379,8 +386,8 @@ def update_tr_radius(
 
 
 def get_boundaries_intersections(z, d, trust_radius):
-    """
-    Solve the scalar quadratic equation ||z + t d|| == trust_radius.
+    """Solve the scalar quadratic equation ||z + t d|| == trust_radius.
+
     This is like a line-sphere intersection.
     Return the two values of t, sorted from low to high.
     """
@@ -391,8 +398,8 @@ def get_boundaries_intersections(z, d, trust_radius):
 
     # The following calculation is mathematically
     # equivalent to:
-    # ta = (-b - sqrt_discriminant) / (2*a)
-    # tb = (-b + sqrt_discriminant) / (2*a)
+    # ta = (-b - sqrt_discriminant) / (2*a)    # noqa: E800
+    # tb = (-b + sqrt_discriminant) / (2*a)    # noqa: E800
     # but produce smaller round off errors.
     # Look at Matrix Computation p.97
     # for a better justification.

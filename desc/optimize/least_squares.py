@@ -1,23 +1,27 @@
+"""Function for solving nonlinear least squares problems."""
+
 import numpy as np
+from scipy.optimize import OptimizeResult
 from termcolor import colored
+
 from desc.backend import jnp
-from .utils import (
-    check_termination,
-    print_header_nonlinear,
-    print_iteration_nonlinear,
-    status_messages,
-    compute_jac_scale,
-    evaluate_quadratic_form_jac,
-)
+
 from .tr_subproblems import (
-    trust_region_step_exact_svd,
     trust_region_step_exact_cho,
+    trust_region_step_exact_svd,
     update_tr_radius,
 )
-from scipy.optimize import OptimizeResult
+from .utils import (
+    STATUS_MESSAGES,
+    check_termination,
+    compute_jac_scale,
+    evaluate_quadratic_form_jac,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
-def lsqtr(
+def lsqtr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
@@ -32,7 +36,7 @@ def lsqtr(
     callback=None,
     options={},
 ):
-    """Solve a least squares problem using a (quasi)-Newton trust region method
+    """Solve a least squares problem using a (quasi)-Newton trust region method.
 
     Parameters
     ----------
@@ -188,7 +192,6 @@ def lsqtr(
     message = None
     step_norm = np.inf
     actual_reduction = np.inf
-    ratio = 0  # ratio between actual reduction and predicted reduction
 
     if verbose > 1:
         print_header_nonlinear()
@@ -205,7 +208,7 @@ def lsqtr(
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
         if g_norm < gtol:
             success = True
-            message = status_messages["gtol"]
+            message = STATUS_MESSAGES["gtol"]
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration, nfev, cost, actual_reduction, step_norm, g_norm
@@ -313,11 +316,9 @@ def lsqtr(
 
         # if reduction was enough, accept the step
         if actual_reduction > 0:
-            x_old = x
             x = x_new
             if return_all:
                 allx.append(x)
-            f_old = f
             f = f_new
             cost = cost_new
             J = jac(x, *args)
@@ -332,7 +333,7 @@ def lsqtr(
                 stop = callback(np.copy(x), *args)
                 if stop:
                     success = False
-                    message = status_messages["callback"]
+                    message = STATUS_MESSAGES["callback"]
                     break
 
         else:

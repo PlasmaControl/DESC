@@ -1,12 +1,16 @@
+"""Class for reading and writing DESC and VMEC input files."""
+
 import argparse
-import pathlib
-import warnings
-import os
-import re
 import io
-import numpy as np
+import os
+import pathlib
+import re
+import warnings
 from datetime import datetime
+
+import numpy as np
 from termcolor import colored
+
 from desc import set_device
 
 
@@ -129,7 +133,7 @@ class InputReader:
         """
         return get_parser()
 
-    def parse_inputs(self, fname=None):
+    def parse_inputs(self, fname=None):  # noqa: C901 - FIXME: simplify this
         """Read input from DESC input file; converts from VMEC input if necessary.
 
         Parameters
@@ -142,7 +146,6 @@ class InputReader:
         inputs : list of dictionaries
             all the input parameters and options. One dictionary for each resolution
             level.
-
         """
         if fname is None:
             fname = self.input_path
@@ -748,13 +751,14 @@ class InputReader:
         header = (
             "# This DESC input file was auto generated from the VMEC input file\n"
             + "# {}\n# on {} at {}.\n".format(vmec_fname, date, time)
-            + "# For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html\n"
+            + "# For details on the various options see "
+            + "https://desc-docs.readthedocs.io/en/stable/input.html\n"
         )
         inputs = InputReader.parse_vmec_inputs(vmec_fname)
         InputReader.write_desc_input(desc_fname, inputs, header)
 
     @staticmethod
-    def parse_vmec_inputs(vmec_fname, threshold=0):
+    def parse_vmec_inputs(vmec_fname, threshold=0):  # noqa: C901 - FIXME: simplify this
         """Parse a VMEC input file into a dictionary of DESC inputs.
 
         Parameters
@@ -777,7 +781,6 @@ class InputReader:
 
         vmec_file.seek(0)
         num_form = r"[-+]?\ *\d*\.?\d*(?:[Ee]\ *[-+]?\ *\d+)?"
-        Ntor = 99
 
         # default values
         inputs = {
@@ -867,7 +870,6 @@ class InputReader:
                 ]
                 inputs["N"] = numbers[0]
                 inputs["N_grid"] = 2 * numbers[0]
-                Ntor = numbers[0]
             match = re.search(
                 r"NCURR\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
@@ -1149,7 +1151,7 @@ class InputReader:
                     warnings.warn(colored("m is negative!", "yellow"))
                     m = abs(m)
                 RBC = numbers[2]
-                # RBC*cos(m*t)*cos(n*p)
+                # RBC*cos(m*t)*cos(n*p)  # noqa: E800
                 m_idx = np.where(inputs["surface"][:, 0] == m)[0]
                 n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
@@ -1247,7 +1249,7 @@ class InputReader:
                     warnings.warn(colored("m is negative!", "yellow"))
                     m = abs(m)
                 ZBC = numbers[2]
-                # ZBC*cos(m*t)*cos(n*p)
+                # ZBC*cos(m*t)*cos(n*p)  # noqa: E800
                 m_idx = np.where(inputs["surface"][:, 0] == m)[0]
                 n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]

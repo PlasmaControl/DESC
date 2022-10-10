@@ -4,8 +4,8 @@ on: [pull_request, workflow_dispatch]
 
 jobs:
   flake8_linting:
-  name: Linting    
     runs-on: ubuntu-latest
+    name: Linting    
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python 3.9

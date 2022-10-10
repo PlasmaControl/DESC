@@ -1,13 +1,14 @@
-import pytest
-import subprocess
+"""Test fixtures for computing equilibria etc."""
+
 import os
+
 import h5py
 import numpy as np
-import time
+import pytest
 from netCDF4 import Dataset
 
-from desc.equilibrium import Equilibrium, EquilibriaFamily
 from desc.__main__ import main
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.vmec import VMECIO
 
 
@@ -344,6 +345,7 @@ def reader_test_file(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def VMEC_save(SOLOVEV, tmpdir_factory):
+    """Save an equilibrium in VMEC netcdf format for comparison."""
     vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])

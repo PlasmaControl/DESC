@@ -1,20 +1,21 @@
-import warnings
+"""Classes for linear optimization constraints.
 
-import numpy as np
-from termcolor import colored
-import warnings
-from abc import ABC, abstractmethod
-
-from desc.backend import jnp
-from desc.basis import zernike_radial_coeffs, zernike_radial
-from desc.profiles import PowerSeriesProfile, SplineProfile
-from .objective_funs import _Objective
-
-"""Linear objective functions must be of the form `A*x-b`, where:
+Linear objective functions must be of the form `A*x-b`, where:
     - `A` is a constant matrix that can be pre-computed
     - `x` is a vector of one or more arguments included in `compute.arg_order`
     - `b` is the desired vector set by `objective.target`
 """
+
+import warnings
+from abc import ABC
+
+import numpy as np
+from termcolor import colored
+
+from desc.backend import jnp
+from desc.basis import zernike_radial, zernike_radial_coeffs
+
+from .objective_funs import _Objective
 
 # TODO: need dim_x attribute
 
@@ -143,6 +144,7 @@ class FixBoundaryR(_Objective):
         self._built = True
 
     def compute(self, *args, **kwargs):
+        """Compute deviation from desired boundary."""
         pass
 
     def _compute_R(self, R_lmn, **kwargs):
@@ -282,6 +284,7 @@ class FixBoundaryZ(_Objective):
         self._built = True
 
     def compute(self, *args, **kwargs):
+        """Compute deviation from desired boundary."""
         pass
 
     def _compute_Z(self, Z_lmn, **kwargs):
@@ -337,22 +340,24 @@ class FixLambdaGauge(_Objective):
             Level of output.
 
         """
-
         L_basis = eq.L_basis
 
         if L_basis.sym:
             # l(0,t,z) = 0
             # any zernike mode that has m != 0 (i.e., has any theta dependence)
             # contains radial dependence at least as rho^m
-            # therefore if m!=0, no constraint is needed to make the mode go to zero at rho=0
+            # therefore if m!=0, no constraint is needed to make the mode go to
+            # zero at rho=0
 
             # for the other modes with m=0, at rho =0 the basis reduces
             # to just a linear combination of sin(n*zeta), cos(n*zeta), and 1
             # since these are all linearly independent, to make lambda -> 0 at rho=0,
             # each coefficient on these terms must individually go to zero
             # i.e. if at rho=0 the lambda basis is given by
-            # Lambda(rho=0) = (L_{00-1} - L_{20-1})sin(zeta) + (L_{001} - L_{201})cos(zeta) + L_{000} - L_{200}
-            # Lambda(rho=0) = 0 constraint being enforced means that each coefficient goes to zero:
+            # Lambda(rho=0) = (L_{00-1} - L_{20-1})sin(zeta) + (L_{001}
+            #                   - L_{201})cos(zeta) + L_{000} - L_{200}
+            # Lambda(rho=0) = 0 constraint being enforced means that each
+            # coefficient goes to zero:
             # L_{00-1} - L_{20-1} = 0
             # L_{001} - L_{201} = 0
             # L_{000} - L_{200} = 0
@@ -385,8 +390,8 @@ class FixLambdaGauge(_Objective):
                     self._A[j, i] = -1
             # l(rho,0,0) = 0
             # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
-            # what this constraint does is make all the coefficients of each power of rho
-            # equal to zero
+            # what this constraint does is make all the coefficients of each power
+            # of rho equal to zero
             # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
             # this constraint will make
             # L_200 + 2*L_310 = 0
@@ -438,7 +443,8 @@ class _FixProfile(_Objective, ABC):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses Profile.params.
-        e.g. for PowerSeriesProfile these are profile coefficients, and for SplineProfile they are values at knots.
+        e.g. for PowerSeriesProfile these are profile coefficients, and for
+        SplineProfile they are values at knots.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -446,8 +452,9 @@ class _FixProfile(_Objective, ABC):
         Profile containing the radial modes to evaluate at.
     indices : ndarray or Bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -537,8 +544,9 @@ class FixPressure(_FixProfile):
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -625,8 +633,9 @@ class FixIota(_FixProfile):
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
+        corresponding to knots for a SplineProfile).
+        Must len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -672,7 +681,10 @@ class FixIota(_FixProfile):
         """
         if eq.iota is None:
             raise RuntimeError(
-                "Attempt to fix rotational transform on an equilibrium with no rotational transform profile assigned"
+                (
+                    "Attempt to fix rotational transform on an equilibrium with no "
+                    + "rotational transform profile assigned"
+                )
             )
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)
@@ -717,8 +729,9 @@ class FixCurrent(_FixProfile):
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -764,7 +777,10 @@ class FixCurrent(_FixProfile):
         """
         if eq.current is None:
             raise RuntimeError(
-                "Attempt to fix toroidal current on an equilibrium no current profile assigned"
+                (
+                    "Attempt to fix toroidal current on an equilibrium no "
+                    + "current profile assigned"
+                )
             )
         profile = eq.current
         super().build(eq, profile, use_jit, verbose)

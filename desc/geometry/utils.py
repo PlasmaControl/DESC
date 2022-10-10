@@ -1,3 +1,5 @@
+"""Functions for converting between coordinate systems."""
+
 from desc.backend import jnp
 
 
@@ -34,7 +36,6 @@ def rotation_matrix(axis, angle=None):
     rot : ndarray, shape(3,3)
         Matrix to rotate points in cartesian (X,Y,Z) coordinates
     """
-
     if angle is None:
         angle = jnp.linalg.norm(axis)
     axis = jnp.asarray(axis) / jnp.linalg.norm(axis)
@@ -45,7 +46,7 @@ def rotation_matrix(axis, angle=None):
 
 
 def xyz2rpz(pts):
-    """Transform points from cartesian (X,Y,Z) to polar (R,phi,Z) form
+    """Transform points from cartesian (X,Y,Z) to polar (R,phi,Z) form.
 
     Parameters
     ----------
@@ -64,7 +65,7 @@ def xyz2rpz(pts):
 
 
 def rpz2xyz(pts):
-    """Transform points from polar (R,phi,Z) to cartesian (X,Y,Z) form
+    """Transform points from polar (R,phi,Z) to cartesian (X,Y,Z) form.
 
     Parameters
     ----------

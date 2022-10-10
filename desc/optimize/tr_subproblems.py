@@ -1,6 +1,8 @@
+"""Functions for solving subproblems arising in trust region methods."""
+
 import numpy as np
-from desc.backend import jnp, cho_factor, cho_solve, solve_triangular, qr
-from desc.utils import isalmostequal
+
+from desc.backend import cho_factor, cho_solve, jnp, qr, solve_triangular
 
 
 def solve_trust_region_dogleg(
@@ -37,7 +39,6 @@ def solve_trust_region_dogleg(
     The Hessian is required to be positive definite.
 
     """
-
     # This is the optimum for the quadratic model function.
     # If it is inside the trust radius then return this point.
     if f is None:
@@ -76,7 +77,9 @@ def solve_trust_region_dogleg(
 def solve_trust_region_2d_subspace(
     grad, hess, scale, trust_radius, f=None, initial_alpha=None, **kwargs
 ):
-    """Solve a trust region problem over the 2d subspace spanned by the gradient
+    """Solve a trust region problem using 2d subspace method.
+
+    Minimizes model function over subspace spanned by the gradient
     and Newton direction
 
     Parameters
@@ -119,7 +122,7 @@ def solve_trust_region_2d_subspace(
 
     # B = [a b]  g = [d f]
     #     [b c]  q = [x y]
-    # p = Sq
+    # p = Sq                    # noqa: E800
 
     try:
         R, lower = cho_factor(B)
@@ -152,7 +155,7 @@ def solve_trust_region_2d_subspace(
 def trust_region_step_exact_svd(
     f, u, s, v, Delta, initial_alpha=None, rtol=0.01, max_iter=10, threshold=None
 ):
-    """Solve a trust-region problem using a semi-exact method
+    """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
         min_p ||J*p + f||^2,  ||p|| < Delta
@@ -191,12 +194,12 @@ def trust_region_step_exact_svd(
         Sometimes called Levenberg-Marquardt parameter.
 
     """
-
     uf = u.T.dot(f)
     suf = s * uf
 
     def phi_and_derivative(alpha, suf, s, Delta):
         """Function of which to find zero.
+
         It is defined as "norm of regularized (by alpha) least-squares
         solution minus `Delta`".
         """
@@ -256,7 +259,7 @@ def trust_region_step_exact_svd(
 def trust_region_step_exact_cho(
     g, B, Delta, initial_alpha=None, rtol=0.01, max_iter=10
 ):
-    """Solve a trust-region problem using a semi-exact method
+    """Solve a trust-region problem using a semi-exact method.
 
     Solves problems of the form
         (B + alpha*I)*p = -g,  ||p|| < Delta
@@ -290,7 +293,6 @@ def trust_region_step_exact_cho(
         Sometimes called Levenberg-Marquardt parameter.
 
     """
-
     # try full newton step
     R, lower = cho_factor(B)
     p = cho_solve((R, lower), -g)
@@ -371,9 +373,11 @@ def update_tr_radius(
     min_tr : float
         minimum allowed trust region radius
     increase_threshold, increase_ratio : float
-        if ratio > inrease_threshold, trust radius is increased by a factor of increase_ratio
+        if ratio > inrease_threshold, trust radius is increased by a factor
+        of increase_ratio
     decrease_threshold, decrease_ratio : float
-        if ratio < decrease_threshold, trust radius is decreased by a factor of decrease_ratio
+        if ratio < decrease_threshold, trust radius is decreased by a factor
+        of decrease_ratio
 
     Returns
     -------
@@ -400,8 +404,8 @@ def update_tr_radius(
 
 
 def get_boundaries_intersections(z, d, trust_radius):
-    """
-    Solve the scalar quadratic equation ||z + t d|| == trust_radius.
+    """Solve the scalar quadratic equation ||z + t d|| == trust_radius.
+
     This is like a line-sphere intersection.
     Return the two values of t, sorted from low to high.
     """
@@ -412,8 +416,8 @@ def get_boundaries_intersections(z, d, trust_radius):
 
     # The following calculation is mathematically
     # equivalent to:
-    # ta = (-b - sqrt_discriminant) / (2*a)
-    # tb = (-b + sqrt_discriminant) / (2*a)
+    # ta = (-b - sqrt_discriminant) / (2*a)    # noqa: E800
+    # tb = (-b + sqrt_discriminant) / (2*a)    # noqa: E800
     # but produce smaller round off errors.
     # Look at Matrix Computation p.97
     # for a better justification.

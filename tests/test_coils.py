@@ -1,8 +1,11 @@
+"""Tests for coils and coilsets."""
+
 import numpy as np
 import pytest
-from desc.grid import LinearGrid, Grid
-from desc.coils import CoilSet, FourierRZCoil, FourierXYZCoil, FourierPlanarCoil
+
+from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
 from desc.geometry import FourierRZCurve
+from desc.grid import Grid, LinearGrid
 
 
 class TestCoil:
@@ -10,7 +13,7 @@ class TestCoil:
 
     @pytest.mark.unit
     def test_biot_savart(self):
-        """Test biot-savart implementation against analytic formula for circular coil."""
+        """Test biot-savart implementation against analytic formula."""
         R = 2
         y = 1
         I = 1
@@ -218,7 +221,7 @@ class TestCoilSet:
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):
-            coils3 = coils1 + FourierRZCurve()
+            _ = coils1 + FourierRZCurve()
 
         with pytest.raises(TypeError):
             coils1[-1] = FourierRZCurve()

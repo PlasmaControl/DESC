@@ -1,8 +1,11 @@
-import numpy as np
+"""Wrapper classes for JAX automatic differentiation and finite differences."""
+
 from abc import ABC, abstractmethod
+
+import numpy as np
 from termcolor import colored
 
-from desc.backend import use_jax, put, jnp
+from desc.backend import jnp, put, use_jax
 
 if use_jax:
     import jax
@@ -45,7 +48,7 @@ class _Derivative(ABC):
 
     @property
     def fun(self):
-        """callable : function being differentiated"""
+        """Callable : function being differentiated."""
         return self._fun
 
     @fun.setter
@@ -54,7 +57,7 @@ class _Derivative(ABC):
 
     @property
     def argnum(self):
-        """int : argument being differentiated with respect to"""
+        """Integer : argument being differentiated with respect to."""
         return self._argnum
 
     @argnum.setter
@@ -63,7 +66,7 @@ class _Derivative(ABC):
 
     @property
     def mode(self):
-        """str : the kind of derivative being computed (eg ``'grad'``, ``'hess'``, etc)"""
+        """String : the kind of derivative being computed (eg ``'grad'``)."""
         return self._mode
 
     def __call__(self, *args):
@@ -344,7 +347,6 @@ class FiniteDiffDerivative(_Derivative):
         fx = f(x)
         h = np.maximum(1.0, np.abs(x)) * self.rel_step
         ee = np.diag(h)
-        dtype = fx.dtype
         hess = np.outer(h, h)
 
         for i in range(n):
@@ -594,7 +596,7 @@ class FiniteDiffDerivative(_Derivative):
 
 
 def nested_zeros_like(x):
-
+    """Get a nested pytree of zeros like a given pytree."""
     if x is None:
         return None
     if jnp.isscalar(x):

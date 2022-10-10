@@ -1,3 +1,5 @@
+"""Tests for perturbation functions."""
+
 import numpy as np
 import pytest
 
@@ -12,7 +14,6 @@ from desc.perturbations import perturb
 @pytest.mark.solve
 def test_perturbation_orders(SOLOVEV):
     """Test that higher-order perturbations are more accurate."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
     objective = get_equilibrium_objective()

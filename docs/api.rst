@@ -17,6 +17,16 @@ Basis
     desc.basis.FourierZernikeBasis
 
 
+Continuation
+************
+.. autosummary::
+    :toctree: _api/continuation
+    :recursive:
+
+    desc.continuation.solve_continuation
+    desc.continuation.solve_continuation_automatic
+
+
 Derivatives
 ***********
 Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
@@ -143,6 +153,7 @@ Perturbations
     :toctree: _api/perturbations
     :recursive:
 
+    desc.perturbations.get_deltas
     desc.perturbations.perturb
     desc.perturbations.optimal_perturb
 

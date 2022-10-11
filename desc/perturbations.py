@@ -1,5 +1,6 @@
 """Functions for perturbing equilibria."""
 
+import copy as pycopy
 import warnings
 
 import numpy as np
@@ -13,7 +14,59 @@ from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import evaluate_quadratic
 from desc.utils import Timer
 
-__all__ = ["perturb", "optimal_perturb"]
+__all__ = ["get_deltas", "perturb", "optimal_perturb"]
+
+
+def get_deltas(things1, things2):
+    """Compute differences between parameters for perturbations.
+
+    Parameters
+    ----------
+    things1, things2 : dict
+        should be dictionary with keys "surface", "iota", "pressure", etc.
+        Values should be a either objects of the appropriate type (Surface, Profile).
+        Finds deltas for a perturbation going from 1 to 2.
+        Should have same keys in both dictionaries.
+
+    Returns
+    -------
+    deltas : dict of ndarray
+        deltas to pass in to perturb
+
+    """
+    deltas = {}
+    assert things1.keys() == things2.keys(), "Must have same keys in both dictionaries"
+
+    if "surface" in things1:
+        s1 = pycopy.copy(things1.pop("surface"))
+        s2 = pycopy.copy(things2.pop("surface"))
+        if s1 is not None:
+            s1.change_resolution(s2.L, s2.M, s2.N)
+            if not np.allclose(s2.R_lmn, s1.R_lmn):
+                deltas["dRb"] = s2.R_lmn - s1.R_lmn
+            if not np.allclose(s2.Z_lmn, s1.Z_lmn):
+                deltas["dZb"] = s2.Z_lmn - s1.Z_lmn
+
+    for key in ["iota", "pressure", "current"]:
+        if key in things1:
+            t1 = pycopy.copy(things1.pop(key))
+            t2 = pycopy.copy(things2.pop(key))
+            if t1 is not None:
+                if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
+                    t1.change_resolution(t2.basis.L)
+                if not np.allclose(t2.params, t1.params):
+                    deltas["d" + key[0]] = t2.params - t1.params
+
+    if "Psi" in things1:
+        psi1 = things1.pop("Psi")
+        psi2 = things2.pop("Psi")
+        if psi1 is not None and not np.allclose(psi2, psi1):
+            deltas["dPsi"] = psi2 - psi1
+
+    assert len(things1) == 0, "get_deltas got an unexpected key: {}".format(
+        things1.keys()
+    )
+    return deltas
 
 
 def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces

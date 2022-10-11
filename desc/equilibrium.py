@@ -860,8 +860,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
           * A single list of dictionaries, one for each equilibrium in a continuation.
           * Nothing, to create an empty family.
         For more information see inputs required by ``'Equilibrium'``.
-        If solving using continuation method, a list of dict should be given.
-
     """
 
     _io_attrs_ = ["_equilibria"]
@@ -869,11 +867,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
     def __init__(self, *args):
 
         self.equilibria = []
-        self.inputs = None
         if len(args) == 1 and isinstance(args[0], list):
-            inputs = args[0]
-            self.equilibria.append(Equilibrium(**inputs[0]))
-            self.inputs = inputs
+            for inp in args[0]:
+                self.equilibria.append(Equilibrium(**inp))
         else:
             for arg in args:
                 if isinstance(arg, Equilibrium):
@@ -888,21 +884,40 @@ class EquilibriaFamily(IOAble, MutableSequence):
                         )
                     )
 
-    # TODO: should this be a class method / constructor?
-    def solve_continuation_manual(
-        self, inputs=None, verbose=None, checkpoint_path=None
+    def solve_continuation(
+        self,
+        objective="force",
+        optimizer="lsq-exact",
+        pert_order=2,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        nfev=100,
+        verbose=1,
+        checkpoint_path=None,
     ):
         """Solve for an equilibrium by continuation method.
 
-            1. Creates an initial guess from the given inputs
-            2. Find equilibrium flux surfaces by minimizing the objective function.
-            3. Step up to higher resolution and perturb the previous solution
-            4. Repeat 2 and 3 until at desired resolution
+        Steps through an EquilibriaFamily, solving each equilibrium, and uses
+        pertubations to step between different profiles/boundaries.
+
+        Uses the previous step as an initial guess for each solution.
 
         Parameters
         ----------
-        inputs : list of dict
-            dictionaries with input parameters for each continuation step.
+        eqfam : EquilibriaFamily or list of Equilibria
+            Equilibria to solve for at each step.
+        objective : str or ObjectiveFunction (optional)
+            function to solve for equilibrium solution
+        optimizer : str or Optimzer (optional)
+            optimizer to use
+        pert_order : int or array of int
+            order of perturbations to use. If array-like, should be same length as
+            family to specify different values for each step.
+        ftol, xtol, gtol : float or array-like of float
+            stopping tolerances for subproblem at each step.
+        nfev : int or array-like of int
+            maximum number of function evaluations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -917,17 +932,25 @@ class EquilibriaFamily(IOAble, MutableSequence):
             family of equilibria for the intermediate steps, where the last member is
             the final desired configuration,
 
-
         """
-        from desc.continuation import solve_continuation_manual
+        from desc.continuation import solve_continuation
 
-        if inputs is None:
-            inputs = self.inputs
-        return solve_continuation_manual(inputs, verbose, checkpoint_path, self)
+        return solve_continuation(
+            self,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            nfev,
+            verbose,
+            checkpoint_path,
+        )
 
-    # TODO: should this be a class method / constructor?
+    @classmethod
     def solve_continuation_automatic(
-        self,
+        cls,
         L,
         M,
         N,
@@ -952,6 +975,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         nfev=100,
         verbose=1,
         checkpoint_path=None,
+        initial=None,
     ):
         """Solve for an equilibrium using an automatic continuation method.
 
@@ -998,6 +1022,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             * 3: as above plus detailed solver output
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
+        initial : Equilibrium or path-like
+            Initial guess for first step of continuation method
 
         Returns
         -------
@@ -1033,7 +1059,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             nfev,
             verbose,
             checkpoint_path,
-            self,
+            cls(),
+            initial,
         )
 
     @property

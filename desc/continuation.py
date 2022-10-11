@@ -2,10 +2,10 @@
 
 import numpy as np
 
-from desc.backend import jnp
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
+from desc.perturbations import get_deltas
 from desc.utils import Timer
 
 
@@ -35,6 +35,7 @@ def solve_continuation_automatic(  # noqa: C901
     verbose=1,
     checkpoint_path=None,
     eqfam=None,
+    initial=None,
 ):
     """Solve for an equilibrium using an automatic continuation method.
 
@@ -83,6 +84,8 @@ def solve_continuation_automatic(  # noqa: C901
         file to save checkpoint data (Default value = None)
     eqfam : EquilibriaFamily
         Family object to store results in. If None, a new one is created.
+    initial : Equilibrium or path-like
+        Initial guess for first step of continuation method
 
     Returns
     -------
@@ -151,6 +154,7 @@ def solve_continuation_automatic(  # noqa: C901
         sym,
         spectral_indexing,
     )
+    eqi.set_initial_guess(initial)
     optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and iota is not None
@@ -180,46 +184,46 @@ def solve_continuation_automatic(  # noqa: C901
             surf_i = eqi.surface
             surf_i2 = surface.copy()
             surf_i2.change_resolution(Li, Mi, Ni)
-            deltas = _get_deltas({"surface": [surf_i, surf_i2]})
+            deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
 
         if ii >= res_steps and ii < res_steps + pres_steps:
             # make sure its at full radial/poloidal resolution
             eqi.change_resolution(L=L, M=M, L_grid=L_grid, M_grid=M_grid)
             # increase pressure
-            deltas = _get_deltas(
-                {"pressure": [eqfam[res_steps - 1].pressure, pressure]}
+            deltas = get_deltas(
+                {"pressure": eqfam[res_steps - 1].pressure}, {"pressure": pressure}
             )
             deltas["dp"] *= pres_step
             pres_ratio += pres_step
 
         if ii >= res_steps + pres_steps:
             # boundary perturbations
-            # TODO: do we want to jump to full N? or maybe step that up too?
             eqi.change_resolution(L, M, N, L_grid, M_grid, N_grid)
             surf_axisym.change_resolution(L, M, N)
-            deltas = _get_deltas({"surface": [surf_axisym, surface]})
+            deltas = get_deltas({"surface": surf_axisym}, {"surface": surface})
             if "dRb" in deltas:
                 deltas["dRb"] *= bdry_step
             if "dZb" in deltas:
                 deltas["dZb"] *= bdry_step
             bdry_ratio += bdry_step
 
-        _print_iteration_summary(
-            ii,
-            nn,
-            eqi,
-            bdry_ratio,
-            pres_ratio,
-            curr_ratio,
-            pert_order,
-            objective_i,
-            optimizer,
-            ftol,
-            gtol,
-            xtol,
-            nfev,
-        )
+        if verbose:
+            _print_iteration_summary(
+                ii,
+                nn,
+                eqi,
+                bdry_ratio,
+                pres_ratio,
+                curr_ratio,
+                pert_order,
+                objective_i,
+                optimizer,
+                ftol,
+                gtol,
+                xtol,
+                nfev,
+            )
 
         if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
             constraints_i = get_fixed_boundary_constraints(
@@ -272,21 +276,40 @@ def solve_continuation_automatic(  # noqa: C901
     return eqfam, objective_i, constraints_i
 
 
-def solve_continuation_manual(  # noqa: C901
-    inputs, verbose=None, checkpoint_path=None, eqfam=None
+def solve_continuation(  # noqa: C901
+    eqfam,
+    objective="force",
+    optimizer="lsq-exact",
+    pert_order=2,
+    ftol=1e-2,
+    xtol=1e-4,
+    gtol=1e-6,
+    nfev=100,
+    verbose=1,
+    checkpoint_path=None,
 ):
     """Solve for an equilibrium by continuation method.
 
-        1. Creates an initial guess from the given inputs
-        2. Find equilibrium flux surfaces by minimizing the objective function.
-        3. Step up to higher resolution and perturb the previous solution
-        4. Repeat 2 and 3 until at desired resolution
+    Steps through an EquilibriaFamily, solving each equilibrium, and uses pertubations
+    to step between different profiles/boundaries.
+
+    Uses the previous step as an initial guess for each solution.
 
     Parameters
     ----------
-    inputs : list of dict
-        dictionaries with input parameters for each continuation step,
-        eg, from InputReader
+    eqfam : EquilibriaFamily or list of Equilibria
+        Equilibria to solve for at each step.
+    objective : str or ObjectiveFunction (optional)
+        function to solve for equilibrium solution
+    optimizer : str or Optimzer (optional)
+        optimizer to use
+    pert_order : int or array of int
+        order of perturbations to use. If array-like, should be same length as eqfam
+        to specify different values for each step.
+    ftol, xtol, gtol : float or array-like of float
+        stopping tolerances for subproblem at each step.
+    nfev : int or array-like of int
+        maximum number of function evaluations in each equilibrium subproblem.
     verbose : integer
         * 0: no output
         * 1: summary of each iteration
@@ -294,8 +317,6 @@ def solve_continuation_manual(  # noqa: C901
         * 3: as above plus detailed solver output
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
-    eqfam : EquilibriaFamily
-        Family object to store results in. If None, a new one is created.
 
     Returns
     -------
@@ -306,90 +327,100 @@ def solve_continuation_manual(  # noqa: C901
     """
     timer = Timer()
     timer.start("Total time")
-    eqfam = EquilibriaFamily(inputs) if eqfam is None else eqfam
-    verbose = inputs[0]["verbose"] if verbose is None else verbose
+    pert_order, ftol, xtol, gtol, nfev, _ = np.broadcast_arrays(
+        pert_order, ftol, xtol, gtol, nfev, eqfam
+    )
+    if isinstance(eqfam, (list, tuple)):
+        eqfam = EquilibriaFamily(*eqfam)
 
-    optimizer = Optimizer(inputs[0]["optimizer"])
-    objective_i = get_equilibrium_objective(inputs[0]["objective"])
+    optimizer = Optimizer(optimizer)
+    objective_i = get_equilibrium_objective(objective)
     constraints_i = get_fixed_boundary_constraints(
-        iota=inputs[0]["objective"] != "vacuum" and "iota" in inputs[0]
+        iota=objective != "vacuum" and eqfam[0].iota is not None
     )
 
     ii = 0
-    nn = len(inputs)
+    nn = len(eqfam)
     stop = False
     while ii < nn and not stop:
         timer.start("Iteration {} total".format(ii + 1))
-        if ii == 0:
-            equil = eqfam[ii]
-            if verbose > 0:
-                _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
-            deltas = {}
-        else:
-            equil = eqfam[-1].copy()
-            equil.change_resolution(
-                L=inputs[ii]["L"],
-                M=inputs[ii]["M"],
-                N=inputs[ii]["N"],
-                L_grid=inputs[ii]["L_grid"],
-                M_grid=inputs[ii]["M_grid"],
-                N_grid=inputs[ii]["N_grid"],
+        eqi = eqfam[ii]
+        if verbose:
+            _print_iteration_summary(
+                ii,
+                nn,
+                eqi,
+                _get_ratio(eqi.surface, eqfam[-1].surface),
+                _get_ratio(eqi.pressure, eqfam[-1].pressure),
+                _get_ratio(eqi.current, eqfam[-1].current),
+                pert_order[ii],
+                objective_i,
+                optimizer,
+                ftol[ii],
+                gtol[ii],
+                xtol[ii],
+                nfev[ii],
             )
+            deltas = {}
 
-            if verbose > 0:
-                _print_iteration_summary(ii, len(inputs), equil, **inputs[ii])
+        if ii > 0:
+            eqi.set_initial_guess(eqfam[ii - 1])
 
             # figure out if we need perturbations
-            things = {
-                "surface": (equil.surface, inputs[ii].get("surface")),
-                "iota": (equil.iota, inputs[ii].get("iota")),
-                "current": (equil.current, inputs[ii].get("current")),
-                "pressure": (equil.pressure, inputs[ii].get("pressure")),
-                "Psi": (equil.Psi, inputs[ii].get("Psi")),
+            things1 = {
+                "surface": eqfam[ii - 1].surface,
+                "iota": eqfam[ii - 1].iota,
+                "current": eqfam[ii - 1].current,
+                "pressure": eqfam[ii - 1].pressure,
+                "Psi": eqfam[ii - 1].Psi,
             }
-            deltas = _get_deltas(things)
+            things2 = {
+                "surface": eqi.surface,
+                "iota": eqi.iota,
+                "current": eqi.current,
+                "pressure": eqi.pressure,
+                "Psi": eqi.Psi,
+            }
+            deltas = get_deltas(things1, things2)
 
-        # maybe rebuild objective if resolution changed.
-        if eqfam[-1].resolution != equil.resolution:
-            objective_i = get_equilibrium_objective(inputs[0]["objective"])
-            constraints_i = get_fixed_boundary_constraints(
-                iota=inputs[0]["objective"] != "vacuum" and "iota" in inputs[0]
-            )
+            # maybe rebuild objective if resolution changed.
+            if eqfam[ii - 1].resolution != eqi.resolution:
+                objective_i = get_equilibrium_objective(objective)
+                constraints_i = get_fixed_boundary_constraints(
+                    iota=objective != "vacuum" and eqfam[ii].iota is not None
+                )
 
         if len(deltas) > 0:
             if verbose > 0:
                 print("Perturbing equilibrium")
             # TODO: pass Jx if available
-            equil.perturb(
+            eqi.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
                 **deltas,
-                order=inputs[ii]["pert_order"],
+                order=pert_order[ii],
                 verbose=verbose,
                 copy=False,
             )
             deltas = {}
 
-        if not equil.is_nested(msg="manual"):
+        if not eqi.is_nested(msg="manual"):
             stop = True
 
         if not stop:
-            equil.solve(
+            eqi.solve(
                 optimizer=optimizer,
                 objective=objective_i,
                 constraints=constraints_i,
-                ftol=inputs[ii]["ftol"],
-                xtol=inputs[ii]["xtol"],
-                gtol=inputs[ii]["gtol"],
+                ftol=ftol[ii],
+                xtol=xtol[ii],
+                gtol=gtol[ii],
                 verbose=verbose,
-                maxiter=inputs[ii]["nfev"],
+                maxiter=nfev[ii],
             )
 
-        if not equil.is_nested(msg="manual"):
+        if not eqi.is_nested(msg="manual"):
             stop = True
-        if ii > 0:
-            # the fam starts with iteration 0 already in it, dont want to add it again
-            eqfam.append(equil)
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -415,87 +446,23 @@ def solve_continuation_manual(  # noqa: C901
     return eqfam
 
 
-def _get_deltas(things):
-    """Compute differences between parameters.
-
-    Parameters
-    ----------
-    things: dict
-        should be dictionary with keys "surface", "iota", "current", "pressure"
-        values should be a tuple of (current_thing, target_thing) where the _things are
-        either objects of the appropriate type (Surface, Profile, etc) or ndarray.
-        Finds deltas for a perturbation going from current to target.
-
-    Returns
-    -------
-    deltas : dict of ndarray
-        deltas to pass in to perturb
-
-    """
-    deltas = {}
-    if "surface" in things and things["surface"][0] is not None:
-        s1 = things["surface"][0].copy()
-        s2 = things["surface"][1].copy()
-        s2 = _arr2obj(s2, s1)
-        s2.change_resolution(s1.L, s1.M, s1.N)
-        if not np.allclose(s2.R_lmn, s1.R_lmn):
-            deltas["dRb"] = s2.R_lmn - s1.R_lmn
-        if not np.allclose(s2.Z_lmn, s1.Z_lmn):
-            deltas["dZb"] = s2.Z_lmn - s1.Z_lmn
-
-    if "iota" in things and things["iota"][0] is not None:
-        i1 = things["iota"][0].copy()
-        i2 = things["iota"][1].copy()
-        i2 = _arr2obj(i2, i1)
-        if hasattr(i2, "change_resolution") and hasattr(i1, "basis"):
-            i2.change_resolution(i1.basis.L)
-        if not np.allclose(i2.params, i1.params):
-            deltas["di"] = i2.params - i1.params
-
-    if "current" in things and things["current"][0] is not None:
-        c1 = things["current"][0].copy()
-        c2 = things["current"][1].copy()
-        c2 = _arr2obj(c2, c1)
-        if hasattr(c2, "change_resolution") and hasattr(c1, "basis"):
-            c2.change_resolution(c1.basis.L)
-        if not np.allclose(c2.params, c1.params):
-            deltas["dc"] = c2.params - c1.params
-
-    if "pressure" in things and things["pressure"][0] is not None:
-        p1 = things["pressure"][0].copy()
-        p2 = things["pressure"][1].copy()
-        p2 = _arr2obj(p2, p1)
-        if hasattr(p2, "change_resolution") and hasattr(p1, "basis"):
-            p2.change_resolution(p1.basis.L)
-        if not np.allclose(p2.params, p1.params):
-            deltas["dp"] = p2.params - p1.params
-
-    if "Psi" in things and things["Psi"][0] is not None:
-        psi1 = things["Psi"][0]
-        psi2 = things["Psi"][1]
-        if not np.allclose(psi2, psi1):
-            deltas["dPsi"] = psi2 - psi1
-
-    return deltas
-
-
-def _arr2obj(arr, obj):
-    """Convert array of parameters to object of the appropriate type."""
-    if not isinstance(arr, (np.ndarray, jnp.ndarray)):
-        return arr
-    cls = obj.__class__
-    if arr.shape[1] == 2:
-        # treat it as a profile
-        return cls(arr[:, 1], arr[:, 0])
-    # treat it as a surface
-    return cls(
-        arr[:, 3],
-        arr[:, 4],
-        arr[:, 1:3].astype(int),
-        arr[:, 1:3].astype(int),
-        obj.NFP,
-        obj.sym,
-    )
+def _get_ratio(thing1, thing2):
+    """Figure out bdry_ratio, pres_ratio etc from objects."""
+    if thing1 is None or thing2 is None:
+        return None
+    if hasattr(thing1, "R_lmn"):  # treat it as surface
+        R1 = thing1.R_lmn[thing1.R_basis.modes[:, 2] != 0]
+        R2 = thing2.R_lmn[thing2.R_basis.modes[:, 2] != 0]
+        Z1 = thing1.Z_lmn[thing1.Z_basis.modes[:, 2] != 0]
+        Z2 = thing2.Z_lmn[thing2.Z_basis.modes[:, 2] != 0]
+        num = np.linalg.norm([R1, Z1])
+        den = np.linalg.norm([R2, Z2])
+    else:
+        num = np.linalg.norm(thing1.params)
+        den = np.linalg.norm(thing2.params)
+    if num == 0 and den == 0:
+        return 1
+    return num / den
 
 
 def _print_iteration_summary(

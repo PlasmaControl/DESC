@@ -469,7 +469,7 @@ class _Configuration(IOAble, ABC):
             raise ValueError(
                 "set_initial_guess should be called with 4 or fewer arguments."
             )
-        if nargs == 0:
+        if nargs == 0 or nargs == 1 and args[0] is None:
             if hasattr(self, "_surface"):
                 # use whatever surface is already assigned
                 if hasattr(self, "_axis"):

@@ -425,11 +425,14 @@ class LinearGrid(Grid):
             self._L = len(np.atleast_1d(rho))
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
+            # choose dr such that each node has the same weight
             dr = 1 / r.size * np.ones_like(r)
         else:
             r = np.atleast_1d(rho)
             dr = np.zeros_like(r)
             if r.size > 1:
+                # choose dr such that cumulative sums of dr[] are node midpoints
+                # and the total sum is 1
                 dr[0] = (r[0] + r[1]) / 2
                 dr[1:-1] = (r[2:] - r[:-2]) / 2
                 dr[-1] = 1 - (r[-2] + r[-1]) / 2
@@ -449,17 +452,26 @@ class LinearGrid(Grid):
             if self.sym:
                 t += t[1] / 2
             dt = 2 * np.pi / t.size * np.ones_like(t)
+
         else:
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
             if t.size > 1:
-                dt[0] = (t[0] + t[1]) / 2
-                dt[1:-1] = (t[2:] - t[:-2]) / 2
-                dt[-1] = 2 * np.pi - (t[-2] + t[-1]) / 2
+                # choose dt to be half the cyclic distance of the surrounding two nodes
+                SUP = 2 * np.pi  # supremum
+                dt[0] = t[1] + (SUP - (t[-1] % SUP)) % SUP
+                dt[1:-1] = t[2:] - t[:-2]
+                dt[-1] = t[0] + (SUP - (t[-2] % SUP)) % SUP
+                dt /= 2
+                if t.size == 2:
+                    dt[-1] = dt[0]
             else:
                 dt = np.array([2 * np.pi])
 
         # zeta
+        # note: dz spacing should not depend on NFP
+        # spacing corresponds to a node's weight in an integral --
+        # such as integral = sum(dz * data["B"]) -- not the node's coordinates
         if self.N is not None:
             zeta = 2 * self.N + 1
         else:
@@ -471,9 +483,15 @@ class LinearGrid(Grid):
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
             if z.size > 1:
-                dz[0] = (z[0] + z[1]) / 2
-                dz[1:-1] = (z[2:] - z[:-2]) / 2
-                dz[-1] = 2 * np.pi - (z[-2] + z[-1]) / 2
+                # choose dz to be half the cyclic distance of the surrounding two nodes
+                SUP = 2 * np.pi / self.NFP  # supremum
+                dz[0] = z[1] + (SUP - (z[-1] % SUP)) % SUP
+                dz[1:-1] = z[2:] - z[:-2]
+                dz[-1] = z[0] + (SUP - (z[-2] % SUP)) % SUP
+                dz /= 2
+                dz *= self.NFP
+                if z.size == 2:
+                    dz[-1] = dz[0]
             else:
                 dz = np.array([2 * np.pi])
 

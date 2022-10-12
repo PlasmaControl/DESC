@@ -231,7 +231,7 @@ class Optimizer(IOAble):
 
         if (
             self.method in Optimizer._desc_methods
-            and self.method not in Optimizer._stochastic_methods
+            and self.method not in Optimizer._desc_stochastic_methods
         ):
             if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
                 options.setdefault("initial_trust_radius", 0.5)

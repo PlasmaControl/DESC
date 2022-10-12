@@ -326,11 +326,11 @@ eq.surface = surf
 
 eq.change_resolution(
     veq.L // 2,
-    veq.M // 2,
-    veq.N // 2,
+    veq.M,
+    veq.N,
     veq.L_grid // 2,
-    veq.M_grid // 2,
-    veq.N_grid // 2,
+    veq.M_grid,
+    veq.N_grid,
 )
 # print("==========SOLVING EQ0==========")
 # eq.solve(ftol=1e-2, verbose=3)
@@ -344,7 +344,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=18)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction((fb_objective, bc_objective))

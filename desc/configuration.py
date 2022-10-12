@@ -484,7 +484,7 @@ class _Configuration(IOAble, ABC):
                     self.Rb_lmn,
                     self.surface.R_basis,
                     axisR,
-                    "lcfs",
+                    None,
                     coord,
                 )
                 self.Z_lmn = self._initial_guess_surface(
@@ -492,7 +492,7 @@ class _Configuration(IOAble, ABC):
                     self.Zb_lmn,
                     self.surface.Z_basis,
                     axisZ,
-                    "lcfs",
+                    None,
                     coord,
                 )
             else:
@@ -658,12 +658,10 @@ class _Configuration(IOAble, ABC):
                     x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
                 else:
                     x_lmn[idx0] = b_lmn[k] / scale
-
         elif mode == "poincare":
             for k, (l, m, n) in enumerate(b_basis.modes):
                 idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
                 x_lmn[idx] = b_lmn[k]
-
         else:
             raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
 

@@ -17,8 +17,12 @@ from desc.basis import (
     zernike_radial,
     zernike_radial_coeffs,
     zernike_radial_poly,
+    FourierZernike_to_PoincareZernikePolynomial,
+    FourierZernike_to_FourierZernike_no_N_modes,
 )
 from desc.grid import LinearGrid
+from desc.transform import Transform
+from desc.equilibrium import Equilibrium
 
 
 class TestBasis:
@@ -279,3 +283,35 @@ class TestBasis:
         basis = FourierZernikeBasis(L=10, M=4, N=0, spectral_indexing="fringe")
         assert (basis.modes == [10, 0, 0]).all(axis=1).any()
         assert not (basis.modes == [10, 2, 0]).all(axis=1).any()
+
+
+@pytest.mark.unit
+def test_FourierZernike_to_PoincareZernikePolynomial(DummyStellarator):
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+    eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
+    L_lmn_2d, L_ZP_zeta0_basis = FourierZernike_to_PoincareZernikePolynomial(
+        eq.L_lmn, eq.L_basis
+    )
+    grid = LinearGrid(L=50, M=50, zeta=0)
+    transf = Transform(grid=grid, basis=L_ZP_zeta0_basis, derivs=0)
+    L_2D = transf.transform(L_lmn_2d)
+    L_3D = eq.compute(name="lambda", grid=grid)["lambda"]
+    np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)
+
+
+@pytest.mark.unit
+def test_FourierZernike_to_FourierZernike_no_N_modes(DummyStellarator):
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+    eq.L_lmn = np.random.rand(*np.shape(eq.L_lmn))
+    L_lmn_no_N, L_basis = FourierZernike_to_FourierZernike_no_N_modes(
+        eq.L_lmn, eq.L_basis
+    )
+    grid = LinearGrid(L=50, M=50, zeta=0)
+    transf = Transform(grid=grid, basis=L_basis, derivs=0)
+    L_2D = transf.transform(L_lmn_no_N)
+    L_3D = eq.compute(name="lambda", grid=grid)["lambda"]
+    np.testing.assert_allclose(L_2D, L_3D, atol=1e-14)

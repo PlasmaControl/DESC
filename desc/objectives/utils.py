@@ -21,11 +21,12 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
+    PoincareLambda,
 )
 from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(profiles=True, iota=True):
+def get_fixed_boundary_constraints(profiles=True, iota=True, poincare=False):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -44,7 +45,6 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
     constraints = (
         FixBoundaryR(fixed_boundary=True),
         FixBoundaryZ(fixed_boundary=True),
-        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:
@@ -54,6 +54,10 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
             constraints += (FixIota(),)
         else:
             constraints += (FixCurrent(),)
+    if poincare:
+        constraints += (PoincareLambda(),)
+    else:
+        constraints += (FixLambdaGauge(),)
     return constraints
 
 

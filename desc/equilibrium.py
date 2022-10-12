@@ -12,7 +12,11 @@ from termcolor import colored
 from desc.backend import use_jax
 from desc.basis import FourierZernikeBasis
 from desc.configuration import _Configuration
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.geometry import (
+    FourierRZCurve,
+    FourierRZToroidalSurface,
+    ZernikeRZToroidalSection,
+)
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.objectives import (
@@ -468,13 +472,6 @@ class Equilibrium(_Configuration, IOAble):
                     "yellow",
                 )
             )
-        if eq.bdry_mode == "poincare":
-            raise NotImplementedError(
-                (
-                    "Solving equilibrium with poincare XS as BC is not supported yet "
-                    + "on master branch."
-                )
-            )
 
         result = optimizer.optimize(
             eq,
@@ -901,9 +898,16 @@ class EquilibriaFamily(IOAble, MutableSequence):
             s.change_resolution(equil.L, equil.M, equil.N)
             Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
-            raise NotImplementedError(
-                "Specifying poincare XS as BC is not implemented yet on master branch."
+            s = ZernikeRZToroidalSection(
+                inputs["surface"][:, 3],
+                inputs["surface"][:, 4],
+                inputs["surface"][:, :2].astype(int),
+                inputs["surface"][:, :2].astype(int),
+                equil.spectral_indexing,
+                equil.sym,
             )
+            s.change_resolution(equil.L, equil.M, equil.N)
+            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
 
         p_l = np.zeros_like(equil.pressure.params)
         for l, p in inputs["pressure"]:

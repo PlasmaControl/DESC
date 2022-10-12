@@ -6,7 +6,7 @@ from numpy.random import default_rng
 from scipy.optimize import BFGS, rosen, rosen_der
 
 import desc.examples
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.objectives import (
     FixBoundaryR,
@@ -18,9 +18,10 @@ from desc.objectives import (
     ObjectiveFunction,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.optimize import Optimizer, fmintr, lsqtr
+from desc.optimize import Optimizer, fmintr, lsqtr, sgd
 
 
+@jit
 def vector_fun(x, p):
     """Complicated-ish vector valued function for testing least squares."""
     a0 = x * p[0]
@@ -47,6 +48,7 @@ SCALAR_FUN_SOLN = np.array(
 )
 
 
+@jit
 def scalar_fun(x):
     """Simple convex function for testing scalar minimization.
 
@@ -60,8 +62,8 @@ def scalar_fun(x):
     )
 
 
-scalar_grad = Derivative(scalar_fun, mode="grad")
-scalar_hess = Derivative(scalar_fun, mode="hess")
+scalar_grad = jit(Derivative(scalar_fun, mode="grad"))
+scalar_hess = jit(Derivative(scalar_fun, mode="hess"))
 
 
 class TestFmin:
@@ -152,6 +154,27 @@ class TestFmin:
             options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
+
+
+class TestSGD:
+    """Tests for stochastic optimizers."""
+
+    @pytest.mark.unit
+    def test_sgd_convex(self):
+        """Test minimizing convex test function using stochastic gradient descent."""
+        x0 = np.ones(2)
+
+        out = sgd(
+            scalar_fun,
+            x0,
+            scalar_grad,
+            verbose=3,
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
+            maxiter=2000,
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
 
 
 class TestLSQTR:

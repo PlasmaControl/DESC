@@ -248,6 +248,7 @@ def run_qh_step(n, eq):
         verbose=3,
         copy=True,
         options={
+            "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0},
             "solve_options": {"verbose": 0},
         },

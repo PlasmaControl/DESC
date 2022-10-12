@@ -326,12 +326,12 @@ eq.set_initial_guess(surf)
 eq.surface = surf
 
 eq.change_resolution(
-    veq.L // 3,
-    veq.M,
-    veq.N,
-    veq.L_grid // 3,
-    veq.M_grid,
-    veq.N_grid,
+    veq.L // 2,
+    veq.M // 2,
+    veq.N // 2,
+    veq.L_grid // 2,
+    veq.M_grid // 2,
+    veq.N_grid // 2,
 )
 print("==========SOLVING EQ0==========")
 eq.solve(ftol=1e-2, verbose=3)
@@ -361,6 +361,17 @@ bc_objective.build(eq)
 
 
 eq1 = eq.copy()
+eq1.change_resolution(
+    veq.L // 2,
+    veq.M,
+    veq.N,
+    veq.L_grid // 2,
+    veq.M_grid,
+    veq.N_grid,
+)
+print("==========SOLVING EQ1==========")
+eq1.solve(ftol=1e-2, verbose=3)
+
 print("==========OPTIMIZING EQ1==========")
 out = eq1.optimize(
     objective,
@@ -383,14 +394,7 @@ with open("run_nestor_vac_out1.pkl", "wb+") as f:
 
 eq2 = eq1.copy()
 
-eq2.change_resolution(
-    veq.L // 3 * 2,
-    veq.M,
-    veq.N,
-    veq.L_grid // 3 * 2,
-    veq.M_grid,
-    veq.N_grid,
-)
+eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
 print("==========SOLVING EQ2==========")
 eq2.solve(ftol=1e-2, verbose=3)
 
@@ -425,50 +429,8 @@ out = eq2.optimize(
 )
 
 
-eq2.save("run_nestor_vac_out2.h5")
+eq2.save("run_nestor_vac_out3.h5")
 with open("run_nestor_vac_out2.pkl", "wb+") as f:
-    pickle.dump(out, f)
-
-
-eq3 = eq2.copy()
-
-eq3.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
-print("==========SOLVING EQ3==========")
-eq3.solve(ftol=1e-2, verbose=3)
-
-
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
-fb_objective = ForceBalance()
-
-objective = ObjectiveFunction(bc_objective)
-constraints = (
-    fb_objective,
-    FixPressure(),
-    FixIota(),
-    FixPsi(),
-)
-
-fb_objective.build(eq3)
-bc_objective.build(eq3)
-
-print("==========OPTIMIZING EQ3==========")
-out = eq3.optimize(
-    objective,
-    constraints,
-    maxiter=100,
-    ftol=1e-6,
-    xtol=1e-12,
-    verbose=3,
-    options={
-        "perturb_options": {"order": 2},
-        "initial_trust_radius": 1e-1,
-        "ga_tr_ratio": 0,
-    },
-)
-
-
-eq3.save("run_nestor_vac_out3.h5")
-with open("run_nestor_vac_out3.pkl", "wb+") as f:
     pickle.dump(out, f)
 
 print("==========OPTIMIZING VEQ==========")

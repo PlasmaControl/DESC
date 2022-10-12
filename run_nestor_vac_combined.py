@@ -278,7 +278,7 @@ print(f["ntor"][:])
 
 
 veq = VMECIO.load("wout_test_iota.vmec.nc", spectral_indexing="fringe")
-veq.change_resolution(L=20, M=10, N=10, L_grid=20, M_grid=12, N_grid=12)
+veq.change_resolution(L=20, M=10, N=10, L_grid=24, M_grid=14, N_grid=14)
 
 pres = np.asarray(f.variables["presf"])
 sp = np.linspace(0, 1, pres.size)
@@ -363,8 +363,8 @@ out = eq1.solve(
     constraints,
     maxiter=100,
     verbose=3,
-    ftol=1e-8,
-    xtol=1e-12,
+    ftol=1e-4,
+    xtol=1e-4,
     options={
         "ga_tr_ratio": 0,
     },
@@ -398,8 +398,8 @@ out = eq2.solve(
     constraints,
     maxiter=100,
     verbose=3,
-    ftol=1e-8,
-    xtol=1e-12,
+    ftol=1e-4,
+    xtol=1e-4,
     options={
         "ga_tr_ratio": 0,
     },
@@ -416,8 +416,8 @@ out = veq.solve(
     constraints,
     maxiter=100,
     verbose=3,
-    ftol=1e-8,
-    xtol=1e-12,
+    ftol=1e-4,
+    xtol=1e-4,
     options={
         "ga_tr_ratio": 0,
     },

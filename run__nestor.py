@@ -342,7 +342,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -361,7 +361,7 @@ eq1 = eq.copy()
 out = eq1._optimize(
     ObjectiveFunction(bc_objective),
     ObjectiveFunction(fb_objective),
-    maxiter=10,
+    maxiter=30,
     verbose=3,
     perturb_options={"order": 2, "dZb": True, "dRb": True, "tr_ratio": [0.01, 0.01]},
 )
@@ -384,7 +384,7 @@ eq2.change_resolution(
 eq2.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -402,7 +402,7 @@ bc_objective.build(eq2)
 out = eq2._optimize(
     ObjectiveFunction(bc_objective),
     ObjectiveFunction(fb_objective),
-    maxiter=10,
+    maxiter=30,
     verbose=3,
     perturb_options={"order": 2, "dZb": True, "dRb": True, "tr_ratio": [0.01, 0.01]},
 )
@@ -419,7 +419,7 @@ eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
 eq2.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field)
+bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -437,7 +437,7 @@ bc_objective.build(eq3)
 out = eq3._optimize(
     ObjectiveFunction(bc_objective),
     ObjectiveFunction(fb_objective),
-    maxiter=10,
+    maxiter=30,
     verbose=3,
     perturb_options={"order": 2, "dZb": True, "dRb": True, "tr_ratio": [0.01, 0.01]},
 )
@@ -451,7 +451,7 @@ with open("run__nestor_out3.pkl", "wb+") as f:
 out = veq._optimize(
     ObjectiveFunction(bc_objective),
     ObjectiveFunction(fb_objective),
-    maxiter=10,
+    maxiter=30,
     verbose=3,
     perturb_options={"order": 2, "dZb": True, "dRb": True, "tr_ratio": [0.01, 0.01]},
 )

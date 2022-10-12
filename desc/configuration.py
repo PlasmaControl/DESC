@@ -353,21 +353,14 @@ class _Configuration(IOAble, ABC):
         elif current is not None:
             raise TypeError("Got unknown current profile {}".format(current))
 
-        # warning about odd profiles
-        if isinstance(self.pressure, PowerSeriesProfile):
-            if self.pressure.sym != "even":
+        # ensure profiles have the right resolution
+        for profile in ["pressure", "iota", "current"]:
+            p = getattr(self, profile)
+            if hasattr(p, "change_resolution"):
+                p.change_resolution(max(p.basis.L, self.L))
+            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
                 warnings.warn(
-                    colored("Pressure profile is not an even power series.", "yellow")
-                )
-        if isinstance(self.iota, PowerSeriesProfile):
-            if self.iota.sym != "even":
-                warnings.warn(
-                    colored("Iota profile is not an even power series.", "yellow")
-                )
-        if isinstance(self.current, PowerSeriesProfile):
-            if self.current.sym != "even":
-                warnings.warn(
-                    colored("Current profile is not an even power series.", "yellow")
+                    colored(f"{profile} profile is not an even power series.", "yellow")
                 )
 
         # ensure number of field periods agree before setting guesses

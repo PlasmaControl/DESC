@@ -97,8 +97,8 @@ class TestConstructor:
         assert eq.N == 2
         assert eq.NFP == 3
         assert eq.spectral_indexing == "ansi"
-        np.testing.assert_allclose(eq.p_l, [10, 5])
-        np.testing.assert_allclose(eq.i_l, [1, 3])
+        np.testing.assert_allclose(eq.p_l, [10, 5, 0])
+        np.testing.assert_allclose(eq.i_l, [1, 3, 0])
         assert isinstance(eq.surface, FourierRZToroidalSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn,

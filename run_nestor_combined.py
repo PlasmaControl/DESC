@@ -361,12 +361,11 @@ print("==========SOLVING EQ1==========")
 out = eq1.solve(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
     verbose=3,
     ftol=1e-8,
     xtol=1e-12,
     options={
-        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
@@ -379,7 +378,6 @@ with open("run_nestor_combined_out1.pkl", "wb+") as f:
 eq2 = eq1.copy()
 
 eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
-eq2.solve(ftol=1e-2, verbose=3)
 
 
 bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
@@ -397,12 +395,11 @@ print("==========SOLVING EQ2==========")
 out = eq2.solve(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
     verbose=3,
     ftol=1e-8,
     xtol=1e-12,
     options={
-        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
@@ -416,12 +413,11 @@ print("==========SOLVING EQV==========")
 out = veq.solve(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
     verbose=3,
     ftol=1e-8,
     xtol=1e-12,
     options={
-        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )

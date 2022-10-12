@@ -365,7 +365,9 @@ print("==========OPTIMIZING EQ1==========")
 out = eq1.optimize(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
+    ftol=1e-6,
+    xtol=1e-12,
     verbose=3,
     options={
         "perturb_options": {"order": 2},
@@ -411,7 +413,9 @@ print("==========OPTIMIZING EQ2==========")
 out = eq2.optimize(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
+    ftol=1e-6,
+    xtol=1e-12,
     verbose=3,
     options={
         "perturb_options": {"order": 2},
@@ -451,7 +455,9 @@ print("==========OPTIMIZING EQ3==========")
 out = eq3.optimize(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
+    ftol=1e-6,
+    xtol=1e-12,
     verbose=3,
     options={
         "perturb_options": {"order": 2},
@@ -469,7 +475,9 @@ print("==========OPTIMIZING VEQ==========")
 out = veq.optimize(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
+    ftol=1e-6,
+    xtol=1e-12,
     verbose=3,
     options={
         "perturb_options": {"order": 2},

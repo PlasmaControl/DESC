@@ -361,12 +361,11 @@ print("==========SOLVING EQ1==========")
 out = eq1.solve(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
     verbose=3,
     ftol=1e-8,
     xtol=1e-12,
     options={
-        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
@@ -397,12 +396,11 @@ print("==========SOLVING EQ2==========")
 out = eq2.solve(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
     verbose=3,
     ftol=1e-8,
     xtol=1e-12,
     options={
-        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )
@@ -416,12 +414,11 @@ print("==========SOLVING EQV==========")
 out = veq.solve(
     objective,
     constraints,
-    maxiter=60,
+    maxiter=100,
     verbose=3,
     ftol=1e-8,
     xtol=1e-12,
     options={
-        "initial_trust_radius": 1e-1,
         "ga_tr_ratio": 0,
     },
 )

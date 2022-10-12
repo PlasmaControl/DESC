@@ -20,6 +20,8 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
+    FixAxisR,
+    FixAxisZ,
 )
 from .objective_funs import ObjectiveFunction
 from .utils import get_equilibrium_objective, get_fixed_boundary_constraints

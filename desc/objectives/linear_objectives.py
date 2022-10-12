@@ -179,7 +179,7 @@ class FixBoundaryZ(_Objective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the profile modes.
+        If True/False uses all/none of the surface modes.
     surface_label : float
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
@@ -430,6 +430,295 @@ class FixLambdaGauge(_Objective):
 
         """
         f = jnp.dot(self._A, L_lmn)
+        return self._shift_scale(f)
+
+
+class FixAxisR(_Objective):
+    """Fixes magnetic axis R coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Magnetic axis coefficients to fix. If None, uses Equilibrium's axis coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        modes=True,
+        name="axis R",
+    ):
+
+        self._modes = modes
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "R axis error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        R_basis = eq.R_basis
+
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.axis.R_basis.modes
+            idx = np.arange(eq.axis.R_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_1d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.axis.R_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the axis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        # self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        # for i, (l, m, n) in enumerate(eq.R_basis.modes):
+        #     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+        #     surf = (
+        #         eq.surface.rho
+        #         if self._surface_label is None
+        #         else self._surface_label
+        #     )
+        #     self._A[j, i] = zernike_radial(surf, l, m)
+        # # else:  # Zb_lmn -> Zb optimization space
+        # #     self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
+
+        ns = np.unique(eq.R_basis.modes[:, 2])
+        self._A = np.zeros((len(ns), R_basis.num_modes))
+        self._dim_f = len(ns)
+
+        for i, (l, m, n) in enumerate(R_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0] and None not in self.target:
+            self.target = self._target[modes_idx]
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
+            self.weight = self._weight[modes_idx]
+
+        # use axis parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = np.zeros((len(ns),))
+            for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
+                j = np.argwhere(ns == n)
+                self.target[j] = Rn
+        print("R target: ", self.target)
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+        ################################################
+
+    def compute(self, R_lmn, **kwargs):
+        """Compute axis R errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Axis R errors..
+
+        """
+        f = jnp.dot(self._A, R_lmn)
+        return self._shift_scale(f)
+
+
+class FixAxisZ(_Objective):
+    """Fixes magnetic axis Z coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Magnetic axis coefficients to fix. If None, uses Equilibrium's axis coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        modes=True,
+        name="axis Z",
+    ):
+
+        self._modes = modes
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "Z axis error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        Z_basis = eq.Z_basis
+
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.axis.Z_basis.modes
+            idx = np.arange(eq.axis.Z_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_1d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.axis.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the axis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        # self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+        # for i, (l, m, n) in enumerate(eq.R_basis.modes):
+        #     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+        #     surf = (
+        #         eq.surface.rho
+        #         if self._surface_label is None
+        #         else self._surface_label
+        #     )
+        #     self._A[j, i] = zernike_radial(surf, l, m)
+        # # else:  # Zb_lmn -> Zb optimization space
+        # #     self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
+
+        ns = np.unique(eq.Z_basis.modes[:, 2])
+        self._A = np.zeros((len(ns), Z_basis.num_modes))
+        self._dim_f = len(ns)
+
+        for i, (l, m, n) in enumerate(Z_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        # use given targets and weights if specified
+        if self.target.size == modes.shape[0] and None not in self.target:
+            self.target = self._target[modes_idx]
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
+            self.weight = self._weight[modes_idx]
+
+        # use axis parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = np.zeros((len(ns),))
+            for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
+                j = np.argwhere(ns == n)
+                self.target[j] = Zn
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+        ################################################
+
+    def compute(self, Z_lmn, **kwargs):
+        """Compute axis Z errors.
+
+        Parameters
+        ----------
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Axis Z errors.
+
+        """
+        f = jnp.dot(self._A, Z_lmn)
         return self._shift_scale(f)
 
 

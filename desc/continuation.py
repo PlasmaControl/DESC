@@ -1,5 +1,7 @@
 """Functions for solving for equilibria with multigrid continuation method."""
 
+import copy
+
 import numpy as np
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -10,21 +12,7 @@ from desc.utils import Timer
 
 
 def solve_continuation_automatic(  # noqa: C901
-    L,
-    M,
-    N,
-    surface,
-    pressure,
-    iota=None,
-    current=None,
-    NFP=1,
-    Psi=1.0,
-    sym=None,
-    L_grid=None,
-    M_grid=None,
-    N_grid=None,
-    node_pattern="jacobi",
-    spectral_indexing="ansi",
+    eq,
     objective="force",
     optimizer="lsq-exact",
     pert_order=2,
@@ -34,37 +22,19 @@ def solve_continuation_automatic(  # noqa: C901
     nfev=100,
     verbose=1,
     checkpoint_path=None,
-    eqfam=None,
-    initial=None,
+    **kwargs,
 ):
     """Solve for an equilibrium using an automatic continuation method.
 
-    By default, the method first solves for a vacuum tokamak, then a finite beta
+    By default, the method first solves for a no pressure tokamak, then a finite beta
     tokamak, then a finite beta stellarator. Currently hard coded to take a fixed
     number of perturbation steps based on conservative estimates and testing. In the
     future, continuation stepping will be done adaptively.
 
     Parameters
     ----------
-    L, M, N : int
-        desired spectral resolution of the final equilibrium
-    surface : Surface
-        desired surface of the final equilibrium
-    pressure, iota, current : Profile
-        desired profiles of the final equilibrium. Must specify pressure and either
-        iota or current
-    NFP : int
-        number of field periods
-    Psi : float (optional)
-        total toroidal flux (in Webers) within LCFS. Default 1.0
-    sym : bool (optional)
-        Whether to enforce stellarator symmetry. Default surface.sym or False.
-    L_grid, M_grid, N_grid : int
-        desired real space resolution of the final equilibrium
-    node_pattern : str (optional)
-        pattern of nodes in real space. Default is ``'jacobi'``
-    spectral_indexing : str (optional)
-        Type of Zernike indexing scheme to use. Default ``'ansi'``
+    eq : Equilibrium
+        Unsolved Equilibrium with the final desired boundary, profiles, resolution.
     objective : str or ObjectiveFunction (optional)
         function to solve for equilibrium solution
     optimizer : str or Optimzer (optional)
@@ -82,10 +52,6 @@ def solve_continuation_automatic(  # noqa: C901
         * 3: as above plus detailed solver output
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
-    eqfam : EquilibriaFamily
-        Family object to store results in. If None, a new one is created.
-    initial : Equilibrium or path-like
-        Initial guess for first step of continuation method
 
     Returns
     -------
@@ -94,24 +60,20 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
-    assert (
-        iota is None or current is None
-    ), "Can only specify iota or current, not both."
     timer = Timer()
     timer.start("Total time")
 
-    surface.change_resolution(L, M, N)
-    surf_axisym = surface.copy()
-    pres_vac = pressure.copy()
+    surface = eq.surface
+    pressure = eq.pressure
+    L, M, N, L_grid, M_grid, N_grid = eq.L, eq.M, eq.N, eq.L_grid, eq.M_grid, eq.N_grid
+    spectral_indexing = eq.spectral_indexing
 
-    L_grid = L_grid or 2 * L
-    M_grid = M_grid or 2 * M
-    N_grid = N_grid or 2 * N
+    mres_step = kwargs.pop("mres_step", 6)
+    pres_step = kwargs.pop("pres_step", 1 / 2)
+    bdry_step = kwargs.pop("bdry_step", 1 / 4)
+    assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
 
-    res_step = 6
-    pres_step = 1 / 2
-    bdry_step = 1 / 4
-    Mi = min(M // 2, res_step)
+    Mi = min(M // 2, mres_step)
     Li = 2 * Mi if spectral_indexing == "fringe" else Mi
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
@@ -121,50 +83,53 @@ def solve_continuation_automatic(  # noqa: C901
     # first we solve vacuum until we reach full L,M
     # then pressure
     # then 3d shaping
-    res_steps = max(M // res_step, 1)
+    mres_steps = max(M // mres_step, 1)
     pres_steps = (
         0
         if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all()
         else int(np.ceil(1 / pres_step))
     )
     bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
-    bdry_ratio = pres_ratio = curr_ratio = 0
+    pres_ratio = 0 if pres_steps else 1
+    bdry_ratio = 0 if N else 1
+    curr_ratio = 1
     deltas = {}
 
-    surf_axisym.change_resolution(L, M, 0)
-
+    surf_axisym = surface.copy()
+    pres_vac = pressure.copy()
+    surf_axisym.change_resolution(L, M, Ni)
     # start with zero pressure
     pres_vac.params *= 0
 
     eqi = Equilibrium(
-        Psi,
-        NFP,
+        eq.Psi,
+        eq.NFP,
         Li,
         Mi,
         Ni,
         L_gridi,
         M_gridi,
         N_gridi,
-        node_pattern,
+        eq.node_pattern,
         pres_vac.copy(),
-        iota,
-        current,
+        copy.copy(eq.iota),  # have to use copy.copy here since may be None
+        copy.copy(eq.current),
         surf_axisym.copy(),
         None,
-        sym,
+        eq.sym,
         spectral_indexing,
     )
-    eqi.set_initial_guess(initial)
+
     optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and iota is not None
+        iota=objective != "vacuum" and eq.iota is not None
     )
     objective_i = get_equilibrium_objective(objective)
 
-    eqfam = EquilibriaFamily() if eqfam is None else eqfam
+    eqfam = EquilibriaFamily()
 
     ii = 0
-    nn = res_steps + pres_steps + bdry_steps
+    nn = mres_steps + pres_steps + bdry_steps
     stop = False
     while ii < nn and not stop:
         timer.start("Iteration {} total".format(ii + 1))
@@ -172,9 +137,9 @@ def solve_continuation_automatic(  # noqa: C901
         if ii > 0:
             eqi = eqfam[-1].copy()
 
-        if ii < res_steps and ii > 0:
+        if ii < mres_steps and ii > 0:
             # increase resolution of vacuum soln
-            Mi = min(Mi + res_step, M)
+            Mi = min(Mi + mres_step, M)
             Li = 2 * Mi if spectral_indexing == "fringe" else Mi
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
             M_gridi = np.ceil(M_grid / M * Mi).astype(int)
@@ -187,18 +152,18 @@ def solve_continuation_automatic(  # noqa: C901
             deltas = get_deltas({"surface": surf_i}, {"surface": surf_i2})
             surf_i = surf_i2
 
-        if ii >= res_steps and ii < res_steps + pres_steps:
+        if ii >= mres_steps and ii < mres_steps + pres_steps:
             # make sure its at full radial/poloidal resolution
             eqi.change_resolution(L=L, M=M, L_grid=L_grid, M_grid=M_grid)
             # increase pressure
             deltas = get_deltas(
-                {"pressure": eqfam[res_steps - 1].pressure}, {"pressure": pressure}
+                {"pressure": eqfam[mres_steps - 1].pressure}, {"pressure": pressure}
             )
             deltas["dp"] *= pres_step
             pres_ratio += pres_step
 
-        if ii >= res_steps + pres_steps:
-            # boundary perturbations
+        elif ii >= mres_steps + pres_steps:
+            # otherwise do boundary perturbations to get 3d shape from tokamak
             eqi.change_resolution(L, M, N, L_grid, M_grid, N_grid)
             surf_axisym.change_resolution(L, M, N)
             deltas = get_deltas({"surface": surf_axisym}, {"surface": surface})
@@ -227,7 +192,7 @@ def solve_continuation_automatic(  # noqa: C901
 
         if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
             constraints_i = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and iota is not None
+                iota=objective != "vacuum" and eq.iota is not None
             )
             objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
@@ -246,7 +211,16 @@ def solve_continuation_automatic(  # noqa: C901
         if not eqi.is_nested(msg="auto"):
             stop = True
         if not stop:
-            eqi.solve(objective_i, constraints_i, optimizer, ftol, xtol, gtol, nfev)
+            eqi.solve(
+                optimizer=optimizer,
+                objective=objective_i,
+                constraints=constraints_i,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                verbose=verbose,
+                maxiter=nfev,
+            )
         if not eqi.is_nested(msg="auto"):
             stop = True
         eqfam.append(eqi)
@@ -260,6 +234,10 @@ def solve_continuation_automatic(  # noqa: C901
             timer.disp("Iteration {} total".format(ii + 1))
         ii += 1
 
+    eq.R_lmn = eqi.R_lmn
+    eq.Z_lmn = eqi.Z_lmn
+    eq.L_lmn = eqi.L_lmn
+    eqfam[-1] = eq
     timer.stop("Total time")
     if verbose > 0:
         print("====================")
@@ -273,7 +251,7 @@ def solve_continuation_automatic(  # noqa: C901
     if verbose:
         print("====================")
 
-    return eqfam, objective_i, constraints_i
+    return eqfam
 
 
 def solve_continuation(  # noqa: C901
@@ -479,7 +457,7 @@ def _print_iteration_summary(
     gtol,
     xtol,
     nfev,
-    **kwargs
+    **kwargs,
 ):
     print("================")
     print("Step {}/{}".format(ii + 1, nn))

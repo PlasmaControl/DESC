@@ -951,21 +951,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
     @classmethod
     def solve_continuation_automatic(
         cls,
-        L,
-        M,
-        N,
-        surface,
-        pressure,
-        iota=None,
-        current=None,
-        NFP=1,
-        Psi=1.0,
-        sym=None,
-        L_grid=None,
-        M_grid=None,
-        N_grid=None,
-        node_pattern="jacobi",
-        spectral_indexing="ansi",
+        eq,
         objective="force",
         optimizer="lsq-exact",
         pert_order=2,
@@ -975,36 +961,18 @@ class EquilibriaFamily(IOAble, MutableSequence):
         nfev=100,
         verbose=1,
         checkpoint_path=None,
-        initial=None,
     ):
         """Solve for an equilibrium using an automatic continuation method.
 
-        By default, the method first solves for a vacuum tokamak, then a finite beta
-        tokamak, then a finite beta stellarator. Currently hard coded to take a fixed
-        number of perturbation steps based on conservative estimates and testing. In the
-        future, continuation stepping will be done adaptively.
+        By default, the method first solves for a no pressure tokamak, then a finite
+        beta tokamak, then a finite beta stellarator. Currently hard coded to take a
+        fixed number of perturbation steps based on conservative estimates and testing.
+        In the future, continuation stepping will be done adaptively.
 
         Parameters
         ----------
-        L, M, N : int
-            desired spectral resolution of the final equilibrium
-        surface : Surface
-            desired surface of the final equilibrium
-        pressure, iota, current : Profile
-            desired profiles of the final equilibrium. Must specify pressure and either
-            iota or current
-        NFP : int
-            number of field periods
-        Psi : float (optional)
-            total toroidal flux (in Webers) within LCFS. Default 1.0
-        sym : bool (optional)
-            Whether to enforce stellarator symmetry. Default surface.sym or False.
-        L_grid, M_grid, N_grid : int
-            desired real space resolution of the final equilibrium
-        node_pattern : str (optional)
-            pattern of nodes in real space. Default is ``'jacobi'``
-        spectral_indexing : str (optional)
-            Type of Zernike indexing scheme to use. Default ``'ansi'``
+        eq : Equilibrium
+            Unsolved Equilibrium with the final desired boundary, profiles, resolution.
         objective : str or ObjectiveFunction (optional)
             function to solve for equilibrium solution
         optimizer : str or Optimzer (optional)
@@ -1035,21 +1003,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         from desc.continuation import solve_continuation_automatic
 
         return solve_continuation_automatic(
-            L,
-            M,
-            N,
-            surface,
-            pressure,
-            iota,
-            current,
-            NFP,
-            Psi,
-            sym,
-            L_grid,
-            M_grid,
-            N_grid,
-            node_pattern,
-            spectral_indexing,
+            eq,
             objective,
             optimizer,
             pert_order,
@@ -1059,8 +1013,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
             nfev,
             verbose,
             checkpoint_path,
-            cls(),
-            initial,
         )
 
     @property

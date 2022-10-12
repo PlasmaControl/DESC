@@ -308,23 +308,26 @@ def test_ATF_results(tmpdir_factory):
     """Test automatic continuation method with ATF."""
     output_dir = tmpdir_factory.mktemp("result")
     eq0 = desc.examples.get("ATF")
-    eqf = EquilibriaFamily()
-    eqf.solve_continuation_automatic(
+    eq = Equilibrium(
+        eq0.Psi,
+        eq0.NFP,
         eq0.L,
         eq0.M,
         eq0.N,
-        eq0.get_surface_at(rho=1),
-        eq0.pressure,
-        eq0.iota,
-        None,
-        eq0.NFP,
-        eq0.Psi,
-        eq0.sym,
         eq0.L_grid,
         eq0.M_grid,
         eq0.N_grid,
         eq0.node_pattern,
+        eq0.pressure,
+        eq0.iota,
+        None,
+        eq0.get_surface_at(rho=1),
+        None,
+        eq0.sym,
         eq0.spectral_indexing,
+    )
+    eqf = EquilibriaFamily.solve_continuation_automatic(
+        eq,
         verbose=2,
         checkpoint_path=output_dir.join("ATF.h5"),
     )
@@ -332,6 +335,41 @@ def test_ATF_results(tmpdir_factory):
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
     np.testing.assert_allclose(rho_err[:, 4:], 0, atol=4e-2)
     np.testing.assert_allclose(theta_err, 0, atol=5e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_ESTELL_results(tmpdir_factory):
+    """Test automatic continuation method with ESTELL."""
+    output_dir = tmpdir_factory.mktemp("result")
+    eq0 = desc.examples.get("ESTELL")
+    eq = Equilibrium(
+        eq0.Psi,
+        eq0.NFP,
+        eq0.L,
+        eq0.M,
+        eq0.N,
+        eq0.L_grid,
+        eq0.M_grid,
+        eq0.N_grid,
+        eq0.node_pattern,
+        eq0.pressure,
+        None,
+        eq0.current,
+        eq0.get_surface_at(rho=1),
+        None,
+        eq0.sym,
+        eq0.spectral_indexing,
+    )
+    eqf = EquilibriaFamily.solve_continuation_automatic(
+        eq,
+        verbose=2,
+        checkpoint_path=output_dir.join("ESTELL.h5"),
+    )
+    eqf = load(output_dir.join("ESTELL.h5"))
+    rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
+    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=4e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 class TestGetExample:

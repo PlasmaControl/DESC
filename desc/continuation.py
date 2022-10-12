@@ -343,7 +343,6 @@ def solve_continuation(  # noqa: C901
 
         if ii > 0:
             eqi.set_initial_guess(eqfam[ii - 1])
-
             # figure out if we need perturbations
             things1 = {
                 "surface": eqfam[ii - 1].surface,
@@ -372,7 +371,9 @@ def solve_continuation(  # noqa: C901
             if verbose > 0:
                 print("Perturbing equilibrium")
             # TODO: pass Jx if available
-            eqi.perturb(
+            eqp = eqfam[ii - 1].copy()
+            eqp.change_resolution(**eqi.resolution)
+            eqp.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
                 **deltas,
@@ -380,7 +381,11 @@ def solve_continuation(  # noqa: C901
                 verbose=verbose,
                 copy=False,
             )
+            eqi.R_lmn = eqp.R_lmn
+            eqi.Z_lmn = eqp.Z_lmn
+            eqi.L_lmn = eqp.L_lmn
             deltas = {}
+            del eqp
 
         if not eqi.is_nested(msg="manual"):
             stop = True

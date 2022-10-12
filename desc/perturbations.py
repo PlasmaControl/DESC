@@ -1,6 +1,5 @@
 """Functions for perturbing equilibria."""
 
-import copy as pycopy
 import warnings
 
 import numpy as np
@@ -38,9 +37,11 @@ def get_deltas(things1, things2):
     assert things1.keys() == things2.keys(), "Must have same keys in both dictionaries"
 
     if "surface" in things1:
-        s1 = pycopy.copy(things1.pop("surface"))
-        s2 = pycopy.copy(things2.pop("surface"))
-        if s1 is not None:
+        s1 = things1.pop("surface")
+        s2 = things2.pop("surface")
+        if s1 is not None and s2 is not None:
+            s1 = s1.copy()
+            s2 = s2.copy()
             s1.change_resolution(s2.L, s2.M, s2.N)
             if not np.allclose(s2.R_lmn, s1.R_lmn):
                 deltas["dRb"] = s2.R_lmn - s1.R_lmn
@@ -49,9 +50,11 @@ def get_deltas(things1, things2):
 
     for key in ["iota", "pressure", "current"]:
         if key in things1:
-            t1 = pycopy.copy(things1.pop(key))
-            t2 = pycopy.copy(things2.pop(key))
-            if t1 is not None:
+            t1 = things1.pop(key)
+            t2 = things2.pop(key)
+            if t1 is not None and t2 is not None:
+                t1 = t1.copy()
+                t2 = t2.copy()
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
                     t1.change_resolution(t2.basis.L)
                 if not np.allclose(t2.params, t1.params):

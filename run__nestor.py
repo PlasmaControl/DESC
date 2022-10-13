@@ -299,16 +299,13 @@ surf = veq.get_surface_at(1)
 surf.change_resolution(M=1, N=1)
 eq = Equilibrium(
     Psi=veq.Psi,
+    surface=surf,
     pressure=veq.pressure,
     iota=veq.iota,
     spectral_indexing=veq.spectral_indexing,
     sym=veq.sym,
     NFP=veq.NFP,
 )
-
-surf.Z_lmn = surf.R_lmn[-1:]
-eq.set_initial_guess(surf)
-eq.surface = surf
 
 eq.change_resolution(
     veq.L // 3,

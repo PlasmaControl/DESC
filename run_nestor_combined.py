@@ -347,7 +347,7 @@ out = eq1.solve(
     objective,
     constraints,
     maxiter=60,
-    xscale=1,    
+    x_scale=1,    
     verbose=3,
     options={
         "initial_trust_radius": 1e-2,
@@ -382,7 +382,7 @@ out = eq2.solve(
     objective,
     constraints,
     maxiter=60,
-    xscale=1,    
+    x_scale=1,    
     verbose=3,
     options={
         "initial_trust_radius": 1e-2,
@@ -400,7 +400,7 @@ out = veq.solve(
     objective,
     constraints,
     maxiter=60,
-    xscale=1,
+    x_scale=1,
     verbose=3,
     options={
         "initial_trust_radius": 1e-2,

@@ -349,7 +349,7 @@ out = eq1.solve(
     constraints,
     maxiter=60,
     verbose=3,
-    xscale=1,
+    x_scale=1,
     options={
         "initial_trust_radius": 1e-2,
         "ga_tr_ratio": 0,
@@ -383,7 +383,7 @@ out = eq2.solve(
     objective,
     constraints,
     maxiter=60,
-    xscale=1,    
+    x_scale=1,    
     verbose=3,
     options={
         "initial_trust_radius": 1e-2,
@@ -401,7 +401,7 @@ out = veq.solve(
     objective,
     constraints,
     maxiter=60,
-    xscale=1,
+    x_scale=1,
     verbose=3,
     options={
         "initial_trust_radius": 1e-2,

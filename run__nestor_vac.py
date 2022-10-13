@@ -298,6 +298,7 @@ veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 surf = veq.get_surface_at(1)
 surf.change_resolution(M=1, N=1)
 eq = Equilibrium(
+    surface=surf,
     Psi=veq.Psi,
     pressure=veq.pressure,
     iota=veq.iota,
@@ -305,10 +306,6 @@ eq = Equilibrium(
     sym=veq.sym,
     NFP=veq.NFP,
 )
-
-surf.Z_lmn = surf.R_lmn[-1:]
-eq.set_initial_guess(surf)
-eq.surface = surf
 
 eq.change_resolution(
     veq.L // 3,

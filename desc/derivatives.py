@@ -273,8 +273,25 @@ class AutoDiffDerivative(_Derivative):
     def _compute_jvp(self, v, *args):
         return self.compute_jvp(self._fun, self.argnum, v, *args)
 
+    def _jac_looped(self, *args):
+
+        Z = nested_zeros_like(args)
+        n = args[self._argnum].size
+        I = jnp.eye(n)
+
+        J = []
+        if not isinstance(Z, tuple):
+            Z = (Z,)
+
+        for i in range(n):
+            tangents = Z[0 : self._argnum] + (I[i],) + Z[self._argnum + 1 :]
+            Ji = jnp.atleast_2d(jax.jit(self._compute_jvp)(tangents, *args))
+            J.append(Ji.T)
+
+        return jnp.hstack(J)
+
     def _set_mode(self, mode) -> None:
-        if mode not in ["fwd", "rev", "grad", "hess", "jvp"]:
+        if mode not in ["fwd", "rev", "grad", "hess", "jvp", "looped"]:
             raise ValueError(
                 colored("invalid mode option for automatic differentiation", "red")
             )
@@ -290,6 +307,8 @@ class AutoDiffDerivative(_Derivative):
             self._compute = jax.hessian(self._fun, self._argnum)
         elif self._mode == "jvp":
             self._compute = self._compute_jvp
+        elif self._mode == "looped":
+            self._compute = self._jac_looped
 
 
 class FiniteDiffDerivative(_Derivative):

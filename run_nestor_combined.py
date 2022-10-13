@@ -278,21 +278,7 @@ print(f["ntor"][:])
 
 
 veq = VMECIO.load("wout_test_beta.vmec.nc", spectral_indexing="fringe")
-veq.change_resolution(L=20, M=10, N=10, L_grid=24, M_grid=14, N_grid=14)
-
-pres = np.asarray(f.variables["presf"])
-sp = np.linspace(0, 1, pres.size)
-rp = np.sqrt(sp)
-pressure = SplineProfile(pres, rp)
-
-iot = np.asarray(f.variables["iotaf"])
-si = np.linspace(0, 1, iot.size)
-ri = np.sqrt(si)
-iota = SplineProfile(iot, ri)
-
-
-veq.pressure = pressure
-veq.iota = iota
+veq.change_resolution(L=20, M=10, N=10, L_grid=24, M_grid=12, N_grid=12)
 
 NFP = veq.NFP
 mgrid = "tests/inputs/nestor/mgrid_test.nc"
@@ -300,13 +286,12 @@ extcur = f["extcur"][:]
 folder = os.getcwd()
 mgridFilename = os.path.join(folder, mgrid)
 ext_field = SplineMagneticField.from_mgrid(
-    mgridFilename, extcur, extrap=True, period=(2 * np.pi / NFP)
+    mgridFilename, extcur, extrap=False, period=(2 * np.pi / NFP)
 )
 
-
 veq.resolution_summary()
-# print("==========SOLVING VEQ==========")
-# veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
+print("==========SOLVING VEQ==========")
+veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
 surf = veq.get_surface_at(1)
@@ -326,14 +311,14 @@ eq.surface = surf
 
 eq.change_resolution(
     veq.L // 2,
-    veq.M,
-    veq.N,
+    veq.M // 2,
+    veq.N // 2,
     veq.L_grid // 2,
-    veq.M_grid,
-    veq.N_grid,
+    veq.M_grid // 2,
+    veq.N_grid // 2,
 )
-# print("==========SOLVING EQ0==========")
-# eq.solve(ftol=1e-2, verbose=3)
+print("==========SOLVING EQ0==========")
+eq.solve(ftol=1e-2, verbose=3)
 
 from desc.objectives import (
     ObjectiveFunction,
@@ -344,7 +329,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction((fb_objective, bc_objective))
@@ -361,11 +346,11 @@ print("==========SOLVING EQ1==========")
 out = eq1.solve(
     objective,
     constraints,
-    maxiter=100,
+    maxiter=60,
+    xscale=1,    
     verbose=3,
-    ftol=1e-4,
-    xtol=1e-4,
     options={
+        "initial_trust_radius": 1e-2,
         "ga_tr_ratio": 0,
     },
 )
@@ -378,9 +363,10 @@ with open("run_nestor_combined_out1.pkl", "wb+") as f:
 eq2 = eq1.copy()
 
 eq2.change_resolution(veq.L, veq.M, veq.N, veq.L_grid, veq.M_grid, veq.N_grid)
+eq2.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction((fb_objective, bc_objective))
@@ -395,11 +381,11 @@ print("==========SOLVING EQ2==========")
 out = eq2.solve(
     objective,
     constraints,
-    maxiter=100,
+    maxiter=60,
+    xscale=1,    
     verbose=3,
-    ftol=1e-4,
-    xtol=1e-4,
     options={
+        "initial_trust_radius": 1e-2,
         "ga_tr_ratio": 0,
     },
 )
@@ -413,11 +399,11 @@ print("==========SOLVING EQV==========")
 out = veq.solve(
     objective,
     constraints,
-    maxiter=100,
+    maxiter=60,
+    xscale=1,
     verbose=3,
-    ftol=1e-4,
-    xtol=1e-4,
     options={
+        "initial_trust_radius": 1e-2,
         "ga_tr_ratio": 0,
     },
 )

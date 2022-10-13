@@ -332,7 +332,7 @@ eq.change_resolution(
     veq.M_grid // 2,
     veq.N_grid // 2,
 )
-print("==========SOLVING EQ0==========")
+print("==========SOLVING EQ1==========")
 eq.solve(ftol=1e-2, verbose=3)
 
 from desc.objectives import (
@@ -344,7 +344,7 @@ from desc.objectives import (
     FixPsi,
 )
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -360,23 +360,11 @@ bc_objective.build(eq)
 
 
 eq1 = eq.copy()
-eq1.change_resolution(
-    veq.L // 2,
-    veq.M,
-    veq.N,
-    veq.L_grid // 2,
-    veq.M_grid,
-    veq.N_grid,
-)
-print("==========SOLVING EQ1==========")
-eq1.solve(ftol=1e-2, verbose=3)
 print("==========OPTIMIZING EQ1==========")
 out = eq1.optimize(
     objective,
     constraints,
-    maxiter=100,
-    ftol=1e-6,
-    xtol=1e-12,
+    maxiter=60,
     verbose=3,
     options={
         "perturb_options": {"order": 2},
@@ -397,7 +385,7 @@ print("==========SOLVING EQ2==========")
 eq2.solve(ftol=1e-2, verbose=3)
 
 
-bc_objective = BoundaryErrorNESTOR(ext_field, nzeta=36)
+bc_objective = BoundaryErrorNESTOR(ext_field)
 fb_objective = ForceBalance()
 
 objective = ObjectiveFunction(bc_objective)
@@ -411,13 +399,11 @@ constraints = (
 fb_objective.build(eq2)
 bc_objective.build(eq2)
 
-print("==========OPTIMIZING EQ2==========")
+print("==========OPTIMIZING VEQ==========")
 out = eq2.optimize(
     objective,
     constraints,
-    maxiter=100,
-    ftol=1e-6,
-    xtol=1e-12,
+    maxiter=60,
     verbose=3,
     options={
         "perturb_options": {"order": 2},
@@ -435,9 +421,7 @@ print("==========OPTIMIZING VEQ==========")
 out = veq.optimize(
     objective,
     constraints,
-    maxiter=100,
-    ftol=1e-6,
-    xtol=1e-12,
+    maxiter=60,
     verbose=3,
     options={
         "perturb_options": {"order": 2},

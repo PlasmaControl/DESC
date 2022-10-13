@@ -27,6 +27,7 @@ __all__ = [
     "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_boundaries",
     "plot_boundary",
     "plot_coefficients",
     "plot_comparison",
@@ -860,7 +861,7 @@ def plot_fsa(
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
-    grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
+    grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
     g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
     data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
@@ -1395,6 +1396,116 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
                 marker=marker,
                 s=size,
             )
+
+    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
+    ax.tick_params(labelbottom=True, labelleft=True)
+
+    fig.legend(fontsize=legend_fontsize)
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
+    """Plot stellarator boundaries at multiple toroidal coordinates.
+
+    Parameters
+    ----------
+    eqs : array-like of Equilibrium or EquilibriaFamily
+        Equilibria to plot.
+    labels : array-like
+        Array the same length as eqs of labels to apply to each equilibrium.
+    zeta : int or array-like or None
+        Values of zeta to plot boundary surface at.
+        If an integer, plot that many contours linearly spaced in [0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        cmap : colormap to use for plotting, discretized into len(eqs) colors
+        colors: array of colors to use for each Equilibrium
+        ls : array of line styles to use for each Equilibrium
+        lw : array of line widths to use for each Equilibrium
+        label_fontsize: float, fontsize of the x and y labels
+        legend_fontsize: float, fontsize of the legend
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_boundary.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boundary
+        fig, ax = plot_boundary(eq)
+
+    """
+    figsize = kwargs.pop("figsize", None)
+    cmap = kwargs.pop("cmap", "rainbow")
+    colors = kwargs.pop("colors", None)
+    ls = kwargs.pop("ls", None)
+    lw = kwargs.pop("lw", None)
+    label_fontsize = kwargs.pop("label_fontsize", None)
+    legend_fontsize = kwargs.pop("legend_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+
+    if zeta is None:
+        zeta = 1 if eqs[0].N == 0 else 4
+    zeta = zeta + 1  # include zeta = 2*pi
+    grid_kwargs = {"NFP": eqs[-1].NFP, "theta": 100, "zeta": zeta}
+    grid = _get_grid(**grid_kwargs)
+
+    neq = len(eqs)
+
+    if labels is None:
+        labels = [str(i) for i in range(neq)]
+    if colors is None:
+        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if lw is None:
+        lw = 1
+    if isinstance(lw, int):
+        lw = [lw for i in range(neq)]
+    if ls is None:
+        ls = "-"
+    if isinstance(ls, str):
+        ls = [ls for i in range(neq)]
+
+    fig, ax = _format_ax(ax, figsize=figsize, equal=True)
+
+    for i in range(neq):
+        coords = eqs[i].compute("R", grid)
+        R = coords["R"].reshape(
+            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
+        )
+        Z = coords["Z"].reshape(
+            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
+        )
+        for j in range(grid.num_zeta - 1):
+            (line,) = ax.plot(
+                R[:, -1, j],
+                Z[:, -1, j],
+                color=colors[i],
+                linestyle=ls[i],
+                lw=lw[i],
+            )
+            if j == 0:
+                line.set_label(labels[i])
 
     ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)

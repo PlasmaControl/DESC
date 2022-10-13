@@ -82,6 +82,16 @@ def test_1d_iota(DSHAPE_current):
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_1d_iota_radial(DSHAPE_current):
+    """Test plotting 1d rotational transform."""
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    fig, ax = plot_1d(eq, "iota", figsize=(4, 4))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_logpsi(DSHAPE_current):
     """Test plotting 1d flux funciton with log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]

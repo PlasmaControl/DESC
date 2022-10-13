@@ -539,7 +539,15 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    if (
+        eq.iota is None
+    ):  # avoid issue of plot grid needing to be used for computing FSAs by making a temp eq with iota calculated already
+        compute_eq = eq.copy()
+        compute_eq.iota = compute_eq.get_profile("iota")
+    else:
+        compute_eq = eq
+
+    data, label = _compute(compute_eq, name, grid, kwargs.pop("component", None))
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
@@ -549,11 +557,11 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
             np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
         ):  # normalize vacuum force by B pressure gradient
             norm_name = "|grad(|B|^2)|/2mu0"
-            norm_data, _ = _compute(eq, norm_name, grid)
+            norm_data, _ = _compute(compute_eq, norm_name, grid)
         else:  # normalize force balance with pressure by gradient of pressure
             compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
             norm_name = "<|grad(p)|>_vol"
-            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+            norm_data, _ = _compute(compute_eq, norm_name, compute_grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D

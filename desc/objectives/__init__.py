@@ -7,6 +7,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
+from ._free_boundary import BoundaryErrorNESTOR
 from ._generic import GenericObjective, ToroidalCurrent
 from ._geometry import AspectRatio, Volume
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm

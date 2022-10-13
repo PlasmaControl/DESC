@@ -74,7 +74,7 @@ def solve_continuation_automatic(  # noqa: C901
     assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
 
     Mi = min(M // 2, mres_step)
-    Li = 2 * Mi if spectral_indexing == "fringe" else Mi
+    Li = int(np.ceil(L / M) * Mi)
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
     M_gridi = np.ceil(M_grid / M * Mi).astype(int)
@@ -83,7 +83,7 @@ def solve_continuation_automatic(  # noqa: C901
     # first we solve vacuum until we reach full L,M
     # then pressure
     # then 3d shaping
-    mres_steps = max(M // mres_step, 1)
+    mres_steps = int(max(np.ceil(M / mres_step), 1))
     pres_steps = (
         0
         if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all()
@@ -140,7 +140,7 @@ def solve_continuation_automatic(  # noqa: C901
         if ii < mres_steps and ii > 0:
             # increase resolution of vacuum soln
             Mi = min(Mi + mres_step, M)
-            Li = 2 * Mi if spectral_indexing == "fringe" else Mi
+            Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
             M_gridi = np.ceil(M_grid / M * Mi).astype(int)
             N_gridi = np.ceil(N_grid / N * Ni).astype(int)

@@ -215,7 +215,7 @@ def check_termination(
 ):
     """Check termination condition and get message."""
     ftol_satisfied = dF < abs(ftol * F) and ratio > 0.25
-    xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and ratio > 0.25
+    xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
     gtol_satisfied = g_norm < gtol
 
     if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):

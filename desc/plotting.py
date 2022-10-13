@@ -434,7 +434,36 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    if (
+        eq.iota is None
+    ):  # make compute grid able to do flux surface averages needed for iota
+        # FIXME: would not work if given a grid with rho=0.5 and then M=M
+        # as the compute grid would not have the given rho
+        # should put logic to check if the grid given
+        grid_kwargs = {
+            "L": 1 if plot_axes[0] != 0 else grid.L,
+            "M": eq.M_grid if plot_axes[0] != 1 else grid.M,
+            "N": eq.N_grid,
+            "NFP": eq.NFP,
+            "axis": False,
+        }
+        compute_grid = _get_grid(**grid_kwargs)
+        surf_labels = ["rho", "theta", "zeta"]
+    # FIXME: if given a grid that is not in rho, this will not work
+    # as it won't have the right M and N.
+    else:
+        compute_grid = grid
+    if eq.iota is None:
+        data, label = _compute(
+            eq, name, compute_grid, kwargs.pop("component", None), reshape=False
+        )
+    else:
+        data, label = _compute(eq, name, compute_grid, kwargs.pop("component", None))
+
+    # FIXME: if given a grid that is not in rho, this will not work
+    # as it defaults to giving the "rho" unique indices
+    if eq.iota is None:
+        data = compress(compute_grid, data, surface_label=surf_labels[plot_axes[0]])
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     # reshape data to 1D

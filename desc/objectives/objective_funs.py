@@ -119,15 +119,24 @@ class ObjectiveFunction(IOAble):
             self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
             )
+        looped = False
         if self._deriv_mode == "batched":
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
             self._jac = Derivative(self.compute, mode="fwd")
+            obj_names = [obj.__class__.__name__ for obj in self.objectives]
+            looped = any(["BoundaryError" in s for s in obj_names])
+            if looped:
+                self._jac = Derivative(
+                    self.compute,
+                    mode="looped",
+                )
 
         if use_jit:
             self.compute = jit(self.compute)
             self.compute_scalar = jit(self.compute_scalar)
-            self.jac = jit(self.jac)
+            if not looped:
+                self.jac = jit(self.jac)
             self.hess = jit(self.hess)
             self.grad = jit(self.grad)
             self.jvp = jit(self.jvp)

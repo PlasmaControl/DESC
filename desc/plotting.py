@@ -1543,7 +1543,7 @@ def plot_comparison(
         If an integer, plot that many contours linearly spaced in (0,2pi).
     zeta : int or array-like or None
         Values of zeta to plot contours at.
-        If an integer, plot that many contours linearly spaced in (0,2pi).
+        If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
@@ -1610,7 +1610,7 @@ def plot_comparison(
     N = np.max([eq.N for eq in eqs])
     nfp = eqs[0].NFP
     if isinstance(zeta, numbers.Integral):
-        zeta = np.linspace(0, 2 * np.pi / nfp, zeta)
+        zeta = np.linspace(0, 2 * np.pi / nfp, zeta, endpoint=False)
     elif zeta is None:
         if N == 0:
             zeta = np.array([0])

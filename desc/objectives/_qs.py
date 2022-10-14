@@ -12,8 +12,8 @@ from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import compute_scaling_factors
 
 
 class QuasisymmetryBoozer(_Objective):

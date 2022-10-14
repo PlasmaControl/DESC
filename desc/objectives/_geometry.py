@@ -5,8 +5,8 @@ from desc.grid import QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from .utils import compute_scaling_factors
 
 
 class Volume(_Objective):

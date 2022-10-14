@@ -54,7 +54,9 @@ class TestObjectiveFunction:
         """Test calculation of plasma volume."""
 
         def test(eq):
-            obj = Volume(target=10 * np.pi ** 2, weight=1 / np.pi ** 2, eq=eq)
+            obj = Volume(
+                target=10 * np.pi ** 2, weight=1 / np.pi ** 2, eq=eq, normalize=False
+            )
             V = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 10)
             V_compute_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
@@ -80,7 +82,7 @@ class TestObjectiveFunction:
         """Test calculation of MHD energy."""
 
         def test(eq):
-            obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
+            obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq, normalize=False)
             W = obj.compute(
                 eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
             )
@@ -94,7 +96,7 @@ class TestObjectiveFunction:
         """Test calculation of toroidal current."""
 
         def test(eq):
-            obj = ToroidalCurrent(target=1, weight=2, eq=eq)
+            obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
             np.testing.assert_allclose(I, -2)
 

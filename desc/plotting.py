@@ -249,6 +249,13 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
+    if (
+        eq.iota is None
+    ):  # avoid issue of plot grid needing to be used for computing FSAs by making a temp eq with iota calculated already
+        compute_eq = eq.copy()
+        compute_eq.iota = compute_eq.get_profile("iota")
+    else:
+        compute_eq = eq
     if name not in data_index:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
@@ -267,7 +274,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
-        data = eq.compute(name, grid)[name]
+        data = compute_eq.compute(name, grid)[name]
 
     if data_index[name]["dim"] > 1:
         if component is None:
@@ -434,14 +441,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     if len(plot_axes) != 1:
         return ValueError(colored("Grid must be 1D", "red"))
 
-    if (
-        eq.iota is None
-    ):  # avoid issue of plot grid needing to be used for computing FSAs by making a temp eq with iota calculated already
-        compute_eq = eq.copy()
-        compute_eq.iota = compute_eq.get_profile("iota")
-    else:
-        compute_eq = eq
-    data, label = _compute(compute_eq, name, grid, kwargs.pop("component", None))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -539,15 +539,7 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     if len(plot_axes) != 2:
         return ValueError(colored("Grid must be 2D", "red"))
 
-    if (
-        eq.iota is None
-    ):  # avoid issue of plot grid needing to be used for computing FSAs by making a temp eq with iota calculated already
-        compute_eq = eq.copy()
-        compute_eq.iota = compute_eq.get_profile("iota")
-    else:
-        compute_eq = eq
-
-    data, label = _compute(compute_eq, name, grid, kwargs.pop("component", None))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
@@ -557,11 +549,11 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
             np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
         ):  # normalize vacuum force by B pressure gradient
             norm_name = "|grad(|B|^2)|/2mu0"
-            norm_data, _ = _compute(compute_eq, norm_name, grid)
+            norm_data, _ = _compute(eq, norm_name, grid)
         else:  # normalize force balance with pressure by gradient of pressure
             compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
             norm_name = "<|grad(p)|>_vol"
-            norm_data, _ = _compute(compute_eq, norm_name, compute_grid, reshape=False)
+            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -1000,22 +992,15 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         nzeta = zeta.size
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
-    if (
-        eq.iota is None
-    ):  # avoid issue of plot grid needing to be used for computing FSAs by making a temp eq with iota calculated already
-        compute_eq = eq.copy()
-        compute_eq.iota = compute_eq.get_profile("iota")
-    else:
-        compute_eq = eq
 
-    data, label = _compute(compute_eq, name, grid, kwargs.pop("component", None))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
         assert name == "|F|", "Can only normalize |F|."
         if (
             np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
         ):  # normalize vacuum force by B pressure gradient
             norm_name = "|grad(|B|^2)|/2mu0"
-            norm_data, _ = _compute(compute_eq, norm_name, grid)
+            norm_data, _ = _compute(eq, norm_name, grid)
         else:  # normalize force balance with pressure by gradient of pressure
             compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
             norm_name = "<|grad(p)|>_vol"

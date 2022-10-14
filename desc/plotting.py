@@ -251,7 +251,8 @@ def _compute(eq, name, grid, component=None, reshape=True):
     """
     if (
         eq.iota is None
-    ):  # avoid issue of plot grid needing to be used for computing FSAs by making a temp eq with iota calculated already
+    ):  # avoid issue of plot grid needing to be used for computing FSAs
+        #     by making a temp eq with iota calculated already
         compute_eq = eq.copy()
         compute_eq.iota = compute_eq.get_profile("iota")
     else:

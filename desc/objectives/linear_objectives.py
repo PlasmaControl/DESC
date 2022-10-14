@@ -49,6 +49,8 @@ class FixBoundaryR(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # TODO: can we dynamically detect this instead?
+    _units = "(m)"
+    _print_value_fmt = "R boundary error: {:10.3e} "
 
     def __init__(
         self,
@@ -65,7 +67,6 @@ class FixBoundaryR(_Objective):
         self._modes = modes
         self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
 
         if self._fixed_boundary:
             self.compute = self._compute_R
@@ -190,6 +191,8 @@ class FixBoundaryZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Z boundary error: {:10.3e} "
 
     def __init__(
         self,
@@ -206,7 +209,6 @@ class FixBoundaryZ(_Objective):
         self._modes = modes
         self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
 
         if self._fixed_boundary:
             self.compute = self._compute_Z
@@ -321,11 +323,12 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _units = "(radians)"
+    _print_value_fmt = "lambda gauge error: {:10.3e} "
 
     def __init__(self, eq=None, target=0, weight=1, name="lambda gauge"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "lambda gauge error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -556,6 +559,8 @@ class FixPressure(_FixProfile):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(Pa)"
+    _print_value_fmt = "Fixed-pressure profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -575,7 +580,6 @@ class FixPressure(_FixProfile):
             indices=indices,
             name=name,
         )
-        self._print_value_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -645,6 +649,8 @@ class FixIota(_FixProfile):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-iota profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -664,7 +670,6 @@ class FixIota(_FixProfile):
             indices=indices,
             name=name,
         )
-        self._print_value_fmt = "Fixed-iota profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -741,6 +746,8 @@ class FixCurrent(_FixProfile):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(A)"
+    _print_value_fmt = "Fixed-current profile error: {:10.3e} "
 
     def __init__(
         self,
@@ -760,7 +767,6 @@ class FixCurrent(_FixProfile):
             indices=indices,
             name=name,
         )
-        self._print_value_fmt = "Fixed-current profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -827,11 +833,12 @@ class FixPsi(_Objective):
     _scalar = True
     _linear = True
     _fixed = True
+    _units = "(Wb)"
+    _print_value_fmt = "Fixed-Psi error: {:10.3e} "
 
     def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

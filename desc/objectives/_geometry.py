@@ -6,6 +6,7 @@ from desc.transform import Transform
 from desc.utils import Timer
 
 from .objective_funs import _Objective
+from .utils import compute_scaling_factors
 
 
 class Volume(_Objective):
@@ -21,6 +22,12 @@ class Volume(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -30,12 +37,29 @@ class Volume(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(m^3)"
+    _print_value_fmt = "Plasma volume: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="volume"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="volume",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -72,6 +96,10 @@ class Volume(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -120,12 +148,13 @@ class AspectRatio(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Aspect ratio: {:10.3e} "
 
     def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

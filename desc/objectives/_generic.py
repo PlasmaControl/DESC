@@ -13,6 +13,7 @@ from desc.transform import Transform
 from desc.utils import Timer
 
 from .objective_funs import _Objective
+from .utils import compute_scaling_factors
 
 
 class GenericObjective(_Objective):
@@ -39,15 +40,15 @@ class GenericObjective(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(Unknown)"
+    _print_value_fmt = "Residual: {:10.3e} "
 
     def __init__(self, f, eq=None, target=0, weight=1, grid=None, name="generic"):
 
         self.f = f
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = (
-            "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
-        )
+        self._units = "(" + data_index[self.f]["units"] + ")"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -168,6 +169,12 @@ class ToroidalCurrent(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -177,12 +184,29 @@ class ToroidalCurrent(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(A)"
+    _print_value_fmt = "Toroidal current: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="toroidal current"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="toroidal current",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -229,6 +253,10 @@ class ToroidalCurrent(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["J"]
 
         self._check_dimensions()
         self._set_dimensions(eq)

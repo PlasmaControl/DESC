@@ -1,13 +1,17 @@
-import numpy as np
+"""Functions for perturbing equilibria."""
+
 import warnings
+
+import numpy as np
 from termcolor import colored
-from desc.objectives.utils import factorize_linear_constraints
-from desc.backend import use_jax, put
-from desc.utils import Timer
+
+from desc.backend import put, use_jax
 from desc.compute import arg_order
-from desc.optimize.utils import evaluate_quadratic
+from desc.objectives import get_fixed_boundary_constraints
+from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.objectives import ObjectiveFunction, get_fixed_boundary_constraints
+from desc.optimize.utils import evaluate_quadratic
+from desc.utils import Timer
 
 __all__ = ["autoperturb", "perturb", "optimal_perturb"]
 
@@ -138,7 +142,7 @@ def autoperturb(
     return eq2
 
 
-def perturb(
+def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective,
     constraints=(),
@@ -404,7 +408,6 @@ def perturb(
             threshold=1e-6,
         )
         dx3_reduced = scale @ dx3_h
-        dx3 = recover(dx3_reduced) - xp
 
     if order > 3:
         raise ValueError(
@@ -447,7 +450,7 @@ def perturb(
     return eq_new
 
 
-def optimal_perturb(
+def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective_f,
     objective_g,

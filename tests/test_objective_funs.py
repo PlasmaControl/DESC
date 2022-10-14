@@ -1,19 +1,27 @@
+"""Tests for objective functions.
+
+These generally don't test the accuracy of the computation for realistic examples,
+that is done in test_compute_functions or regression tests.
+
+This module primarily tests the constructing/building/calling methods.
+"""
+
 import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.objectives import (
-    ObjectiveFunction,
-    GenericObjective,
-    Energy,
-    Volume,
     AspectRatio,
-    ToroidalCurrent,
-    QuasisymmetryBoozer,
-    QuasisymmetryTwoTerm,
-    QuasisymmetryTripleProduct,
-    MercierStability,
+    Energy,
+    GenericObjective,
     MagneticWell,
+    MercierStability,
+    ObjectiveFunction,
+    QuasisymmetryBoozer,
+    QuasisymmetryTripleProduct,
+    QuasisymmetryTwoTerm,
+    ToroidalCurrent,
+    Volume,
 )
 from desc.profiles import PowerSeriesProfile
 

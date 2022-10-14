@@ -1,13 +1,16 @@
+"""Tests for _Configuration base class."""
+
 import numpy as np
 import pytest
-from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.grid import LinearGrid, ConcentricGrid, QuadratureGrid
-from desc.profiles import PowerSeriesProfile, SplineProfile
+
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
     ZernikeRZToroidalSection,
 )
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.profiles import PowerSeriesProfile, SplineProfile
 
 
 class TestConstructor:
@@ -380,15 +383,15 @@ class TestInitialGuess:
 
         # test axis and eq NFP not agreeing
         with pytest.raises(ValueError):
-            eq = Equilibrium(surface=surface3, axis=axis, NFP=3)
+            _ = Equilibrium(surface=surface3, axis=axis, NFP=3)
 
         # test axis and surface NFP not agreeing
         with pytest.raises(ValueError):
-            eq = Equilibrium(surface=surface2, axis=axis, NFP=3)
+            _ = Equilibrium(surface=surface2, axis=axis, NFP=3)
 
         # test surface and eq NFP not agreeing
         with pytest.raises(ValueError):
-            eq = Equilibrium(surface=surface3, axis=axis, NFP=2)
+            _ = Equilibrium(surface=surface3, axis=axis, NFP=2)
 
     @pytest.mark.unit
     @pytest.mark.solve
@@ -404,41 +407,44 @@ class TestInitialGuess:
 
 
 class TestGetSurfaces:
-    """Tests for get_surface method"""
+    """Tests for get_surface method."""
 
     @pytest.mark.unit
     def test_get_rho_surface(self):
         """Test getting a constant rho surface."""
         eq = Equilibrium()
-        surf = eq.get_surface_at(rho=0.5)
+        R0 = 10
+        rho = 0.5
+        surf = eq.get_surface_at(rho=rho)
+        assert surf.rho == rho
         np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi ** 2 * 10 * 0.5
+            surf.compute_surface_area(), 4 * np.pi ** 2 * R0 * rho
         )
-        assert surf.rho == 0.5
 
     @pytest.mark.unit
     def test_get_zeta_surface(self):
         """Test getting a constant zeta surface."""
         eq = Equilibrium()
         surf = eq.get_surface_at(zeta=np.pi)
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * (1.0) ** 2)
         assert surf.zeta == np.pi
+        rho = 1
+        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho ** 2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
         """Test that getting a constant theta surface doesn't work yet."""
         eq = Equilibrium()
         with pytest.raises(NotImplementedError):
-            surf = eq.get_surface_at(theta=np.pi)
+            _ = eq.get_surface_at(theta=np.pi)
 
     @pytest.mark.unit
     def test_asserts(self):
         """Test error checking in get_surface method."""
         eq = Equilibrium()
         with pytest.raises(ValueError):
-            surf = eq.get_surface_at(rho=1, zeta=2)
+            _ = eq.get_surface_at(rho=1, zeta=2)
         with pytest.raises(AssertionError):
-            surf = eq.get_surface_at(rho=1.2)
+            _ = eq.get_surface_at(rho=1.2)
 
 
 @pytest.mark.unit

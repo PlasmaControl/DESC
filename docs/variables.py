@@ -1,10 +1,11 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../"))
-from desc.compute.data_index import data_index
 import csv
+
+from desc.compute.data_index import data_index
 
 with open("variables.csv", "w", newline="") as f:
     fieldnames = ["Name", "Label", "Units", "Description", "Compute function"]

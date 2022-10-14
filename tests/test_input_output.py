@@ -1,18 +1,20 @@
-import pytest
+"""Tests for reading/writing intput/output, both ascii and binary."""
+
 import os
 import pathlib
-import h5py
 import shutil
-import numpy as np
 
-from desc.io import InputReader, load
-from desc.io import hdf5Writer, hdf5Reader
-from desc.io.ascii_io import write_ascii, read_ascii
-from desc.utils import equals
-from desc.grid import LinearGrid
+import h5py
+import numpy as np
+import pytest
+
 from desc.basis import FourierZernikeBasis
-from desc.transform import Transform
 from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
+from desc.io import InputReader, hdf5Reader, hdf5Writer, load
+from desc.io.ascii_io import read_ascii, write_ascii
+from desc.transform import Transform
+from desc.utils import equals
 
 
 @pytest.mark.unit
@@ -80,19 +82,14 @@ class TestInputReader:
     def test_min_input(self):
         """Test that minimal input is parsed correctly."""
         ir = InputReader(cl_args=self.argv2)
-        # self.assertEqual(ir.args.prog, 'DESC', 'Program is incorrect.')
         assert ir.args.input_file[0] == self.argv2[0], "Input file name does not match"
-        # self.assertEqual(ir.output_path, self.argv2[0] + '.output',
-        #        'Default output file does not match.')
         assert ir.input_path == str(
             pathlib.Path("./" + self.argv2[0]).resolve()
         ), "Path to input file is incorrect."
         # Test defaults
-        assert ir.args.plot == False, "plot is not default False"
+        assert ir.args.plot == 0, "plot is not default 0"
         assert ir.args.quiet is False, "quiet is not default False"
         assert ir.args.verbose == 1, "verbose is not default 1"
-        # self.assertEqual(ir.args.vmec_path, '', "vmec path is not default ''")
-        # self.assertFalse(ir.args.gpuID, 'gpu argument was given')
         assert ir.args.numpy is False, "numpy is not default False"
         assert (
             os.environ["DESC_BACKEND"] == "jax"
@@ -137,12 +134,15 @@ class TestInputReader:
 
     @pytest.mark.unit
     def test_vmec_to_desc_input(self):
+        """Test that we correctly convert a VMEC input file to DESC input file."""
         # FIXME: maybe just store a file we know is converted correctly,
         #  and checksum compare a live conversion to it
         pass
 
 
 class MockObject:
+    """Example object for saving/loading tests."""
+
     def __init__(self):
         self._io_attrs_ = ["a", "b", "c"]
 
@@ -166,8 +166,6 @@ def test_writer_given_file(writer_test_file):
     assert writer.check_type(writer.target) is True
     assert writer.check_type(writer.base) is True
     assert writer._close_base_ is False
-    # with self.assertWarns(RuntimeWarning):
-    #    writer.close()
     assert writer._close_base_ is False
     f.close()
 
@@ -356,6 +354,7 @@ def test_save_none(tmpdir_factory):
 
 @pytest.mark.unit
 def test_load_eq_without_current():
+    """Test that loading an eq from DESC < 0.6.0 works correctly."""
     desc_no_current_path = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
     with pytest.warns(RuntimeWarning):
         eq = load(desc_no_current_path)[-1]

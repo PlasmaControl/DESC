@@ -1,10 +1,13 @@
+"""Tests for profile classes."""
+
 import numpy as np
 import pytest
 
-from desc.io import InputReader
-from desc.profiles import PowerSeriesProfile, FourierZernikeProfile
 from desc.equilibrium import Equilibrium
-from .utils import compute_coords, area_difference
+from desc.io import InputReader
+from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+
+from .utils import area_difference, compute_coords
 
 
 class TestProfiles:

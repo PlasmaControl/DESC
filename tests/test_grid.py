@@ -1,11 +1,13 @@
-import pytest
+"""Tests for Grid classes."""
+
 import numpy as np
+import pytest
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
 from desc.compute.utils import compress, surface_averages, surface_integrals
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
 from desc.equilibrium import Equilibrium
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
 
@@ -65,6 +67,53 @@ class TestGrid:
         # spacing.prod == weights for linear grids (not true for concentric)
         np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
         np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
+
+    @pytest.mark.unit
+    def test_linear_grid_spacing(self):
+        """Test linear grid spacing is consistent."""
+
+        def test(endpoint=False, axis=True):
+            nrho = 1
+            ntheta = 5
+            nzeta = 7
+            NFP = 3
+            grid1 = LinearGrid(
+                rho=nrho,
+                theta=ntheta,
+                zeta=nzeta,
+                NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
+            )
+            grid2 = LinearGrid(
+                rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
+                theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
+                zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
+                NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
+            )
+            np.testing.assert_allclose(grid1.nodes, grid2.nodes)
+            np.testing.assert_allclose(grid1.spacing, grid2.spacing)
+
+        test(endpoint=False)
+        test(axis=False)
+        test(axis=True)
+
+    @pytest.mark.unit
+    def test_linear_grid_spacing_two_nodes(self):
+        """Test that 2 node grids assign equal spacing to nodes."""
+        node_count = 2
+        NFP = 7  # any integer > 1 is good candidate for test
+        endpoint = False  # TODO: fix endpoint = True issue later
+        lg = LinearGrid(
+            theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
+            zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
+            NFP=NFP,
+            endpoint=endpoint,
+        )
+        spacing = np.tile([1, np.pi, np.pi], (node_count * node_count, 1))
+        np.testing.assert_allclose(lg.spacing, spacing)
 
     @pytest.mark.unit
     def test_concentric_grid(self):
@@ -145,8 +194,11 @@ class TestGrid:
 
     @pytest.mark.unit
     def test_concentric_grid_high_res(self):
-        """Test that we can create high resolution grids without crashing, as in GH issue #207."""
-        grid = ConcentricGrid(L=32, M=28, N=30)
+        """Test that we can create high resolution grids without crashing.
+
+        Verifies solution to GH issue #207.
+        """
+        _ = ConcentricGrid(L=32, M=28, N=30)
 
     @pytest.mark.unit
     def test_quad_grid_volume_integration(self):

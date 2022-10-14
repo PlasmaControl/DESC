@@ -1,5 +1,8 @@
+"""Classes for reading and writing pickle files."""
+
 import io
 import pickle
+
 from .core_io import IO, Reader, Writer
 
 
@@ -7,7 +10,6 @@ class PickleIO(IO):
     """Class to wrap ABC IO for pickle file format."""
 
     def __init__(self):
-        """Initialize PickleIO instance"""
         self._file_types_ = io.BufferedWriter
         self._file_format_ = "pickle"
         super().__init__()

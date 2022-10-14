@@ -34,7 +34,7 @@ from desc.plotting import (
     plot_surfaces,
 )
 
-tol_1d = 5
+tol_1d = 7.8
 tol_2d = 15
 tol_3d = 15
 

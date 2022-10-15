@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import pickle
 import sys
@@ -33,7 +34,15 @@ veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
 surf = veq.get_surface_at(1)
+# ensure positive jacobian
+one = np.ones_like(surf.R_lmn)
+one[surf.R_basis.modes[:,1] < 0] *= -1
+surf.R_lmn *= one
+one = np.ones_like(surf.Z_lmn)
+one[surf.Z_basis.modes[:,1] < 0] *= -1
+surf.Z_lmn *= one
 surf.change_resolution(M=1, N=0)
+
 eq = Equilibrium(
     Psi=veq.Psi,
     surface=surf,

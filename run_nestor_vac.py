@@ -41,7 +41,7 @@ surf.R_lmn *= one
 one = np.ones_like(surf.Z_lmn)
 one[surf.Z_basis.modes[:,1] < 0] *= -1
 surf.Z_lmn *= one
-surf.change_resolution(M=1, N=0)
+surf.change_resolution(M=1, N=1)
 
 eq = Equilibrium(
     Psi=veq.Psi,
@@ -52,6 +52,7 @@ eq = Equilibrium(
     NFP=veq.NFP,
 )
 
+surf.Z_lmn = surf.R_lmn[-1:]
 eq.set_initial_guess(surf)
 eq.surface = surf
 

@@ -42,7 +42,8 @@ def compute_I(
         c_profile,
     )
     w = R_transform.grid.weights
-    return jnp.sum(data["B_theta"] * w) / (mu_0 * 2 * np.pi)
+    signgs = jnp.sign(data["sqrt(g)"].mean())
+    return signgs * jnp.sum(data["B_theta"] * w) / (mu_0 * 2 * np.pi)
 
 
 def bsq_vac(

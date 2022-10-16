@@ -1222,7 +1222,7 @@ class Nestor:
             surface_coords,
             normal,
         )
-        B_field = {key: (B_extern[key] + B_plasma[key]) for key in B_extern.keys()}
+        B_field = {key: (B_extern[key] - B_plasma[key]) for key in B_extern.keys()}
         TS = compute_T_S(jacobian, self.M, self.N, self.ntheta, self.nzeta, self.sym)
         I_mn, K_mntz = compute_analytic_integrals(
             normal,

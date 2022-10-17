@@ -1771,7 +1771,9 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **kwargs):
+def plot_boozer_modes(
+    eq, log=True, B0=True, norm=False, num_modes=10, rho=None, ax=None, **kwargs
+):
     """Plot Fourier harmonics of :math:`|B|` in Boozer coordinates.
 
     Parameters
@@ -1782,6 +1784,8 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
         Whether to use a log scale.
     B0 : bool, optional
         Whether to include the m=n=0 mode.
+    norm : bool, optional
+        Whether to normalize the magnitudes such that B0=1 Tesla.
     num_modes : int, optional
         How many modes to include. Default (-1) is all.
     rho : int or ndarray, optional
@@ -1838,6 +1842,8 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     else:
         idx = idx[-1 : -num_modes - 1 : -1]
     B_mn = B_mn[:, idx]
+    if norm:
+        B_mn = B_mn / np.max(B_mn)
     modes = data["B modes"][idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))

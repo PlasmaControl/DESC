@@ -100,7 +100,7 @@ out = eq1.optimize(
     verbose=3,
     options={
         "perturb_options": {"order": 2},
-        "ga_tr_ratio": 0,
+        "ga_tr_ratio": 0.05,
     },
 )
 
@@ -138,7 +138,7 @@ out = eq2.optimize(
     verbose=3,
     options={
         "perturb_options": {"order": 2},
-        "ga_tr_ratio": 0,
+        "ga_tr_ratio":  0.05,
     },
 )
 
@@ -155,7 +155,7 @@ out = veq.optimize(
     verbose=3,
     options={
         "perturb_options": {"order": 2},
-        "ga_tr_ratio": 0,
+        "ga_tr_ratio":  0.05,
     },
 )
 

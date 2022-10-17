@@ -40,6 +40,10 @@ class FourierRZToroidalSurface(Surface):
         default grid for computation
     name : str
         name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
@@ -65,6 +69,7 @@ class FourierRZToroidalSurface(Surface):
         rho=1,
         grid=None,
         name="",
+        check_orientation=True,
     ):
 
         if R_lmn is None:
@@ -111,6 +116,18 @@ class FourierRZToroidalSurface(Surface):
         self._NFP = NFP
         self._sym = sym
         self.rho = rho
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                (
+                    "Left handed coordinates detected, switching sign of theta."
+                    + " To avoid this warning in the future, switch the sign of all"
+                    + " modes with m<0"
+                )
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
         if grid is None:
             grid = LinearGrid(
                 M=2 * self.M,
@@ -579,6 +596,10 @@ class ZernikeRZToroidalSection(Surface):
         default grid for computation
     name : str
         name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
@@ -604,6 +625,7 @@ class ZernikeRZToroidalSection(Surface):
         zeta=0.0,
         grid=None,
         name="",
+        check_orientation=True,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
@@ -657,6 +679,18 @@ class ZernikeRZToroidalSection(Surface):
         self._spectral_indexing = spectral_indexing
 
         self.zeta = zeta
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                (
+                    "Left handed coordinates detected, switching sign of theta."
+                    + " To avoid this warning in the future, switch the sign of all"
+                    + " modes with m<0"
+                )
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
         if grid is None:
             grid = LinearGrid(
                 L=self.L, M=2 * self.M, zeta=np.asarray(self.zeta), endpoint=True

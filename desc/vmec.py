@@ -137,9 +137,8 @@ class VMECIO:
             setattr(eq, key, value)
 
         signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
-        if signgs > 0:
+        if signgs < 0:
             # vmec always outputs negative jacobian - flip theta and iota
-            eq = eq.copy()
             rone = np.ones_like(eq.R_lmn)
             rone[eq.R_basis.modes[:, 1] < 0] *= -1
             eq.R_lmn *= rone
@@ -154,8 +153,8 @@ class VMECIO:
 
             if eq.iota is not None:
                 eq.i_l *= -1
-            signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
-            assert signgs == 1
+        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        assert signgs == 1
 
         return eq
 

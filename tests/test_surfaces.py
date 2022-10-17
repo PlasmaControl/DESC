@@ -88,7 +88,8 @@ class TestFourierRZToroidalSurface:
         """Test reading a surface from a vmec or desc input file."""
         vmec_path = ".//tests//inputs//input.DSHAPE"
         desc_path = ".//tests//inputs//DSHAPE"
-        vmec_surf = FourierRZToroidalSurface.from_input_file(vmec_path)
+        with pytest.warns(UserWarning):
+            vmec_surf = FourierRZToroidalSurface.from_input_file(vmec_path)
         desc_surf = FourierRZToroidalSurface.from_input_file(desc_path)
         true_surf = desc.examples.get("DSHAPE", "boundary")
 

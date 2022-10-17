@@ -1145,6 +1145,7 @@ class VMECIO:
             "rmnc": file.variables["rmnc"][:],
             "zmns": file.variables["zmns"][:],
             "lmns": file.variables["lmns"][:],
+            "signgs": file.variables["signgs"][:],
         }
         try:
             vmec_data["rmns"] = file.variables["rmns"][:]

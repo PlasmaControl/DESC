@@ -52,7 +52,7 @@ def test_SOLOVEV_results(SOLOVEV):
     rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.regression
@@ -62,7 +62,7 @@ def test_DSHAPE_results(DSHAPE):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
     np.testing.assert_allclose(rho_err, 0, atol=2e-3)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.regression
@@ -72,7 +72,7 @@ def test_DSHAPE_current_results(DSHAPE_current):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, DSHAPE_current["vmec_nc_path"])
     np.testing.assert_allclose(rho_err, 0, atol=2e-3)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.regression

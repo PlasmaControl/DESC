@@ -76,7 +76,7 @@ class FourierRZToroidalSurface(Surface):
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 0]])
         if Z_lmn is None:
-            Z_lmn = np.array([0, 1])
+            Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -540,16 +540,16 @@ class FourierRZToroidalSurface(Surface):
                 -1 / 5,
                 a * epsilon,
                 (elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                (elongation - 1) * b / 2,
             ]
         )
         Z_lmn = np.array(
             [
-                (elongation + 1) * b / 2,
+                -(elongation + 1) * b / 2,
                 axis_Z,
-                b * epsilon,
+                -b * epsilon,
                 -(elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                (elongation - 1) * b / 2,
             ]
         )
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])
@@ -631,7 +631,7 @@ class ZernikeRZToroidalSection(Surface):
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 1]])
         if Z_lmn is None:
-            Z_lmn = np.array([0, 1])
+            Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R

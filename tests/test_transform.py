@@ -1,24 +1,27 @@
-import unittest
+"""Tests for transforming from spectral coefficients to real space values."""
+
 import numpy as np
 import pytest
-from desc.grid import Grid, LinearGrid, ConcentricGrid
+
 from desc.basis import (
-    PowerSeries,
-    FourierSeries,
     DoubleFourierSeries,
-    ZernikePolynomial,
+    FourierSeries,
     FourierZernikeBasis,
+    PowerSeries,
+    ZernikePolynomial,
 )
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
 
-class TestTransform(unittest.TestCase):
+class TestTransform:
     """Tests Transform classes."""
 
+    @pytest.mark.unit
     def test_eq(self):
         """Tests equals operator overload method."""
-        grid_1 = LinearGrid(L=11, N=3)
-        grid_2 = LinearGrid(M=5, N=5)
+        grid_1 = LinearGrid(L=10, N=1)
+        grid_2 = LinearGrid(M=2, N=2)
         grid_3 = ConcentricGrid(L=4, M=2, N=2)
 
         basis_1 = DoubleFourierSeries(M=1, N=1)
@@ -30,29 +33,31 @@ class TestTransform(unittest.TestCase):
         transf_32 = Transform(grid_3, basis_2)
         transf_32b = Transform(grid_3, basis_2)
 
-        self.assertFalse(transf_11.eq(transf_21))
-        self.assertFalse(transf_31.eq(transf_32))
-        self.assertTrue(transf_32.eq(transf_32b))
+        assert not transf_11.eq(transf_21)
+        assert not transf_31.eq(transf_32)
+        assert transf_32.eq(transf_32b)
 
+    @pytest.mark.unit
     def test_transform_order_error(self):
         """Tests error handling with transform method."""
-        grid = LinearGrid(L=11, endpoint=True)
+        grid = LinearGrid(L=10)
         basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=0)
 
         # invalid derivative orders
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             c = np.array([1, 2, 3])
             transf.transform(c, 1, 1, 1)
 
         # incompatible number of coefficients
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             c = np.array([1, 2])
             transf.transform(c, 0, 0, 0)
 
+    @pytest.mark.unit
     def test_profile(self):
         """Tests transform of power series on a radial profile."""
-        grid = LinearGrid(L=11, endpoint=True)
+        grid = LinearGrid(L=10)
         basis = PowerSeries(L=2, sym=False)
         transf = Transform(grid, basis, derivs=1)
 
@@ -68,9 +73,10 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
+    @pytest.mark.unit
     def test_surface(self):
         """Tests transform of double Fourier series on a flux surface."""
-        grid = LinearGrid(M=5, N=5, sym=True)
+        grid = LinearGrid(M=2, N=2, sym=True)
         basis = DoubleFourierSeries(M=1, N=1)
         transf = Transform(grid, basis, derivs=1)
 
@@ -103,13 +109,14 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(dz, correct_dz, atol=1e-8)
         np.testing.assert_allclose(dtz, correct_dtz, atol=1e-8)
 
+    @pytest.mark.unit
     def test_volume(self):
         """Tests transform of Fourier-Zernike basis in a toroidal volume."""
         grid = ConcentricGrid(L=4, M=2, N=2)
         basis = FourierZernikeBasis(L=-1, M=1, N=1, sym="sin")
         transf = Transform(grid, basis)
 
-        r = grid.nodes[:, 0]  # rho coordiantes
+        r = grid.nodes[:, 0]  # rho coordinates
         t = grid.nodes[:, 1]  # theta coordinates
         z = grid.nodes[:, 2]  # zeta coordinates
 
@@ -130,13 +137,14 @@ class TestTransform(unittest.TestCase):
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+    @pytest.mark.unit
     def test_set_grid(self):
         """Tests the grid setter method."""
         basis = FourierZernikeBasis(L=-1, M=1, N=1)
 
-        grid_1 = LinearGrid(L=1, M=1, N=1)
-        grid_3 = LinearGrid(L=3, M=1, N=1)
-        grid_5 = LinearGrid(L=5, M=1, N=1)
+        grid_1 = LinearGrid(L=0)
+        grid_3 = LinearGrid(L=2)
+        grid_5 = LinearGrid(L=4)
 
         with pytest.warns(UserWarning):
             transf_1 = Transform(grid_1, basis, method="fft")
@@ -144,13 +152,14 @@ class TestTransform(unittest.TestCase):
             transf_5 = Transform(grid_5, basis, method="fft")
 
         transf_3.grid = grid_5
-        self.assertTrue(transf_3.eq(transf_5))
+        assert transf_3.eq(transf_5)
 
         transf_3.grid = grid_1
-        self.assertTrue(transf_3.eq(transf_1))
+        assert transf_3.eq(transf_1)
 
         np.testing.assert_allclose(transf_3.nodes, grid_1.nodes)
 
+    @pytest.mark.unit
     def test_set_basis(self):
         """Tests the basis setter method."""
         grid = ConcentricGrid(L=4, M=2, N=1)
@@ -164,16 +173,17 @@ class TestTransform(unittest.TestCase):
         transf_31 = Transform(grid, basis_31, method="fft")
 
         transf_21.basis = basis_31
-        self.assertTrue(transf_21.eq(transf_31))
+        assert transf_21.eq(transf_31)
 
         transf_21.basis = basis_20
-        self.assertTrue(transf_21.eq(transf_20))
+        assert transf_21.eq(transf_20)
 
         np.testing.assert_allclose(transf_21.modes, basis_20.modes)
 
+    @pytest.mark.unit
     def test_fft(self):
         """Tests Fast Fourier Transform method."""
-        grid = LinearGrid(N=33)
+        grid = LinearGrid(N=16)
         zeta = grid.nodes[:, 2]
 
         sin_coeffs = np.array([0.5, -1, 2])
@@ -210,9 +220,9 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(f1, correct_f1, atol=1e-8)
 
     @pytest.mark.slow
+    @pytest.mark.unit
     def test_direct_fft_equal(self):
         """Tests that the direct and fft method produce the same results."""
-
         L = 4
         M = 3
         N = 2
@@ -346,9 +356,9 @@ class TestTransform(unittest.TestCase):
                 err_msg="failed on double fourier after change, d={}".format(d),
             )
 
+    @pytest.mark.unit
     def test_project(self):
-        """Tests projection method."""
-
+        """Tests projection method for Galerkin method."""
         basis = FourierZernikeBasis(L=-1, M=5, N=3)
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
@@ -391,8 +401,10 @@ class TestTransform(unittest.TestCase):
         np.testing.assert_allclose(transform.project(y), dtransform1.project(y))
         np.testing.assert_allclose(transform.project(y), dtransform2.project(y))
 
+    @pytest.mark.unit
     def test_fft_warnings(self):
-        g = LinearGrid(L=2, M=2, N=2)
+        """Test that warnings are thrown when trying to use fft where it won't work."""
+        g = LinearGrid(rho=2, theta=2, zeta=2)
         b = ZernikePolynomial(L=0, M=0)
         with pytest.warns(UserWarning):
             t = Transform(g, b, method="fft")
@@ -404,7 +416,7 @@ class TestTransform(unittest.TestCase):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(L=2, M=2, N=2)
+        g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=2, N=2)
         b._modes = b.modes[np.random.permutation(25)]
         with pytest.warns(
@@ -413,26 +425,26 @@ class TestTransform(unittest.TestCase):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(L=2, M=2, N=2, NFP=2)
+        g = LinearGrid(rho=2, theta=2, zeta=2, NFP=2)
         b = DoubleFourierSeries(M=2, N=2)
         with pytest.warns(UserWarning, match="nodes complete 1 full field period"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
-        g = LinearGrid(L=2, M=2, N=2)
+        g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=1, N=1)
         b._modes[:, 2] = np.where(b._modes[:, 2] == 1, 2, b._modes[:, 2])
         with pytest.warns(UserWarning, match="toroidal modes are equally spaced in n"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(L=2, M=2, N=2)
+        g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=1, N=3)
         with pytest.warns(UserWarning, match="can not undersample in zeta"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
-        g = LinearGrid(L=2, M=2, N=4)
+        g = LinearGrid(rho=2, theta=2, zeta=4)
         b = DoubleFourierSeries(M=1, N=1)
         with pytest.warns(
             UserWarning, match="requires an odd number of toroidal nodes"
@@ -440,23 +452,24 @@ class TestTransform(unittest.TestCase):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
-        g = LinearGrid(L=2, M=2, N=5)
+        g = LinearGrid(rho=2, theta=2, zeta=5)
         b = DoubleFourierSeries(M=1, N=1)
         g._nodes = g._nodes[::-1]
         with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct1"
 
-        g = LinearGrid(L=2, M=2, N=5)
+        g = LinearGrid(rho=2, theta=2, zeta=5)
         b = DoubleFourierSeries(M=1, N=1)
         g._nodes[:, 2] = np.where(g._nodes[:, 2] == 0, 0.01, g.nodes[:, 2])
         with pytest.warns(UserWarning, match="nodes to be equally spaced in zeta"):
             t = Transform(g, b, method="fft")
         assert t.method == "direct2"
 
+    @pytest.mark.unit
     def test_direct2_warnings(self):
-
-        g = LinearGrid(L=2, M=2, N=5)
+        """Test that warnings are thrown when trying to use direct2 if it won't work."""
+        g = LinearGrid(rho=2, theta=2, zeta=5)
         b = DoubleFourierSeries(M=1, N=1)
         g._nodes = g._nodes[::-1]
         with pytest.warns(UserWarning, match="nodes to be sorted by toroidal angle"):
@@ -475,7 +488,7 @@ class TestTransform(unittest.TestCase):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
 
-        g = LinearGrid(L=2, M=2, N=2)
+        g = LinearGrid(rho=2, theta=2, zeta=2)
         b = DoubleFourierSeries(M=2, N=2)
         b._modes = b.modes[np.random.permutation(25)]
         with pytest.warns(
@@ -483,3 +496,39 @@ class TestTransform(unittest.TestCase):
         ):
             t = Transform(g, b, method="direct2")
         assert t.method == "direct1"
+
+    @pytest.mark.unit
+    def test_fit_direct1(self):
+        """Test fitting with direct1 method."""
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = ConcentricGrid(3, 3, 2, node_pattern="ocs")
+        transform = Transform(grid, basis, method="direct1", build_pinv=True)
+        np.random.seed(0)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_fit_direct2(self):
+        """Test fitting with direct2 method."""
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = ConcentricGrid(4, 4, 3, node_pattern="jacobi")
+        transform = Transform(grid, basis, method="direct2", build_pinv=True)
+        np.random.seed(1)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_fit_fft(self):
+        """Test fitting with fft method."""
+        basis = FourierZernikeBasis(3, 3, 2, spectral_indexing="ansi")
+        grid = LinearGrid(4, 4, 3)
+        transform = Transform(grid, basis, method="fft", build_pinv=True)
+        np.random.seed(2)
+        c = (0.5 - np.random.random(basis.num_modes)) * abs(basis.modes).sum(axis=-1)
+        x = transform.transform(c)
+        c1 = transform.fit(x)
+        np.testing.assert_allclose(c, c1, atol=1e-12)

@@ -1,11 +1,10 @@
-from desc.backend import jnp
-from desc.utils import Timer
+"""Objectives for targeting geometrical quantities."""
+
+from desc.compute import compute_geometry, data_index
 from desc.grid import QuadratureGrid
 from desc.transform import Transform
-from desc.compute import (
-    data_index,
-    compute_geometry,
-)
+from desc.utils import Timer
+
 from .objective_funs import _Objective
 
 
@@ -36,7 +35,7 @@ class Volume(_Objective):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Plasma volume: {:10.3e} (m^3)"
+        self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -96,7 +95,7 @@ class Volume(_Objective):
 
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return self._shift_scale(jnp.atleast_1d(data["V"]))
+        return self._shift_scale(data["V"])
 
 
 class AspectRatio(_Objective):
@@ -126,7 +125,7 @@ class AspectRatio(_Objective):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+        self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -186,4 +185,4 @@ class AspectRatio(_Objective):
 
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return self._shift_scale(jnp.atleast_1d(data["R0/a"]))
+        return self._shift_scale(data["R0/a"])

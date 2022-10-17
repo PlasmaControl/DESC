@@ -1,13 +1,20 @@
+"""Objectives for solving equilibrium problems."""
+
+import warnings
+
+from termcolor import colored
+
 from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, ConcentricGrid
-from desc.transform import Transform
 from desc.compute import (
-    data_index,
-    compute_force_error,
-    compute_energy,
     compute_contravariant_current_density,
+    compute_energy,
+    compute_force_error,
+    data_index,
 )
+from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.transform import Transform
+from desc.utils import Timer
+
 from .objective_funs import _Objective
 
 
@@ -46,7 +53,7 @@ class ForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Total force: {:10.3e} " + units
+        self._print_value_fmt = "Total force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -62,16 +69,29 @@ class ForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation=None,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 2 * self.grid.num_nodes
 
@@ -80,11 +100,16 @@ class ForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._orientation = eq.orientation
         self._pressure = eq.pressure.copy()
-        self._iota = eq.iota.copy()
         self._pressure.grid = self.grid
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
@@ -105,7 +130,7 @@ class ForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute MHD force balance errors.
 
         Parameters
@@ -116,10 +141,12 @@ class ForceBalance(_Objective):
             Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -135,13 +162,14 @@ class ForceBalance(_Objective):
             L_lmn,
             p_l,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._pressure,
             self._iota,
-            self._orientation,
+            self._current,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
@@ -184,7 +212,7 @@ class RadialForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Radial force: {:10.3e} " + units
+        self._print_value_fmt = "Radial force: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -200,16 +228,29 @@ class RadialForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="cos",
-                node_pattern=eq.node_pattern,
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = self.grid.num_nodes
 
@@ -218,11 +259,16 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._orientation = eq.orientation
         self._pressure = eq.pressure.copy()
-        self._iota = eq.iota.copy()
         self._pressure.grid = self.grid
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
@@ -243,7 +289,7 @@ class RadialForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute radial MHD force balance errors.
 
         Parameters
@@ -254,10 +300,12 @@ class RadialForceBalance(_Objective):
             Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -273,13 +321,14 @@ class RadialForceBalance(_Objective):
             L_lmn,
             p_l,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._pressure,
             self._iota,
-            self._orientation,
+            self._current,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -319,7 +368,7 @@ class HelicalForceBalance(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
-        self._callback_fmt = "Helical force: {:10.3e}, " + units
+        self._print_value_fmt = "Helical force: {:10.3e}, " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -335,16 +384,29 @@ class HelicalForceBalance(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation="sin",
-                node_pattern=eq.node_pattern,
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = self.grid.num_nodes
 
@@ -353,11 +415,16 @@ class HelicalForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._orientation = eq.orientation
-        self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
-        self._iota.grid = self.grid
         self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
@@ -378,7 +445,7 @@ class HelicalForceBalance(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute helical MHD force balance errors.
 
         Parameters
@@ -389,10 +456,12 @@ class HelicalForceBalance(_Objective):
             Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -408,13 +477,14 @@ class HelicalForceBalance(_Objective):
             L_lmn,
             p_l,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._pressure,
             self._iota,
-            self._orientation,
+            self._current,
         )
         f = data["F_beta"] * data["|beta|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -439,6 +509,7 @@ class Energy(_Objective):
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str
@@ -455,7 +526,7 @@ class Energy(_Objective):
         self.grid = grid
         self.gamma = gamma
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Total MHD energy: {:10.3e} (J)"
+        self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -471,9 +542,38 @@ class Energy(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+            if eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                warnings.warn(
+                    colored(
+                        "Energy objective built using grid "
+                        + "that is not the quadrature grid! "
+                        + "This is not recommended and may result in poor convergence. "
+                        "yellow",
+                    )
+                )
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+
+            else:
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 1
 
@@ -482,11 +582,16 @@ class Energy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._orientation = eq.orientation
-        self._iota = eq.iota.copy()
         self._pressure = eq.pressure.copy()
-        self._iota.grid = self.grid
         self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["W"]["R_derivs"], build=True
@@ -507,7 +612,7 @@ class Energy(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute MHD energy.
 
         Parameters
@@ -518,10 +623,12 @@ class Energy(_Objective):
             Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -537,16 +644,17 @@ class Energy(_Objective):
             L_lmn,
             p_l,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
-            self._iota,
             self._pressure,
-            self._orientation,
+            self._iota,
+            self._current,
             self._gamma,
         )
-        return self._shift_scale(jnp.atleast_1d(data["W"]))
+        return self._shift_scale(data["W"])
 
     @property
     def gamma(self):
@@ -595,7 +703,7 @@ class CurrentDensity(_Objective):
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(A/m^2)"
-        self._callback_fmt = "Total current density: {:10.3e} " + units
+        self._print_value_fmt = "Total current density: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -611,16 +719,29 @@ class CurrentDensity(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                rotation=None,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 3 * self.grid.num_nodes
 
@@ -629,9 +750,14 @@ class CurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._orientation = eq.orientation
-        self._iota = eq.iota.copy()
-        self._iota.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
 
         self._R_transform = Transform(
             self.grid, eq.R_basis, derivs=data_index["J"]["R_derivs"], build=True
@@ -652,7 +778,7 @@ class CurrentDensity(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, Psi, **kwargs):
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current density.
 
         Parameters
@@ -665,6 +791,8 @@ class CurrentDensity(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
 
@@ -679,12 +807,13 @@ class CurrentDensity(_Objective):
             Z_lmn,
             L_lmn,
             i_l,
+            c_l,
             Psi,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._iota,
-            self._orientation,
+            self._current,
         )
         jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights

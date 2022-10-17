@@ -1,12 +1,15 @@
-import pytest
-import subprocess
+"""Test fixtures for computing equilibria etc."""
+
 import os
+
 import h5py
 import numpy as np
-import time
+import pytest
+from netCDF4 import Dataset
 
-from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.__main__ import main
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.vmec import VMECIO
 
 
 @pytest.fixture(scope="session")
@@ -80,7 +83,7 @@ def SOLOVEV(tmpdir_factory):
 
 @pytest.fixture(scope="session")
 def DSHAPE(tmpdir_factory):
-    """Run DSHAPE example."""
+    """Run DSHAPE fixed rotational transform example."""
     input_path = ".//tests//inputs//DSHAPE"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("DSHAPE_out.h5")
@@ -92,7 +95,7 @@ def DSHAPE(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running DSHAPE test.")
+    print("Running DSHAPE fixed rotational transform test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -110,8 +113,39 @@ def DSHAPE(tmpdir_factory):
 
 
 @pytest.fixture(scope="session")
+def DSHAPE_current(tmpdir_factory):
+    """Run DSHAPE fixed toroidal current example."""
+    input_path = ".//tests//inputs//DSHAPE_current"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("DSHAPE_current_out.h5")
+    desc_nc_path = output_dir.join("DSHAPE_current_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_DSHAPE.nc"
+    booz_nc_path = output_dir.join("DSHAPE_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running DSHAPE fixed toroidal current test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    DSHAPE_current_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return DSHAPE_current_out
+
+
+@pytest.fixture(scope="session")
 def HELIOTRON(tmpdir_factory):
-    """Run HELIOTRON example."""
+    """Run HELIOTRON fixed rotational transform example."""
     input_path = ".//tests//inputs//HELIOTRON"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("HELIOTRON_out.h5")
@@ -123,7 +157,7 @@ def HELIOTRON(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    print("Running HELIOTRON test.")
+    print("Running HELIOTRON fixed rotational transform test.")
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
@@ -138,6 +172,113 @@ def HELIOTRON(tmpdir_factory):
         "booz_nc_path": booz_nc_path,
     }
     return HELIOTRON_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_ex(tmpdir_factory):
+    """Saved HELIOTRON fixed rotational transform example."""
+    input_path = ".//tests//inputs//HELIOTRON"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = ".//desc//examples//HELIOTRON_output.h5"
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_bx.nc")
+
+    HELIOTRON_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_vac(tmpdir_factory):
+    """Run HELIOTRON vacuum (vacuum) example."""
+    input_path = ".//tests//inputs//HELIOTRON_vacuum"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_vacuum_out.h5")
+    desc_nc_path = output_dir.join("HELIOTRON_vacuum_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_vacuum_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON vacuum (vacuum) test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    HELIOTRON_vacuum_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_vacuum_out
+
+
+@pytest.fixture(scope="session")
+def HELIOTRON_vac2(tmpdir_factory):
+    """Run HELIOTRON vacuum (fixed current) example."""
+    input_path = ".//tests//inputs//HELIOTRON_vacuum2"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("HELIOTRON_vacuum2_out.h5")
+    desc_nc_path = output_dir.join("HELIOTRON_vacuum2_out.nc")
+    vmec_nc_path = ".//tests//inputs//wout_HELIOTRON_vacuum2.nc"
+    booz_nc_path = output_dir.join("HELIOTRON_vacuum2_bx.nc")
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running HELIOTRON vacuum (fixed current) test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    main(args)
+
+    HELIOTRON_vacuum2_out = {
+        "input_path": input_path,
+        "desc_h5_path": desc_h5_path,
+        "desc_nc_path": desc_nc_path,
+        "vmec_nc_path": vmec_nc_path,
+        "booz_nc_path": booz_nc_path,
+    }
+    return HELIOTRON_vacuum2_out
+
+
+@pytest.fixture(scope="session")
+def precise_QH(tmpdir_factory):
+    """Fun initial condition for precise QH optimization."""
+    input_path = ".//tests//inputs//precise_QH"
+    output_dir = tmpdir_factory.mktemp("result")
+    initial_h5_path = output_dir.join("precise_QH_output.h5")
+    truth_path = ".//tests//inputs//precise_QH_step0.h5"
+
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running precise QH test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(initial_h5_path), input_filename, "-vv"]
+    main(args)
+
+    precise_QH_out = {
+        "input_path": input_path,
+        "desc_h5_path": initial_h5_path,
+        "output_path": truth_path,
+    }
+    return precise_QH_out
 
 
 @pytest.fixture(scope="session")
@@ -200,3 +341,17 @@ def reader_test_file(tmpdir_factory):
         g.create_dataset(key, data=thedict[key])
     f.close()
     return filename
+
+
+@pytest.fixture(scope="session")
+def VMEC_save(SOLOVEV, tmpdir_factory):
+    """Save an equilibrium in VMEC netcdf format for comparison."""
+    vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
+    eq._solved = True
+    VMECIO.save(
+        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+    )
+    desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
+    return vmec, desc

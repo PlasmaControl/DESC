@@ -5,8 +5,9 @@
 ##############################
 Stellarator Equilibrium Solver
 ##############################
-|License| |DOI| |Docs| |Tests| |Codecov|
-|Issues| |Pypi|
+|License| |DOI| |Issues| |Pypi|
+
+|Docs| |UnitTests| |RegressionTests| |Codecov|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
 It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.
@@ -22,20 +23,20 @@ Please cite our work if you use DESC!
 Quick Start
 ===========
 
-.. role:: bash(code)
-   :language: bash
+.. role:: console(code)
+   :language: console
 
-The easiest way to install DESC is from pypi: :bash:`pip install desc-opt`
+The easiest way to install DESC is from pypi: :console:`pip install desc-opt`
 
 For more detailed instructions on installing DESC and its dependencies, see Installation_.
-The code is run using the syntax :bash:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that if you may have to prepend the command with :bash:`python -m`)
+The code is run using the syntax :console:`desc <path/to/input_file>` and the full list of command line options are given in `Command Line Interface`_. (Note that you may have to prepend the command with :console:`python -m`)
 DESC requires an input file to specify the equilibrium and solver options, and can also accept VMEC input files.
 Refer to Inputs_ for documentation on how to format the input file.
 The equilibrium solution is output in a HDF5 binary file, whose format is detailed in Outputs_.
 
-As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :bash:`DESC` directory is
-:bash:`desc -p examples/DESC/DSHAPE`
-Where the :bash:`-p` flag tells DESC to plot the results once it finishes.
+As an example usage, to use DESC to solve for the equilibrium of the high-beta, D-shaped plasma described with the DSHAPE input file, the command from the :console:`DESC` directory is
+:console:`desc -p examples/DESC/DSHAPE`
+Where the :console:`-p` flag tells DESC to plot the results once it finishes.
 
 .. _Installation: https://desc-docs.readthedocs.io/en/latest/installation.html
 .. _Command Line Interface: https://desc-docs.readthedocs.io/en/latest/command_line.html
@@ -76,9 +77,13 @@ Contribute
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Tests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml
-    :alt: Tests
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
+    :alt: UnitTests
+
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+    :alt: RegressionTests
 
 .. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/PlasmaControl/DESC

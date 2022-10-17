@@ -1,51 +1,55 @@
-import os
-import numpy as np
-from netCDF4 import Dataset
-import pytest
+"""Tests for Equilibrium class."""
 
+import os
+import pickle
+
+import numpy as np
+import pytest
+from netCDF4 import Dataset
+
+from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
-from desc.utils import area_difference
-from desc.__main__ import main
-from desc.geometry import ZernikeRZToroidalSection
-from desc.objectives import (
-    get_fixed_boundary_constraints,
-    ObjectiveFunction,
-    ForceBalance,
-)
-from desc.transform import Transform
+
+from .utils import area_difference, compute_coords
 
 
-def test_compute_geometry(DSHAPE):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_geometry(DSHAPE_current):
     """Test computation of plasma geometric values."""
 
-    # VMEC values
-    file = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    V_vmec = float(file.variables["volume_p"][-1])
-    R0_vmec = float(file.variables["Rmajor_p"][-1])
-    a_vmec = float(file.variables["Aminor_p"][-1])
-    ar_vmec = float(file.variables["aspect"][-1])
-    file.close
+    def test(stellarator):
+        # VMEC values
+        file = Dataset(str(stellarator["vmec_nc_path"]), mode="r")
+        V_vmec = float(file.variables["volume_p"][-1])
+        R0_vmec = float(file.variables["Rmajor_p"][-1])
+        a_vmec = float(file.variables["Aminor_p"][-1])
+        ar_vmec = float(file.variables["aspect"][-1])
+        file.close()
 
-    # DESC values
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    data = eq.compute("R0/a")
-    V_desc = data["V"]
-    R0_desc = data["R0"]
-    a_desc = data["a"]
-    ar_desc = data["R0/a"]
+        # DESC values
+        eq = EquilibriaFamily.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        data = eq.compute("R0/a")
+        V_desc = data["V"]
+        R0_desc = data["R0"]
+        a_desc = data["a"]
+        ar_desc = data["R0/a"]
 
-    assert abs(V_vmec - V_desc) < 5e-3
-    assert abs(R0_vmec - R0_desc) < 5e-3
-    assert abs(a_vmec - a_desc) < 5e-3
-    assert abs(ar_vmec - ar_desc) < 5e-3
+        assert abs(V_vmec - V_desc) < 5e-3
+        assert abs(R0_vmec - R0_desc) < 5e-3
+        assert abs(a_vmec - a_desc) < 5e-3
+        assert abs(ar_vmec - ar_desc) < 5e-3
+
+    test(DSHAPE_current)
 
 
 @pytest.mark.slow
-def test_compute_theta_coords(SOLOVEV):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_theta_coords(DSHAPE_current):
     """Test root finding for theta(theta*,lambda(theta))."""
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -67,10 +71,11 @@ def test_compute_theta_coords(SOLOVEV):
 
 
 @pytest.mark.slow
-def test_compute_flux_coords(SOLOVEV):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_flux_coords(DSHAPE_current):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -90,68 +95,25 @@ def test_compute_flux_coords(SOLOVEV):
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
 
 
-def _compute_coords(equil, check_all_zeta=False):
-
-    if equil.N == 0 and not check_all_zeta:
-        Nz = 1
-    else:
-        Nz = 6
-
-    Nr = 10
-    Nt = 8
-    num_theta = 1000
-    num_rho = 1000
-
-    # flux surfaces to plot
-    rr = np.linspace(0, 1, Nr)
-    rt = np.linspace(0, 2 * np.pi, num_theta)
-    rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
-
-    # straight field-line angles to plot
-    tr = np.linspace(0, 1, num_rho)
-    tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
-    tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
-
-    # Note: theta* (also known as vartheta) is the poloidal straight field-line
-    # angle in PEST-like flux coordinates
-
-    # find theta angles corresponding to desired theta* angles
-    v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-    r_coords = equil.compute("R", r_grid)
-    v_coords = equil.compute("Z", v_grid)
-
-    # rho contours
-    Rr1 = r_coords["R"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-    Rr1 = np.swapaxes(Rr1, 0, 1)
-    Zr1 = r_coords["Z"].reshape((r_grid.M, r_grid.L, r_grid.N), order="F")
-    Zr1 = np.swapaxes(Zr1, 0, 1)
-
-    # vartheta contours
-    Rv1 = v_coords["R"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Rv1 = np.swapaxes(Rv1, 0, 1)
-    Zv1 = v_coords["Z"].reshape((t_grid.M, t_grid.L, t_grid.N), order="F")
-    Zv1 = np.swapaxes(Zv1, 0, 1)
-
-    return Rr1, Zr1, Rv1, Zv1
-
-
 @pytest.mark.slow
-def test_to_sfl(SOLOVEV):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_to_sfl(DSHAPE_current):
+    """Test converting an equilibrium to straight field line coordinates."""
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-
-    Rr1, Zr1, Rv1, Zv1 = _compute_coords(eq)
-    Rr2, Zr2, Rv2, Zv2 = _compute_coords(eq.to_sfl())
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2.5e-5)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-7)
+    np.testing.assert_allclose(rho_err, 0, atol=2.5e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.slow
+@pytest.mark.regression
 def test_continuation_resolution(tmpdir_factory):
+    """Test that stepping resolution in continuation method works correctly."""
     input_path = ".//tests//inputs//res_test"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("res_test_out.h5")
@@ -161,11 +123,14 @@ def test_continuation_resolution(tmpdir_factory):
     input_filename = os.path.join(exec_dir, input_path)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning):
+        main(args)
 
 
-def test_grid_resolution_warning(SOLOVEV):
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+@pytest.mark.unit
+def test_grid_resolution_warning():
+    """Test that a warning is thrown if grid resolution is too low."""
+    eq = Equilibrium(L=2, M=2, N=2)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
     with pytest.warns(Warning):
@@ -180,33 +145,60 @@ def test_grid_resolution_warning(SOLOVEV):
         eqL.solve(ftol=1e-2, maxiter=2)
 
 
-def test_eq_change_grid_resolution(SOLOVEV):
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+@pytest.mark.unit
+def test_eq_change_grid_resolution():
+    """Test changing equilibrium grid resolution."""
+    eq = Equilibrium(L=2, M=2, N=2)
     eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
     assert eq.L_grid == 10
     assert eq.M_grid == 10
     assert eq.N_grid == 10
 
 
+@pytest.mark.unit
 def test_resolution():
+    """Test changing equilibrium spectral resolution."""
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
     eq2 = Equilibrium()
 
-    assert eq1.resolution() != eq2.resolution()
-    eq2.change_resolution(**eq1.resolution())
-    assert eq1.resolution() == eq2.resolution()
+    assert eq1.resolution != eq2.resolution
+    eq2.change_resolution(**eq1.resolution)
+    assert eq1.resolution == eq2.resolution
 
     eq1.L = 2
     eq1.M = 3
     eq1.N = 4
-    eq1.NFP = 5
+    with pytest.warns(UserWarning):
+        eq1.NFP = 5
     assert eq1.R_basis.L == 2
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
     assert eq1.R_basis.NFP == 5
 
 
+@pytest.mark.unit
+def test_equilibrium_from_near_axis():
+    """Test loading a solution from pyQSC/pyQIC."""
+    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
+    file = open(qsc_path, "rb")
+    na = pickle.load(file)
+    file.close()
+
+    r = 1e-2
+    eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    data = eq.compute("|B|", grid)
+
+    assert eq.is_nested()
+    assert eq.NFP == na.nfp
+    np.testing.assert_allclose(eq.Ra_n[eq.N : eq.N + 2], na.rc, atol=1e-10)
+    np.testing.assert_allclose(eq.Za_n[eq.N : eq.N - 2 : -1], na.zs, atol=1e-10)
+    np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
+
+
+@pytest.mark.unit
 def test_poincare_solve_not_implemented():
+    """Test that solving with fixed poincare section doesn't work yet."""
     inputs = {
         "L": 4,
         "M": 2,
@@ -217,9 +209,9 @@ def test_poincare_solve_not_implemented():
         "axis": np.array([[0, 10, 0]]),
         "pressure": np.array([[0, 10], [2, 5]]),
         "iota": np.array([[0, 1], [2, 3]]),
+        "surface": np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]]),
     }
 
-    inputs["surface"] = np.array([[0, 0, 0, 10, 0], [1, 1, 0, 1, 1]])
     eq = Equilibrium(**inputs)
     np.testing.assert_allclose(
         eq.Rb_lmn, [10.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

@@ -1,27 +1,39 @@
-import scipy.optimize
+"""Class for wrapping a number of common optimization methods."""
+
 import warnings
+
+import numpy as np
+import scipy.optimize
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.utils import Timer
 from desc.io import IOAble
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
     CurrentDensity,
+    FixCurrent,
+    FixIota,
+    ForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+    RadialForceBalance,
     WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
-from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
+from desc.utils import Timer
+
+from .utils import (
+    check_termination,
+    find_matching_inds,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
 class Optimizer(IOAble):
-    """A helper class to wrap several different optimization routines
+    """A helper class to wrap several optimization routines.
 
-    Offers all of the ``scipy.optimize.least_squares`` routines  and several of the most
+    Offers all the ``scipy.optimize.least_squares`` routines  and several of the most
     useful ``scipy.optimize.minimize`` routines.
     Also offers several custom routines specifically designed for DESC, both scalar and
     least squares routines with and without jacobian/hessian information.
@@ -33,7 +45,8 @@ class Optimizer(IOAble):
 
         * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-trust-exact'``,
           ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
-        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``, ``'scipy-dogbox'``
+        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``,
+          ``'scipy-dogbox'``
         * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
           ``'subspace-bfgs'``
         * desc least squares routines: ``'lsq-exact'``
@@ -102,7 +115,7 @@ class Optimizer(IOAble):
         self.method = method
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -112,7 +125,7 @@ class Optimizer(IOAble):
 
     @property
     def method(self):
-        """str : name of the optimization method"""
+        """str: Name of the optimization method."""
         return self._method
 
     @method.setter
@@ -129,7 +142,7 @@ class Optimizer(IOAble):
         self._method = method
 
     # TODO: add copy argument and return the equilibrium?
-    def optimize(
+    def optimize(  # noqa: C901 - FIXME: simplify this
         self,
         eq,
         objective,
@@ -165,7 +178,7 @@ class Optimizer(IOAble):
             If None, the termination by this condition is disabled.
         gtol : float or None, optional
             Absolute tolerance for termination by the norm of the gradient.
-            Default is 1e-8. Optimizer teriminates when ``norm(g) < gtol``, where
+            Default is 1e-8. Optimizer terminates when ``norm(g) < gtol``, where
             # FIXME: missing documentation!
             If None, the termination by this condition is disabled.
         x_scale : array_like or ``'auto'``, optional
@@ -184,8 +197,8 @@ class Optimizer(IOAble):
         maxiter : int, optional
             Maximum number of iterations. Defaults to size(x)*100.
         options : dict, optional
-            Dictionary of optional keyword arguments to override default solver settings.
-            See the code for more details.
+            Dictionary of optional keyword arguments to override default solver
+            settings. See the code for more details.
 
         Returns
         -------
@@ -216,6 +229,15 @@ class Optimizer(IOAble):
         nonlinear_constraints = tuple(
             constraint for constraint in constraints if not constraint.linear
         )
+        if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
+            isinstance(lc, FixIota) for lc in linear_constraints
+        ):
+            raise ValueError(
+                (
+                    "Toroidal current and rotational transform cannot be "
+                    + "constrained simultaneously."
+                )
+            )
 
         # wrap nonlinear constraints if necessary
         wrapped = False
@@ -469,6 +491,16 @@ class Optimizer(IOAble):
             )
 
         if wrapped:
+            # history from objective includes steps the optimizer didn't accept
+            # need to find where the optimizer actually stepped and only take those
+            wrapped_allx = objective._allx
+            projected_wrapped_allx = []
+            for i, x in enumerate(wrapped_allx):
+                projected_wrapped_allx.append(project(x))
+            optim_allx = result["allx"]
+            match_inds = find_matching_inds(optim_allx, projected_wrapped_allx)
+            for key, val in objective.history.items():
+                objective.history[key] = np.asarray(val)[match_inds]
             result["history"] = objective.history
         else:
             result["history"] = {}
@@ -486,7 +518,7 @@ class Optimizer(IOAble):
             timer.disp("Solution time")
             timer.pretty_print(
                 "Avg time per step",
-                timer["Solution time"] / result.get("nit", result.get("nfev")),
+                timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
             )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)

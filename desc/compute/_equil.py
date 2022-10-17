@@ -1,17 +1,19 @@
 """Compute functions for equilibrium objectives, ie Force and MHD energy."""
 
-from desc.backend import jnp
 from scipy.constants import mu_0
 
+from desc.backend import jnp
+
 from ._core import (
-    check_derivs,
-    compute_pressure,
     compute_contravariant_metric_coefficients,
+    compute_geometry,
+    compute_pressure,
 )
 from ._field import (
     compute_contravariant_current_density,
     compute_magnetic_field_magnitude,
 )
+from .utils import check_derivs
 
 
 def compute_force_error(
@@ -20,13 +22,14 @@ def compute_force_error(
     L_lmn,
     p_l,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
     pressure,
     iota,
-    orientation,
+    current,
     data=None,
     **kwargs,
 ):
@@ -37,13 +40,15 @@ def compute_force_error(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -56,8 +61,8 @@ def compute_force_error(
         Transforms p_l coefficients to real space.
     iota : Profile
         Transforms i_l coefficients to real space.
-    orientation : {-1, 1}
-        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
+    current : Profile
+        Transforms c_l coefficients to real space.
 
     Returns
     -------
@@ -73,17 +78,19 @@ def compute_force_error(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
-        orientation,
+        current,
         data=data,
     )
     data = compute_contravariant_metric_coefficients(
         R_lmn, Z_lmn, R_transform, Z_transform, data=data
     )
+    data = compute_geometry(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     if check_derivs("F_rho", R_transform, Z_transform, L_transform):
         data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
@@ -110,15 +117,26 @@ def compute_force_error(
             + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
             + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
         )
-        data["div_J_perp"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
+        data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
 
     if check_derivs("|grad(p)|", R_transform, Z_transform, L_transform):
         data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+        data["<|grad(p)|>_vol"] = (
+            jnp.sum(
+                data["|grad(p)|"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights
+            )
+            / data["V"]
+        )
     if check_derivs("|beta|", R_transform, Z_transform, L_transform):
         data["|beta|"] = jnp.sqrt(
             data["B^zeta"] ** 2 * data["g^tt"]
             + data["B^theta"] ** 2 * data["g^zz"]
             - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
+        )
+    if check_derivs("<|F|>_vol", R_transform, Z_transform, L_transform):
+        data["<|F|>_vol"] = (
+            jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
+            / data["V"]
         )
 
     return data
@@ -130,13 +148,14 @@ def compute_energy(
     L_lmn,
     p_l,
     i_l,
+    c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
-    iota,
     pressure,
-    orientation,
+    iota,
+    current,
     gamma=0,
     data=None,
     **kwargs,
@@ -148,13 +167,15 @@ def compute_energy(
     R_lmn : ndarray
         Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
     Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordiante.
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
     L_lmn : ndarray
         Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
     p_l : ndarray
         Spectral coefficients of p(rho) -- pressure profile.
     i_l : ndarray
         Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
     R_transform : Transform
@@ -163,12 +184,12 @@ def compute_energy(
         Transforms Z_lmn coefficients to real space.
     L_transform : Transform
         Transforms L_lmn coefficients to real space.
-    iota : Profile
-        Transforms i_l coefficients to real space.
     pressure : Profile
         Transforms p_l coefficients to real space.
-    orientation : {-1, 1}
-        handedness of flux coordinate system. +1 for right handed, -1 for left handed.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
     gamma : float
         Adiabatic (compressional) index.
 
@@ -184,12 +205,13 @@ def compute_energy(
         Z_lmn,
         L_lmn,
         i_l,
+        c_l,
         Psi,
         R_transform,
         Z_transform,
         L_transform,
         iota,
-        orientation,
+        current,
         data=data,
     )
 

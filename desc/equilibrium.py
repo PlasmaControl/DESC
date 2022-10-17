@@ -1,22 +1,30 @@
-import numpy as np
-import warnings
+"""Core class representing MHD equilibrium."""
+
 import numbers
-from termcolor import colored
+import warnings
 from collections.abc import MutableSequence
 
+import numpy as np
+from scipy import special
+from scipy.constants import mu_0
+from termcolor import colored
+
 from desc.backend import use_jax
-from desc.utils import Timer, isalmostequal
+from desc.basis import FourierZernikeBasis
 from desc.configuration import _Configuration
+from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.grid import LinearGrid
 from desc.io import IOAble
-from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
-from desc.optimize import Optimizer
 from desc.objectives import (
-    ObjectiveFunction,
     ForceBalance,
+    ObjectiveFunction,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
 )
+from desc.optimize import Optimizer
 from desc.perturbations import perturb
+from desc.transform import Transform
+from desc.utils import Timer, isalmostequal
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -52,24 +60,21 @@ class Equilibrium(_Configuration, IOAble):
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
-        Default is a PowerSeriesProfile with zero rotational transform
+    current : Profile or ndarray shape(k,2) (optional)
+        Toroidal current profile or array of mode numbers and spectral coefficients
+        Default is a PowerSeriesProfile with zero toroidal current
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
-        Default is a FourierRZToroidalSurface with major radius 10 and
-        minor radius 1
+        Default is a FourierRZToroidalSurface with major radius 10 and minor radius 1
     axis : Curve or ndarray shape(k,3) (optional)
         Initial guess for the magnetic axis as a Curve object or ndarray
-        of mode numbers and spectral coefficints of the form [n, R, Z].
+        of mode numbers and spectral coefficients of the form [n, R, Z].
         Default is the centroid of the surface.
     sym : bool (optional)
         Whether to enforce stellarator symmetry. Default surface.sym or False.
     spectral_indexing : str (optional)
         Type of Zernike indexing scheme to use. Default ``'ansi'``
-    objective : str or ObjectiveFunction (optional)
-        function to solve for equilibrium solution
-    optimizer : str or Optimzer (optional)
-        optimizer to use
     """
 
     _io_attrs_ = _Configuration._io_attrs_ + [
@@ -93,12 +98,11 @@ class Equilibrium(_Configuration, IOAble):
         node_pattern=None,
         pressure=None,
         iota=None,
+        current=None,
         surface=None,
         axis=None,
         sym=None,
         spectral_indexing=None,
-        objective=None,
-        optimizer=None,
         **kwargs,
     ):
 
@@ -110,6 +114,7 @@ class Equilibrium(_Configuration, IOAble):
             N,
             pressure,
             iota,
+            current,
             surface,
             axis,
             sym,
@@ -152,7 +157,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def L_grid(self):
-        """Radial resolution of grid in real space (int)."""
+        """int: Radial resolution of grid in real space."""
         if not hasattr(self, "_L_grid"):
             self._L_grid = (
                 self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
@@ -166,7 +171,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def M_grid(self):
-        """Poloidal resolution of grid in real space (int)."""
+        """int: Poloidal resolution of grid in real space."""
         if not hasattr(self, "_M_grid"):
             self._M_grid = 1
         return self._M_grid
@@ -178,7 +183,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def N_grid(self):
-        """Toroidal resolution of grid in real space (int)."""
+        """int: Toroidal resolution of grid in real space."""
         if not hasattr(self, "_N_grid"):
             self._N_grid = 0
         return self._N_grid
@@ -190,21 +195,23 @@ class Equilibrium(_Configuration, IOAble):
 
     @property
     def node_pattern(self):
-        """Pattern for placement of nodes in curvilinear coordinates (str)."""
+        """str: Pattern for placement of nodes in curvilinear coordinates."""
         if not hasattr(self, "_node_pattern"):
             self._node_pattern = None
         return self._node_pattern
 
     @property
     def solved(self):
-        """Whether the equilibrium has been solved (bool)."""
+        """bool: Whether the equilibrium has been solved."""
         return self._solved
 
     @solved.setter
     def solved(self, solved):
         self._solved = solved
 
+    @property
     def resolution(self):
+        """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
             "L": self.L,
             "M": self.M,
@@ -268,6 +275,112 @@ class Equilibrium(_Configuration, IOAble):
         if N_grid is not None and N_grid != self.N_grid:
             self._N_grid = N_grid
 
+    @classmethod
+    def from_near_axis(
+        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+    ):
+        """Initialize an Equilibrium from a near-axis solution.
+
+        Parameters
+        ----------
+        na_eq : Qsc or Qic
+            Near-axis solution generated by pyQSC or pyQIC.
+        r : float
+            Radius of the desired boundary surface (in meters).
+        L : int (optional)
+            Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+        M : int (optional)
+            Poloidal resolution. Default is 8
+        N : int (optional)
+            Toroidal resolution. Default is M.
+            If N=np.inf, the max resolution provided by na_eq.nphi is used.
+        ntheta : int, optional
+            Number of poloidal grid points used in the conversion. Default 2*M+1
+        spectral_indexing : str (optional)
+            Type of Zernike indexing scheme to use. Default ``'ansi'``
+
+        Returns
+        -------
+        eq : Equilibrium
+            Equilibrium approximation of the near-axis solution.
+
+        """
+        try:
+            # default resolution parameters
+            if L is None:
+                if spectral_indexing == "ansi":
+                    L = M
+                elif spectral_indexing == "fringe":
+                    L = 2 * M
+            if N is None:
+                N = M
+            if N == np.inf:
+                N = int((na_eq.nphi - 1) / 2)
+
+            if ntheta is None:
+                ntheta = 2 * M + 1
+
+            inputs = {}
+            inputs["Psi"] = np.pi * r ** 2 * na_eq.spsi * na_eq.Bbar
+            inputs["NFP"] = na_eq.nfp
+            inputs["L"] = L
+            inputs["M"] = M
+            inputs["N"] = N
+            inputs["sym"] = not na_eq.lasym
+            inputs["spectral_indexing "] = spectral_indexing
+            inputs["pressure"] = np.array(
+                [[0, -na_eq.p2 * r ** 2], [2, na_eq.p2 * r ** 2]]
+            )
+            inputs["iota"] = None
+            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r ** 2]])
+            inputs["axis"] = FourierRZCurve(
+                R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
+                Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
+                NFP=na_eq.nfp,
+            )
+            inputs["surface"] = None
+        except AttributeError as e:
+            raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
+
+        rho, _ = special.js_roots(L, 2, 2)
+        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.nphi, NFP=na_eq.nfp)
+        basis_R = FourierZernikeBasis(
+            L=L,
+            M=M,
+            N=N,
+            NFP=na_eq.nfp,
+            sym="cos" if not na_eq.lasym else False,
+            spectral_indexing=spectral_indexing,
+        )
+        basis_Z = FourierZernikeBasis(
+            L=L,
+            M=M,
+            N=N,
+            NFP=na_eq.nfp,
+            sym="sin" if not na_eq.lasym else False,
+            spectral_indexing=spectral_indexing,
+        )
+        transform_R = Transform(grid, basis_R, build_pinv=True)
+        transform_Z = Transform(grid, basis_Z, build_pinv=True)
+
+        R_1D = np.zeros((grid.num_nodes,))
+        Z_1D = np.zeros((grid.num_nodes,))
+
+        for rho_i in rho:
+            idx = idx = np.where((grid.nodes[:, 0] == rho_i))[0]
+            R_2D, Z_2D, _ = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+            R_1D[idx] = R_2D.flatten(order="F")
+            Z_1D[idx] = Z_2D.flatten(order="F")
+
+        inputs["R_lmn"] = transform_R.fit(R_1D)
+        inputs["Z_lmn"] = transform_Z.fit(Z_1D)
+        inputs["L_lmn"] = np.zeros_like(inputs["Z_lmn"])
+
+        eq = Equilibrium(**inputs)
+        eq.surface = eq.get_surface_at(rho=1)
+
+        return eq
+
     def solve(
         self,
         objective="force",
@@ -286,7 +399,7 @@ class Equilibrium(_Configuration, IOAble):
 
         Parameters
         ----------
-        objective : {"force", "force2", "energy"}
+        objective : {"force", "forces", "energy", "vacuum"}
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
@@ -330,10 +443,12 @@ class Equilibrium(_Configuration, IOAble):
 
 
         """
+        if constraints is None:
+            constraints = get_fixed_boundary_constraints(
+                iota=objective != "vacuum" and self.iota is not None
+            )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
-        if constraints is None:
-            constraints = get_fixed_boundary_constraints()
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer("lsq-exact")
 
@@ -346,16 +461,19 @@ class Equilibrium(_Configuration, IOAble):
             warnings.warn(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
-                    + "less than the corresponding collocation grid resolution! "
+                    + "greater than the corresponding collocation grid resolution! "
                     + "This is not recommended and may result in poor convergence. "
-                    + "Set grid resolutions to be higher,( i.e. like eq.N_grid=2*eq.N ) "
-                    + "To avoid this warning. "
+                    + "Set grid resolutions to be higher, (i.e. eq.N_grid=2*eq.N) "
+                    + "to avoid this warning.",
                     "yellow",
                 )
             )
         if eq.bdry_mode == "poincare":
             raise NotImplementedError(
-                f"Solving equilibrium with poincare XS as BC is not supported yet on master branch."
+                (
+                    "Solving equilibrium with poincare XS as BC is not supported yet "
+                    + "on master branch."
+                )
             )
 
         result = optimizer.optimize(
@@ -373,12 +491,15 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
+            # don't set nonexistent profile (values are empty ndarrays)
+            if not (key == "c_l" or key == "i_l") or value[-1].size:
+                setattr(eq, key, value[-1])
+
         if verbose > 0:
             print("End of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -403,7 +524,7 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to optimize.
-        constraint : Objective or tuple of Objective
+        constraints : Objective or tuple of Objective
             Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : Optimizer
             Optimization algorithm. Default = lsq-exact.
@@ -447,7 +568,7 @@ class Equilibrium(_Configuration, IOAble):
         if optimizer is None:
             optimizer = Optimizer("lsq-exact")
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
             constraints = (ForceBalance(), *constraints)
 
         if copy:
@@ -470,12 +591,14 @@ class Equilibrium(_Configuration, IOAble):
 
         if verbose > 0:
             print("Start of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
-            setattr(eq, key, value[-1])
+            # don't set nonexistent profile (values are empty ndarrays)
+            if not (key == "c_l" or key == "i_l") or value[-1].size:
+                setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -518,14 +641,15 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            Optimized equilibrum.
+            Optimized equilibrium.
 
         """
         import inspect
         from copy import deepcopy
-        from desc.perturbations import optimal_perturb
-        from desc.optimize.utils import check_termination
+
         from desc.optimize.tr_subproblems import update_tr_radius
+        from desc.optimize.utils import check_termination
+        from desc.perturbations import optimal_perturb
 
         if constraint is None:
             constraint = get_equilibrium_objective()
@@ -547,7 +671,7 @@ class Equilibrium(_Configuration, IOAble):
         )
 
         if verbose > 0:
-            objective.callback(objective.x(eq))
+            objective.print_value(objective.x(eq))
 
         iteration = 1
         success = None
@@ -592,7 +716,7 @@ class Equilibrium(_Configuration, IOAble):
 
             timer.stop("Step {} time".format(iteration))
             if verbose > 0:
-                objective.callback(objective.x(eq_new))
+                objective.print_value(objective.x(eq_new))
                 print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
                 print("Reduction Ratio = {:+.3f}".format(ratio))
             if verbose > 1:
@@ -652,6 +776,7 @@ class Equilibrium(_Configuration, IOAble):
         dZb=None,
         dp=None,
         di=None,
+        dc=None,
         dPsi=None,
         order=2,
         tr_ratio=0.1,
@@ -664,11 +789,11 @@ class Equilibrium(_Configuration, IOAble):
         ----------
         objective : ObjectiveFunction
             Objective function to satisfy. Default = force balance.
-        constraint : Objective or tuple of Objective
+        constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
-        dR, dZ, dL, dRb, dZb, dp, di, dPsi : ndarray or float
+        dR, dZ, dL, dRb, dZb, dp, di, dc, dPsi : ndarray or float
             Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, and total toroidal magnetic flux.
+            rotational transform, toroidal current, and total toroidal magnetic flux.
             Setting to None or zero ignores that term in the expansion.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
@@ -685,13 +810,13 @@ class Equilibrium(_Configuration, IOAble):
         Returns
         -------
         eq_new : Equilibrium
-            Perturbed equilibrum.
+            Perturbed equilibrium.
 
         """
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints()
+            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
 
         if not objective.built:
             objective.build(self, verbose=verbose)
@@ -710,6 +835,7 @@ class Equilibrium(_Configuration, IOAble):
             dZb=dZb,
             dp=dp,
             di=di,
+            dc=dc,
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
@@ -776,17 +902,23 @@ class EquilibriaFamily(IOAble, MutableSequence):
             Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
         elif equil.bdry_mode == "poincare":
             raise NotImplementedError(
-                f"Specifying poincare XS as BC is not implemented yet on main branch."
+                "Specifying poincare XS as BC is not implemented yet on master branch."
             )
 
         p_l = np.zeros_like(equil.pressure.params)
-        i_l = np.zeros_like(equil.iota.params)
         for l, p in inputs["pressure"]:
-            idx_p = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
-            p_l[idx_p] = p
-        for l, i in inputs["iota"]:
-            idx_i = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
-            i_l[idx_i] = i
+            idx = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
+            p_l[idx] = p
+        if equil.iota is not None:
+            i_l = np.zeros_like(equil.iota.params)
+            for l, i in inputs["iota"]:
+                idx = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
+                i_l[idx] = i
+        if equil.current is not None:
+            c_l = np.zeros_like(equil.current.params)
+            for l, c in inputs["current"]:
+                idx = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
+                c_l[idx] = c
 
         if not np.allclose(Rb_lmn, equil.Rb_lmn):
             deltas["dRb"] = Rb_lmn - equil.Rb_lmn
@@ -794,8 +926,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             deltas["dZb"] = Zb_lmn - equil.Zb_lmn
         if not np.allclose(p_l, equil.p_l):
             deltas["dp"] = p_l - equil.p_l
-        if not np.allclose(i_l, equil.i_l):
+        if equil.iota is not None and not np.allclose(i_l, equil.i_l):
             deltas["di"] = i_l - equil.i_l
+        if equil.current is not None and not np.allclose(c_l, equil.c_l):
+            deltas["dc"] = c_l - equil.c_l
         if not np.allclose(inputs["Psi"], equil.Psi):
             deltas["dPsi"] = inputs["Psi"] - equil.Psi
         return deltas
@@ -807,6 +941,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         equil.resolution_summary()
         print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
         print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+        if "current" in self.inputs[ii]:
+            print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
         print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
         print("Objective: {}".format(self.inputs[ii]["objective"]))
         print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
@@ -816,7 +952,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
         print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
         print("================")
 
-    def solve_continuation(self, start_from=0, verbose=None, checkpoint_path=None):
+    def solve_continuation(  # noqa: C901 - FIXME: break this up into simpler pieces
+        self, start_from=0, verbose=None, checkpoint_path=None
+    ):
         """Solve for an equilibrium by continuation method.
 
             1. Creates an initial guess from the given inputs
@@ -852,7 +990,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             warnings.warn(
                 colored(
                     "Computing perturbations with finite differences can be "
-                    + "highly innacurate, consider using JAX or setting all "
+                    + "highly inaccurate, consider using JAX or setting all "
                     + "perturbation ratios to 1",
                     "yellow",
                 )
@@ -865,7 +1003,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             optimizer = Optimizer(self.inputs[ii]["optimizer"])
             objective = get_equilibrium_objective(self.inputs[ii]["objective"])
             constraints = get_fixed_boundary_constraints(
-                profiles=self.inputs[ii]["objective"] != "vacuum"
+                iota=self.inputs[ii]["objective"] != "vacuum"
+                and "iota" in self.inputs[ii]
             )
 
             if ii == start_from:
@@ -889,7 +1028,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 if verbose > 0:
                     self._print_iteration(ii, equil)
 
-                # figure out if we we need perturbations
+                # figure out if we need perturbations
                 deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:
@@ -961,7 +1100,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     @property
     def equilibria(self):
-        """List of equilibria contained in the family (list)."""
+        """list: Equilibria contained in the family."""
         return self._equilibria
 
     @equilibria.setter
@@ -997,6 +1136,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return len(self._equilibria)
 
     def insert(self, i, new_item):
+        """Insert a new Equilibrium into the family at position i."""
         if not isinstance(new_item, Equilibrium):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."

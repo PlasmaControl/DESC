@@ -1,13 +1,12 @@
+"""Tests for compute functions."""
+
 import numpy as np
-from scipy.signal import convolve2d
 import pytest
-from desc.grid import LinearGrid, Grid
-from desc.equilibrium import Equilibrium, EquilibriaFamily
-from desc.geometry import FourierRZToroidalSurface
-from desc.profiles import PowerSeriesProfile
+from scipy.signal import convolve2d
 
-
-# TODO: add tests for compute_geometry
+from desc.compute.utils import compress
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import LinearGrid
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -16,18 +15,92 @@ FD_COEF_2_2 = np.array([1, -2, 1])[::-1]
 FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
 
 
-@pytest.mark.slow
-def test_magnetic_field_derivatives(DummyStellarator):
-    """Test that the partial derivatives of B and |B| match with numerical derivatives
-    for a dummy stellarator example."""
+# TODO: add more tests for compute_geometry
+@pytest.mark.unit
+def test_total_volume(DummyStellarator):
+    """Test that the volume enclosed by the LCFS is equal to the total volume."""
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
 
+    grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
+    lcfs_volume = eq.compute("V(r)", grid)["V(r)"].mean()
+    total_volume = eq.compute("V")["V"]  # default quadrature grid
+    np.testing.assert_allclose(lcfs_volume, total_volume)
+
+
+@pytest.mark.unit
+def test_enclosed_volumes():
+    """Test that the volume enclosed by flux surfaces matches analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("V_rr(r)", grid=grid)
+    np.testing.assert_allclose(
+        2 * data["R0"] * (np.pi * rho) ** 2,
+        compress(grid, data["V(r)"]),
+    )
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi ** 2 * rho,
+        compress(grid, data["V_r(r)"]),
+    )
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi ** 2,
+        compress(grid, data["V_rr(r)"]),
+    )
+
+
+@pytest.mark.unit
+def test_surface_areas():
+    """Test that the flux surface areas match known analytic formulas."""
+    eq = Equilibrium()  # torus
+    rho = np.linspace(1 / 128, 1, 128)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+    data = eq.compute("S(r)", grid=grid)
+    S = 4 * data["R0"] * np.pi ** 2 * rho
+    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
+
+
+# TODO: remove or combine with above
+@pytest.mark.unit
+def test_surface_areas_2():
+    """Alternate test that the flux surface areas match known analytic formulas."""
+    eq = Equilibrium()
+
+    grid_r = LinearGrid(rho=1, theta=10, zeta=10)
+    grid_t = LinearGrid(rho=10, theta=1, zeta=10)
+    grid_z = LinearGrid(rho=10, theta=10, zeta=1)
+
+    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
+    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
+    data_z = eq.compute("|e_rho x e_theta|", grid_z)
+
+    Ar = np.sum(
+        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
+    )
+    At = np.sum(
+        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
+    )
+    Az = np.sum(
+        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
+    )
+
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
+    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
+    np.testing.assert_allclose(Az, np.pi)
+
+
+@pytest.mark.slow
+@pytest.mark.unit
+def test_magnetic_field_derivatives(DummyStellarator):
+    """Test that the derivatives of B and |B| are close to numerical derivatives."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
 
     # partial derivatives wrt rho
-    L = 50
-    grid = LinearGrid(L=L)
+    num_rho = 75
+    grid = LinearGrid(rho=num_rho, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute("J", grid)
 
@@ -40,37 +113,37 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_r"][3:-2],
         B_sup_theta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B^theta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B^theta_r"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_r"][3:-2],
         B_sup_zeta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B^zeta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B^zeta_r"])),
     )
     np.testing.assert_allclose(
         data["B_rho_r"][3:-2],
         B_sub_rho_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B_rho_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B_rho_r"])),
     )
     np.testing.assert_allclose(
         data["B_theta_r"][3:-2],
         B_sub_theta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B_theta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B_theta_r"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_r"][3:-2],
         B_sub_zeta_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["B_zeta_r"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["B_zeta_r"])),
     )
 
     # partial derivatives wrt theta
-    M = 90
-    grid = LinearGrid(M=M, NFP=eq.NFP)
+    num_theta = 120
+    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
     data = eq.compute("J", grid)
     data = eq.compute("|B|_tt", grid, data=data)
@@ -87,44 +160,44 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_t"][2:-2],
         B_sup_theta_t[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_t"])),
+        rtol=2e-3,
+        atol=3e-3 * np.mean(np.abs(data["B^theta_t"])),
     )
     np.testing.assert_allclose(
         data["B^theta_tt"][2:-2],
         B_sup_theta_tt[2:-2],
-        rtol=2e-2,
+        rtol=2e-4,
         atol=2e-2 * np.mean(np.abs(data["B^theta_tt"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_t"][2:-2],
         B_sup_zeta_t[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_t"])),
+        rtol=3e-3,
+        atol=3e-3 * np.mean(np.abs(data["B^zeta_t"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_tt"][2:-2],
         B_sup_zeta_tt[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^zeta_tt"])),
+        rtol=6e-3,
+        atol=6e-3 * np.mean(np.abs(data["B^zeta_tt"])),
     )
     np.testing.assert_allclose(
         data["B_rho_t"][2:-2],
         B_sub_rho_t[2:-2],
         rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_rho_t"])),
+        atol=1e-3 * np.mean(np.abs(data["B_rho_t"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_t"][2:-2],
         B_sub_zeta_t[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_zeta_t"])),
+        rtol=2e-2,
+        atol=2e-2 * np.mean(np.abs(data["B_zeta_t"])),
     )
     np.testing.assert_allclose(
         data["|B|_t"][2:-2],
         B_t[2:-2],
         rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_t"])),
+        atol=1e-3 * np.mean(np.abs(data["|B|_t"])),
     )
     np.testing.assert_allclose(
         data["|B|_tt"][2:-2],
@@ -134,8 +207,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt zeta
-    N = 90
-    grid = LinearGrid(N=N, NFP=eq.NFP)
+    num_zeta = 120
+    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
     data = eq.compute("J", grid)
     data = eq.compute("|B|_zz", grid, data=data)
@@ -152,63 +225,63 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_z"][2:-2],
         B_sup_theta_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B^theta_z"])),
     )
     np.testing.assert_allclose(
         data["B^theta_zz"][2:-2],
         B_sup_theta_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_zz"])),
+        rtol=1e-4,
+        atol=1e-4 * np.mean(np.abs(data["B^theta_zz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_z"][2:-2],
         B_sup_zeta_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B^zeta_z"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_zz"][2:-2],
         B_sup_zeta_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_zz"])),
+        rtol=1e-4,
+        atol=1e-4 * np.mean(np.abs(data["B^zeta_zz"])),
     )
     np.testing.assert_allclose(
         data["B_rho_z"][2:-2],
         B_sub_rho_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_rho_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B_rho_z"])),
     )
     np.testing.assert_allclose(
         data["B_theta_z"][2:-2],
         B_sub_theta_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["B_theta_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["B_theta_z"])),
     )
     np.testing.assert_allclose(
         data["|B|_z"][2:-2],
         B_z[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_z"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["|B|_z"])),
     )
     np.testing.assert_allclose(
         data["|B|_zz"][2:-2],
         B_zz[2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_zz"])),
+        rtol=1e-3,
+        atol=1e-3 * np.mean(np.abs(data["|B|_zz"])),
     )
 
     # mixed derivatives wrt theta & zeta
-    M = 125
-    N = 125
-    grid = LinearGrid(M=M, N=N, NFP=eq.NFP)
-    dtheta = grid.nodes[:, 1].reshape((N, M))[0, 1]
-    dzeta = grid.nodes[:, 2].reshape((N, M))[1, 0]
+    num_theta = 180
+    num_zeta = 180
+    grid = LinearGrid(NFP=eq.NFP, theta=num_theta, zeta=num_zeta)
+    dtheta = grid.nodes[:, 1].reshape((num_zeta, num_theta))[0, 1]
+    dzeta = grid.nodes[:, 2].reshape((num_zeta, num_theta))[1, 0]
     data = eq.compute("|B|_tz", grid)
 
-    B_sup_theta = data["B^theta"].reshape((N, M))
-    B_sup_zeta = data["B^zeta"].reshape((N, M))
-    B = data["|B|"].reshape((N, M))
+    B_sup_theta = data["B^theta"].reshape((num_zeta, num_theta))
+    B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_theta))
+    B = data["|B|"].reshape((num_zeta, num_theta))
 
     B_sup_theta_tz = (
         convolve2d(
@@ -239,37 +312,36 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     np.testing.assert_allclose(
-        data["B^theta_tz"].reshape((N, M))[2:-2, 2:-2],
+        data["B^theta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
         B_sup_theta_tz[2:-2, 2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^theta_tz"])),
+        atol=1e-2 * np.mean(np.abs(data["B^theta_tz"])),
     )
     np.testing.assert_allclose(
-        data["B^zeta_tz"].reshape((N, M))[2:-2, 2:-2],
+        data["B^zeta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
         B_sup_zeta_tz[2:-2, 2:-2],
         rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B^zeta_tz"])),
+        atol=1e-2 * np.mean(np.abs(data["B^zeta_tz"])),
     )
     np.testing.assert_allclose(
-        data["|B|_tz"].reshape((N, M))[2:-2, 2:-2],
+        data["|B|_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
         B_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["|B|_tz"])),
+        rtol=1e-2,
+        atol=1e-2 * np.mean(np.abs(data["|B|_tz"])),
     )
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
-    """Test that the components of grad(|B|^2)) match with numerical gradients
-    for a dummy stellarator example."""
-
+    """Test that the components of grad(|B|^2)) match with numerical gradients."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
 
     # partial derivatives wrt rho
-    L = 50
-    grid = LinearGrid(L=L, NFP=eq.NFP)
+    num_rho = 110
+    grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
     data = eq.compute("|B|", grid)
     data = eq.compute("grad(|B|^2)_rho", grid, data=data)
@@ -277,13 +349,13 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
         B2_r[3:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.nanmean(np.abs(data["grad(|B|^2)_rho"])),
+        rtol=1e-3,
+        atol=1e-3 * np.nanmean(np.abs(data["grad(|B|^2)_rho"])),
     )
 
     # partial derivative wrt theta
-    M = 90
-    grid = LinearGrid(M=M, NFP=eq.NFP)
+    num_theta = 90
+    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
     data = eq.compute("|B|", grid)
     data = eq.compute("grad(|B|^2)_theta", grid, data=data)
@@ -296,8 +368,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
     # partial derivative wrt zeta
-    N = 90
-    grid = LinearGrid(N=N, NFP=eq.NFP)
+    num_zeta = 90
+    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
     data = eq.compute("|B|", grid)
     data = eq.compute("grad(|B|^2)_zeta", grid, data=data)
@@ -310,31 +382,36 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
 
-def test_currents(DSHAPE):
-    """Test that two different methods for computing I and G agree."""
+@pytest.mark.unit
+@pytest.mark.solve
+def test_currents(DSHAPE_current):
+    """Test that different methods for computing I and G agree."""
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=1.0)
+    grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
 
-    data1 = eq.compute("f_C", grid)
-    data2 = eq.compute("|B|_mn", grid)
+    data_booz = eq.compute("|B|_mn", grid_full, M_booz=eq.M, N_booz=eq.N)
+    data_full = eq.compute("I", grid_full)
+    data_sym = eq.compute("I", grid_sym)
 
-    np.testing.assert_allclose(data1["I"], data2["I"], atol=1e-16)
-    np.testing.assert_allclose(data1["G"], data2["G"], atol=1e-16)
+    np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
+    np.testing.assert_allclose(data_full["G"].mean(), data_booz["G"], atol=1e-16)
+    np.testing.assert_allclose(data_sym["G"].mean(), data_booz["G"], atol=1e-16)
 
 
 @pytest.mark.slow
-def test_quasisymmetry(DummyStellarator):
-    """Test that the components of grad(B*grad(|B|)) match with numerical gradients
-    for a dummy stellarator example."""
-
+@pytest.mark.unit
+def test_BdotgradB(DummyStellarator):
+    """Test that the components of grad(B*grad(|B|)) match with numerical gradients."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
 
     # partial derivative wrt theta
-    M = 120
-    grid = LinearGrid(M=M, NFP=eq.NFP)
+    num_theta = 120
+    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
     data = eq.compute("(B*grad(|B|))_t", grid)
     Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
@@ -346,8 +423,8 @@ def test_quasisymmetry(DummyStellarator):
     )
 
     # partial derivative wrt zeta
-    N = 120
-    grid = LinearGrid(N=N, NFP=eq.NFP)
+    num_zeta = 120
+    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
     data = eq.compute("(B*grad(|B|))_z", grid)
     Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
@@ -360,11 +437,12 @@ def test_quasisymmetry(DummyStellarator):
 
 
 # TODO: add test with stellarator example
-def test_boozer_transform(DSHAPE):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_boozer_transform(DSHAPE_current):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    grid = LinearGrid(M=2 * eq.M_grid + 1, N=2 * eq.N_grid + 1, NFP=eq.NFP, rho=1.0)
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
@@ -387,219 +465,14 @@ def test_boozer_transform(DSHAPE):
     np.testing.assert_allclose(
         np.flipud(np.sort(np.abs(data["|B|_mn"]))),
         booz_xform,
-        rtol=1e-2,
+        rtol=1e-3,
         atol=1e-4,
     )
 
 
-def test_surface_areas():
-    eq = Equilibrium()
-
-    grid_r = LinearGrid(rho=1, M=10, N=10)
-    grid_t = LinearGrid(L=10, theta=0, N=10)
-    grid_z = LinearGrid(L=10, M=10, zeta=0)
-
-    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
-    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
-    data_z = eq.compute("|e_rho x e_theta|", grid_z)
-
-    Ar = np.sum(
-        data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
-    )
-    At = np.sum(
-        data_t["|e_zeta x e_rho|"] * grid_t.spacing[:, 2] * grid_t.spacing[:, 0]
-    )
-    Az = np.sum(
-        data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
-    )
-
-    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
-    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
-    np.testing.assert_allclose(Az, np.pi)
-
-
-def test_vector_signs():
-
-    R_lmn = np.array([10, 1, 0.2])
-    modes_R = np.array([[0, 0], [1, 0], [-1, 1]])
-    Z_lmn = np.array([0, -2, -0.2])
-    modes_Z = np.array([[0, 0], [-1, 0], [-1, 1]])
-    surfacep = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
-    R_lmn = np.array([10, 1, -0.2])
-    modes_R = np.array([[0, 0], [1, 0], [-1, 1]])
-    Z_lmn = np.array([0, 2, 0.2])
-    modes_Z = np.array([[0, 0], [-1, 0], [-1, 1]])
-    surfacem = FourierRZToroidalSurface(R_lmn, Z_lmn, modes_R, modes_Z, NFP=1)
-
-    iotap = PowerSeriesProfile([1, 0, -0.5])
-    iotam = PowerSeriesProfile([-1, 0, 0.5])
-
-    # ppp = jacobian plus, psi plus, iota plus
-    # mmp = jacobian minus, psi minus, iota plus
-    # etc.
-
-    eqmmm = Equilibrium(
-        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=-1
-    )
-    eqmmp = Equilibrium(
-        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=-1
-    )
-    eqmpm = Equilibrium(
-        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=1
-    )
-    eqmpp = Equilibrium(
-        surface=surfacem, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=1
-    )
-    eqpmm = Equilibrium(
-        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=-1
-    )
-    eqpmp = Equilibrium(
-        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=-1
-    )
-    eqppm = Equilibrium(
-        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotam, Psi=1
-    )
-
-    eqppp = Equilibrium(
-        surface=surfacep, L=5, M=10, N=5, NFP=1, sym=False, iota=iotap, Psi=1
-    )
-
-    grid = Grid(np.array([[1, 0, 0]]))
-
-    # jacobian sign
-    assert np.sign(eqmmm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
-    assert np.sign(eqmmp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
-    assert np.sign(eqmpm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
-    assert np.sign(eqmpp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == -1.0
-    assert np.sign(eqpmm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
-    assert np.sign(eqpmp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
-    assert np.sign(eqppm.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
-    assert np.sign(eqppp.compute("sqrt(g)", grid=grid)["sqrt(g)"][0]) == 1.0
-
-    grid = Grid(np.array([[0.1, 0, 0]]))
-    # toroidal field sign
-    assert np.sign(eqmmm.compute("B", grid=grid)["B"][0, 1]) == -1.0
-    assert np.sign(eqmmp.compute("B", grid=grid)["B"][0, 1]) == -1.0
-    assert np.sign(eqmpm.compute("B", grid=grid)["B"][0, 1]) == 1.0
-    assert np.sign(eqmpp.compute("B", grid=grid)["B"][0, 1]) == 1.0
-    assert np.sign(eqpmm.compute("B", grid=grid)["B"][0, 1]) == -1.0
-    assert np.sign(eqpmp.compute("B", grid=grid)["B"][0, 1]) == -1.0
-    assert np.sign(eqppm.compute("B", grid=grid)["B"][0, 1]) == 1.0
-    assert np.sign(eqppp.compute("B", grid=grid)["B"][0, 1]) == 1.0
-
-    grid = Grid(np.array([[1, 0, 0]]))
-    # poloidal field sign = -Bz on outboard side
-    assert np.sign(eqmmm.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqmmp.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqmpm.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqmpp.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqpmm.compute("B", grid=grid)["B"][0, 2]) == -1.0
-    assert np.sign(eqpmp.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqppm.compute("B", grid=grid)["B"][0, 2]) == 1.0
-    assert np.sign(eqppp.compute("B", grid=grid)["B"][0, 2]) == -1.0
-
-    grid = Grid(np.array([[0.1, 0, 0]]))
-    # toroidal current sign
-    assert np.sign(eqmmm.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqmmp.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqmpm.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqmpp.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqpmm.compute("J", grid=grid)["J"][0, 1]) == 1.0
-    assert np.sign(eqpmp.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqppm.compute("J", grid=grid)["J"][0, 1]) == -1.0
-    assert np.sign(eqppp.compute("J", grid=grid)["J"][0, 1]) == 1.0
-
-    grid = LinearGrid(rho=0.5, M=15, N=15)
-    # toroidal current sign
-    assert np.sign(eqmmm.compute("I", grid=grid)["I"]) == 1.0
-    assert np.sign(eqmmp.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqmpm.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqmpp.compute("I", grid=grid)["I"]) == 1.0
-    assert np.sign(eqpmm.compute("I", grid=grid)["I"]) == 1.0
-    assert np.sign(eqpmp.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqppm.compute("I", grid=grid)["I"]) == -1.0
-    assert np.sign(eqppp.compute("I", grid=grid)["I"]) == 1.0
-
-    grid = LinearGrid(rho=0.5, M=15, N=15)
-    # poloidal current sign
-    assert np.sign(eqmmm.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqmmp.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqmpm.compute("G", grid=grid)["G"]) == 1.0
-    assert np.sign(eqmpp.compute("G", grid=grid)["G"]) == 1.0
-    assert np.sign(eqpmm.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqpmp.compute("G", grid=grid)["G"]) == -1.0
-    assert np.sign(eqppm.compute("G", grid=grid)["G"]) == 1.0
-    assert np.sign(eqppp.compute("G", grid=grid)["G"]) == 1.0
-
-    # for positive jacobian
-    pgrid = Grid(np.array([[1, 0, 0], [0.5, np.pi / 6, np.pi / 3]]))
-    # same real space, but for negative jacobian need to flip theta
-    mgrid = Grid(np.array([[1, 0, 0], [0.5, -np.pi / 6, np.pi / 3]]))
-
-    # test that just flipping jacobian gives same physics:
-    keys = ["B", "B_r", "B_z", "grad(|B|^2)", "curl(B)xB", "(B*grad)B", "J", "F"]
-    for key in keys:
-        np.testing.assert_allclose(
-            eqpmm.compute(key, grid=pgrid)[key],
-            eqmmm.compute(key, grid=mgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-        np.testing.assert_allclose(
-            eqpmp.compute(key, grid=pgrid)[key],
-            eqmmp.compute(key, grid=mgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-        np.testing.assert_allclose(
-            eqppm.compute(key, grid=pgrid)[key],
-            eqmpm.compute(key, grid=mgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-        np.testing.assert_allclose(
-            eqppp.compute(key, grid=pgrid)[key],
-            eqmpp.compute(key, grid=mgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-
-    # test that flipping helicity just flips sign of field
-    keys = ["B", "B_r", "B_z", "J"]
-    for key in keys:
-        np.testing.assert_allclose(
-            eqmmm.compute(key, grid=mgrid)[key],
-            -eqppm.compute(key, grid=pgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-        np.testing.assert_allclose(
-            eqmmp.compute(key, grid=mgrid)[key],
-            -eqppp.compute(key, grid=pgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-
-    # test that flipping helicity leaves quadratic stuff unchanged
-    keys = ["grad(|B|^2)", "curl(B)xB", "(B*grad)B", "F"]
-    for key in keys:
-        np.testing.assert_allclose(
-            eqmmm.compute(key, grid=mgrid)[key],
-            eqppm.compute(key, grid=pgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
-        np.testing.assert_allclose(
-            eqmmp.compute(key, grid=mgrid)[key],
-            eqppp.compute(key, grid=pgrid)[key],
-            rtol=1e-8,
-            atol=1e-8,
-            err_msg=key,
-        )
+@pytest.mark.unit
+def test_compute_grad_p_volume_avg():
+    """Test calculation of volume averaged pressure gradient."""
+    eq = Equilibrium()  # default pressure profile is 0 pressure
+    pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
+    np.testing.assert_allclose(pres_grad_vol_avg, 0)

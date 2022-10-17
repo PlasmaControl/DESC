@@ -136,6 +136,27 @@ class VMECIO:
         for key, value in args.items():
             setattr(eq, key, value)
 
+        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        if signgs > 0:
+            # vmec always outputs negative jacobian - flip theta and iota
+            eq = eq.copy()
+            rone = np.ones_like(eq.R_lmn)
+            rone[eq.R_basis.modes[:, 1] < 0] *= -1
+            eq.R_lmn *= rone
+
+            zone = np.ones_like(eq.Z_lmn)
+            zone[eq.Z_basis.modes[:, 1] < 0] *= -1
+            eq.Z_lmn *= zone
+
+            lone = np.ones_like(eq.L_lmn)
+            lone[eq.L_basis.modes[:, 1] >= 0] *= -1
+            eq.L_lmn *= lone
+
+            if eq.iota is not None:
+                eq.i_l *= -1
+            signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+            assert signgs == 1
+
         return eq
 
     @classmethod
@@ -168,6 +189,31 @@ class VMECIO:
             see lines 300+ for full list of included variables
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+
+        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        if signgs > 0:
+            # vmec always outputs negative jacobian - flip theta and iota
+            # FIXME: do we want to do this here? our calculations of J are wrong
+            # when signgs < 0, so maybe we always compute stuff with positive jacobian
+            # and flip sign term by term as needed in output?
+            eq = eq.copy()
+            rone = np.ones_like(eq.R_lmn)
+            rone[eq.R_basis.modes[:, 1] < 0] *= -1
+            eq.R_lmn *= rone
+
+            zone = np.ones_like(eq.Z_lmn)
+            zone[eq.Z_basis.modes[:, 1] < 0] *= -1
+            eq.Z_lmn *= zone
+
+            lone = np.ones_like(eq.L_lmn)
+            lone[eq.L_basis.modes[:, 1] >= 0] *= -1
+            eq.L_lmn *= lone
+
+            if eq.iota is not None:
+                eq.i_l *= -1
+
+            signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+            assert signgs == -1
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -758,10 +804,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupvmnc[0, :] = 0
-        bsupvmnc[1:, :] = c
+        bsupvmnc[1:, :] = c * signgs[:]
         if not eq.sym:
             bsupvmns[0, :] = 0
-            bsupvmns[1:, :] = s
+            bsupvmns[1:, :] = s * signgs[:]
         timer.stop("B^zeta")
         if verbose > 1:
             timer.disp("B^zeta")
@@ -890,10 +936,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubvmnc[0, :] = 0
-        bsubvmnc[1:, :] = c
+        bsubvmnc[1:, :] = c * signgs[:]
         if not eq.sym:
             bsubvmns[0, :] = 0
-            bsubvmns[1:, :] = s
+            bsubvmns[1:, :] = s * signgs[:]
         timer.stop("B_zeta")
         if verbose > 1:
             timer.disp("B_zeta")

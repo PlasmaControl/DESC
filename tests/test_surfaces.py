@@ -30,12 +30,11 @@ class TestFourierRZToroidalSurface:
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
         s.grid = grid
         N = s.compute_normal()
-        # note default surface is left handed
         np.testing.assert_allclose(N[0], [0, 0, -1], atol=1e-14)
         grid = LinearGrid(theta=0.0, zeta=0.0)
         s.grid = grid
         N = s.compute_normal(basis="xyz")
-        np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
+        np.testing.assert_allclose(N[0], [1, 0, 0], atol=1e-12)
 
     @pytest.mark.unit
     def test_misc(self):
@@ -115,13 +114,13 @@ class TestFourierRZToroidalSurface:
         surf = FourierRZToroidalSurface.from_near_axis(10, 4, 0.3, 0.2)
         np.testing.assert_allclose(
             surf.R_lmn,
-            np.array([-0.075, 0, 1, 0.125, 0, 0.0150853, -0.2, 0.075]),
+            np.array([0.075, 0, 1, 0.125, 0, 0.0150853, -0.2, 0.075]),
             rtol=1e-4,
             atol=1e-6,
         )
         np.testing.assert_allclose(
             surf.Z_lmn,
-            np.array([0.2, -0.075, 0, 0, 0.125, 0.00377133, -0.075]),
+            np.array([0.2, -0.075, 0, 0, -0.125, -0.00377133, 0.075]),
             rtol=1e-4,
             atol=1e-6,
         )

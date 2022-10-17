@@ -3,9 +3,10 @@
 import warnings
 
 import numpy as np
+import scipy.integrate
 from termcolor import colored
 
-from desc.backend import put, use_jax
+from desc.backend import jnp, put, use_jax
 from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import factorize_linear_constraints
@@ -16,23 +17,22 @@ from desc.utils import Timer
 __all__ = ["autoperturb", "perturb", "optimal_perturb"]
 
 
-def autoperturb(
+def autoperturb(  # noqa: C901
     eq,
     objective,
     constraints=(),
     surface=None,
     pressure=None,
     iota=None,
+    current=None,
     Psi=None,
-    nsteps=1,
     maxiter=10,
     order=2,
-    tr_ratio=0.1,
     weight="auto",
     verbose=1,
     copy=True,
 ):
-    """Perturb an Equilibrium with respect to input parameters, with adaptive step sizing.
+    """Perturb an Equilibrium with adaptive step sizing.
 
     Recommended to use this method over directly calling ``perturb``
 
@@ -50,18 +50,10 @@ def autoperturb(
         target profiles to perturb to
     Psi : float
         target toroidal flux to perturb to
-    nsteps : int > 0
-        initial number of perturbation steps to try. If this fails, nsteps will be
-        increased until it succeeds or the total number of steps exceeds maxiter.
     maxiter : int > 0
         total number of perturbation steps to try before giving up.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
-    tr_ratio : float or array of float
-        Radius of the trust region, as a fraction of ||x||.
-        Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
-        If a scalar, uses the same ratio for all steps. If an array, uses the first
-        element for the first step and so on.
     weight : ndarray, "auto", or None, optional
         1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
         matrices. Default is to weight by (mode number)**2. None applies no weighting.
@@ -76,70 +68,106 @@ def autoperturb(
         Perturbed equilibrium.
 
     """
-    assert (
-        int(nsteps) == nsteps and nsteps >= 1
-    ), "nsteps must be a strictly positive integer"
-    assert (
-        int(maxiter) == maxiter and maxiter >= 1
-    ), "maxiter must be a strictly positive integer"
     deltas = {}
     if hasattr(surface, "change_resolution"):
         surface.change_resolution(eq.L, eq.M, eq.N)
+    if surface is not None:
         deltas["dRb"] = surface.R_lmn - eq.surface.R_lmn
         deltas["dZb"] = surface.Z_lmn - eq.surface.Z_lmn
     if hasattr(pressure, "change_resolution"):
         pressure.change_resolution(eq.L)
+    if pressure is not None:
         deltas["dp"] = pressure.params - eq.pressure.params
     if hasattr(iota, "change_resolution"):
         iota.change_resolution(eq.L)
+    if iota is not None:
         deltas["di"] = iota.params - eq.iota.params
+    if hasattr(current, "change_resolution"):
+        current.change_resolution(eq.L)
+    if current is not None:
+        deltas["dc"] = current.params - eq.current.params
     if Psi is not None:
         deltas["dPsi"] = Psi - eq.Psi
 
-    istep = 0
-    k = 0
-    eq1 = eq.copy()
-    while istep < nsteps and k < maxiter:
-        if verbose:
-            print("Perturbing, step {}/{}".format(istep + 1, nsteps))
-        k += 1
-        deltas_istep = {key: val / nsteps for key, val in deltas.items()}
-        eq2 = perturb(
-            eq1,
-            objective,
-            constraints,
-            **deltas_istep,
-            order=order,
-            tr_ratio=tr_ratio,
-            copy=True,
-            verbose=verbose
-        )
-        if eq2.is_nested():
-            istep += 1
-            eq1 = eq2
-        else:
-            if verbose:
-                print(
-                    "autoperturb failed with {} steps, retrying with {} steps".format(
-                        nsteps, nsteps + 1
-                    )
-                )
-            nsteps += 1
-            istep = 0
-            eq1 = eq.copy()
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.args
+    )
 
-    if k >= maxiter and istep < nsteps:
-        warnings.warn(
-            "Maximum number of perturbation steps reached, solution may not be correct"
-        )
+    tangents = _get_tangents(objective, deltas, Ainv)
+    # state vector
+    x = objective.x(eq)
+    x_reduced = project(x)
 
-    if not copy:
-        eq.surface = eq2.surface
-        eq.pressure = eq2.pressure
-        eq.iota = eq2.iota
-        eq.Psi = eq2.Psi
-        return eq
-    return eq2
+    def odefun(t, x):
+        # 1st partial derivatives wrt both state vector (x) and input parameters (c)
+        dfdx = objective.jac(x)
+        dfdx_reduced = dfdx[:, unfixed_idx] @ Z
+        dfdc_dc = objective.jvp(tangents, x)
+
+        dx_reduced = jnp.linalg.lstsq(dfdx_reduced, dfdc_dc)[0]
+        # TODO: is this right? do we need to update the project/recover each time?
+        # is this really a DAE?
+        return recover(dx_reduced) - xp
+
+    # TODO: call scipy ode, or custom method?
+
+    out = scipy.integrate.solve_ivp(odefun, (0, 1), x, "RK23")
+
+    xf_reduced = out.y[-1]
+
+    if copy:
+        eq_new = eq.copy()
+    else:
+        eq_new = eq
+
+    for key, value in deltas.items():
+        setattr(eq_new, key, getattr(eq_new, key) + value)
+    for constraint in constraints:
+        constraint.update_target(eq_new)
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.args
+    )
+
+    # TODO: unpack all states to history dictionary
+    # update other attributes
+    x_new = recover(xf_reduced)
+    args = objective.unpack_state(x_new)
+    for key, value in args.items():
+        if key not in deltas:
+            value = put(  # parameter values below threshold are set to 0
+                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+            )
+            # don't set nonexistent profile (values are empty ndarrays)
+            if not (key == "c_l" or key == "i_l") or value.size:
+                setattr(eq_new, key, value)
+
+    return eq_new
+
+
+def _get_tangents(objective, deltas, Ainv):
+    """Get tangent vector for perturbations."""
+    # tangent vectors
+    tangents = np.zeros((objective.dim_x,))
+    if "Rb_lmn" in deltas.keys():
+        dc = deltas["Rb_lmn"]
+        tangents += (
+            np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv["R_lmn"] @ dc
+        )
+    if "Zb_lmn" in deltas.keys():
+        dc = deltas["Zb_lmn"]
+        tangents += (
+            np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
+        )
+    # all other perturbations besides the boundary
+    other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
+    if len([arg for arg in other_args if arg in deltas.keys()]):
+        dc = np.concatenate([deltas[arg] for arg in other_args if arg in deltas.keys()])
+        x_idx = np.concatenate(
+            [objective.x_idx[arg] for arg in other_args if arg in deltas.keys()]
+        )
+        x_idx.sort(kind="mergesort")
+        tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
+    return tangents
 
 
 def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
@@ -270,27 +298,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = np.zeros_like(x_reduced)
     dx3_reduced = np.zeros_like(x_reduced)
 
-    # tangent vectors
-    tangents = np.zeros((objective.dim_x,))
-    if "Rb_lmn" in deltas.keys():
-        dc = deltas["Rb_lmn"]
-        tangents += (
-            np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv["R_lmn"] @ dc
-        )
-    if "Zb_lmn" in deltas.keys():
-        dc = deltas["Zb_lmn"]
-        tangents += (
-            np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
-        )
-    # all other perturbations besides the boundary
-    other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
-    if len([arg for arg in other_args if arg in deltas.keys()]):
-        dc = np.concatenate([deltas[arg] for arg in other_args if arg in deltas.keys()])
-        x_idx = np.concatenate(
-            [objective.x_idx[arg] for arg in other_args if arg in deltas.keys()]
-        )
-        x_idx.sort(kind="mergesort")
-        tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
+    tangents = _get_tangents(objective, deltas, Ainv)
 
     # 1st order
     if order > 0:

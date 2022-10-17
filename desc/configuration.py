@@ -146,6 +146,8 @@ class _Configuration(IOAble, ABC):
         ], f"sym should be one of True, False, None, got {sym}"
         if sym is None and hasattr(surface, "sym"):
             self._sym = surface.sym
+        if sym is None and surface is None:  # default surface is symmetric
+            self._sym = True
         elif sym is None:
             self._sym = False
         else:

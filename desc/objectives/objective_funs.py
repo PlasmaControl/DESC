@@ -528,6 +528,7 @@ class _Objective(IOAble, ABC):
 
         return None
 
+    # TODO: allow directly passing array here
     def update_target(self, eq):
         """Update target values using an Equilibrium.
 

@@ -190,3 +190,6 @@ def factorize_linear_constraints(constraints, objective_args):
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
+
+
+# new function to just get xp? allow project/recover to take xp?

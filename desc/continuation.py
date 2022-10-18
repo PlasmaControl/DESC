@@ -73,7 +73,7 @@ def solve_continuation_automatic(  # noqa: C901
     bdry_step = kwargs.pop("bdry_step", 1 / 4)
     assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
 
-    Mi = min(M // 2, mres_step)
+    Mi = min(M, mres_step)
     Li = int(np.ceil(L / M) * Mi)
     Ni = 0
     L_gridi = np.ceil(L_grid / L * Li).astype(int)

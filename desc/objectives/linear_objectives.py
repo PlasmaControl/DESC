@@ -129,10 +129,10 @@ class FixBoundaryR(_Objective):
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
-        if self.target.size == modes.shape[0]:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0]:
-            self.weight = self._weight[modes_idx]
+        # if self.target.size == modes.shape[0]:
+        #     self.target = self._target[modes_idx]
+        # if self.weight.size == modes.shape[0]:
+        #     self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
@@ -269,10 +269,10 @@ class FixBoundaryZ(_Objective):
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
-        if self.target.size == modes.shape[0]:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0]:
-            self.weight = self._weight[modes_idx]
+        # if self.target.size == modes.shape[0]:
+        #     self.target = self._target[modes_idx]
+        # if self.weight.size == modes.shape[0]:
+        #     self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:

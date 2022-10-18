@@ -142,7 +142,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             )
             from desc.continuation import solve_continuation_automatic
 
-            eqf = solve_continuation_automatic(self.eq, **self._solve_options)
+            eqf = solve_continuation_automatic(self._eq, **self._solve_options)
             self._eq = eqf[-1]
             # self._eq.solve(
             #     objective=self._eq_objective,

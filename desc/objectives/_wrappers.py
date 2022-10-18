@@ -240,6 +240,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
         Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
         Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
@@ -247,9 +248,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
         Gc = Gx @ dxdc
-
-        GxFx = Gx_reduced @ Fx_reduced_inv
-        LHS = GxFx @ Fc - Gc
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
         return -LHS
 
     def hess(self, x):

@@ -172,9 +172,6 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_state_vector()
-
-        # build linear constraint matrices
-
         self._set_derivatives(self.use_jit)
 
         self._built = True
@@ -525,6 +522,12 @@ class _Objective(IOAble, ABC):
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""
+        if len(self.target) == 0:
+            # need this so if the objective was previously built at a resolution where
+            # target is [] and the resolution changes the target and weight get
+            # set correctly
+            self._target = np.zeros(1)
+            self._weight = np.ones(1)
         if np.unique(self.target).size == 1:
             self._target = np.repeat(self.target[0], self.dim_f)
         if np.unique(self.weight).size == 1:

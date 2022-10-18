@@ -30,8 +30,8 @@ veq = eqf[-1]
 
 
 veq.resolution_summary()
-print("==========SOLVING VEQ==========")
-veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
+# print("==========SOLVING VEQ==========")
+# veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
 surf = veq.get_surface_at(1)
@@ -184,15 +184,15 @@ eq3.save("run__nestor_vac_out3.h5")
 with open("run__nestor_vac_out3.pkl", "wb+") as f:
     pickle.dump(out, f)
 
-print("==========OPTIMIZING VEQ==========")
-out = veq._optimize(
-    ObjectiveFunction(bc_objective),
-    ObjectiveFunction(fb_objective),
-    maxiter=30,
-    verbose=3,
-    perturb_options={"order": 2, "dZb": True, "dRb": True, "tr_ratio": [0.01, 0.01]},
-)
+# print("==========OPTIMIZING VEQ==========")
+# out = veq._optimize(
+#     ObjectiveFunction(bc_objective),
+#     ObjectiveFunction(fb_objective),
+#     maxiter=30,
+#     verbose=3,
+#     perturb_options={"order": 2, "dZb": True, "dRb": True, "tr_ratio": [0.01, 0.01]},
+# )
 
-veq.save("run__nestor_vac_outv.h5")
-with open("run__nestor_vac_outv.pkl", "wb+") as f:
-    pickle.dump(out, f)
+# veq.save("run__nestor_vac_outv.h5")
+# with open("run__nestor_vac_outv.pkl", "wb+") as f:
+#     pickle.dump(out, f)

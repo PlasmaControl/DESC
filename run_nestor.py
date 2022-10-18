@@ -29,8 +29,8 @@ eqf = load("eqfb_freeb_test_beta.h5")
 veq = eqf[-1]
 
 veq.resolution_summary()
-print("==========SOLVING VEQ==========")
-veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
+# print("==========SOLVING VEQ==========")
+# veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
 
 
 surf = veq.get_surface_at(1)
@@ -130,7 +130,7 @@ constraints = (
 fb_objective.build(eq2)
 bc_objective.build(eq2)
 
-print("==========OPTIMIZING VEQ==========")
+print("==========OPTIMIZING EQ2==========")
 out = eq2.optimize(
     objective,
     constraints,
@@ -147,18 +147,18 @@ eq2.save("run_nestor_out2.h5")
 with open("run_nestor_out2.pkl", "wb+") as f:
     pickle.dump(out, f)
 
-print("==========OPTIMIZING VEQ==========")
-out = veq.optimize(
-    objective,
-    constraints,
-    maxiter=60,
-    verbose=3,
-    options={
-        "perturb_options": {"order": 2},
-        "ga_tr_ratio":  0.05,
-    },
-)
+# print("==========OPTIMIZING VEQ==========")
+# out = veq.optimize(
+#     objective,
+#     constraints,
+#     maxiter=60,
+#     verbose=3,
+#     options={
+#         "perturb_options": {"order": 2},
+#         "ga_tr_ratio":  0.05,
+#     },
+# )
 
-veq.save("run_nestor_outv.h5")
-with open("run_nestor_outv.pkl", "wb+") as f:
-    pickle.dump(out, f)
+# veq.save("run_nestor_outv.h5")
+# with open("run_nestor_outv.pkl", "wb+") as f:
+#     pickle.dump(out, f)

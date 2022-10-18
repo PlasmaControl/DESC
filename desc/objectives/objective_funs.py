@@ -595,7 +595,7 @@ class _Objective(IOAble, ABC):
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
         target = (
-            self.target / self.normalization if self._normalize_target else self.target
+            self.target * self.normalization if self._normalize_target else self.target
         )
         return x / self.weight * self.normalization + target
 

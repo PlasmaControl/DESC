@@ -19,7 +19,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr, stoch
 from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
-
+import numpy as np
 
 class Optimizer(IOAble):
     """A helper class to wrap several optimization routines
@@ -64,6 +64,7 @@ class Optimizer(IOAble):
     _desc_constrained_scalar_methods = []
     _desc_constrained_least_squares_methods = []
     _desc_stochastic_methods = ["stochastic"]
+    _scipy_derivative_free_methods = ["scipy-nelder-mead"]
     _scalar_methods = (
         _desc_scalar_methods
         + _scipy_scalar_methods
@@ -82,6 +83,7 @@ class Optimizer(IOAble):
         + _scipy_scalar_methods
         + _scipy_constrained_scalar_methods
         + _scipy_constrained_least_squares_methods
+        + _scipy_derivative_free_methods
     )
     _desc_methods = (
         _desc_least_squares_methods
@@ -102,6 +104,7 @@ class Optimizer(IOAble):
         + _desc_scalar_methods
         + _desc_least_squares_methods
         + _desc_stochastic_methods
+        + _scipy_derivative_free_methods
     )
 
     def __init__(self, method):
@@ -443,6 +446,22 @@ class Optimizer(IOAble):
                 verbose=disp,
             )
             result["allx"] = allx
+
+        elif self.method in Optimizer._scipy_derivative_free_methods:
+            init_simplex = np.zeros((2,1))
+            init_simplex[0][0] = 0
+            init_simplex[1][0] = -0.02
+            result = scipy.optimize.minimize(
+                compute_scalar_wrapped,
+                x0=x0_reduced,
+                args=(),
+                method='Nelder-Mead',
+                bounds = ((-0.2,0.0),),
+                callback=None,
+                options={"maxiter": maxiter, 'initial_simplex': init_simplex,"disp": True, **options},
+            )
+            #result["allx"] = allx
+
 
         elif self.method in Optimizer._desc_scalar_methods:
 

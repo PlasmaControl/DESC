@@ -698,7 +698,11 @@ class Equilibrium(_Configuration, IOAble):
                 copy=True,
                 **perturb_options,
             )
-            eq_new.solve(objective=constraint, **solve_options)
+            from desc.continuation import solve_continuation_automatic
+
+            eqf = solve_continuation_automatic(eq_new, **solve_options)
+            eq_new = eqf[-1]
+            # eq_new.solve(objective=constraint, **solve_options)
 
             # update trust region radius
             cost_new = objective.compute_scalar(objective.x(eq_new))

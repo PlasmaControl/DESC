@@ -84,11 +84,12 @@ def solve_continuation_automatic(  # noqa: C901
     # then pressure
     # then 3d shaping
     mres_steps = int(max(np.ceil(M / mres_step), 1))
-    pres_steps = (
-        0
-        if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all()
-        else int(np.ceil(1 / pres_step))
-    )
+    # pres_steps = (
+    #     0
+    #     if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all()
+    #     else int(np.ceil(1 / pres_step))
+    # )
+    pres_steps = 0
     bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
     pres_ratio = 0 if pres_steps else 1
     bdry_ratio = 0 if N else 1
@@ -111,7 +112,7 @@ def solve_continuation_automatic(  # noqa: C901
         M_gridi,
         N_gridi,
         eq.node_pattern,
-        pres_vac.copy(),
+        pressure.copy(),
         copy.copy(eq.iota),  # have to use copy.copy here since may be None
         copy.copy(eq.current),
         surf_axisym.copy(),

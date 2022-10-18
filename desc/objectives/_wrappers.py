@@ -140,11 +140,15 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 **deltas,
                 **self._perturb_options
             )
-            self._eq.solve(
-                objective=self._eq_objective,
-                constraints=self._constraints,
-                **self._solve_options
-            )
+            from desc.continuation import solve_continuation_automatic
+
+            eqf = solve_continuation_automatic(self.eq, **self._solve_options)
+            self._eq = eqf[-1]
+            # self._eq.solve(
+            #     objective=self._eq_objective,
+            #     constraints=self._constraints,
+            #     **self._solve_options
+            # )
             self._x_old = x
             self._allx.append(x)
 

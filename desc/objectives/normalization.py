@@ -24,4 +24,5 @@ def compute_scaling_factors(eq):
     scales["J"] = scales["B"] / scales["a"] / mu_0
     scales["F"] = scales["p"] / scales["a"]
     scales["f"] = scales["F"] * scales["V"]
+    scales["Psi"] = abs(eq.Psi)
     return scales

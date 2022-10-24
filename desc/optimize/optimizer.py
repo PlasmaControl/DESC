@@ -149,7 +149,7 @@ class Optimizer(IOAble):
         constraints=(),
         ftol=1e-6,
         xtol=1e-6,
-        gtol=1e-6,
+        gtol=1e-12,
         x_scale="auto",
         verbose=1,
         maxiter=None,

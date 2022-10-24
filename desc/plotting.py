@@ -249,6 +249,14 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
+    if (
+        eq.iota is None
+    ):  # avoid issue of plot grid needing to be used for computing FSAs
+        #     by making a temp eq with iota calculated already
+        compute_eq = eq.copy()
+        compute_eq.iota = compute_eq.get_profile("iota")
+    else:
+        compute_eq = eq
     if name not in data_index:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
@@ -267,7 +275,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
-        data = eq.compute(name, grid)[name]
+        data = compute_eq.compute(name, grid)[name]
 
     if data_index[name]["dim"] > 1:
         if component is None:
@@ -435,6 +443,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         return ValueError(colored("Grid must be 1D", "red"))
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     # reshape data to 1D

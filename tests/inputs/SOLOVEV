@@ -14,7 +14,7 @@ N_grid =  0
 # solver tolerances
 ftol = 1e-15
 xtol = 1e-08
-gtol = 1e-08
+gtol = 1e-12
 nfev = 50
 
 # solver methods

@@ -73,9 +73,9 @@ def solve_continuation_automatic(  # noqa: C901
     bdry_step = kwargs.pop("bdry_step", 1 / 4)
     assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
 
-    Mi = min(M // 2, mres_step)
+    Mi = min(M // 2, mres_step) if mres_step > 0 else M
     Li = int(np.ceil(L / M) * Mi)
-    Ni = 0
+    Ni = 0 if bdry_step > 0 else N
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
     M_gridi = np.ceil(M_grid / M * Mi).astype(int)
     N_gridi = np.ceil(N_grid / N * Ni).astype(int)
@@ -83,13 +83,13 @@ def solve_continuation_automatic(  # noqa: C901
     # first we solve vacuum until we reach full L,M
     # then pressure
     # then 3d shaping
-    mres_steps = int(max(np.ceil(M / mres_step), 1))
+    mres_steps = int(max(np.ceil(M / mres_step), 1)) if mres_step > 0 else 0
     pres_steps = (
         0
-        if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all()
+        if (abs(pressure(np.linspace(0, 1, 20))) < 1e-14).all() or pres_step == 0
         else int(np.ceil(1 / pres_step))
     )
-    bdry_steps = 0 if N == 0 else int(np.ceil(1 / bdry_step))
+    bdry_steps = 0 if N == 0 or bdry_step == 0 else int(np.ceil(1 / bdry_step))
     pres_ratio = 0 if pres_steps else 1
     bdry_ratio = 0 if N else 1
     curr_ratio = 1
@@ -99,7 +99,7 @@ def solve_continuation_automatic(  # noqa: C901
     pres_vac = pressure.copy()
     surf_axisym.change_resolution(L, M, Ni)
     # start with zero pressure
-    pres_vac.params *= 0
+    pres_vac.params *= 0 if pres_step else 1
 
     eqi = Equilibrium(
         eq.Psi,

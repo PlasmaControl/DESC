@@ -165,7 +165,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
+    tr_ratio = options.pop("initial_trust_ratio", 1.0)
     trust_radius = init_tr.get(trust_radius, trust_radius)
+    trust_radius *= tr_ratio
 
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)

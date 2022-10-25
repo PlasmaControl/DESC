@@ -8,6 +8,7 @@ import desc.compute as compute_funs
 from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import arg_order, compute_quasisymmetry_error, data_index
+from desc.compute.utils import compress
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
@@ -200,7 +201,7 @@ class ToroidalCurrent(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
-        self._dim_f = 1
+        self._dim_f = self.grid.num_rho
 
         timer = Timer()
         if verbose > 0:
@@ -273,4 +274,5 @@ class ToroidalCurrent(_Objective):
             self._current,
         )
         I = 2 * jnp.pi / mu_0 * data["I"]
+        I = compress(self.grid, I, surface_label="rho")
         return self._shift_scale(I)

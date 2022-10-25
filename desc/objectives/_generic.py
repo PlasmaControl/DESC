@@ -2,12 +2,9 @@
 
 from inspect import signature
 
-from scipy.constants import mu_0
-
 import desc.compute as compute_funs
-from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
-from desc.compute import arg_order, compute_quasisymmetry_error, data_index
+from desc.compute import arg_order, compute_boozer_magnetic_field, data_index
 from desc.compute.utils import compress
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
@@ -218,13 +215,13 @@ class ToroidalCurrent(_Objective):
             self._iota = None
 
         self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["I"]["R_derivs"], build=True
+            self.grid, eq.R_basis, derivs=data_index["current"]["R_derivs"], build=True
         )
         self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["I"]["R_derivs"], build=True
+            self.grid, eq.Z_basis, derivs=data_index["current"]["R_derivs"], build=True
         )
         self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["I"]["L_derivs"], build=True
+            self.grid, eq.L_basis, derivs=data_index["current"]["L_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -260,7 +257,7 @@ class ToroidalCurrent(_Objective):
             Toroidal current (A).
 
         """
-        data = compute_quasisymmetry_error(
+        data = compute_boozer_magnetic_field(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -273,6 +270,5 @@ class ToroidalCurrent(_Objective):
             self._iota,
             self._current,
         )
-        I = 2 * jnp.pi / mu_0 * data["I"]
-        I = compress(self.grid, I, surface_label="rho")
+        I = compress(self.grid, data["current"], surface_label="rho")
         return self._shift_scale(I)

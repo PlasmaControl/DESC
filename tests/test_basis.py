@@ -167,21 +167,6 @@ class TestBasis:
         np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
 
     @pytest.mark.unit
-    def test_fourier(self):
-        """Test Fourier series evaluation."""
-        m = np.array([-1, 0, 1])
-        t = np.linspace(0, 2 * np.pi, 8, endpoint=False)  # theta coordinates
-
-        correct_vals = np.array([np.sin(t), np.ones_like(t), np.cos(t)]).T
-        correct_ders = np.array([np.cos(t), np.zeros_like(t), -np.sin(t)]).T
-
-        values = fourier(t[:, np.newaxis], m, dt=0)
-        derivs = fourier(t[:, np.newaxis], m, dt=1)
-
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
-
-    @pytest.mark.unit
     def test_power_series(self):
         """Test PowerSeries evaluation."""
         grid = LinearGrid(rho=11)
@@ -193,6 +178,21 @@ class TestBasis:
         basis = PowerSeries(L=2, sym=False)
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
         derivs = basis.evaluate(grid.nodes, derivatives=np.array([1, 0, 0]))
+
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+        np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_fourier(self):
+        """Test Fourier series evaluation."""
+        m = np.array([-1, 0, 1])
+        t = np.linspace(0, 2 * np.pi, 8, endpoint=False)  # theta coordinates
+
+        correct_vals = np.array([np.sin(t), np.ones_like(t), np.cos(t)]).T
+        correct_ders = np.array([np.cos(t), np.zeros_like(t), -np.sin(t)]).T
+
+        values = fourier(t[:, np.newaxis], m, dt=0)
+        derivs = fourier(t[:, np.newaxis], m, dt=1)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
@@ -222,6 +222,18 @@ class TestBasis:
         values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_indexing(self):
+        """Test basis with varying index values."""
+        ps = PowerSeries(L=4, index="n")
+        np.testing.assert_allclose(ps.modes[:, :2], 0)
+
+        fs = FourierSeries(N=3, index="l")
+        np.testing.assert_allclose(fs.modes[:, 1:], 0)
+
+        dfs = DoubleFourierSeries(M=3, N=4, index="ln")
+        np.testing.assert_allclose(dfs.modes[:, 1], 0)
 
     @pytest.mark.unit
     def test_change_resolution(self):

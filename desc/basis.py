@@ -29,8 +29,10 @@ class Basis(IOAble, ABC):
         "_NFP",
         "_modes",
         "_sym",
+        "_index",
         "_spectral_indexing",
     ]
+    _mode_index = {"l": 0, "m": 1, "n": 2}
 
     def __init__(self):
 
@@ -56,16 +58,33 @@ class Basis(IOAble, ABC):
             None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            if len(self.index) == 1:
+                non_sym_idx = np.where(
+                    sign(self.modes[:, self._mode_index[self.index]]) < 0
+                )
+            elif len(self.index) == 2:
+                non_sym_idx = np.where(
+                    sign(self.modes[:, self._mode_index[self.index[0]]])
+                    != sign(self.modes[:, self._mode_index[self.index[1]]])
+                )
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
-        elif self.sym == "even":  # even powers of rho
-            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            if len(self.index) == 1:
+                non_sym_idx = np.where(
+                    sign(self.modes[:, self._mode_index[self.index]]) >= 0
+                )
+            elif len(self.index) == 2:
+                non_sym_idx = np.where(
+                    sign(self.modes[:, self._mode_index[self.index[0]]])
+                    == sign(self.modes[:, self._mode_index[self.index[1]]])
+                )
+        elif self.sym == "even":  # even powers
+            non_sym_idx = np.where(self.modes[:, self._mode_index[self.index]] % 2 != 0)
         elif self.sym is None:
             self._sym = False
+            return
+        else:
+            return
+        self._modes = np.delete(self.modes, non_sym_idx, axis=0)
 
     def _sort_modes(self):
         """Sorts modes for use with FFT."""
@@ -180,6 +199,11 @@ class Basis(IOAble, ABC):
         return self.modes.shape[0]
 
     @property
+    def index(self):
+        """str: Spectral mode number indicies used in the basis."""
+        return self.__dict__.setdefault("_index", "l")
+
+    @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
         return self.__dict__.setdefault("_spectral_indexing", "linear")
@@ -197,40 +221,49 @@ class Basis(IOAble, ABC):
 
 
 class PowerSeries(Basis):
-    """1D basis set for flux surface quantities.
+    """1D power series basis set.
 
-    Power series in the radial coordinate.
+    Example: represent a flux surface quantity.
 
     Parameters
     ----------
     L : int
-        Maximum radial resolution.
+        Maximum resolution (highest power).
     sym : {"even", False}
         Type of symmetry. "even" has only even powers of rho, for an analytic profile
         on the disc. False uses the full (odd + even) powers.
+    index : {``'l'``, ``'m'``, ``'n'``}
+        * ``'l'`` for radial modes corresponding to the coordinate rho (default)
+        * ``'m'`` for poloidal modes corresponding to the coordinate theta
+        * ``'n'`` for toroidal modes corresponding to the coordinate zeta
 
     """
 
-    def __init__(self, L, sym="even"):
+    def __init__(self, L, sym="even", index="l"):
 
         self._L = L
         self._M = 0
         self._N = 0
         self._NFP = 1
         self._sym = sym
+        self._index = index
         self._spectral_indexing = "linear"
 
-        self._modes = self._get_modes(L=self.L)
+        self._modes = self._get_modes(L=self.L, index=self.index)
 
         super().__init__()
 
-    def _get_modes(self, L=0):
+    def _get_modes(self, L=0, index="l"):
         """Get mode numbers for power series.
 
         Parameters
         ----------
         L : int
-            Maximum radial resolution.
+            Maximum resolution (highest power).
+        index : {``'l'``, ``'m'``, ``'n'``}
+            * ``'l'`` for radial modes corresponding to the coordinate rho (default)
+            * ``'m'`` for poloidal modes corresponding to the coordinate theta
+            * ``'n'`` for toroidal modes corresponding to the coordinate zeta
 
         Returns
         -------
@@ -239,9 +272,9 @@ class PowerSeries(Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
-        l = np.arange(L + 1).reshape((-1, 1))
+        l = np.arange(L + 1)
         z = np.zeros((L + 1, 2))
-        return np.hstack([l, z])
+        return np.insert(z, self._mode_index[index], l, axis=1)
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -300,48 +333,57 @@ class PowerSeries(Basis):
         """
         if L != self.L:
             self._L = L
-            self._modes = self._get_modes(self.L)
+            self._modes = self._get_modes(self.L, self.index)
             self._set_up()
 
 
 class FourierSeries(Basis):
-    """1D basis set for use with the magnetic axis.
+    """1D Fourier series basis set.
 
-    Fourier series in the toroidal coordinate.
+    Example: represent the magnetic axis shape.
 
     Parameters
     ----------
     N : int
-        Maximum toroidal resolution.
+        Maximum resolution (largest mode number).
     NFP : int
-        number of field periods
+        Number of field periods.
     sym : {``'cos'``, ``'sin'``, False}
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
+    index : {``'l'``, ``'m'``, ``'n'``}
+        * ``'l'`` for radial modes corresponding to the coordinate rho
+        * ``'m'`` for poloidal modes corresponding to the coordinate theta
+        * ``'n'`` for toroidal modes corresponding to the coordinate zeta (default)
 
     """
 
-    def __init__(self, N, NFP=1, sym=False):
+    def __init__(self, N, NFP=1, sym=False, index="n"):
 
         self._L = 0
         self._M = 0
         self._N = N
         self._NFP = NFP
         self._sym = sym
+        self._index = index
         self._spectral_indexing = "linear"
 
-        self._modes = self._get_modes(N=self.N)
+        self._modes = self._get_modes(N=self.N, index=self.index)
 
         super().__init__()
 
-    def _get_modes(self, N=0):
+    def _get_modes(self, N=0, index="n"):
         """Get mode numbers for Fourier series.
 
         Parameters
         ----------
         N : int
-            Maximum toroidal resolution.
+            Maximum resolution (largest mode number).
+        index : {``'l'``, ``'m'``, ``'n'``}
+            * ``'l'`` for radial modes corresponding to the coordinate rho
+            * ``'m'`` for poloidal modes corresponding to the coordinate theta
+            * ``'n'`` for toroidal modes corresponding to the coordinate zeta (default)
 
         Returns
         -------
@@ -351,9 +393,9 @@ class FourierSeries(Basis):
 
         """
         dim_tor = 2 * N + 1
-        n = np.arange(dim_tor).reshape((-1, 1)) - N
+        n = np.arange(dim_tor) - N
         z = np.zeros((dim_tor, 2))
-        return np.hstack([z, n])
+        return np.insert(z, self._mode_index[index], n, axis=1)
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -414,14 +456,14 @@ class FourierSeries(Basis):
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
             self._N = N
-            self._modes = self._get_modes(self.N)
+            self._modes = self._get_modes(self.N, self.index)
             self._set_up()
 
 
 class DoubleFourierSeries(Basis):
-    """2D basis set for use on a single flux surface.
+    """1D Fourier series basis set.
 
-    Fourier series in both the poloidal and toroidal coordinates.
+    Example: represent a quantity on a flux surface.
 
     Parameters
     ----------
@@ -435,23 +477,28 @@ class DoubleFourierSeries(Basis):
         * ``'cos'`` for cos(m*t-n*z) symmetry
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
+    index : {``'lm'``, ``'ln'``, ``'mn'``}
+        * ``'lm'`` for radial and poloidal modes with rho and theta
+        * ``'ln'`` for radial and toroidal modes with rho and zeta
+        * ``'mn'`` for poloidal and toroidal modes with theta and zeta (default)
 
     """
 
-    def __init__(self, M, N, NFP=1, sym=False):
+    def __init__(self, M, N, NFP=1, sym=False, index="mn"):
 
         self._L = 0
         self._M = M
         self._N = N
         self._NFP = NFP
         self._sym = sym
+        self._index = index
         self._spectral_indexing = "linear"
 
-        self._modes = self._get_modes(M=self.M, N=self.N)
+        self._modes = self._get_modes(M=self.M, N=self.N, index=self.index)
 
         super().__init__()
 
-    def _get_modes(self, M=0, N=0):
+    def _get_modes(self, M=0, N=0, index="mn"):
         """Get mode numbers for double Fourier series.
 
         Parameters
@@ -460,6 +507,10 @@ class DoubleFourierSeries(Basis):
             Maximum poloidal resolution.
         N : int
             Maximum toroidal resolution.
+        index : {``'lm'``, ``'ln'``, ``'mn'``}
+            * ``'lm'`` for radial and poloidal modes with rho and theta
+            * ``'ln'`` for radial and toroidal modes with rho and zeta
+            * ``'mn'`` for poloidal and toroidal modes with theta and zeta
 
         Returns
         -------
@@ -475,9 +526,10 @@ class DoubleFourierSeries(Basis):
         mm, nn = np.meshgrid(m, n)
         mm = mm.reshape((-1, 1), order="F")
         nn = nn.reshape((-1, 1), order="F")
-        z = np.zeros_like(mm)
-        y = np.hstack([z, mm, nn])
-        return y
+        z = np.zeros((dim_pol * dim_tor,))
+        mn = np.hstack([mm, nn])
+        idx = [self._mode_index[k] for k in self._mode_index.keys() if k not in index]
+        return np.insert(mn, idx[0], z, axis=1)
 
     def evaluate(
         self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
@@ -556,7 +608,7 @@ class DoubleFourierSeries(Basis):
         if M != self.M or N != self.N:
             self._M = M
             self._N = N
-            self._modes = self._get_modes(self.M, self.N)
+            self._modes = self._get_modes(self.M, self.N, self.index)
             self._set_up()
 
 
@@ -600,6 +652,7 @@ class ZernikePolynomial(Basis):
         self._N = 0
         self._NFP = 1
         self._sym = sym
+        self._index = "lm"
         self._spectral_indexing = spectral_indexing
 
         self._modes = self._get_modes(
@@ -814,6 +867,7 @@ class FourierZernikeBasis(Basis):
         self._N = N
         self._NFP = NFP
         self._sym = sym
+        self._index = "lmn"
         self._spectral_indexing = spectral_indexing
 
         self._modes = self._get_modes(

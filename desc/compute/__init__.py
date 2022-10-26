@@ -26,8 +26,23 @@ from ._field import (
     compute_contravariant_current_density,
 )
 from ._equil import compute_force_error, compute_energy
-from ._qs import compute_boozer_coordinates, compute_quasisymmetry_error
+from ._qs import (
+    compute_boozer_coordinates,
+    compute_quasisymmetry_error,
+    compute_quasiisodynamic_field,
+)
 from ._stability import compute_mercier_stability, compute_magnetic_well
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "Rb_lmn",
+    "Zb_lmn",
+    "qi",
+)

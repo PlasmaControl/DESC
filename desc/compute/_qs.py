@@ -254,3 +254,50 @@ def compute_quasisymmetry_error(
         )
 
     return data
+
+
+def compute_quasiisodynamic_field(qi, zeta_min_transform, data=None, **kwargs):
+    """Compute quasi-isodynamic field.
+
+    Parameters
+    ----------
+    qi : ndarray
+        Array of QI parameters: [B_min, B_max, a_L, a_R, zeta_min_m]
+    zeta_min_transform : Transform
+        Transforms zeta_min_m coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        ndarray, shape(num_nodes,) of quasi-isodynamic field strength B
+        in Boozer coordinates.
+
+    """
+    B_min = qi[0]  # maximum |B| (T)
+    B_max = qi[1]  # minimum |B| (T)
+    a_L = qi[2]  # shaping parameter for left side of magnetic well
+    a_R = qi[3]  # shaping parameter for right side of magnetic well
+    zeta_min_m = qi[4:]  # Fourier coefficients for zeta_min(theta_Boozer)
+
+    # a = 4th-order polynomail coefficient (a=0 is a cubic spline)
+    # a < 0 makes well wider, a > 0 makes well narrower, a = [-3, +3]
+    b_L = 2 * a_L + 2  # 3rd-order term, left side of well
+    b_R = -2 * a_R - 2  # 3rd-order term, right side of well
+    c_L = a_L + 3  # 2nd-order term, left side of well
+    c_R = a_R + 3  # 2nd-order term, right side of well
+
+    zeta_min_mn = jnp.zeros((zeta_min_transform.basis.num_modes,))
+    zeta_min_mn[jnp.where(zeta_min_transform.basis.modes[:, 2] == 0)] = zeta_min_m
+    zeta_min = zeta_min_transform.transform(zeta_min_mn)
+
+    zeta = zeta_min_transform.grid.nodes[:, 2]
+    delta = zeta - zeta_min
+    z_L = delta / zeta_min  # rescale zeta to range [-1, 0]
+    z_R = delta / (2 * jnp.pi - zeta_min)  # rescale zeta to range [0, +1]
+
+    B = jnp.zeros((zeta_min_transform.grid.num_nodes,))
+    B += (a_L * z_L ** 4 + b_L * z_L ** 3 + c_L * z_L ** 2) * (sign(delta) < 0)
+    B += (a_R * z_R ** 4 + b_R * z_R ** 3 + c_R * z_R ** 2) * (sign(delta) > 0)
+    B = B * (B_max - B_min) + B_min  # rescale B
+
+    return B

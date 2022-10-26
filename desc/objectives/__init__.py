@@ -21,6 +21,7 @@ from ._qs import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
+    QuasiIsodynamic,
 )
 from ._stability import MercierStability, MagneticWell
 from .utils import (

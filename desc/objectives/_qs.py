@@ -4,6 +4,7 @@ from desc.compute import (
     data_index,
     compute_boozer_coordinates,
     compute_quasisymmetry_error,
+    compute_quasiisodynamic_field,
 )
 from desc.grid import LinearGrid
 from desc.transform import Transform
@@ -515,3 +516,177 @@ class QuasisymmetryTripleProduct(_Objective):
         f = data["f_T"] * self.grid.weights
 
         return self._shift_scale(f)
+
+
+class QuasiIsodynamic(_Objective):
+    """Quasi-Isodynamic error.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    M_booz : int, optional
+        Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
+    N_booz : int, optional
+        Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        grid=None,
+        M_booz=None,
+        N_booz=None,
+        name="QI",
+    ):
+
+        self.grid = grid
+        self.M_booz = M_booz
+        self.N_booz = N_booz
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(T)"
+        self._print_value_fmt = "Quasi-isodynamic error: {:10.3e} " + units
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.M_booz is None:
+            self.M_booz = 2 * eq.M
+        if self.N_booz is None:
+            self.N_booz = 2 * eq.N
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
+            )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["|B|_mn"]["L_derivs"], build=True
+        )
+        self._B_transform = Transform(
+            self.grid,
+            DoubleFourierSeries(
+                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.R_basis.sym
+            ),
+            derivs=data_index["|B|_mn"]["R_derivs"],
+            build=True,
+            build_pinv=True,
+        )
+        self._w_transform = Transform(
+            self.grid,
+            DoubleFourierSeries(
+                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.Z_basis.sym
+            ),
+            derivs=data_index["|B|_mn"]["L_derivs"],
+            build=True,
+        )
+
+        self.M_zeta_min = int((eq.qi.size - 5) / 2)
+        self._zeta_min_transform = Transform(
+            self.grid,
+            DoubleFourierSeries(M=self.M_zeta_min, N=0, NFP=eq.NFP),
+            build=True,
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._dim_f = self.grid.num_nodes
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, qi, **kwargs):
+        """Compute quasi-isodynamic error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+        qi : ndarray
+            Array of QI parameters: [B_min, B_max, a_L, a_R, zeta_min_m]
+
+        Returns
+        -------
+        f : ndarray
+            Quasi-isodynamic error at each node (T).
+
+        """
+        data = compute_boozer_coordinates(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._B_transform,
+            self._w_transform,
+            self._iota,
+            self._current,
+        )
+        B_QI = compute_quasiisodynamic_field(qi, self._zeta_min_transform)
+        B = self._B_transform.transform(data["|B|_mn"])
+        error = B_QI - B
+
+        return self._shift_scale(error)

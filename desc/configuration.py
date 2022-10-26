@@ -90,6 +90,7 @@ class _Configuration(IOAble, ABC):
         "_current",
         "_spectral_indexing",
         "_bdry_mode",
+        "_qi",
     ]
 
     def __init__(
@@ -1152,6 +1153,15 @@ class _Configuration(IOAble, ABC):
     def L_basis(self):
         """Spectral basis for lambda (FourierZernikeBasis)."""
         return self._L_basis
+
+    @property
+    def qi(self):
+        """[B_min, B_max, a_L, a_R, zeta_min_m]."""
+        return self.qi
+
+    @qi.setter
+    def qi(self, qi):
+        self.qi = qi
 
     def compute(self, name, grid=None, data=None, **kwargs):
         """Compute the quantity given by name on grid.

@@ -272,6 +272,7 @@ class PowerSeries(Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
+        assert index in ["l", "m", "n"]
         l = np.arange(L + 1)
         z = np.zeros((L + 1, 2))
         return np.insert(z, self._mode_index[index], l, axis=1)
@@ -392,6 +393,7 @@ class FourierSeries(Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
+        assert index in ["l", "m", "n"]
         dim_tor = 2 * N + 1
         n = np.arange(dim_tor) - N
         z = np.zeros((dim_tor, 2))
@@ -519,6 +521,7 @@ class DoubleFourierSeries(Basis):
             Each row is one basis function with modes (l,m,n).
 
         """
+        assert index in ["lm", "ln", "mn"]
         dim_pol = 2 * M + 1
         dim_tor = 2 * N + 1
         m = np.arange(dim_pol) - M

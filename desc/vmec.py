@@ -30,7 +30,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe"):
+    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe", profile="iota"):
         """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
@@ -45,6 +45,8 @@ class VMECIO:
             Toroidal resolution. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
             Type of Zernike indexing scheme to use. (Default = ``'fringe'``)
+        profile : {"iota", "current"}
+            Which profile to use.
 
         Returns
         -------
@@ -52,6 +54,7 @@ class VMECIO:
             Equilibrium that resembles the VMEC data.
 
         """
+        assert profile in ["iota", "current"]
         file = Dataset(path, mode="r")
         inputs = {}
 
@@ -100,9 +103,19 @@ class VMECIO:
         inputs["pressure"] = np.zeros((preset, 2))
         inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
         inputs["pressure"][:, 1] = file.variables["am"][:] * p0
-        inputs["iota"] = np.zeros((preset, 2))
-        inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
-        inputs["iota"][:, 1] = file.variables["ai"][:]
+        if profile == "iota":
+            inputs["iota"] = np.zeros((preset, 2))
+            inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
+            inputs["iota"][:, 1] = file.variables["ai"][:]
+            inputs["current"] = None
+        if profile == "current":
+            inputs["current"] = np.zeros((preset, 2))
+            inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
+            inputs["current"][:, 1] = file.variables["ac"][:]
+            inputs["current"][:, 1] *= (
+                file.variables["ctor"][:] / (np.sum(inputs["current"][:, 1]) or 1),
+            )
+            inputs["iota"] = None
 
         file.close()
 

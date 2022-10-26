@@ -519,10 +519,10 @@ class FourierRZToroidalSurface(Surface):
         R_lmn = np.array(
             [
                 1,
-                (elongation + 1) * b / 2,
+                -(elongation + 1) * b / 2,
                 -1 / 5,
                 a * epsilon,
-                (elongation - 1) * b / 2,
+                -(elongation - 1) * b / 2,
                 -(elongation - 1) * b / 2,
             ]
         )
@@ -530,8 +530,8 @@ class FourierRZToroidalSurface(Surface):
             [
                 (elongation + 1) * b / 2,
                 axis_Z,
-                b * epsilon,
-                -(elongation - 1) * b / 2,
+                -b * epsilon,
+                (elongation - 1) * b / 2,
                 -(elongation - 1) * b / 2,
             ]
         )

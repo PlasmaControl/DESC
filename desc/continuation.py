@@ -78,7 +78,7 @@ def solve_continuation_automatic(  # noqa: C901
     Ni = 0 if bdry_step > 0 else N
     L_gridi = np.ceil(L_grid / L * Li).astype(int)
     M_gridi = np.ceil(M_grid / M * Mi).astype(int)
-    N_gridi = np.ceil(N_grid / N * Ni).astype(int)
+    N_gridi = np.ceil(N_grid / max(N, 1) * Ni).astype(int)
 
     # first we solve vacuum until we reach full L,M
     # then pressure
@@ -143,7 +143,7 @@ def solve_continuation_automatic(  # noqa: C901
             Li = int(np.ceil(L / M) * Mi)
             L_gridi = np.ceil(L_grid / L * Li).astype(int)
             M_gridi = np.ceil(M_grid / M * Mi).astype(int)
-            N_gridi = np.ceil(N_grid / N * Ni).astype(int)
+            N_gridi = np.ceil(N_grid / max(N, 1) * Ni).astype(int)
             eqi.change_resolution(Li, Mi, Ni, L_gridi, M_gridi, N_gridi)
 
             surf_i = eqi.surface

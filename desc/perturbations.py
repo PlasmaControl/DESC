@@ -10,7 +10,7 @@ from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.optimize.utils import evaluate_quadratic
+from desc.optimize.utils import evaluate_quadratic_form_jac
 from desc.utils import Timer
 
 __all__ = ["perturb", "optimal_perturb"]
@@ -703,7 +703,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
+    predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:

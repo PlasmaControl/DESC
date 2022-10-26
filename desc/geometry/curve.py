@@ -1,12 +1,17 @@
-import numpy as np
+"""Classes for parameterized 3D space curves."""
+
 import numbers
+
+import numpy as np
+
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from .core import Curve
-from .utils import xyz2rpz, rpz2xyz, xyz2rpz_vec, rpz2xyz_vec
-from desc.transform import Transform
 from desc.grid import Grid, LinearGrid
+from desc.transform import Transform
 from desc.utils import copy_coeffs
+
+from .core import Curve
+from .utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 __all__ = [
     "FourierRZCurve",
@@ -201,7 +206,10 @@ class FourierRZCurve(Curve):
             self._R_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_n should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                (
+                    f"R_n should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self.R_basis.num_modes} modes."
+                )
             )
 
     @property
@@ -215,7 +223,10 @@ class FourierRZCurve(Curve):
             self._Z_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_n should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                (
+                    f"Z_n should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self.Z_basis.num_modes} modes"
+                )
             )
 
     def _get_transforms(self, grid=None):
@@ -548,7 +559,10 @@ class FourierXYZCurve(Curve):
             self._X_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"X_n should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                (
+                    f"X_n should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self._basis.num_modes} modes."
+                )
             )
 
     @property
@@ -562,7 +576,10 @@ class FourierXYZCurve(Curve):
             self._Y_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Y_n should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                (
+                    f"Y_n should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self._basis.num_modes} modes."
+                )
             )
 
     @property
@@ -576,7 +593,10 @@ class FourierXYZCurve(Curve):
             self._Z_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_n should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                (
+                    f"Z_n should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self._basis.num_modes} modes."
+                )
             )
 
     def _get_transforms(self, grid=None):
@@ -756,9 +776,11 @@ class FourierXYZCurve(Curve):
 
 
 class FourierPlanarCurve(Curve):
-    """Curve that lines in a plane, parameterized by a point (the center of the curve),
-    a vector (normal to the plane), and a fourier series defining the radius from the
-    center as a function of a polar angle theta.
+    """Curve that lines in a plane.
+
+    Parameterized by a point (the center of the curve), a vector (normal to the plane),
+    and a Fourier series defining the radius from the center as a function of
+    a polar angle theta.
 
     Parameters
     ----------
@@ -891,7 +913,10 @@ class FourierPlanarCurve(Curve):
             self._r_n = jnp.asarray(new)
         else:
             raise ValueError(
-                f"r_n should have the same size as the basis, got {len(new)} for basis with {self._basis.num_modes} modes"
+                (
+                    f"r_n should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self._basis.num_modes} modes."
+                )
             )
 
     def get_coeffs(self, n):

@@ -1,3 +1,5 @@
+"""Base class for Equilibrium."""
+
 import copy
 import numbers
 import os
@@ -9,21 +11,21 @@ import numpy as np
 from termcolor import colored
 
 import desc.compute as compute_funs
-from desc.backend import jnp, jit, put, while_loop
+from desc.backend import jit, jnp, put, while_loop
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-from desc.compute import arg_order, data_index, compute_jacobian
+from desc.compute import arg_order, compute_jacobian, data_index
 from desc.compute.utils import compress
 from desc.geometry import (
-    FourierRZToroidalSurface,
-    ZernikeRZToroidalSection,
     FourierRZCurve,
+    FourierRZToroidalSurface,
     Surface,
+    ZernikeRZToroidalSection,
 )
-from desc.grid import Grid, LinearGrid, ConcentricGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.io import IOAble, load
-from desc.profiles import Profile, PowerSeriesProfile, SplineProfile
+from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
 from desc.transform import Transform
-from desc.utils import copy_coeffs, Index
+from desc.utils import Index, copy_coeffs
 
 
 class _Configuration(IOAble, ABC):
@@ -93,7 +95,7 @@ class _Configuration(IOAble, ABC):
         "_qi",
     ]
 
-    def __init__(
+    def __init__(  # noqa: C901 - FIXME: break this up into simpler pieces
         self,
         Psi=1.0,
         NFP=None,
@@ -111,8 +113,8 @@ class _Configuration(IOAble, ABC):
     ):
 
         assert spectral_indexing in [None, "ansi", "fringe",], (
-            f"spectral_indexing should be one of 'ansi', 'fringe', None, got "
-            + "{spectral_indexing}"
+            "spectral_indexing should be one of 'ansi', 'fringe', None, got "
+            + f"{spectral_indexing}"
         )
         if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
             self._spectral_indexing = surface.spectral_indexing
@@ -380,10 +382,6 @@ class _Configuration(IOAble, ABC):
                 + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
             )
 
-        # keep track of where it came from
-        self._parent = None
-        self._children = []
-
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
@@ -398,13 +396,17 @@ class _Configuration(IOAble, ABC):
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
     def _set_up(self):
-        """Called after loading, to ensure object has all properties needed for current DESC version.
-        Allows for backwards-compatibility with equilibria saved/ran with older DESC versions"""
+        """Set unset attributes after loading.
+
+        To ensure object has all properties needed for current DESC version.
+        Allows for backwards-compatibility with equilibria saved/ran with older
+        DESC versions.
+        """
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
 
-    def set_initial_guess(self, *args):
+    def set_initial_guess(self, *args):  # noqa: C901 - FIXME: simplify this
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
@@ -432,7 +434,8 @@ class _Configuration(IOAble, ABC):
 
         >>> equil.set_initial_guess(surface)
 
-        Optionally, an interior surface may be scaled by giving the surface a flux label:
+        Optionally, an interior surface may be scaled by giving the surface a
+        flux label:
 
         >>> surf = FourierRZToroidalSurface(rho=0.7)
         >>> equil.set_initial_guess(surf)
@@ -555,12 +558,12 @@ class _Configuration(IOAble, ABC):
                         )
                 try:  # is it desc?
                     eq = load(path, file_format)
-                except:
+                except:  # noqa: E722
                     try:  # maybe its vmec
                         from desc.vmec import VMECIO
 
                         eq = VMECIO.load(path)
-                    except:  # its neither
+                    except:  # noqa: E722
                         raise ValueError(
                             "Could not load equilibrium from path {}, ".format(path)
                             + "please make sure it is a valid DESC or VMEC equilibrium."
@@ -668,7 +671,7 @@ class _Configuration(IOAble, ABC):
         return x_lmn
 
     def _initial_guess_points(self, nodes, x, x_basis):
-        """Create an initial guess based on locations of flux surfaces in real space
+        """Create an initial guess based on locations of flux surfaces in real space.
 
         Parameters
         ----------
@@ -691,24 +694,12 @@ class _Configuration(IOAble, ABC):
         x_lmn = transform.fit(x)
         return x_lmn
 
-    @property
-    def parent(self):
-        """Pointer to the equilibrium this was derived from."""
-        return self.__dict__.setdefault("_parent", None)
-
-    @property
-    def children(self):
-        """List of configurations that were derived from this one."""
-        return self.__dict__.setdefault("_children", [])
-
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
         if deepcopy:
             new = copy.deepcopy(self)
         else:
             new = copy.copy(self)
-        new._parent = self
-        self.children.append(new)
         return new
 
     def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):
@@ -866,7 +857,7 @@ class _Configuration(IOAble, ABC):
             )
 
     def get_profile(self, name, grid=None, **kwargs):
-        """Return a SplineProfile of the desired quantity
+        """Return a SplineProfile of the desired quantity.
 
         Parameters
         ----------
@@ -893,7 +884,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def surface(self):
-        """Geometric surface defining boundary conditions."""
+        """Surface: Geometric surface defining boundary conditions."""
         return self._surface
 
     @surface.setter
@@ -908,22 +899,22 @@ class _Configuration(IOAble, ABC):
 
     @property
     def spectral_indexing(self):
-        """Type of indexing used for the spectral basis (str)."""
+        """str: Type of indexing used for the spectral basis."""
         return self._spectral_indexing
 
     @property
     def sym(self):
-        """Whether this equilibrium is stellarator symmetric (bool)."""
+        """bool: Whether this equilibrium is stellarator symmetric."""
         return self._sym
 
     @property
     def bdry_mode(self):
-        """Mode for specifying plasma boundary (str)."""
+        """str: Method for specifying boundary condition."""
         return self._bdry_mode
 
     @property
     def Psi(self):
-        """Total toroidal flux within the last closed flux surface in Webers (float)."""
+        """float: Total toroidal flux within the last closed flux surface in Webers."""
         return self._Psi
 
     @Psi.setter
@@ -932,7 +923,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def NFP(self):
-        """Number of (toroidal) field periods (int)."""
+        """int: Number of (toroidal) field periods."""
         return self._NFP
 
     @NFP.setter
@@ -944,7 +935,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def L(self):
-        """Maximum radial mode number (int)."""
+        """int: Maximum radial mode number."""
         return self._L
 
     @L.setter
@@ -956,7 +947,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def M(self):
-        """Maximum poloidal fourier mode number (int)."""
+        """int: Maximum poloidal fourier mode number."""
         return self._M
 
     @M.setter
@@ -968,7 +959,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def N(self):
-        """Maximum toroidal fourier mode number (int)."""
+        """int: Maximum toroidal fourier mode number."""
         return self._N
 
     @N.setter
@@ -980,7 +971,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients of R (ndarray)."""
+        """ndarray: Spectral coefficients of R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -989,7 +980,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients of Z (ndarray)."""
+        """ndarray: Spectral coefficients of Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -998,7 +989,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def L_lmn(self):
-        """Spectral coefficients of lambda (ndarray)."""
+        """ndarray: Spectral coefficients of lambda."""
         return self._L_lmn
 
     @L_lmn.setter
@@ -1007,7 +998,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Rb_lmn(self):
-        """Spectral coefficients of R at the boundary (ndarray)."""
+        """ndarray: Spectral coefficients of R at the boundary."""
         return self.surface.R_lmn
 
     @Rb_lmn.setter
@@ -1016,7 +1007,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Zb_lmn(self):
-        """Spectral coefficients of Z at the boundary (ndarray)."""
+        """ndarray: Spectral coefficients of Z at the boundary."""
         return self.surface.Z_lmn
 
     @Zb_lmn.setter
@@ -1025,17 +1016,17 @@ class _Configuration(IOAble, ABC):
 
     @property
     def Ra_n(self):
-        """R coefficients for axis Fourier series."""
+        """ndarray: R coefficients for axis Fourier series."""
         return self.axis.R_n
 
     @property
     def Za_n(self):
-        """Z coefficients for axis Fourier series."""
+        """ndarray: Z coefficients for axis Fourier series."""
         return self.axis.Z_n
 
     @property
     def axis(self):
-        """Curve object representing the magnetic axis."""
+        """Curve: object representing the magnetic axis."""
         # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
         sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
         # indices where m=0
@@ -1064,7 +1055,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def pressure(self):
-        """Pressure profile."""
+        """Profile: Pressure profile."""
         return self._pressure
 
     @pressure.setter
@@ -1078,7 +1069,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def p_l(self):
-        """Coefficients of pressure profile (ndarray)."""
+        """ndarray: Coefficients of pressure profile."""
         return self.pressure.params
 
     @p_l.setter
@@ -1087,7 +1078,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def iota(self):
-        """Rotational transform (iota) profile."""
+        """Profile: Rotational transform (iota) profile."""
         return self._iota
 
     @iota.setter
@@ -1101,20 +1092,23 @@ class _Configuration(IOAble, ABC):
 
     @property
     def i_l(self):
-        """Coefficients of iota profile (ndarray)."""
+        """ndarray: Coefficients of iota profile."""
         return np.empty(0) if self.iota is None else self.iota.params
 
     @i_l.setter
     def i_l(self, i_l):
         if self.iota is None:
             raise ValueError(
-                "Attempt to set rotational transform on an equilibrium with fixed toroidal current"
+                (
+                    "Attempt to set rotational transform on an equilibrium "
+                    + "with fixed toroidal current"
+                )
             )
         self.iota.params = i_l
 
     @property
     def current(self):
-        """Toroidal current (I) profile."""
+        """Profile: Toroidal current profile (I)."""
         return self._current
 
     @current.setter
@@ -1128,30 +1122,33 @@ class _Configuration(IOAble, ABC):
 
     @property
     def c_l(self):
-        """Coefficients of current profile (ndarray)."""
+        """ndarray: Coefficients of current profile."""
         return np.empty(0) if self.current is None else self.current.params
 
     @c_l.setter
     def c_l(self, c_l):
         if self.current is None:
             raise ValueError(
-                "Attempt to set toroidal current on an equilibrium with fixed rotational transform"
+                (
+                    "Attempt to set toroidal current on an equilibrium with "
+                    + "fixed rotational transform"
+                )
             )
         self.current.params = c_l
 
     @property
     def R_basis(self):
-        """Spectral basis for R (FourierZernikeBasis)."""
+        """FourierZernikeBasis: Spectral basis for R."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z (FourierZernikeBasis)."""
+        """FourierZernikeBasis: Spectral basis for Z."""
         return self._Z_basis
 
     @property
     def L_basis(self):
-        """Spectral basis for lambda (FourierZernikeBasis)."""
+        """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
 
     @property
@@ -1163,7 +1160,7 @@ class _Configuration(IOAble, ABC):
     def qi(self, qi):
         self._qi = qi
 
-    def compute(self, name, grid=None, data=None, **kwargs):
+    def compute(self, name, grid=None, data=None, **kwargs):  # noqa: C901 - FIXME
         """Compute the quantity given by name on grid.
 
         Parameters
@@ -1247,8 +1244,7 @@ class _Configuration(IOAble, ABC):
         return fun(**inputs, **kwargs)
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
-        """Find the theta coordinates (rho, theta, phi) that correspond to a set of
-        straight field-line coordinates (rho, theta*, zeta).
+        """Find geometric theta for given straight field line theta.
 
         Parameters
         ----------
@@ -1319,13 +1315,13 @@ class _Configuration(IOAble, ABC):
     def compute_flux_coords(
         self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
     ):
-        """Find the flux coordinates (rho, theta, zeta) that correspond to a set of
-        real space coordinates (R, phi, Z).
+        """Find the (rho, theta, zeta) that correspond to given (R, phi, Z).
 
         Parameters
         ----------
         real_coords : ndarray, shape(k,3)
-            2D array of real space coordinates [R,phi,Z]. Each row is a different coordinate.
+            2D array of real space coordinates [R,phi,Z]. Each row is a different
+            coordinate.
         R_lmn, Z_lmn : ndarray
             spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
         tol : float
@@ -1418,17 +1414,19 @@ class _Configuration(IOAble, ABC):
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-            Does so by checking coordianate jacobian (sqrt(g)) sign.
-            If coordinate jacobian switches sign somewhere in the volume, this indicates that
-            it is zero at some point, meaning surfaces are touching and the equilibrium is not nested
+        Does so by checking coordianate jacobian (sqrt(g)) sign.
+        If coordinate jacobian switches sign somewhere in the volume, this
+        indicates that it is zero at some point, meaning surfaces are touching and
+        the equilibrium is not nested.
 
-            NOTE: If grid resolution used is too low, or the solution is just barely unnested, this function may
-                fail to return the correct answer.
+        NOTE: If grid resolution used is too low, or the solution is just barely
+        unnested, this function may fail to return the correct answer.
 
         Parameters
         ----------
         grid  :  Grid, optional
-            Grid on which to evaluate the coordinate jacobian and check for the sign. (Default to QuadratureGrid with eq's current grid resolutions)
+            Grid on which to evaluate the coordinate jacobian and check for the sign.
+            (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
             spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
 

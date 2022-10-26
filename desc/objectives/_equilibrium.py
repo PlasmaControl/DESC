@@ -1,16 +1,21 @@
-from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, ConcentricGrid
-from desc.transform import Transform
-from desc.compute import (
-    data_index,
-    compute_force_error,
-    compute_energy,
-    compute_contravariant_current_density,
-)
-from .objective_funs import _Objective
+"""Objectives for solving equilibrium problems."""
+
 import warnings
+
 from termcolor import colored
+
+from desc.backend import jnp
+from desc.compute import (
+    compute_contravariant_current_density,
+    compute_energy,
+    compute_force_error,
+    data_index,
+)
+from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.transform import Transform
+from desc.utils import Timer
+
+from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):
@@ -503,7 +508,8 @@ class Energy(_Objective):
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at. This will default to a QuadratureGrid
+        Collocation grid containing the nodes to evaluate at.
+        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str
@@ -713,15 +719,29 @@ class CurrentDensity(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 3 * self.grid.num_nodes
 

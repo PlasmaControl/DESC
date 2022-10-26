@@ -1,8 +1,12 @@
+"""Functions needed by other tests for computing differences between equilibria."""
+
 import os
+
 import numpy as np
 from shapely.geometry import Polygon
-from desc.vmec import VMECIO
+
 from desc.grid import Grid, LinearGrid
+from desc.vmec import VMECIO
 
 
 def compute_coords(equil, check_all_zeta=False):
@@ -61,7 +65,7 @@ def compute_coords(equil, check_all_zeta=False):
 
 
 def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
-    """Compute area difference between coordinate curves
+    """Compute area difference between coordinate curves.
 
     Parameters
     ----------
@@ -156,11 +160,6 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     # 1e-3 tolerance seems reasonable for testing, similar to comparison by eye
     if isinstance(vmec_data, (str, os.PathLike)):
         vmec_data = VMECIO.read_vmec_output(vmec_data)
-
-    if equil.N == 0:
-        Nz = 1
-    else:
-        Nz = 6
 
     coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 

@@ -1,18 +1,22 @@
-import numpy as np
+"""Functions for perturbing equilibria."""
+
 import warnings
+
+import numpy as np
 from termcolor import colored
-from desc.objectives.utils import factorize_linear_constraints
-from desc.backend import use_jax, put
-from desc.utils import Timer
+
+from desc.backend import put, use_jax
 from desc.compute import arg_order
-from desc.optimize.utils import evaluate_quadratic
+from desc.objectives import get_fixed_boundary_constraints
+from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.objectives import ObjectiveFunction, get_fixed_boundary_constraints
+from desc.optimize.utils import evaluate_quadratic
+from desc.utils import Timer
 
 __all__ = ["perturb", "optimal_perturb"]
 
 
-def perturb(
+def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective,
     constraints=(),
@@ -124,7 +128,7 @@ def perturb(
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective.args
+        constraints, objective.args
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -278,7 +282,6 @@ def perturb(
             threshold=1e-6,
         )
         dx3_reduced = scale @ dx3_h
-        dx3 = recover(dx3_reduced) - xp
 
     if order > 3:
         raise ValueError(
@@ -296,7 +299,7 @@ def perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective.args
+        constraints, objective.args
     )
 
     # update other attributes
@@ -321,7 +324,7 @@ def perturb(
     return eq_new
 
 
-def optimal_perturb(
+def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective_f,
     objective_g,
@@ -486,7 +489,7 @@ def optimal_perturb(
         unfixed_idx,
         project,
         recover,
-    ) = factorize_linear_constraints(constraints, extra_args=objective_f.args)
+    ) = factorize_linear_constraints(constraints, objective_f.args)
 
     # state vector
     xf = objective_f.x(eq)
@@ -684,7 +687,7 @@ def optimal_perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective_f.args
+        constraints, objective_f.args
     )
 
     # update other attributes

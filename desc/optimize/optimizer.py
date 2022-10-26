@@ -1,27 +1,37 @@
-import scipy.optimize
+"""Class for wrapping a number of common optimization methods."""
+
 import warnings
+
+import numpy as np
+import scipy.optimize
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.utils import Timer
 from desc.io import IOAble
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
     CurrentDensity,
-    WrappedEquilibriumObjective,
-    FixIota,
     FixCurrent,
+    FixIota,
+    ForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+    RadialForceBalance,
+    WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize import fmintr, lsqtr
-from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
+from desc.utils import Timer
+
+from .utils import (
+    check_termination,
+    find_matching_inds,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
 class Optimizer(IOAble):
-    """A helper class to wrap several optimization routines
+    """A helper class to wrap several optimization routines.
 
     Offers all the ``scipy.optimize.least_squares`` routines  and several of the most
     useful ``scipy.optimize.minimize`` routines.
@@ -35,7 +45,8 @@ class Optimizer(IOAble):
 
         * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-trust-exact'``,
           ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
-        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``, ``'scipy-dogbox'``
+        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``,
+          ``'scipy-dogbox'``
         * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
           ``'subspace-bfgs'``
         * desc least squares routines: ``'lsq-exact'``
@@ -104,7 +115,7 @@ class Optimizer(IOAble):
         self.method = method
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -114,7 +125,7 @@ class Optimizer(IOAble):
 
     @property
     def method(self):
-        """str : name of the optimization method"""
+        """str: Name of the optimization method."""
         return self._method
 
     @method.setter
@@ -131,7 +142,7 @@ class Optimizer(IOAble):
         self._method = method
 
     # TODO: add copy argument and return the equilibrium?
-    def optimize(
+    def optimize(  # noqa: C901 - FIXME: simplify this
         self,
         eq,
         objective,
@@ -186,8 +197,8 @@ class Optimizer(IOAble):
         maxiter : int, optional
             Maximum number of iterations. Defaults to size(x)*100.
         options : dict, optional
-            Dictionary of optional keyword arguments to override default solver settings.
-            See the code for more details.
+            Dictionary of optional keyword arguments to override default solver
+            settings. See the code for more details.
 
         Returns
         -------
@@ -222,7 +233,10 @@ class Optimizer(IOAble):
             isinstance(lc, FixIota) for lc in linear_constraints
         ):
             raise ValueError(
-                "Toroidal current and rotational transform can't be constrained simultaneously"
+                (
+                    "Toroidal current and rotational transform cannot be "
+                    + "constrained simultaneously."
+                )
             )
 
         # wrap nonlinear constraints if necessary
@@ -477,6 +491,16 @@ class Optimizer(IOAble):
             )
 
         if wrapped:
+            # history from objective includes steps the optimizer didn't accept
+            # need to find where the optimizer actually stepped and only take those
+            wrapped_allx = objective._allx
+            projected_wrapped_allx = []
+            for i, x in enumerate(wrapped_allx):
+                projected_wrapped_allx.append(project(x))
+            optim_allx = result["allx"]
+            match_inds = find_matching_inds(optim_allx, projected_wrapped_allx)
+            for key, val in objective.history.items():
+                objective.history[key] = np.asarray(val)[match_inds]
             result["history"] = objective.history
         else:
             result["history"] = {}

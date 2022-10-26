@@ -1,13 +1,14 @@
 """Compute functions for quasisymmetry objectives."""
 
 from desc.backend import jnp, put, sign
-from .utils import check_derivs
+
 from ._field import (
-    compute_magnetic_field_magnitude,
-    compute_covariant_magnetic_field,
     compute_B_dot_gradB,
     compute_boozer_magnetic_field,
+    compute_covariant_magnetic_field,
+    compute_magnetic_field_magnitude,
 )
+from .utils import check_derivs
 
 
 def compute_boozer_coordinates(
@@ -124,7 +125,7 @@ def compute_boozer_coordinates(
     w_t = w_transform.transform(w_mn, dr=0, dt=1, dz=0)
     w_z = w_transform.transform(w_mn, dr=0, dt=0, dz=1)
 
-    # nu = zeta_Boozer - zeta
+    # nu = zeta_Boozer - zeta   # noqa: E800
     GI = data["G"] + data["iota"] * data["I"]
     data["nu"] = (w - data["I"] * data["lambda"]) / GI
     data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI

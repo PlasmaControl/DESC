@@ -1,31 +1,30 @@
-from .objective_funs import ObjectiveFunction
-from .linear_objectives import (
-    FixBoundaryR,
-    FixBoundaryZ,
-    FixLambdaGauge,
-    FixPressure,
-    FixIota,
-    FixCurrent,
-    FixPsi,
-)
-from ._generic import GenericObjective, ToroidalCurrent
+"""Classes defining objectives for equilibrium and optimization."""
+
 from ._equilibrium import (
+    CurrentDensity,
     Energy,
     ForceBalance,
-    RadialForceBalance,
     HelicalForceBalance,
-    CurrentDensity,
+    RadialForceBalance,
 )
-from ._geometry import Volume, AspectRatio
+from ._generic import GenericObjective, ToroidalCurrent
+from ._geometry import AspectRatio, Volume
 from ._qs import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
     QuasiIsodynamic,
 )
-from ._stability import MercierStability, MagneticWell
-from .utils import (
-    get_fixed_boundary_constraints,
-    get_equilibrium_objective,
-)
+from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective
+from .linear_objectives import (
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixCurrent,
+    FixIota,
+    FixLambdaGauge,
+    FixPressure,
+    FixPsi,
+)
+from .objective_funs import ObjectiveFunction
+from .utils import get_equilibrium_objective, get_fixed_boundary_constraints

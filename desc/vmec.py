@@ -1,28 +1,27 @@
+"""Functions and classes for interfacing with VMEC equilibria."""
+
 import os
 import warnings
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 from netCDF4 import Dataset, stringtochar
-from scipy import optimize, interpolate, integrate
+from scipy import integrate, interpolate, optimize
 
 from desc.backend import sign
-from desc.compute.utils import compress
-from desc.utils import Timer
-from desc.grid import Grid, LinearGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
-from desc.profiles import PowerSeriesProfile
+from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
-from desc.objectives import (
-    ObjectiveFunction,
-    FixBoundaryR,
-    FixBoundaryZ,
-)
+from desc.grid import Grid, LinearGrid
+from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
 from desc.objectives.utils import factorize_linear_constraints
+from desc.profiles import PowerSeriesProfile
+from desc.transform import Transform
+from desc.utils import Timer
 from desc.vmec_utils import (
+    fourier_to_zernike,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
-    fourier_to_zernike,
     zernike_to_fourier,
 )
 
@@ -59,8 +58,10 @@ class VMECIO:
         version = file.variables["version_"][0]
         if version < 9:
             warnings.warn(
-                "VMEC output appears to be from version {}, while DESC is only designed for compatibility with VMEC version 9. Some data may not be loaded correctly.".format(
-                    str(version)
+                (
+                    "VMEC output appears to be from version {}".format(str(version))
+                    + " while DESC is only designed for compatibility with VMEC version"
+                    + " 9. Some data may not be loaded correctly."
                 )
             )
 
@@ -87,7 +88,7 @@ class VMECIO:
             zmnc = file.variables["zmnc"][:].filled()
             lmnc = file.variables["lmnc"][:].filled()
             inputs["sym"] = False
-        except:
+        except KeyError:
             rmns = np.zeros_like(rmnc)
             zmnc = np.zeros_like(zmns)
             lmnc = np.zeros_like(lmns)
@@ -129,7 +130,7 @@ class VMECIO:
         constraints = (FixBoundaryR(), FixBoundaryZ())
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, extra_args=objective.args
+            constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():
@@ -138,7 +139,7 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq, path, surfs=128, verbose=1):
+    def save(cls, eq, path, surfs=128, verbose=1):  # noqa: C901 - FIXME - simplify
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -197,7 +198,6 @@ class VMECIO:
         file.createDimension("dim_00020", 20)
         file.createDimension("dim_00100", 100)
         file.createDimension("dim_00200", 200)
-        preset = file.dimensions["preset"].size
 
         # parameters
         timer.start("parameters")
@@ -898,7 +898,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
-        # J^theta * sqrt(g)
+        # J^theta * sqrt(g)   # noqa: E800
         timer.start("J^theta")
         if verbose > 0:
             print("Saving J^theta")
@@ -948,7 +948,7 @@ class VMECIO:
         if verbose > 1:
             timer.disp("J^theta")
 
-        # J^zeta * sqrt(g)
+        # J^zeta * sqrt(g)   # noqa: E800
         timer.start("J^zeta")
         if verbose > 0:
             print("Saving J^zeta")
@@ -1151,7 +1151,7 @@ class VMECIO:
             vmec_data["zmnc"] = file.variables["zmnc"][:]
             vmec_data["lmnc"] = file.variables["lmnc"][:]
             vmec_data["sym"] = False
-        except:
+        except KeyError:
             vmec_data["sym"] = True
 
         return vmec_data
@@ -1189,8 +1189,7 @@ class VMECIO:
             C, S (tuple of ndarray): VMEC data interpolated at the points (s,theta,phi)
             where C has cosine symmetry and S has sine symmetry
         if sym = False
-            X (ndarray): non-symmetric VMEC data interpolated at the points (s,theta,phi)
-
+            X (ndarray): non-symmetric VMEC data interpolated at (s,theta,phi)
         """
         if si is None:
             si = np.linspace(0, 1, Cmn.shape[0])
@@ -1277,7 +1276,7 @@ class VMECIO:
 
     @classmethod
     def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
-        """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC
+        """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC.
 
         Parameters
         ----------

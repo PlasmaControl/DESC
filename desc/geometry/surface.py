@@ -1,15 +1,19 @@
-import tempfile
-import numpy as np
-import warnings
+"""Classes for 2D surfaces embedded in 3D space."""
+
 import numbers
-from desc.backend import jnp, sign, put
-from desc.utils import copy_coeffs
-from desc.grid import Grid, LinearGrid
+import warnings
+
+import numpy as np
+
+from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.transform import Transform
+from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
+from desc.transform import Transform
+from desc.utils import copy_coeffs
+
 from .core import Surface
-from .utils import rpz2xyz_vec, rpz2xyz
+from .utils import rpz2xyz, rpz2xyz_vec
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -121,7 +125,7 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def NFP(self):
-        """Number of (toroidal) field periods (int)."""
+        """int: Number of (toroidal) field periods."""
         return self._NFP
 
     @NFP.setter
@@ -133,17 +137,17 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def R_basis(self):
-        """Spectral basis for R double Fourier series."""
+        """DoubleFourierSeries: Spectral basis for R."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z double Fourier series."""
+        """DoubleFourierSeries: Spectral basis for Z."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Grid for computation."""
+        """Grid: Nodes for computation."""
         return self._grid
 
     @grid.setter
@@ -161,17 +165,23 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
-        assert ((len(args) in [2, 3]) and (len(kwargs) == 0 or "NFP" in kwargs)) or (
-            len(args) == 0
-        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
-        L = kwargs.get("L", None)
-        M = kwargs.get("M", None)
-        N = kwargs.get("N", None)
-        NFP = kwargs.get("NFP", None)
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         self._NFP = NFP if NFP is not None else self.NFP
         if L is not None:
             warnings.warn(
-                "FourierRZToroidalSurface does not have a radial resolution, ignoring L"
+                "FourierRZToroidalSurface does not have radial resolution, ignoring L"
             )
         if len(args) == 2:
             M, N = args
@@ -197,7 +207,7 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients for R."""
+        """ndarray: Spectral coefficients for R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -206,12 +216,15 @@ class FourierRZToroidalSurface(Surface):
             self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                (
+                    f"R_lmn should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self.R_basis.num_modes} modes."
+                )
             )
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients for Z."""
+        """ndarray: Spectral coefficients for Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -220,7 +233,10 @@ class FourierRZToroidalSurface(Surface):
             self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                (
+                    f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self.R_basis.num_modes} modes."
+                )
             )
 
     def get_coeffs(self, m, n=0):
@@ -436,7 +452,7 @@ class FourierRZToroidalSurface(Surface):
 
     @classmethod
     def from_input_file(cls, path):
-        """Create a surface from Fourier coefficients in a DESC or VMEC input file
+        """Create a surface from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
         ----------
@@ -651,21 +667,22 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def spectral_indexing(self):
+        """str: Type of spectral indexing for Zernike basis."""
         return self._spectral_indexing
 
     @property
     def R_basis(self):
-        """Spectral basis for R Zernike polynomial."""
+        """ZernikePolynomial: Spectral basis for R."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z Zernike polynomial."""
+        """ZernikePolynomial: Spectral basis for Z."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Grid for computation."""
+        """Grid: Nodes for computation."""
         return self._grid
 
     @grid.setter
@@ -683,15 +700,21 @@ class ZernikeRZToroidalSection(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
-        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
-            len(args) == 0
-        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
-        L = kwargs.get("L", None)
-        M = kwargs.get("M", None)
-        N = kwargs.get("N", None)
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         if N is not None:
             warnings.warn(
-                "ZernikeRZToroidalSection does not have a toroidal resolution, ignoring N"
+                "ZernikeRZToroidalSection does not have toroidal resolution, ignoring N"
             )
         if len(args) == 2:
             L, M = args
@@ -711,7 +734,7 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients for R."""
+        """ndarray: Spectral coefficients for R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -720,12 +743,15 @@ class ZernikeRZToroidalSection(Surface):
             self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                (
+                    f"R_lmn should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self.R_basis.num_modes} modes."
+                )
             )
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients for Z."""
+        """ndarray: Spectral coefficients for Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -734,7 +760,10 @@ class ZernikeRZToroidalSection(Surface):
             self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                (
+                    f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                    + f"basis with {self.R_basis.num_modes} modes."
+                )
             )
 
     def get_coeffs(self, l, m=0):

@@ -1,6 +1,6 @@
+"""Main command line interface to DESC for solving fixed boundary equilibria."""
+
 import sys
-import warnings
-from termcolor import colored
 
 from desc.io import InputReader
 
@@ -22,10 +22,10 @@ def main(cl_args=sys.argv[1:]):
     if ir.args.verbose:
         print(desc.BANNER)
 
-    from desc.backend import use_jax
-    from desc.equilibrium import EquilibriaFamily
-    from desc.plotting import plot_surfaces, plot_section
     import matplotlib.pyplot as plt
+
+    from desc.equilibrium import EquilibriaFamily
+    from desc.plotting import plot_section, plot_surfaces
 
     if ir.args.verbose:
         print("Reading input from {}".format(ir.input_path))
@@ -46,15 +46,15 @@ def main(cl_args=sys.argv[1:]):
     if ir.args.plot > 1:
         for i, eq in enumerate(equil_fam[:-1]):
             print("Plotting solution at step {}".format(i + 1))
-            ax = plot_surfaces(eq)
+            _ = plot_surfaces(eq)
             plt.show()
-            ax = plot_section(eq, "|F|", log=True, norm_F=True)
+            _ = plot_section(eq, "|F|", log=True, norm_F=True)
             plt.show()
     if ir.args.plot > 0:
         print("Plotting final solution")
-        ax = plot_surfaces(equil_fam[-1])
+        _ = plot_surfaces(equil_fam[-1])
         plt.show()
-        ax = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)
+        _ = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)
         plt.show()
 
 

@@ -30,7 +30,7 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="fringe", profile="iota"):
+    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi", profile="iota"):
         """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
@@ -44,9 +44,9 @@ class VMECIO:
         N : int, optional
             Toroidal resolution. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
-            Type of Zernike indexing scheme to use. (Default = ``'fringe'``)
+            Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
         profile : {"iota", "current"}
-            Which profile to use.
+             Which profile to use as the equilibrium constraint. (Default = ``'iota'``)
 
         Returns
         -------
@@ -112,6 +112,16 @@ class VMECIO:
             inputs["current"] = np.zeros((preset, 2))
             inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["current"][:, 1] = file.variables["ac"][:]
+            # integrate current profile wrt s=rho^2
+            inputs["current"] = np.pad(
+                np.vstack(
+                    (
+                        inputs["current"][:, 0] + 2,
+                        inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
+                    )
+                ).T,
+                ((1, 0), (0, 0)),
+            )
             inputs["current"][:, 1] *= (
                 file.variables["ctor"][:] / (np.sum(inputs["current"][:, 1]) or 1),
             )

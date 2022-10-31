@@ -141,10 +141,13 @@ class TestInputReader:
 
     @pytest.mark.unit
     def test_vacuum_objective_with_iota_yields_current(self):
-        """Test that when a vacuum objective is given in an input file along with iota coefficients, a zero current profile is used instead."""
+        """Test that input file with vacuum objective  always uses zero current."""
         input_path = ".//tests//inputs//HELIOTRON_vacuum"
+        # load an input file with vacuum obj but also an iota profile specified
         ir = InputReader(input_path)
+        # ensure that a current profile instead of an iota profile is used
         assert "iota" not in ir.inputs[0].keys()
+        assert "current" in ir.inputs[0].keys()
 
 
 class MockObject:

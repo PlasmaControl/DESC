@@ -778,7 +778,7 @@ class FixCurrent(_FixProfile):
         if eq.current is None:
             raise RuntimeError(
                 (
-                    "Attempt to fix toroidal current on an equilibrium no "
+                    "Attempting to fix toroidal current on an equilibrium with no "
                     + "current profile assigned"
                 )
             )

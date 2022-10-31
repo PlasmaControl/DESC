@@ -139,6 +139,13 @@ class TestInputReader:
         #  and checksum compare a live conversion to it
         pass
 
+    @pytest.mark.unit
+    def test_vacuum_objective_with_iota_yields_current(self):
+        """Test that when a vacuum objective is given in an input file along with iota coefficients, a zero current profile is used instead."""
+        input_path = ".//tests//inputs//HELIOTRON_vacuum"
+        ir = InputReader(input_path)
+        assert "iota" not in ir.inputs[0].keys()
+
 
 class MockObject:
     """Example object for saving/loading tests."""

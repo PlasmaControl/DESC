@@ -536,7 +536,10 @@ class InputReader:
 
         # remove unused profile
         if iota_flag:
-            del inputs["current"]
+            if inputs["objective"] != "vacuum":
+                del inputs["current"]
+            else:  # if vacuum objective from input file, use zero current
+                del inputs["iota"]
         else:
             del inputs["iota"]
 

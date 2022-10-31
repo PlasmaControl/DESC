@@ -526,10 +526,16 @@ class FixAxisR(_Objective):
         #     self._A[j, i] = zernike_radial(surf, l, m)
         # # else:  # Zb_lmn -> Zb optimization space
         # #     self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
-
-        ns = np.unique(eq.R_basis.modes[:, 2])  ## +1 is dumb hack for R1
-        self._A = np.zeros((len(ns) + 1, R_basis.num_modes))  # +1 hack
-        self._dim_f = len(ns) + 1  # +1 hack
+        num_extra_modes = 0
+        ##### stupid hack to fix R110 ###
+        for i, (l, m, n) in enumerate(R_basis.modes):
+            if m == 1 and l == 1:
+                num_extra_modes += 1
+        ns = np.unique(eq.R_basis.modes[:, 2])  ## + is dumb hack for R11n modes
+        self._A = np.zeros(
+            (len(ns) + num_extra_modes, R_basis.num_modes)
+        )  # + from hack
+        self._dim_f = len(ns) + num_extra_modes  # +1 hack
 
         for i, (l, m, n) in enumerate(R_basis.modes):
             if m != 0:
@@ -540,26 +546,30 @@ class FixAxisR(_Objective):
             else:
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
-
-        ##### stupid hack to fix R110 ###
+        jj = 0
         for i, (l, m, n) in enumerate(R_basis.modes):
-            if m == 1 and l == 1 and n == 0:
-                self._A[-1, i] = 1
+            if m == 1 and l == 1:
+                self._A[-1 - jj, i] = 1
+                jj += 1
+
         ###############################################
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
-
+        jj = 0
         # use axis parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = np.zeros((len(ns) + 1,))  # +1 from hack
+            self.target = np.zeros((len(ns) + num_extra_modes,))  # +1 from hack
             for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Rn
             ##### hack
-            self.target[-1] = eq.R_lmn[eq.R_basis.get_idx(L=1, M=1, N=0)]
+            for i, (l, m, n) in enumerate(R_basis.modes):
+                if m == 1 and l == 1:
+                    self.target[-1 - jj] = eq.R_lmn[eq.R_basis.get_idx(L=l, M=m, N=n)]
+                    jj += 1
             #####
         print("R target: ", self.target)
 
@@ -679,10 +689,15 @@ class FixAxisZ(_Objective):
         #     self._A[j, i] = zernike_radial(surf, l, m)
         # # else:  # Zb_lmn -> Zb optimization space
         # #     self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
+        num_extra_modes = 0
 
+        ##### stupid hack to fix R110 ###
+        for i, (l, m, n) in enumerate(Z_basis.modes):
+            if m == 1 and l == 1:
+                num_extra_modes += 1
         ns = np.unique(eq.Z_basis.modes[:, 2])
-        self._A = np.zeros((len(ns) + 1, Z_basis.num_modes))
-        self._dim_f = len(ns) + 1
+        self._A = np.zeros((len(ns) + num_extra_modes, Z_basis.num_modes))
+        self._dim_f = len(ns) + num_extra_modes
 
         for i, (l, m, n) in enumerate(Z_basis.modes):
             if m != 0:
@@ -694,16 +709,18 @@ class FixAxisZ(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
         ##### stupid hack to fix Z110 ###
+        jj = 0
         for i, (l, m, n) in enumerate(Z_basis.modes):
-            if m == -1 and l == 1 and n == 0:
-                self._A[-1, i] = 1
+            if m == 1 and l == 1:
+                self._A[-1 - jj, i] = 1
+                jj += 1
         ###############################################
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
-
+        jj = 0
         # use axis parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = np.zeros((len(ns) + 1,))
@@ -711,7 +728,10 @@ class FixAxisZ(_Objective):
                 j = np.argwhere(ns == n)
                 self.target[j] = Zn
             ##### hack
-            self.target[-1] = eq.Z_lmn[eq.Z_basis.get_idx(L=1, M=-1, N=0)]
+            for i, (l, m, n) in enumerate(Z_basis.modes):
+                if m == 1 and l == 1:
+                    self.target[-1 - jj] = eq.Z_lmn[eq.Z_basis.get_idx(L=l, M=m, N=n)]
+                    jj += 1
             #####
 
         self._check_dimensions()

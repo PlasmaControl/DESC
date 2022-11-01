@@ -141,7 +141,7 @@ class TestInputReader:
 
     @pytest.mark.unit
     def test_vacuum_objective_with_iota_yields_current(self):
-        """Test that input file with vacuum objective  always uses zero current."""
+        """Test that input file with vacuum objective always uses zero current."""
         input_path = ".//tests//inputs//HELIOTRON_vacuum"
         # load an input file with vacuum obj but also an iota profile specified
         with pytest.warns(UserWarning):

@@ -99,16 +99,25 @@ class VMECIO:
 
         # profiles
         preset = file.dimensions["preset"].size
+        pmass_type = "".join(file.variables["pmass_type"][:].astype(str)).strip()
+        if pmass_type != "power_series":
+            warnings.warn("Pressure is not a power series!")
         p0 = file.variables["presf"][0] / file.variables["am"][0]
         inputs["pressure"] = np.zeros((preset, 2))
         inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
         inputs["pressure"][:, 1] = file.variables["am"][:] * p0
         if profile == "iota":
+            piota_type = "".join(file.variables["piota_type"][:].astype(str)).strip()
+            if piota_type != "power_series":
+                warnings.warn("Iota is not a power series!")
             inputs["iota"] = np.zeros((preset, 2))
             inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["iota"][:, 1] = file.variables["ai"][:]
             inputs["current"] = None
         if profile == "current":
+            pcurr_type = "".join(file.variables["pcurr_type"][:].astype(str)).strip()
+            if pcurr_type != "power_series":
+                warnings.warn("Current is not a power series!")
             inputs["current"] = np.zeros((preset, 2))
             inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["current"][:, 1] = file.variables["ac"][:]
@@ -122,6 +131,7 @@ class VMECIO:
                 ).T,
                 ((1, 0), (0, 0)),
             )
+            # scale total current to correct value
             inputs["current"][:, 1] *= (
                 file.variables["ctor"][:] / (np.sum(inputs["current"][:, 1]) or 1),
             )

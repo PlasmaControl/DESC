@@ -52,59 +52,11 @@ jobs:
             ./mpl_results.html
             ./prof.db	    
       - name: Upload coverage
-        continue-on-error: true
         id : codecov1
         uses: codecov/codecov-action@v3
         with:
+          token: ${{ secrets.CODECOV_TOKEN }} # maybe needed to avoid upload failure?
           name: codecov-umbrella # optional
           files: ./cov.xml
           fail_ci_if_error: true # optional (default = false)
           verbose: true # optional (default = false)
-      - name: Upload coverage2
-        id : codecov2
-        continue-on-error: true
-        if: steps.codecov1.outcome=='failure'         # check the step outcome, retry 1st time
-        uses: codecov/codecov-action@v3
-        with:
-          name: codecov-umbrella # optional
-          files: ./cov.xml
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
-      - name: Upload coverage3
-        id : codecov3
-        continue-on-error: true
-        if: steps.codecov2.outcome=='failure'         # check the step outcome, retry 2nd time
-        uses: codecov/codecov-action@v3
-        with:
-          name: codecov-umbrella # optional
-          files: ./cov.xml
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
-      - name: Upload coverage4
-        id : codecov4
-        continue-on-error: true
-        if: steps.codecov3.outcome=='failure'         # check the step outcome, retry 3rd time
-        uses: codecov/codecov-action@v3
-        with:
-          name: codecov-umbrella # optional
-          files: ./cov.xml
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
-      - name: Upload coverage5
-        id : codecov5
-        continue-on-error: true
-        if: steps.codecov4.outcome=='failure'         # check the step outcome, retry 4th time
-        uses: codecov/codecov-action@v3
-        with:
-          name: codecov-umbrella # optional
-          files: ./cov.xml
-          fail_ci_if_error: true # optional (default = false)
-          verbose: true # optional (default = false)
-      - name: set the status                          # set the workflow status if command failed
-        if: always()
-        run: |
-          if ${{ steps.codecov1.outcome=='success' || steps.codecov2.outcome=='success' || steps.codecov3.outcome=='success' || steps.codecov4.outcome=='success' || steps.codecov5.outcome=='success' }}; then
-             echo fine
-          else
-             exit 1
-          fi

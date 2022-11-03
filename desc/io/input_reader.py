@@ -1332,7 +1332,7 @@ class InputReader:
         )
         # scale current profile
         if curr_tor is not None:
-            inputs["current"][:, 1] *= curr_tor / np.sum(inputs["current"][:, 1])
+            inputs["current"][:, 1] *= curr_tor / (np.sum(inputs["current"][:, 1]) or 1)
         # delete unused profile
         if iota_flag:
             del inputs["current"]

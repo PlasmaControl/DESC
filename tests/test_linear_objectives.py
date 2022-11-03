@@ -129,7 +129,7 @@ def test_constrain_asserts():
     eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(RuntimeError):
         fixmode1 = FixModeR(modes=np.array([1, 1, 0]))
-        fixmode2 = FixModeR(modes=np.array([1, 1, 0]))
+        fixmode2 = FixModeR(modes=np.array([[0, 0, 0], [1, 1, 0]]))
         eq.solve(constraints=(fixmode1, fixmode2))
     # cannot use two constraints on the same Z mode
     eq = Equilibrium(current=PowerSeriesProfile(0))

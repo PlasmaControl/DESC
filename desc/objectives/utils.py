@@ -86,7 +86,9 @@ def get_equilibrium_objective(mode="force"):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(  # noqa: C901  # too complex
+    constraints, objective_args
+):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -135,6 +137,7 @@ def factorize_linear_constraints(constraints, objective_args):
     A = {}
     b = {}
     Ainv = {}
+    arg_obj_lists = {}
     xp = jnp.zeros(dim_x)  # particular solution to Ax=b
     constraint_args = []  # all args used in constraints
     unfixed_args = []  # subset of constraint args for unfixed objectives
@@ -158,6 +161,7 @@ def factorize_linear_constraints(constraints, objective_args):
                 A[arg] = A_
                 b[arg] = b_
                 unfixed_args.append(arg)
+                arg_obj_lists[arg] = [obj]
             elif b_.size > 0:  # we want to stack these vertically if the same arg
                 # but only if the constraint actually constrains anything
                 # if not, i.e. if attempted to fix a mode that is not in the basis,
@@ -165,12 +169,18 @@ def factorize_linear_constraints(constraints, objective_args):
                 rk_before = jnp.linalg.matrix_rank(A[arg])
                 A[arg] = jnp.vstack((A[arg], A_))
                 rk_after = jnp.linalg.matrix_rank(A[arg])
-                if rk_before == rk_after:
+                if (
+                    rk_after < rk_before + A_.shape[0]
+                ):  # if less, there are some lin dependent rows of A_ and A[arg]
+                    # for example, could be trying to constrain same mode with 2
+                    # different values
                     raise RuntimeError(
                         f"Incompatible constraints given for {arg}!"
                         + f" constraint {obj} is incompatible with"
-                        + f" constraint {constraints[obj_ind-1]}"
+                        + f" {*arg_obj_lists[arg],}"
                     )
+                arg_obj_lists[arg] += [obj]
+
                 # FIXME: this test will throw error if the same constraint
                 # is used  twice i.e. R_111 = 1 and 2*R_111=2
                 # do we want to detect and say that is ok? I vote no

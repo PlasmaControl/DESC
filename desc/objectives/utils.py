@@ -157,7 +157,7 @@ def factorize_linear_constraints(  # noqa: C901  # too complex
         else:
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             b_ = obj.target
-            if arg not in A.keys() and b_.size > 0:
+            if arg not in A.keys():
                 A[arg] = A_
                 b[arg] = b_
                 unfixed_args.append(arg)

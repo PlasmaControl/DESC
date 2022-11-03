@@ -143,7 +143,7 @@ def test_constrain_asserts():
 @pytest.mark.solve
 @pytest.mark.slow
 def test_fixed_mode_solve():
-    """test solving an equilibrium with a fixed mode constraint."""
+    """Test solving an equilibrium with a fixed mode constraint."""
     # Reset DSHAPE to initial guess, fix a mode, and then resolve
     # and check that the mode stayed fix
     L = 1
@@ -190,7 +190,7 @@ def test_fixed_mode_solve():
 @pytest.mark.solve
 @pytest.mark.slow
 def test_fixed_axis_solve():
-    """test solving an equilibrium with a fixed axis constraint."""
+    """Test solving an equilibrium with a fixed axis constraint."""
     # Reset DSHAPE to initial guess, fix axis, and then resolve
     # and check that the axis stayed fix
     eq = get("DSHAPE")

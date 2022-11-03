@@ -753,7 +753,6 @@ class FixModeR(_Objective):
             Level of output.
 
         """
-
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)

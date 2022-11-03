@@ -443,7 +443,7 @@ class FixAxisR(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Magnetic axis coefficients to fix. If None, uses Equilibrium's axis coefficients.
+        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -516,27 +516,9 @@ class FixAxisR(_Objective):
                     )
                 )
 
-        # self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
-        # for i, (l, m, n) in enumerate(eq.R_basis.modes):
-        #     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-        #     surf = (
-        #         eq.surface.rho
-        #         if self._surface_label is None
-        #         else self._surface_label
-        #     )
-        #     self._A[j, i] = zernike_radial(surf, l, m)
-        # # else:  # Zb_lmn -> Zb optimization space
-        # #     self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
-        num_extra_modes = 0
-        ##### stupid hack to fix R110 ###
-        for i, (l, m, n) in enumerate(R_basis.modes):
-            if m == 1 and l == 1:
-                num_extra_modes += 1
-        ns = np.unique(eq.R_basis.modes[:, 2])  ## + is dumb hack for R11n modes
-        self._A = np.zeros(
-            (len(ns) + num_extra_modes, R_basis.num_modes)
-        )  # + from hack
-        self._dim_f = len(ns) + num_extra_modes  # +1 hack
+        ns = np.unique(eq.R_basis.modes[:, 2])
+        self._A = np.zeros((len(ns), R_basis.num_modes))
+        self._dim_f = len(ns)
 
         for i, (l, m, n) in enumerate(R_basis.modes):
             if m != 0:
@@ -547,11 +529,6 @@ class FixAxisR(_Objective):
             else:
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
-        jj = 0
-        for i, (l, m, n) in enumerate(R_basis.modes):
-            if m == 1 and l == 1:
-                self._A[-1 - jj, i] = 1
-                jj += 1
 
         ###############################################
         # use given targets and weights if specified
@@ -559,20 +536,13 @@ class FixAxisR(_Objective):
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
-        jj = 0
+
         # use axis parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = np.zeros((len(ns) + num_extra_modes,))  # +1 from hack
+            self.target = np.zeros((len(ns),))
             for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Rn
-            ##### hack
-            for i, (l, m, n) in enumerate(R_basis.modes):
-                if m == 1 and l == 1:
-                    self.target[-1 - jj] = eq.R_lmn[eq.R_basis.get_idx(L=l, M=m, N=n)]
-                    jj += 1
-            #####
-        print("R target: ", self.target)
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -606,7 +576,7 @@ class FixAxisZ(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Magnetic axis coefficients to fix. If None, uses Equilibrium's axis coefficients.
+        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -679,26 +649,9 @@ class FixAxisZ(_Objective):
                     )
                 )
 
-        # self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
-        # for i, (l, m, n) in enumerate(eq.R_basis.modes):
-        #     j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
-        #     surf = (
-        #         eq.surface.rho
-        #         if self._surface_label is None
-        #         else self._surface_label
-        #     )
-        #     self._A[j, i] = zernike_radial(surf, l, m)
-        # # else:  # Zb_lmn -> Zb optimization space
-        # #     self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
-        num_extra_modes = 0
-
-        ##### stupid hack to fix R110 ###
-        for i, (l, m, n) in enumerate(Z_basis.modes):
-            if m == 1 and l == 1:
-                num_extra_modes += 1
         ns = np.unique(eq.Z_basis.modes[:, 2])
-        self._A = np.zeros((len(ns) + num_extra_modes, Z_basis.num_modes))
-        self._dim_f = len(ns) + num_extra_modes
+        self._A = np.zeros((len(ns), Z_basis.num_modes))
+        self._dim_f = len(ns)
 
         for i, (l, m, n) in enumerate(Z_basis.modes):
             if m != 0:
@@ -709,31 +662,18 @@ class FixAxisZ(_Objective):
             else:
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
-        ##### stupid hack to fix Z110 ###
-        jj = 0
-        for i, (l, m, n) in enumerate(Z_basis.modes):
-            if m == 1 and l == 1:
-                self._A[-1 - jj, i] = 1
-                jj += 1
         ###############################################
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
-        jj = 0
         # use axis parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = np.zeros((len(ns) + 1,))
+            self.target = np.zeros((len(ns),))
             for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Zn
-            ##### hack
-            for i, (l, m, n) in enumerate(Z_basis.modes):
-                if m == 1 and l == 1:
-                    self.target[-1 - jj] = eq.Z_lmn[eq.Z_basis.get_idx(L=l, M=m, N=n)]
-                    jj += 1
-            #####
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -767,7 +707,8 @@ class FixModeR(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Fourier-Zernike R coefficient target values. If None, uses Equilibrium's R coefficients.
+        Fourier-Zernike R coefficient target values. If None,
+         uses Equilibrium's R coefficients.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -812,8 +753,6 @@ class FixModeR(_Objective):
             Level of output.
 
         """
-        R_basis = eq.R_basis
-        # we give modes, we should convert to indices?
 
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -893,7 +832,8 @@ class FixModeZ(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Fourier-Zernike Z coefficient target values. If None, uses Equilibrium's Z coefficients.
+        Fourier-Zernike Z coefficient target values. If None,
+         uses Equilibrium's Z coefficients.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -938,8 +878,6 @@ class FixModeZ(_Objective):
             Level of output.
 
         """
-        Z_basis = eq.Z_basis
-        # we give modes, we should convert to indices?
 
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)

@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
+import desc.examples
 from desc.equilibrium import Equilibrium
-from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.objectives import (
     FixAxisR,
@@ -148,7 +148,7 @@ def test_fixed_mode_solve():
     # and check that the mode stayed fix
     L = 1
     M = 1
-    eq = get("DSHAPE")
+    eq = desc.examples.get("DSHAPE")
     eq.set_initial_guess()
     fixR = FixModeR(
         modes=np.array([L, M, 0])
@@ -193,7 +193,7 @@ def test_fixed_axis_solve():
     """Test solving an equilibrium with a fixed axis constraint."""
     # Reset DSHAPE to initial guess, fix axis, and then resolve
     # and check that the axis stayed fix
-    eq = get("DSHAPE")
+    eq = desc.examples.get("DSHAPE")
     eq.axis.R_n[0] = 3.6
     eq.set_initial_guess()
 

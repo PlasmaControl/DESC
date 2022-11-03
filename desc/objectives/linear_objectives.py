@@ -451,8 +451,6 @@ class FixAxisR(_Objective):
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the axis modes.
-    surface_label : float
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
         Name of the objective function.
 
@@ -530,7 +528,6 @@ class FixAxisR(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        ###############################################
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
@@ -548,7 +545,6 @@ class FixAxisR(_Objective):
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
-        ################################################
 
     def compute(self, R_lmn, **kwargs):
         """Compute axis R errors.
@@ -556,12 +552,12 @@ class FixAxisR(_Objective):
         Parameters
         ----------
         R_lmn : ndarray
-            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+            Spectral coefficients of R(rho,theta,zeta)
 
         Returns
         -------
         f : ndarray
-            Axis R errors..
+            Axis R errors.
 
         """
         f = jnp.dot(self._A, R_lmn)
@@ -584,8 +580,6 @@ class FixAxisZ(_Objective):
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the axis modes.
-    surface_label : float
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
         Name of the objective function.
 
@@ -662,7 +656,7 @@ class FixAxisZ(_Objective):
             else:
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
-        ###############################################
+
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
@@ -679,7 +673,6 @@ class FixAxisZ(_Objective):
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
-        ################################################
 
     def compute(self, Z_lmn, **kwargs):
         """Compute axis Z errors.
@@ -716,8 +709,6 @@ class FixModeR(_Objective):
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Equilibrium's modes.
-    surface_label : float
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
         Name of the objective function.
 
@@ -798,7 +789,6 @@ class FixModeR(_Objective):
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
-        ################################################
 
     def compute(self, R_lmn, **kwargs):
         """Compute Fixed mode R errors.
@@ -840,8 +830,6 @@ class FixModeZ(_Objective):
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Equilibrium's modes.
-    surface_label : float
-        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
         Name of the objective function.
 
@@ -922,7 +910,6 @@ class FixModeZ(_Objective):
         self._set_dimensions(eq)
         self._set_derivatives(use_jit=use_jit)
         self._built = True
-        ################################################
 
     def compute(self, Z_lmn, **kwargs):
         """Compute Fixed mode Z errors.

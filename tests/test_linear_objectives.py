@@ -85,12 +85,12 @@ def test_bc_on_interior_surfaces():
 
 @pytest.mark.unit
 def test_constrain_bdry_with_only_one_mode():
-    """Test Fixing boundary with a surface with only one mode in its basis"""
+    """Test Fixing boundary with a surface with only one mode in its basis."""
     eq = Equilibrium()
     FixZ = FixBoundaryZ(fixed_boundary=True)
     try:
         FixZ.build(eq)
-    except:
+    except Exception:
         pytest.fail(
             "Error encountered when attempting to constrain surface with"
             + " only one mode in its basis"

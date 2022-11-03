@@ -4,14 +4,20 @@ import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
 from desc.objectives import (
+    FixAxisR,
+    FixAxisZ,
+    FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
     FixIota,
     FixLambdaGauge,
     FixModeR,
     FixModeZ,
+    FixPressure,
+    FixPsi,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -97,7 +103,7 @@ def test_constrain_bdry_with_only_one_mode():
     FixZ = FixBoundaryZ(fixed_boundary=True)
     try:
         FixZ.build(eq)
-    except:
+    except Exception:
         pytest.fail(
             "Error encountered when attempting to constrain surface with"
             + " only one mode in its basis"
@@ -135,7 +141,80 @@ def test_constrain_asserts():
 
 @pytest.mark.regression
 @pytest.mark.solve
-def test_fixed_mode_solve(DSHAPE):
+@pytest.mark.slow
+def test_fixed_mode_solve():
     # Reset DSHAPE to initial guess, fix a mode, and then resolve
     # and check that the mode stayed fix
-    assert True
+    L = 1
+    M = 1
+    eq = get("DSHAPE")
+    eq.set_initial_guess()
+    fixR = FixModeR(
+        modes=np.array([L, M, 0])
+    )  # no target supplied, so defaults to the eq's current R_LMN coeff
+    fixZ = FixModeZ(
+        modes=np.array([L, -M, 0])
+    )  # no target supplied, so defaults to the eq's current Z_LMN coeff
+    orig_R_val = eq.R_lmn[eq.R_basis.get_idx(L=L, M=M, N=0)]
+    orig_Z_val = eq.Z_lmn[eq.Z_basis.get_idx(L=L, M=-M, N=0)]
+
+    constraints = (
+        FixLambdaGauge(),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        fixR,
+        fixZ,
+    )
+
+    eq.solve(
+        verbose=3,
+        ftol=1e-2,
+        objective="force",
+        maxiter=10,
+        xtol=1e-6,
+        constraints=constraints,
+    )
+    np.testing.assert_almost_equal(
+        orig_R_val, eq.R_lmn[eq.R_basis.get_idx(L=L, M=M, N=0)]
+    )
+    np.testing.assert_almost_equal(
+        orig_Z_val, eq.Z_lmn[eq.Z_basis.get_idx(L=L, M=-M, N=0)]
+    )
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_fixed_axis_solve():
+    # Reset DSHAPE to initial guess, fix axis, and then resolve
+    # and check that the axis stayed fix
+    eq = get("DSHAPE")
+    eq.axis.R_n[0] = 3.6
+    eq.set_initial_guess()
+
+    orig_R_val = eq.axis.R_n
+    orig_Z_val = eq.axis.Z_n
+
+    constraints = (
+        FixLambdaGauge(),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+        FixAxisR(),
+        FixAxisZ(),
+    )
+
+    eq.solve(
+        verbose=3,
+        ftol=1e-2,
+        objective="force",
+        maxiter=10,
+        xtol=1e-6,
+        constraints=constraints,
+    )
+
+    np.testing.assert_almost_equal(orig_R_val, eq.axis.R_n)
+    np.testing.assert_almost_equal(orig_Z_val, eq.axis.Z_n)

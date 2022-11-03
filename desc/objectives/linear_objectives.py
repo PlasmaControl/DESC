@@ -823,7 +823,7 @@ class FixModeR(_Objective):
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
         else:  # specified modes
-            modes = np.atleast_1d(self._modes)
+            modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
@@ -949,7 +949,7 @@ class FixModeZ(_Objective):
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
         else:  # specified modes
-            modes = np.atleast_1d(self._modes)
+            modes = np.atleast_2d(self._modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
@@ -963,7 +963,7 @@ class FixModeZ(_Objective):
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
-                        "Some of the given modes are not in the axbasisis, "
+                        "Some of the given modes are not in the basis, "
                         + "these modes will not be fixed.",
                         "yellow",
                     )
@@ -1258,10 +1258,8 @@ class FixIota(_FixProfile):
         """
         if eq.iota is None:
             raise RuntimeError(
-                (
-                    "Attempt to fix rotational transform on an equilibrium with no "
-                    + "rotational transform profile assigned"
-                )
+                "Attempt to fix rotational transform on an equilibrium with no "
+                + "rotational transform profile assigned"
             )
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)
@@ -1354,10 +1352,8 @@ class FixCurrent(_FixProfile):
         """
         if eq.current is None:
             raise RuntimeError(
-                (
-                    "Attempt to fix toroidal current on an equilibrium no "
-                    + "current profile assigned"
-                )
+                "Attempt to fix toroidal current on an equilibrium no "
+                + "current profile assigned"
             )
         profile = eq.current
         super().build(eq, profile, use_jit, verbose)

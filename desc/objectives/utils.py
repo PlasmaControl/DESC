@@ -140,27 +140,48 @@ def factorize_linear_constraints(constraints, objective_args):
     unfixed_args = []  # subset of constraint args for unfixed objectives
 
     # linear constraint matrices for each objective
-    for obj in constraints:
+    for obj_ind, obj in enumerate(constraints):
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
         arg = obj.args[0]
         if arg not in objective_args:
             continue
-        constraint_args.append(arg)
+        if arg not in constraint_args:  # hope this does not mess
+            constraint_args.append(arg)
         if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
-            unfixed_args.append(arg)
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             b_ = obj.target
-            if A_.shape[0]:
-                Ainv_, Z_ = svd_inv_null(A_)
-            else:
-                Ainv_ = A_.T
-            A[arg] = A_
-            b[arg] = b_
-            Ainv[arg] = Ainv_
+            if arg not in A.keys() and b_.size > 0:
+                A[arg] = A_
+                b[arg] = b_
+                unfixed_args.append(arg)
+            elif b_.size > 0:  # we want to stack these vertically if the same arg
+                # but only if the constraint actually constrains anything
+                # if not, i.e. if attempted to fix a mode that is not in the basis,
+                # b_ is an empty array and does not need to be added
+                rk_before = jnp.linalg.matrix_rank(A[arg])
+                A[arg] = jnp.vstack((A[arg], A_))
+                rk_after = jnp.linalg.matrix_rank(A[arg])
+                if rk_before == rk_after:
+                    raise RuntimeError(
+                        f"Incompatible constraints given for {arg}!"
+                        + f" constraint {obj} is incompatible with"
+                        + f" constraint {constraints[obj_ind-1]}"
+                    )
+                # FIXME: this test will throw error if the same constraint
+                # is used  twice i.e. R_111 = 1 and 2*R_111=2
+                # do we want to detect and say that is ok? I vote no
+
+                b[arg] = jnp.hstack((b[arg], b_))
+    # find inverse of the now-combined constraint matrices for each arg
+    for key in A.keys():
+        if A[key].shape[0]:
+            Ainv[key], Z_ = svd_inv_null(A[key])
+        else:
+            Ainv[key] = A[key].T
 
     # catch any arguments that are not constrained
     for arg in x_idx.keys():

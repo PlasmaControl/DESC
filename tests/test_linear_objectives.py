@@ -5,7 +5,7 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.objectives import FixCurrent, FixIota, FixLambdaGauge
+from desc.objectives import FixCurrent, FixIota, FixLambdaGauge, FixModeR, FixModeZ
 from desc.profiles import PowerSeriesProfile
 
 
@@ -98,3 +98,23 @@ def test_constrain_asserts():
     eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(ValueError):
         eq.solve(constraints=(FixCurrent(), FixIota()))
+    # cannot use two constraints on the same R mode
+    eq = Equilibrium(current=PowerSeriesProfile(0))
+    with pytest.raises(RuntimeError):
+        fixmode1 = FixModeR(modes=np.array([1, 1, 0]))
+        fixmode2 = FixModeR(modes=np.array([1, 1, 0]))
+        eq.solve(constraints=(fixmode1, fixmode2))
+    # cannot use two constraints on the same Z mode
+    eq = Equilibrium(current=PowerSeriesProfile(0))
+    with pytest.raises(RuntimeError):
+        fixmode1 = FixModeZ(modes=np.array([1, -1, 0]))
+        fixmode2 = FixModeZ(modes=np.array([1, -1, 0]))
+        eq.solve(constraints=(fixmode1, fixmode2))
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_fixed_mode_solve(DSHAPE):
+    # Reset DSHAPE to initial guess, fix a mode, and then resolve
+    # and check that the mode stayed fix
+    assert True

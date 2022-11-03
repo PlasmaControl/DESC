@@ -184,7 +184,8 @@ class InputReader:
         }
 
         iota_flag = False
-
+        pres_flag = False
+        curr_flag = False
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -396,6 +397,7 @@ class InputReader:
             # profile coefficients
             match = re.search(r"\sp\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
+                pres_flag = True
                 p_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -429,6 +431,7 @@ class InputReader:
                 flag = True
             match = re.search(r"\sc\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
+                curr_flag = True
                 c_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -533,12 +536,23 @@ class InputReader:
             raise IOError(colored("M_pol is not assigned.", "red"))
         if np.sum(inputs["surface"]) == 0:
             raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
+        if curr_flag and iota_flag:
+            raise IOError(colored("Cannot specify both iota and current.", "red"))
 
         # remove unused profile
         if iota_flag:
-            del inputs["current"]
+            if inputs["objective"] != "vacuum":
+                del inputs["current"]
+            else:  # if vacuum objective from input file, use zero current
+                del inputs["iota"]
         else:
             del inputs["iota"]
+
+        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
+            warnings.warn(
+                "Vacuum objective does not use any profiles, "
+                + "ignoring presssure, iota, and current"
+            )
 
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]

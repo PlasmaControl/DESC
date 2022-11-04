@@ -160,7 +160,10 @@ class FixBoundaryR(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        x = kwargs.get(self.args[0], args[0])
+        if len(args):
+            x = kwargs.get(self.args[0], args[0])
+        else:
+            x = kwargs.get(self.args[0])
         Rb = jnp.dot(self._A, x)
         return self._shift_scale(Rb)
 
@@ -308,7 +311,10 @@ class FixBoundaryZ(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        x = kwargs.get(self.args[0], args[0])
+        if len(args):
+            x = kwargs.get(self.args[0], args[0])
+        else:
+            x = kwargs.get(self.args[0])
         Zb = jnp.dot(self._A, x)
         return self._shift_scale(Zb)
 

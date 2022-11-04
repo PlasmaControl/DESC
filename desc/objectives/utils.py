@@ -220,4 +220,13 @@ def factorize_linear_constraints(  # noqa: C901  # too complex
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
+    # check that all constraints are actually satisfiable
+    xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
+    for con in constraints:
+        res = con.compute(**xp_dict)
+        if not np.allclose(res, 0):
+            raise ValueError(
+                f"Incompatible constraints detected, cannot satisfy constraint {con}"
+            )
+
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover

@@ -547,9 +547,74 @@ def test_vmec_save_2(VMEC_save):
     )
     np.testing.assert_allclose(bsubu_vmec, bsubu_desc, rtol=1e-2)
 
-    # FIXME: not testing B_psi
-    # FIXME: not testing J^theta * sqrt(g)
-    # FIXME: not testing J^zeta * sqrt(g)
+    # B_psi
+    bsubs_vmec = VMECIO.vmec_interpolate(
+        np.zeros_like(vmec.variables["bsubsmns"][:]),
+        vmec.variables["bsubsmns"][:],
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    bsubs_desc = VMECIO.vmec_interpolate(
+        np.zeros_like(desc.variables["bsubsmns"][:]),
+        desc.variables["bsubsmns"][:],
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=1e-3)
+
+    # J^theta
+    curru_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["currumnc"][:],
+        np.zeros_like(vmec.variables["currumnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    curru_desc = VMECIO.vmec_interpolate(
+        desc.variables["currumnc"][:],
+        np.zeros_like(desc.variables["currumnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(curru_vmec, curru_desc, rtol=1e-2)
+
+    # J^zeta
+    currv_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["currvmnc"][:],
+        np.zeros_like(vmec.variables["currvmnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    currv_desc = VMECIO.vmec_interpolate(
+        desc.variables["currvmnc"][:],
+        np.zeros_like(desc.variables["currvmnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(currv_vmec, currv_desc, rtol=1e-2)
 
 
 @pytest.mark.unit

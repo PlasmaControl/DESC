@@ -156,7 +156,11 @@ def test_load_then_save(TmpDir):
     input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
-    eq = VMECIO.load(input_path)
+    eq = VMECIO.load(input_path, profile="current")
+    assert eq.iota is None
+    np.testing.assert_allclose(eq.current.params, 0)
+    eq = VMECIO.load(input_path, profile="iota")
+    assert eq.current is None
     VMECIO.save(eq, output_path)
 
     file1 = Dataset(input_path, mode="r")

@@ -113,30 +113,32 @@ def test_constrain_bdry_with_only_one_mode():
 @pytest.mark.unit
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
+    eqi = Equilibrium(iota=PowerSeriesProfile(0, 0))
+    eqc = Equilibrium(current=PowerSeriesProfile(0))
     # nonexistent toroidal current can't be constrained
-    eq = Equilibrium(iota=PowerSeriesProfile(0, 0))
     with pytest.raises(RuntimeError):
-        eq.solve(constraints=FixCurrent())
+        eqi.solve(constraints=FixCurrent())
     # nonexistent rotational transform can't be constrained
-    eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(RuntimeError):
-        eq.solve(constraints=FixIota())
+        eqc.solve(constraints=FixIota())
     # toroidal current and rotational transform can't be constrained simultaneously
-    eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(ValueError):
-        eq.solve(constraints=(FixCurrent(), FixIota()))
+        eqi.solve(constraints=(FixCurrent(), FixIota()))
     # cannot use two constraints on the same R mode
-    eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(RuntimeError):
         fixmode1 = FixModeR(modes=np.array([1, 1, 0]))
         fixmode2 = FixModeR(modes=np.array([[0, 0, 0], [1, 1, 0]]))
-        eq.solve(constraints=(fixmode1, fixmode2))
+        eqc.solve(constraints=(fixmode1, fixmode2))
     # cannot use two constraints on the same Z mode
-    eq = Equilibrium(current=PowerSeriesProfile(0))
     with pytest.raises(RuntimeError):
         fixmode1 = FixModeZ(modes=np.array([1, -1, 0]))
         fixmode2 = FixModeZ(modes=np.array([1, -1, 0]))
-        eq.solve(constraints=(fixmode1, fixmode2))
+        eqc.solve(constraints=(fixmode1, fixmode2))
+    # cannot use two incompatible constraints
+    with pytest.raises(ValueError):
+        con1 = FixCurrent(target=eqc.c_l)
+        con2 = FixCurrent(target=eqc.c_l + 1)
+        eqc.solve(constraints=(con1, con2))
 
 
 @pytest.mark.regression

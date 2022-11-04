@@ -1152,13 +1152,40 @@ class _Configuration(IOAble, ABC):
         return self._L_basis
 
     @property
-    def qi(self):
-        """[B_min, B_max, a_L, a_R, zeta_min_m]."""
-        return self._qi
+    def B_min(self):
+        """Minimum value of magnetic field strength, |B| (T)."""
+        return self._B_min
 
-    @qi.setter
-    def qi(self, qi):
-        self._qi = qi
+    @B_min.setter
+    def B_min(self, B_min):
+        self._B_min = B_min
+
+    @property
+    def B_max(self):
+        """Maximum value of magnetic field strength, |B| (T)."""
+        return self._B_max
+
+    @B_max.setter
+    def B_max(self, B_max):
+        self._B_max = B_max
+
+    @property
+    def shape_i(self):
+        """Magnetic well shaping parameters. Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2."""
+        return self._shape_i
+
+    @shape_i.setter
+    def shape_i(self, shape_i):
+        self._shape_i = shape_i
+
+    @property
+    def shift_mn(self):
+        """Magnetic well shifting parameters. Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar)."""
+        return self._shift_mn
+
+    @shift_mn.setter
+    def shift_mn(self, shift_mn):
+        self._shift_mn = shift_mn
 
     def compute(self, name, grid=None, data=None, **kwargs):  # noqa: C901 - FIXME
         """Compute the quantity given by name on grid.
@@ -1222,6 +1249,10 @@ class _Configuration(IOAble, ABC):
                         M=M_booz, N=N_booz, sym=self.Z_basis.sym, NFP=self.NFP
                     ),
                     derivs=1,
+                )
+            elif arg == "zeta_transform":
+                inputs[arg] = Transform(
+                    grid, DoubleFourierSeries(M=1, N=2, sym="cos(z)", NFP=self.NFP)
                 )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()

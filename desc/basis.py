@@ -52,6 +52,7 @@ class Basis(IOAble, ABC):
             "cos",
             "cosine",
             "even",
+            "cos(z)",
             False,
             None,
         ], f"Unknown symmetry type {self.sym}"
@@ -63,6 +64,9 @@ class Basis(IOAble, ABC):
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym == "even":  # even powers of rho
             non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym == "cos(z)":  # cos(n*z) terms only
+            non_sym_idx = np.where(sign(self.modes[:, 2]) < 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym is None:
             self._sym = False

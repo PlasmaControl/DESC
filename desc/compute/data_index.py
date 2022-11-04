@@ -3490,6 +3490,16 @@ data_index["f_T"] = {
     ],
 }
 
+# quasi-isodynamic
+data_index["|B|_QI"] = {
+    "label": "|B|_{QI}",
+    "units": "T",
+    "units_long": "Tesla",
+    "description": "Magnitude of quasi-isodynamic magnetic field",
+    "fun": "compute_quasiisodynamic_field",
+    "dim": 1,
+}
+
 # stability
 data_index["D_Mercier"] = {
     "label": "D_{Mercier}",

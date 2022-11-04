@@ -630,7 +630,7 @@ class QuasiIsodynamic(_Objective):
         )
 
         self.M_zeta_min = int((eq.qi.size - 5) / 2)
-        self._zeta_min_transform = Transform(
+        self._zeta_transform = Transform(
             self.grid,
             DoubleFourierSeries(M=self.M_zeta_min, N=0, NFP=eq.NFP),
             build=True,
@@ -647,7 +647,20 @@ class QuasiIsodynamic(_Objective):
         self._set_derivatives(use_jit=use_jit)
         self._built = True
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, qi, **kwargs):
+    def compute(
+        self,
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        B_min,
+        B_max,
+        shape_i,
+        shift_mn,
+        **kwargs,
+    ):
         """Compute quasi-isodynamic error.
 
         Parameters
@@ -664,8 +677,16 @@ class QuasiIsodynamic(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
-        qi : ndarray
-            Array of QI parameters: [B_min, B_max, a_L, a_R, zeta_min_m]
+        B_min : float
+            Minimum value of magnetic field strength, |B| (T).
+        B_max : float
+            Maximum value of magnetic field strength, |B| (T).
+        shape_i : ndarray
+            Magnetic well shaping parameters.
+            Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
+        shift_mn : ndarray
+            Magnetic well shifting parameters.
+            Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
 
         Returns
         -------
@@ -688,7 +709,9 @@ class QuasiIsodynamic(_Objective):
             self._iota,
             self._current,
         )
-        B_QI = compute_quasiisodynamic_field(qi, self._zeta_min_transform)
+        B_QI = compute_quasiisodynamic_field(
+            B_min, B_max, shape_i, shift_mn, self._zeta_transform
+        )
         B = self._B_transform.transform(data["|B|_mn"])
         error = B_QI - B
 

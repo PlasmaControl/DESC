@@ -257,15 +257,25 @@ def compute_quasisymmetry_error(
     return data
 
 
-def compute_quasiisodynamic_field(qi, zeta_min_transform, data=None, **kwargs):
+def compute_quasiisodynamic_field(
+    B_min, B_max, shape_i, shift_mn, zeta_transform, data=None, **kwargs
+):
     """Compute quasi-isodynamic field.
 
     Parameters
     ----------
-    qi : ndarray
-        Array of QI parameters: [B_min, B_max, a_L, a_R, zeta_min_m]
-    zeta_min_transform : Transform
-        Transforms zeta_min_m coefficients to real space.
+    B_min : float
+        Minimum value of magnetic field strength, |B| (T).
+    B_max : float
+        Maximum value of magnetic field strength, |B| (T).
+    shape_i : ndarray
+        Magnetic well shaping parameters.
+        Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
+    shift_mn : ndarray
+        Magnetic well shifting parameters.
+        Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
+    zeta_transform : Transform
+        Transforms zeta_mn coefficients to real space.
 
     Returns
     -------
@@ -274,31 +284,31 @@ def compute_quasiisodynamic_field(qi, zeta_min_transform, data=None, **kwargs):
         in Boozer coordinates.
 
     """
-    B_min = qi[0]  # maximum |B| (T)
-    B_max = qi[1]  # minimum |B| (T)
-    a_L = qi[2]  # shaping parameter for left side of magnetic well
-    a_R = qi[3]  # shaping parameter for right side of magnetic well
-    zeta_min_m = qi[4:]  # Fourier coefficients for zeta_min(theta_Boozer)
+    if data is None:
+        data = {}
 
-    # a = 4th-order polynomail coefficient (a=0 is a cubic spline)
-    # a < 0 makes well wider, a > 0 makes well narrower, a = [-3, +3]
-    b_L = 2 * a_L + 2  # 3rd-order term, left side of well
-    b_R = -2 * a_R - 2  # 3rd-order term, right side of well
-    c_L = a_L + 3  # 2nd-order term, left side of well
-    c_R = a_R + 3  # 2nd-order term, right side of well
+    # XXX: zeta_transform must have zeta_bar grid coordinates!
+    zeta_bar = zeta_transform.grid.nodes[:, 2]
 
-    zeta_min_mn = jnp.zeros((zeta_min_transform.basis.num_modes,))
-    zeta_min_mn[jnp.where(zeta_min_transform.basis.modes[:, 2] == 0)] = zeta_min_m
-    zeta_min = zeta_min_transform.transform(zeta_min_mn)
+    # compute well shape
+    zeros = jnp.concatenate(
+        (jnp.array([0]), jnp.repeat((jnp.pi / 2 + shape_i) ** 2, 2))
+    )
+    B_i = jnp.polyint(jnp.poly(zeros))
+    B0 = jnp.sum(jnp.flipud([(jnp.pi / 2) ** (2 * i) for i in range(len(B_i))]) * B_i)
+    B = jnp.polyval(B_i, zeta_bar)
+    B = B / B0 * (B_max - B_min) + B_min
+    data["|B|_QI"] = B
 
-    zeta = zeta_min_transform.grid.nodes[:, 2]
-    delta = zeta - zeta_min
-    z_L = delta / zeta_min  # rescale zeta to range [-1, 0]
-    z_R = delta / (2 * jnp.pi - zeta_min)  # rescale zeta to range [0, +1]
+    # compute well shift
+    shift_mn_arr = shift_mn.reshape((zeta_transform.basis.N, -1))
+    nn = zeta_transform.basis.modes[:, 2].reshape((zeta_transform.basis.N + 1, -1))
+    shift_m0 = jnp.sum(
+        shift_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
+    )
+    shift_mn = jnp.concatenate((shift_m0, shift_mn))
+    zeta = zeta_bar + zeta_transform.transform(shift_mn)
+    zeta = (2 * zeta + jnp.pi) / zeta_transform.basis.NFP
+    data["zeta_B"] = zeta
 
-    B = jnp.zeros((zeta_min_transform.grid.num_nodes,))
-    B += (a_L * z_L ** 4 + b_L * z_L ** 3 + c_L * z_L ** 2) * (sign(delta) < 0)
-    B += (a_R * z_R ** 4 + b_R * z_R ** 3 + c_R * z_R ** 2) * (sign(delta) > 0)
-    B = B * (B_max - B_min) + B_min  # rescale B
-
-    return B
+    return data

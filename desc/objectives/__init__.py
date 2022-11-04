@@ -24,6 +24,7 @@ from .linear_objectives import (
     FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesR,
 )
 from .objective_funs import ObjectiveFunction
 from .utils import get_equilibrium_objective, get_fixed_boundary_constraints

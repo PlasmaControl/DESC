@@ -72,7 +72,7 @@ class FixBoundaryR(_Objective):
         else:
             self.compute = self._compute_Rb
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -213,7 +213,7 @@ class FixBoundaryZ(_Objective):
         else:
             self.compute = self._compute_Zb
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -328,7 +328,7 @@ class FixLambdaGauge(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "lambda gauge error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -473,7 +473,7 @@ class FixAxisR(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "R axis error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -602,7 +602,7 @@ class FixAxisZ(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Z axis error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -731,7 +731,7 @@ class FixModeR(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-R modes error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -852,7 +852,7 @@ class FixModeZ(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-Z modes error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -977,7 +977,7 @@ class FixSumModesR(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1106,7 +1106,7 @@ class FixSumModesZ(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1239,7 +1239,7 @@ class _FixProfile(_Objective, ABC):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = None
 
-    def build(self, eq, profile=None, use_jit=True, verbose=1):
+    def build(self, eq, profile=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1336,7 +1336,7 @@ class FixPressure(_FixProfile):
         )
         self._print_value_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1425,7 +1425,7 @@ class FixIota(_FixProfile):
         )
         self._print_value_fmt = "Fixed-iota profile error: {:10.3e}"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1519,7 +1519,7 @@ class FixCurrent(_FixProfile):
         )
         self._print_value_fmt = "Fixed-current profile error: {:10.3e}"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1588,7 +1588,7 @@ class FixPsi(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters

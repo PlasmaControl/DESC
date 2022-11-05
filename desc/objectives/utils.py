@@ -207,6 +207,9 @@ def factorize_linear_constraints(constraints, objective_args):
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
+        arg = con.args[0]
+        if arg not in objective_args:
+            continue
         res = con.compute(**xp_dict)
         if not np.allclose(res, 0):
             raise ValueError(

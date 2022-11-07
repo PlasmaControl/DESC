@@ -1,6 +1,48 @@
 Changelog
 =========
 
+v0.6.2
+------
+
+[Github
+Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.1...v0.6.2)
+
+Minor Changes:
+- Remove ``parent`` and ``children`` from ``Equilibrium`` - this was generally unused and caused memory leaks in long optimization runs.
+- Allow targeting current on multiple surfaces with ``ToroidalCurrent`` objective.
+- Refactored optimizer backends to get rid of unused code and use more standard BFGS implementation.
+- Added ``sgd`` optimizer for performing fixed step gradient descent, with or without momentum. In the future this will be upgraded to include other step size rules and line searches.
+- Allow selecting profile when loading VMEC equilibrium, as previously fixed iota was always assumed.
+- Ensure equilibrium and surface have same symmetry.
+
+Bug fixes:
+- Fix floating point comparison when recovering solution after optimization, occasionally leading to the wrong iteration being returned as "optimal"
+- Fix plotting iota of a current-constrained with ``plot_1d`` function
+- Fix bug where having iota specified in an input file along with vacuum objective lead to error. Now specifying vacuum objective will ignore all profile inputs
+
+
+v0.6.1
+------
+
+[Github
+Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.0...v0.6.1)
+
+
+New Features
+- `plot_boundary` function to plot boundary surfaces and multiple toroidal angles together in a single plot. This is a popular plot format in stellarator optimization papers when comparing boundary shapes.
+
+Bug Fixes
+- Fix bugs for vacuum solve 
+  - Allow for constraining arguments that aren't used in the objective (i.e pressure when minimizing current density)
+  - fix bug in `CurrentDensity` where only jacobi grid was being used
+- Fixes to wrapped objective and jit compiling 
+  - optimizer with wrapped objective would sometimes return the equilibrium after the final attempted step, even if that step was rejected for not lowering the objective, resulting in incorrect "optimal" result
+  - Fixes a bug where the `use_jit` arg passed to `objective.build` would override any previously set value for `use_jit` (such as in the class constructor)
+- Grid spacing bugs fixed
+  - fixed a bug where setting nodes with a linear spaced array versus asking for `N` linearly spaced nodes would result in different weights despite being the same nodes
+
+
+
 v0.6.0
 ------
 

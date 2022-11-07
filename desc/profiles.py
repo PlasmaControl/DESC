@@ -897,10 +897,8 @@ class MTanhProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                (
                     "params should have at least 5 elements [ped, offset, sym, width,"
                     + f"*core_poly]  got only {new.size} values"
-                )
             )
 
     @staticmethod
@@ -1213,10 +1211,8 @@ class FourierZernikeProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                (
                     f"params should have the same size as the basis, got {new.size} "
                     + f"for basis with {self._basis.num_modes} modes"
-                )
             )
 
     def get_params(self, l, m, n):

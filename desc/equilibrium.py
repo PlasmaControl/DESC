@@ -367,7 +367,7 @@ class Equilibrium(_Configuration, IOAble):
         Z_1D = np.zeros((grid.num_nodes,))
 
         for rho_i in rho:
-            idx = idx = np.where((grid.nodes[:, 0] == rho_i))[0]
+            idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
             R_2D, Z_2D, _ = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
@@ -470,10 +470,8 @@ class Equilibrium(_Configuration, IOAble):
             )
         if eq.bdry_mode == "poincare":
             raise NotImplementedError(
-                (
                     "Solving equilibrium with poincare XS as BC is not supported yet "
                     + "on master branch."
-                )
             )
 
         result = optimizer.optimize(

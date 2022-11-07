@@ -170,7 +170,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
 def print_header_nonlinear():
     """Print a pretty header."""
     print(
-        "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
+        "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
             "Iteration",
             "Total nfev",
             "Cost",
@@ -198,25 +198,25 @@ def print_iteration_nonlinear(
     if cost is None or abs(cost) == np.inf:
         cost = " " * 15
     else:
-        cost = "{0:^15.4e}".format(cost)
+        cost = "{:^15.4e}".format(cost)
 
     if cost_reduction is None or abs(cost_reduction) == np.inf:
         cost_reduction = " " * 15
     else:
-        cost_reduction = "{0:^15.2e}".format(cost_reduction)
+        cost_reduction = "{:^15.2e}".format(cost_reduction)
 
     if step_norm is None or abs(step_norm) == np.inf:
         step_norm = " " * 15
     else:
-        step_norm = "{0:^15.2e}".format(step_norm)
+        step_norm = "{:^15.2e}".format(step_norm)
 
     if optimality is None or abs(optimality) == np.inf:
         optimality = " " * 15
     else:
-        optimality = "{0:^15.2e}".format(optimality)
+        optimality = "{:^15.2e}".format(optimality)
 
     print(
-        "{0}{1}{2}{3}{4}{5}".format(
+        "{}{}{}{}{}{}".format(
             iteration, nfev, cost, cost_reduction, step_norm, optimality
         )
     )

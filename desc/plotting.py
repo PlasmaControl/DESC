@@ -1979,7 +1979,7 @@ def plot_qs_error(
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["B modes"]
-            idx = np.where((modes[1, :] * helicity[1] != modes[2, :] * helicity[0]))[0]
+            idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
                 np.sum(data["|B|_mn"] ** 2)
             )
@@ -2651,10 +2651,8 @@ def plot_field_lines_sfl(
     """
     if rho == 0:
         raise NotImplementedError(
-            (
                 "Currently does not support field line tracing of the magnetic axis, "
                 + "please input 0 < rho <= 1"
-            )
         )
 
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
@@ -2704,10 +2702,8 @@ def plot_field_lines_sfl(
     # only need to do this after finding the grid corresponding to
     # desired rho, vartheta, phi
     print(
-        (
             "Calculating field line (R,phi,Z) coordinates corresponding to "
             + "(rho,theta,zeta) coordinates"
-        )
     )
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:

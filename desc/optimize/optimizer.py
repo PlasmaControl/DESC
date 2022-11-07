@@ -249,10 +249,8 @@ class Optimizer(IOAble):
             isinstance(lc, FixIota) for lc in linear_constraints
         ):
             raise ValueError(
-                (
                     "Toroidal current and rotational transform cannot be "
                     + "constrained simultaneously."
-                )
             )
 
         # wrap nonlinear constraints if necessary

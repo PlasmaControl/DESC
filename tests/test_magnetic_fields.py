@@ -85,6 +85,40 @@ class TestMagneticFields:
         )
 
     @pytest.mark.unit
+    def test_spline_field_axisym(self):
+        """Test computing axisymmetric magnetic field using SplineMagneticField."""
+        extcur = [
+            -1.370985e03,
+            -1.609154e03,
+            -2.751331e03,
+            -2.524384e03,
+            -3.435372e03,
+            -3.466123e03,
+            3.670919e03,
+            3.450196e03,
+            2.908027e03,
+            3.404695e03,
+            -4.148967e03,
+            -4.294406e03,
+            -3.059939e03,
+            -2.990609e03,
+            3.903818e03,
+            3.727301e03,
+            -3.049484e03,
+            -3.086940e03,
+            -1.488703e07,
+            -2.430716e04,
+            -2.380229e04,
+        ]
+        field = SplineMagneticField.from_mgrid(
+            "tests/inputs/mgrid_d3d.nc", extcur=extcur
+        )
+        # make sure field is invariant to shift in phi
+        B1 = field.compute_magnetic_field(np.array([1.75, 0.0, 0.0]))
+        B2 = field.compute_magnetic_field(np.array([1.75, 1.0, 0.0]))
+        np.testing.assert_allclose(B1, B2)
+
+    @pytest.mark.unit
     def test_field_line_integrate(self):
         """Test field line integration."""
         # q=4, field line should rotate 1/4 turn after 1 toroidal transit

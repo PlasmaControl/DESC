@@ -9,7 +9,7 @@ from desc.backend import jit, jnp, odeint
 from desc.derivatives import Derivative
 from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
 from desc.grid import Grid
-from desc.interpolate import _approx_df, interp3d
+from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 
 
@@ -422,6 +422,7 @@ class SplineMagneticField(MagneticField):
         "_extrap",
         "_period",
         "_derivs",
+        "_axisym",
     ]
 
     def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
@@ -435,6 +436,10 @@ class SplineMagneticField(MagneticField):
 
         self._R = R
         self._phi = phi
+        if len(phi) == 1:
+            self._axisym = True
+        else:
+            self._axisym = False
         self._Z = Z
         self._BR = BR
         self._Bphi = Bphi
@@ -452,12 +457,21 @@ class SplineMagneticField(MagneticField):
     def _approx_derivs(self, Bi):
         tempdict = {}
         tempdict["fx"] = _approx_df(self._R, Bi, self._method, 0)
-        tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
         tempdict["fz"] = _approx_df(self._Z, Bi, self._method, 2)
-        tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
         tempdict["fxz"] = _approx_df(self._Z, tempdict["fx"], self._method, 2)
-        tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
-        tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+        if self._axisym:
+            tempdict["fy"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
+        else:
+            tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
+            tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
+            tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
+            tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+        if self._axisym:
+            for key, val in tempdict.items():
+                tempdict[key] = val[:,0,:]
         return tempdict
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
@@ -485,49 +499,87 @@ class SplineMagneticField(MagneticField):
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
+        if self._axisym:
+            BRq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                self._BR[:,0,:],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs["BR"],
+            )
+            Bphiq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                self._Bphi[:,0,:],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs["Bphi"],
+            )
+            BZq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                self._BZ[:,0,:],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs["BZ"],
+            )
 
-        BRq = interp3d(
-            Rq,
-            phiq,
-            Zq,
-            self._R,
-            self._phi,
-            self._Z,
-            self._BR,
-            self._method,
-            (0, 0, 0),
-            self._extrap,
-            (None, self._period, None),
-            **self._derivs["BR"],
-        )
-        Bphiq = interp3d(
-            Rq,
-            phiq,
-            Zq,
-            self._R,
-            self._phi,
-            self._Z,
-            self._Bphi,
-            self._method,
-            (0, 0, 0),
-            self._extrap,
-            (None, self._period, None),
-            **self._derivs["Bphi"],
-        )
-        BZq = interp3d(
-            Rq,
-            phiq,
-            Zq,
-            self._R,
-            self._phi,
-            self._Z,
-            self._BZ,
-            self._method,
-            (0, 0, 0),
-            self._extrap,
-            (None, self._period, None),
-            **self._derivs["BZ"],
-        )
+        else:
+            BRq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                self._BR,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, self._period, None),
+                **self._derivs["BR"],
+            )
+            Bphiq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                self._Bphi,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, self._period, None),
+                **self._derivs["Bphi"],
+            )
+            BZq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                self._BZ,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, self._period, None),
+                **self._derivs["BZ"],
+            )
         B = jnp.array([BRq, Bphiq, BZq]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])

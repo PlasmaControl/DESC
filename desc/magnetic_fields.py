@@ -471,7 +471,7 @@ class SplineMagneticField(MagneticField):
             tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
         if self._axisym:
             for key, val in tempdict.items():
-                tempdict[key] = val[:,0,:]
+                tempdict[key] = val[:, 0, :]
         return tempdict
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
@@ -505,7 +505,7 @@ class SplineMagneticField(MagneticField):
                 Zq,
                 self._R,
                 self._Z,
-                self._BR[:,0,:],
+                self._BR[:, 0, :],
                 self._method,
                 (0, 0),
                 self._extrap,
@@ -517,7 +517,7 @@ class SplineMagneticField(MagneticField):
                 Zq,
                 self._R,
                 self._Z,
-                self._Bphi[:,0,:],
+                self._Bphi[:, 0, :],
                 self._method,
                 (0, 0),
                 self._extrap,
@@ -529,7 +529,7 @@ class SplineMagneticField(MagneticField):
                 Zq,
                 self._R,
                 self._Z,
-                self._BZ[:,0,:],
+                self._BZ[:, 0, :],
                 self._method,
                 (0, 0),
                 self._extrap,

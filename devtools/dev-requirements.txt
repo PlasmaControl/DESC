@@ -10,7 +10,7 @@ sphinx-rtd-theme
 
 # linting
 black == 22.10.0
-flake8 >= 4.0.1
+flake8 >= 5.0.0
 flake8-docstrings
 flake8-eradicate
 flake8-isort

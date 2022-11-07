@@ -246,7 +246,7 @@ def test_no_iterations():
 @pytest.mark.unit
 @pytest.mark.slow
 def test_overstepping():
-    """Test that equilibrium is correctly NOT updated when final function value is worse.
+    """Test that equilibrium is NOT updated when final function value is worse.
 
     Previously, the optimizer would reach a point where no decrease was possible but
     due to noisy gradients it would keep trying until dx < xtol. However, the final

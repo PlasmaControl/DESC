@@ -164,7 +164,9 @@ Python Styleguide
 *****************
 
 -  `Follow the PEP8 format <https://www.python.org/dev/peps/pep-0008/>`__ where possible
--  Format code using `black <https://github.com/psf/black>`__ before committing - with formatting, consistency is better than "correctness." We use version ``21.7b0`` (there are small differences between versions). Install with ``pip install "black==21.7b0"``.
+-  Format code using `black <https://github.com/psf/black>`__ before committing - with formatting, consistency is better than "correctness." We use version ``22.10.0`` (there are small differences between versions). Install with ``pip install "black==22.10.0"``.
+-  Check code with ``flake8``, settings are in ``setup.cfg``
+-  We recommend installing ``pre-commit`` with ``pip install pre-commit`` and then running ``pre-commit install`` from the root of the repository. This will automatically run a number of checks every time you commit new code, reducing the likelihood of committing bad code.
 -  -  Use `Numpy Style Docstrings <https://sphinxcontrib-napoleon.readthedocs.io/en/latest/example_numpy.html#example-numpy>`__ - see the code for plenty of examples. At a minimum, the docstring should include a description of inputs and outputs, and a short description of what the function or method does. Code snippets showing example usage strongly encouraged.
 -  **Readability** and **usability** are more important than speed 99%
    of the time.

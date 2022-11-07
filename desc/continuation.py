@@ -35,7 +35,7 @@ def solve_continuation_automatic(  # noqa: C901
     ----------
     eq : Equilibrium
         Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-    objective : str or ObjectiveFunction (optional)
+    objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
     optimizer : str or Optimzer (optional)
         optimizer to use
@@ -120,7 +120,7 @@ def solve_continuation_automatic(  # noqa: C901
         spectral_indexing,
     )
 
-    optimizer = Optimizer(optimizer)
+    optimizer = Optimizer(optimizer) if isinstance(optimizer, str) else optimizer
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and eq.iota is not None
     )
@@ -277,7 +277,7 @@ def solve_continuation(  # noqa: C901
     ----------
     eqfam : EquilibriaFamily or list of Equilibria
         Equilibria to solve for at each step.
-    objective : str or ObjectiveFunction (optional)
+    objective : {"force", "energy", "vacuum"}
         function to solve for equilibrium solution
     optimizer : str or Optimzer (optional)
         optimizer to use
@@ -311,7 +311,7 @@ def solve_continuation(  # noqa: C901
     if isinstance(eqfam, (list, tuple)):
         eqfam = EquilibriaFamily(*eqfam)
 
-    optimizer = Optimizer(optimizer)
+    optimizer = Optimizer(optimizer) if isinstance(optimizer, str) else optimizer
     objective_i = get_equilibrium_objective(objective)
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and eqfam[0].iota is not None

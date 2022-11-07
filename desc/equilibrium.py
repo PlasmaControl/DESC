@@ -782,6 +782,7 @@ class Equilibrium(_Configuration, IOAble):
         tr_ratio=0.1,
         verbose=1,
         copy=False,
+        **kwargs,  #  FIXME: hack
     ):
         """Perturb an equilibrium.
 

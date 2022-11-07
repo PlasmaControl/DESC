@@ -6,6 +6,7 @@ from desc.backend import jnp
 from desc.compute import arg_order
 
 from ._equilibrium import CurrentDensity
+from ._qs import QuasiIsodynamic
 from .objective_funs import ObjectiveFunction
 from .utils import (
     factorize_linear_constraints,
@@ -91,6 +92,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._args = ["p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn"]
         if isinstance(self._eq_objective.objectives[0], CurrentDensity):
             self._args.remove("p_l")
+        if isinstance(self._objective.objectives[0], QuasiIsodynamic):  # FIXME: hacky
+            self._args.extend(["B_min", "B_max", "shape_i", "shift_mn"])
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}

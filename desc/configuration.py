@@ -92,7 +92,10 @@ class _Configuration(IOAble, ABC):
         "_current",
         "_spectral_indexing",
         "_bdry_mode",
-        "_qi",
+        "_B_min",
+        "_B_max",
+        "_shape_i",
+        "_shift_mn",
     ]
 
     def __init__(  # noqa: C901 - FIXME: break this up into simpler pieces
@@ -1251,7 +1254,7 @@ class _Configuration(IOAble, ABC):
                     derivs=1,
                 )
             elif arg == "zeta_transform":
-                inputs[arg] = Transform(
+                inputs[arg] = Transform(  # FIXME: M & N are hard-coded!
                     grid, DoubleFourierSeries(M=1, N=2, sym="cos(z)", NFP=self.NFP)
                 )
             elif arg == "pressure":

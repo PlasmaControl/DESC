@@ -473,7 +473,10 @@ class _Objective(IOAble, ABC):
         self._dimensions["Psi"] = 1
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
-        self._dimensions["qi"] = eq.qi.size
+        self._dimensions["B_min"] = 1
+        self._dimensions["B_max"] = 1
+        self._dimensions["shape_i"] = eq.shape_i.size
+        self._dimensions["shift_mn"] = eq.shift_mn.size
 
     def _set_derivatives(self, use_jit=True):
         """Set up derivatives of the objective wrt each argument."""

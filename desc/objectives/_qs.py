@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
@@ -9,7 +10,7 @@ from desc.compute import (
     compute_quasiisodynamic_field,
     data_index,
 )
-from desc.grid import LinearGrid
+from desc.grid import Grid, LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
 from .objective_funs import _Objective
@@ -556,12 +557,16 @@ class QuasiIsodynamic(_Objective):
         grid=None,
         M_booz=None,
         N_booz=None,
+        M_zeta=None,
+        N_zeta=None,
         name="QI",
     ):
 
         self.grid = grid
         self.M_booz = M_booz
         self.N_booz = N_booz
+        self.M_zeta = M_zeta
+        self.N_zeta = N_zeta
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(T)"
         self._print_value_fmt = "Quasi-isodynamic error: {:10.3e} " + units
@@ -628,11 +633,9 @@ class QuasiIsodynamic(_Objective):
             derivs=data_index["|B|_mn"]["L_derivs"],
             build=True,
         )
-
-        self.M_zeta_min = int((eq.qi.size - 5) / 2)
         self._zeta_transform = Transform(
             self.grid,
-            DoubleFourierSeries(M=self.M_zeta_min, N=0, NFP=eq.NFP),
+            DoubleFourierSeries(M=self.M_zeta, N=self.N_zeta, sym="cos(z)", NFP=eq.NFP),
             build=True,
         )
 
@@ -694,7 +697,7 @@ class QuasiIsodynamic(_Objective):
             Quasi-isodynamic error at each node (T).
 
         """
-        data = compute_boozer_coordinates(
+        data_boozer = compute_boozer_coordinates(
             R_lmn,
             Z_lmn,
             L_lmn,
@@ -709,10 +712,15 @@ class QuasiIsodynamic(_Objective):
             self._iota,
             self._current,
         )
-        B_QI = compute_quasiisodynamic_field(
+        data_qi = compute_quasiisodynamic_field(
             B_min, B_max, shape_i, shift_mn, self._zeta_transform
         )
-        B = self._B_transform.transform(data["|B|_mn"])
-        error = B_QI - B
 
-        return self._shift_scale(error)
+        nodes = jnp.hstack((self.grid.nodes[:, :2], data_qi["zeta_B"]))
+        grid = Grid(nodes)
+        transform = Transform(grid, self._B_transform.basis)
+        B = transform.transform(data_boozer["|B|_mn"])
+        B_qi = data_qi["|B|_QI"]
+
+        f = B - B_qi
+        return self._shift_scale(f)

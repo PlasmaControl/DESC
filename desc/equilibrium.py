@@ -470,8 +470,8 @@ class Equilibrium(_Configuration, IOAble):
             )
         if eq.bdry_mode == "poincare":
             raise NotImplementedError(
-                    "Solving equilibrium with poincare XS as BC is not supported yet "
-                    + "on master branch."
+                "Solving equilibrium with poincare XS as BC is not supported yet "
+                + "on master branch."
             )
 
         result = optimizer.optimize(

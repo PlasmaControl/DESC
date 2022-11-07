@@ -1311,9 +1311,7 @@ class InputReader:
         # delete surface modes below threshold magnitude
         inputs["surface"] = np.delete(
             inputs["surface"],
-            np.where(np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1))[
-                0
-            ],
+            np.where(np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1))[0],
             axis=0,
         )
         # add radial mode numbers to surface array

@@ -2651,8 +2651,8 @@ def plot_field_lines_sfl(
     """
     if rho == 0:
         raise NotImplementedError(
-                "Currently does not support field line tracing of the magnetic axis, "
-                + "please input 0 < rho <= 1"
+            "Currently does not support field line tracing of the magnetic axis, "
+            + "please input 0 < rho <= 1"
         )
 
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
@@ -2702,8 +2702,8 @@ def plot_field_lines_sfl(
     # only need to do this after finding the grid corresponding to
     # desired rho, vartheta, phi
     print(
-            "Calculating field line (R,phi,Z) coordinates corresponding to "
-            + "(rho,theta,zeta) coordinates"
+        "Calculating field line (R,phi,Z) coordinates corresponding to "
+        + "(rho,theta,zeta) coordinates"
     )
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:

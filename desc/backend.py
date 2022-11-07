@@ -33,8 +33,8 @@ else:
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
                 warnings.warn(
-                        "JAX failed to detect GPU, are you sure you "
-                        + "installed JAX with GPU support?"
+                    "JAX failed to detect GPU, are you sure you "
+                    + "installed JAX with GPU support?"
                 )
                 set_device("cpu")
             x = jnp.linspace(0, 5)

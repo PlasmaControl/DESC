@@ -61,9 +61,9 @@ class VMECIO:
         version = file.variables["version_"][0]
         if version < 9:
             warnings.warn(
-                    "VMEC output appears to be from version {}".format(str(version))
-                    + " while DESC is only designed for compatibility with VMEC version"
-                    + " 9. Some data may not be loaded correctly."
+                "VMEC output appears to be from version {}".format(str(version))
+                + " while DESC is only designed for compatibility with VMEC version"
+                + " 9. Some data may not be loaded correctly."
             )
 
         # parameters

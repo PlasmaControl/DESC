@@ -206,8 +206,8 @@ class FourierRZCurve(Curve):
             self._R_n = jnp.asarray(new)
         else:
             raise ValueError(
-                    f"R_n should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self.R_basis.num_modes} modes."
+                f"R_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     @property
@@ -221,8 +221,8 @@ class FourierRZCurve(Curve):
             self._Z_n = jnp.asarray(new)
         else:
             raise ValueError(
-                    f"Z_n should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self.Z_basis.num_modes} modes"
+                f"Z_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.Z_basis.num_modes} modes"
             )
 
     def _get_transforms(self, grid=None):
@@ -555,8 +555,8 @@ class FourierXYZCurve(Curve):
             self._X_n = jnp.asarray(new)
         else:
             raise ValueError(
-                    f"X_n should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self._basis.num_modes} modes."
+                f"X_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._basis.num_modes} modes."
             )
 
     @property
@@ -570,8 +570,8 @@ class FourierXYZCurve(Curve):
             self._Y_n = jnp.asarray(new)
         else:
             raise ValueError(
-                    f"Y_n should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self._basis.num_modes} modes."
+                f"Y_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._basis.num_modes} modes."
             )
 
     @property
@@ -585,8 +585,8 @@ class FourierXYZCurve(Curve):
             self._Z_n = jnp.asarray(new)
         else:
             raise ValueError(
-                    f"Z_n should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self._basis.num_modes} modes."
+                f"Z_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._basis.num_modes} modes."
             )
 
     def _get_transforms(self, grid=None):
@@ -903,8 +903,8 @@ class FourierPlanarCurve(Curve):
             self._r_n = jnp.asarray(new)
         else:
             raise ValueError(
-                    f"r_n should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self._basis.num_modes} modes."
+                f"r_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self._basis.num_modes} modes."
             )
 
     def get_coeffs(self, n):

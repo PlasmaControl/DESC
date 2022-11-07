@@ -1106,8 +1106,8 @@ class _Configuration(IOAble, ABC):
     def i_l(self, i_l):
         if self.iota is None:
             raise ValueError(
-                    "Attempt to set rotational transform on an equilibrium "
-                    + "with fixed toroidal current"
+                "Attempt to set rotational transform on an equilibrium "
+                + "with fixed toroidal current"
             )
         self.iota.params = i_l
 
@@ -1134,8 +1134,8 @@ class _Configuration(IOAble, ABC):
     def c_l(self, c_l):
         if self.current is None:
             raise ValueError(
-                    "Attempt to set toroidal current on an equilibrium with "
-                    + "fixed rotational transform"
+                "Attempt to set toroidal current on an equilibrium with "
+                + "fixed rotational transform"
             )
         self.current.params = c_l
 

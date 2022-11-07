@@ -1,6 +1,6 @@
 name: Notebook tests
 
-on: 
+on:
   push:
     branches:
       - master

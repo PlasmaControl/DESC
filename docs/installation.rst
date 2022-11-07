@@ -122,4 +122,3 @@ You can also try running an example input file:
 .. code-block:: console
 
     python -m desc -vvv examples/DESC/SOLOVEV
-

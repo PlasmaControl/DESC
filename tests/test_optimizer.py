@@ -25,8 +25,8 @@ from desc.optimize import Optimizer, fmintr, lsqtr, sgd
 def vector_fun(x, p):
     """Complicated-ish vector valued function for testing least squares."""
     a0 = x * p[0]
-    a1 = jnp.exp(-(x ** 2) * p[1])
-    a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
+    a1 = jnp.exp(-(x**2) * p[1])
+    a2 = jnp.cos(jnp.sin(x * p[2] - x**2 * p[3]))
     a3 = jnp.sum(
         jnp.array([(x + 2) ** -(i * 2) * pi ** (i + 1) for i, pi in enumerate(p[3:])]),
         axis=0,
@@ -42,8 +42,8 @@ B1 = 8
 C1 = -1
 SCALAR_FUN_SOLN = np.array(
     [
-        (-B0 + np.sqrt(B0 ** 2 - 4 * A0 * C0)) / (2 * A0),
-        (-B1 + np.sqrt(B1 ** 2 - 4 * A1 * C1)) / (2 * A1),
+        (-B0 + np.sqrt(B0**2 - 4 * A0 * C0)) / (2 * A0),
+        (-B1 + np.sqrt(B1**2 - 4 * A1 * C1)) / (2 * A1),
     ]
 )
 

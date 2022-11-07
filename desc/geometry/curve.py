@@ -375,7 +375,7 @@ class FourierRZCurve(Curve):
         dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
         d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
         dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn ** 3, axis=1)
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
         return kappa
 
     def compute_torsion(self, R_n=None, Z_n=None, grid=None):
@@ -719,7 +719,7 @@ class FourierXYZCurve(Curve):
         dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
         d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
         dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn ** 3, axis=1)
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
         return kappa
 
     def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
@@ -941,7 +941,7 @@ class FourierPlanarCurve(Curve):
     def _normal_rotmat(self, normal=None):
         """Rotation matrix to rotate z axis into plane normal."""
         nx, ny, nz = normal
-        nxny = jnp.sqrt(nx ** 2 + ny ** 2)
+        nxny = jnp.sqrt(nx**2 + ny**2)
 
         R = jnp.array(
             [
@@ -1124,7 +1124,7 @@ class FourierPlanarCurve(Curve):
         dx = self.compute_coordinates(center, normal, r_n, grid, dt=1)
         d2x = self.compute_coordinates(center, normal, r_n, grid, dt=2)
         dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn ** 3, axis=1)
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
         return kappa
 
     def compute_torsion(self, center=None, normal=None, r_n=None, grid=None):

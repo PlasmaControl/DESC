@@ -59,7 +59,7 @@ def xyz2rpz(pts):
         points in polar (R,phi,Z) coordinates
     """
     x, y, z = pts.T
-    r = jnp.sqrt(x ** 2 + y ** 2)
+    r = jnp.sqrt(x**2 + y**2)
     p = jnp.arctan2(y, x)
     return jnp.array([r, p, z]).T
 

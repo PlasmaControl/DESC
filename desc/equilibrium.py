@@ -321,7 +321,7 @@ class Equilibrium(_Configuration, IOAble):
                 ntheta = 2 * M + 1
 
             inputs = {}
-            inputs["Psi"] = np.pi * r ** 2 * na_eq.spsi * na_eq.Bbar
+            inputs["Psi"] = np.pi * r**2 * na_eq.spsi * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L
             inputs["M"] = M
@@ -329,10 +329,10 @@ class Equilibrium(_Configuration, IOAble):
             inputs["sym"] = not na_eq.lasym
             inputs["spectral_indexing "] = spectral_indexing
             inputs["pressure"] = np.array(
-                [[0, -na_eq.p2 * r ** 2], [2, na_eq.p2 * r ** 2]]
+                [[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]
             )
             inputs["iota"] = None
-            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r ** 2]])
+            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]])
             inputs["axis"] = FourierRZCurve(
                 R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
                 Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),

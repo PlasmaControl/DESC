@@ -937,7 +937,7 @@ class MTanhProfile(Profile):
         elif dx == 1:
             y = -1 / (2 * width) * (1 - jnp.tanh(z) ** 2) * (ped - offset)
         elif dx == 2:
-            y = (ped - offset) * (jnp.tanh(-z) ** 2 - 1) * jnp.tanh(-z) / width ** 2
+            y = (ped - offset) * (jnp.tanh(-z) ** 2 - 1) * jnp.tanh(-z) / width**2
 
         e2z = jnp.exp(2 * z)
         zz = z / (1 + e2z)
@@ -952,10 +952,10 @@ class MTanhProfile(Profile):
                 4
                 * (-width * (1 + e2z) + (1 - e2z) * (sym - x))
                 * e2z
-                / (width ** 3 * (e2z + 1) ** 3)
+                / (width**3 * (e2z + 1) ** 3)
             )
             f = (
-                jnp.polyval(jnp.polyder(core_poly[::-1], 2), zz) * dz ** 2
+                jnp.polyval(jnp.polyder(core_poly[::-1], 2), zz) * dz**2
                 + jnp.polyval(jnp.polyder(core_poly[::-1], 1), zz) * ddz
             )
 

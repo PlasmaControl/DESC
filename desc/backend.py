@@ -116,7 +116,6 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
         y = jnp.where(x == 0, 1, jnp.sign(x))
         return y
 
-
 else:
     jit = lambda func, *args, **kwargs: func
     from scipy.integrate import odeint  # noqa: F401

@@ -144,15 +144,15 @@ def ptolemy_identity_rev(m_1, n_1, x):
         if sign(m_1[k]) * sign(n_1[k]) < 0:
             # sin_mn terms
             if idx_pos.size:
-                s[:, idx_pos[0]] += x[:, k] / (2 ** p)
+                s[:, idx_pos[0]] += x[:, k] / (2**p)
             if idx_neg.size:
-                s[:, idx_neg[0]] += x[:, k] / (2 ** p) * sign(n_1[k])
+                s[:, idx_neg[0]] += x[:, k] / (2**p) * sign(n_1[k])
         else:
             # cos_mn terms
             if idx_pos.size:
-                c[:, idx_pos[0]] += x[:, k] / (2 ** p) * sign(n_1[k])
+                c[:, idx_pos[0]] += x[:, k] / (2**p) * sign(n_1[k])
             if idx_neg.size:
-                c[:, idx_neg[0]] += x[:, k] / (2 ** p)
+                c[:, idx_neg[0]] += x[:, k] / (2**p)
 
     return m_0, n_0, s, c
 

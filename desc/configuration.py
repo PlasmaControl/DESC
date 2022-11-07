@@ -1364,7 +1364,7 @@ class _Configuration(IOAble, ABC):
 
         def cond_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol**2) & (k < maxiter)
 
         def body_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
@@ -1402,7 +1402,7 @@ class _Configuration(IOAble, ABC):
             cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
         )
 
-        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol**2
         rho = jnp.where(noconverge, jnp.nan, rhok)
         theta = jnp.where(noconverge, jnp.nan, thetak)
         phi = jnp.where(noconverge, jnp.nan, phi)

@@ -158,9 +158,9 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
             q += jnp.dot(s * diag, s)
     else:
         Js = J.dot(s.T)
-        q = jnp.sum(Js ** 2, axis=0)
+        q = jnp.sum(Js**2, axis=0)
         if diag is not None:
-            q += jnp.sum(diag * s ** 2, axis=1)
+            q += jnp.sum(diag * s**2, axis=1)
 
     l = jnp.dot(s, g)
 
@@ -295,7 +295,7 @@ def check_termination(
 
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
-    scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
+    scale_inv = jnp.sum(A**2, axis=0) ** 0.5
     scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
 
     if prev_scale_inv is not None:

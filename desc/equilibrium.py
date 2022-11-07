@@ -961,6 +961,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         nfev=100,
         verbose=1,
         checkpoint_path=None,
+        **kwargs,
     ):
         """Solve for an equilibrium using an automatic continuation method.
 
@@ -1013,6 +1014,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             nfev,
             verbose,
             checkpoint_path,
+            **kwargs,
         )
 
     @property

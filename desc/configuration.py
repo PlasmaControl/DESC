@@ -217,7 +217,7 @@ class _Configuration(IOAble, ABC):
 
         # surface
         if surface is None:
-            self._surface = FourierRZToroidalSurface(NFP=self.NFP)
+            self._surface = FourierRZToroidalSurface(NFP=self.NFP, sym=self.sym)
             self._bdry_mode = "lcfs"
         elif isinstance(surface, Surface):
             self._surface = surface
@@ -373,6 +373,11 @@ class _Configuration(IOAble, ABC):
                 "Unequal number of field periods for equilirium "
                 + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
             )
+
+        # make sure symmetry agrees
+        assert (
+            self.sym == self.surface.sym
+        ), "Surface and Equilibrium must have the same symmetry"
 
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
@@ -879,6 +884,9 @@ class _Configuration(IOAble, ABC):
     @surface.setter
     def surface(self, new):
         if isinstance(new, Surface):
+            assert (
+                self.sym == new.sym
+            ), "Surface and Equilibrium must have the same symmetry"
             new.change_resolution(self.L, self.M, self.N)
             self._surface = new
         else:

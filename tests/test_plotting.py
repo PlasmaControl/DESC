@@ -34,7 +34,7 @@ from desc.plotting import (
     plot_surfaces,
 )
 
-tol_1d = 5
+tol_1d = 7.8
 tol_2d = 15
 tol_3d = 15
 
@@ -76,6 +76,16 @@ def test_1d_iota(DSHAPE_current):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
     fig, ax = plot_1d(eq, "iota", grid=grid, figsize=(4, 4))
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_1d_iota_radial(DSHAPE_current):
+    """Test plotting 1d rotational transform."""
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    fig, ax = plot_1d(eq, "iota", figsize=(4, 4))
     return fig
 
 

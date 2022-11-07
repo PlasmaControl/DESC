@@ -3,10 +3,10 @@
 import numpy as np
 import pytest
 from numpy.random import default_rng
-from scipy.optimize import rosen, rosen_der, rosen_hess
+from scipy.optimize import BFGS, rosen, rosen_der
 
 import desc.examples
-from desc.backend import jnp
+from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.objectives import (
     FixBoundaryR,
@@ -18,12 +18,12 @@ from desc.objectives import (
     ObjectiveFunction,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.optimize import Optimizer, fmintr, lsqtr
-from desc.optimize.utils import chol_U_update, make_spd
+from desc.optimize import Optimizer, fmintr, lsqtr, sgd
 
 
-def fun(x, p):
-    """Example function to optimize."""
+@jit
+def vector_fun(x, p):
+    """Complicated-ish vector valued function for testing least squares."""
     a0 = x * p[0]
     a1 = jnp.exp(-(x ** 2) * p[1])
     a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
@@ -34,90 +34,80 @@ def fun(x, p):
     return a0 + a1 + 3 * a2 + a3
 
 
-class TestUtils:
-    """Tests for optimizer utility functions."""
+A0 = 1
+B0 = 2
+C0 = -1
+A1 = 4
+B1 = 8
+C1 = -1
+SCALAR_FUN_SOLN = np.array(
+    [
+        (-B0 + np.sqrt(B0 ** 2 - 4 * A0 * C0)) / (2 * A0),
+        (-B1 + np.sqrt(B1 ** 2 - 4 * A1 * C1)) / (2 * A1),
+    ]
+)
 
-    @pytest.mark.unit
-    def test_spd(self):
-        """Test making a matrix positive definite."""
-        rando = default_rng(seed=0)
 
-        n = 100
-        A = rando.random((n, n))
-        A = A + A.T - 5
-        mineig = sorted(np.linalg.eig(A)[0])[0]
-        assert mineig < 0
-        B = make_spd(A)
-        mineig = sorted(np.linalg.eig(B)[0])[0]
-        assert mineig > 0
+@jit
+def scalar_fun(x):
+    """Simple convex function for testing scalar minimization.
 
-    @pytest.mark.unit
-    def test_chol_update(self):
-        """Test rank 1 update to cholesky factorization."""
-        rando = default_rng(seed=0)
+    Gradient is 2 uncoupled quadratic equations.
+    """
+    return (
+        A0 / 2 * x[0] ** 2
+        + A1 / 2 * x[1] ** 2
+        + C0 * jnp.log(x[0] + B0 / A0)
+        + C1 * jnp.log(x[1] + B1 / A1)
+    )
 
-        n = 100
-        A = rando.random((n, n))
-        v = rando.random(n)
-        A = A + A.T - 5
-        B = make_spd(A)
-        U = np.linalg.cholesky(B).T
-        Bv = B + np.outer(v, v)
-        Uv = np.linalg.cholesky(Bv).T
-        Uva = chol_U_update(U, v, 1)
 
-        np.testing.assert_allclose(Uv, Uva)
+scalar_grad = jit(Derivative(scalar_fun, mode="grad"))
+scalar_hess = jit(Derivative(scalar_fun, mode="hess"))
 
 
 class TestFmin:
-    """Test for scalar minimization function."""
+    """Tests for scalar minimization routine."""
 
     @pytest.mark.unit
-    def test_rosenbrock_full_hess_dogleg(self):
-        """Test minimizing rosenbrock function using dogleg method with full hessian."""
-        rando = default_rng(seed=1)
-
-        x0 = rando.random(7)
-        true_x = np.ones(7)
+    def test_convex_full_hess_dogleg(self):
+        """Test minimizing convex test function using dogleg method."""
+        x0 = np.ones(2)
 
         out = fmintr(
-            rosen,
+            scalar_fun,
             x0,
-            rosen_der,
-            hess=rosen_hess,
-            verbose=1,
+            scalar_grad,
+            scalar_hess,
+            verbose=3,
             method="dogleg",
             x_scale="hess",
-            ftol=1e-8,
-            xtol=1e-8,
-            gtol=1e-8,
-            options={"ga_accept_threshold": 1},
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
+            options={"ga_accept_threshold": 0},
         )
-
-        np.testing.assert_allclose(out["x"], true_x)
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
     @pytest.mark.unit
-    def test_rosenbrock_full_hess_subspace(self):
+    def test_convex_full_hess_subspace(self):
         """Test minimizing rosenbrock function using subspace method with full hess."""
-        rando = default_rng(seed=2)
+        x0 = np.ones(2)
 
-        x0 = rando.random(7)
-        true_x = np.ones(7)
         out = fmintr(
-            rosen,
+            scalar_fun,
             x0,
-            rosen_der,
-            hess=rosen_hess,
+            scalar_grad,
+            scalar_hess,
             verbose=1,
             method="subspace",
             x_scale="hess",
-            ftol=1e-8,
-            xtol=1e-8,
-            gtol=1e-8,
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
             options={"ga_accept_threshold": 1},
         )
-
-        np.testing.assert_allclose(out["x"], true_x)
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
     @pytest.mark.slow
     @pytest.mark.unit
@@ -134,7 +124,7 @@ class TestFmin:
             hess="bfgs",
             verbose=1,
             method="dogleg",
-            x_scale="hess",
+            x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
@@ -154,16 +144,37 @@ class TestFmin:
             rosen,
             x0,
             rosen_der,
-            hess="bfgs",
+            hess=BFGS(),
             verbose=1,
             method="subspace",
-            x_scale="hess",
+            x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
             options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
+
+
+class TestSGD:
+    """Tests for stochastic optimizers."""
+
+    @pytest.mark.unit
+    def test_sgd_convex(self):
+        """Test minimizing convex test function using stochastic gradient descent."""
+        x0 = np.ones(2)
+
+        out = sgd(
+            scalar_fun,
+            x0,
+            scalar_grad,
+            verbose=3,
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
+            maxiter=2000,
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-4, rtol=1e-4)
 
 
 class TestLSQTR:
@@ -177,10 +188,10 @@ class TestLSQTR:
         """
         p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
         x = np.linspace(-1, 1, 100)
-        y = fun(x, p)
+        y = vector_fun(x, p)
 
         def res(p):
-            return fun(x, p) - y
+            return vector_fun(x, p) - y
 
         rando = default_rng(seed=0)
         p0 = p + 0.25 * (rando.random(p.size) - 0.5)

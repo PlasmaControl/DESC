@@ -29,7 +29,7 @@ class TestConstructor:
         assert eq.M == 1
         assert eq.N == 0
         assert eq.sym is False
-        assert eq.surface.eq(FourierRZToroidalSurface())
+        assert eq.surface.eq(FourierRZToroidalSurface(sym=False))
         assert isinstance(eq.pressure, PowerSeriesProfile)
         assert isinstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])

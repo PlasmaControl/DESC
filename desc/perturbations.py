@@ -10,7 +10,7 @@ from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.optimize.utils import evaluate_quadratic
+from desc.optimize.utils import evaluate_quadratic_form_jac
 from desc.utils import Timer
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
@@ -524,12 +524,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-    if objective_g.dim_f < dim_opt:
-        raise ValueError(
-            "Cannot perturb {} parameters with {} objectives.".format(
-                dim_opt, objective_g.dim_f
-            )
-        )
+    if verbose > 0:
+        print("Number of parameters: {}".format(dim_opt))
+        print("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
@@ -748,8 +745,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced
-    dx = recover(dx_reduced) - xp
-    args = objective_f.unpack_state(xf + dx)
+    x_new = recover(x_reduced + dx_reduced)
+    args = objective_f.unpack_state(x_new)
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
@@ -759,7 +756,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
+    predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:

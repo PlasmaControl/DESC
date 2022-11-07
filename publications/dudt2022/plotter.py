@@ -1,19 +1,19 @@
-import numpy as np
+"""Script for creating plots in dudt2022."""
+
 import matplotlib.pyplot as plt
-
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy as np
 from matplotlib.colors import LogNorm, Normalize
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid, QuadratureGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
 from desc.compute import (
     compute_boozer_coords,
-    compute_quasisymmetry_error,
     compute_geometry,
+    compute_quasisymmetry_error,
 )
-
+from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid, QuadratureGrid
+from desc.transform import Transform
 
 plt.rcParams["font.size"] = 14
 dim = 11

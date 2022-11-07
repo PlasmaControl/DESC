@@ -175,7 +175,7 @@ class QuasisymmetryBoozer(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"]
+            self._normalization = scales["B"] / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -361,7 +361,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 3
+            self._normalization = scales["B"] ** 3 / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -534,7 +534,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 4 / scales["a"] ** 2
+            self._normalization = scales["B"] ** 4 / scales["a"] ** 2 / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)

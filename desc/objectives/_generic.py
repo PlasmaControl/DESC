@@ -254,7 +254,7 @@ class ToroidalCurrent(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["J"]
+            self._normalization = scales["I"] / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)

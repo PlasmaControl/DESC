@@ -136,7 +136,7 @@ class MercierStability(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["Psi"] ** 2
+            self._normalization = 1 / scales["Psi"] ** 2 / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)

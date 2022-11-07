@@ -150,7 +150,8 @@ class ForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["F"]
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -335,7 +336,8 @@ class RadialForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["F"]
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -517,7 +519,8 @@ class HelicalForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["F"]
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -897,7 +900,8 @@ class CurrentDensity(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["J"]
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["J"] / self._dim_f
 
         self._check_dimensions()
         self._set_dimensions(eq)

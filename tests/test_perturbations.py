@@ -140,7 +140,7 @@ def test_optimal_perturb():
         dRb=R_modes,
         dZb=Z_modes,
         order=1,
-        tr_ratio=[0.05, 0.1],
+        tr_ratio=[0.025, 0.1],
         verbose=1,
         copy=True,
     )[0]

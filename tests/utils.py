@@ -161,15 +161,16 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     if isinstance(vmec_data, (str, os.PathLike)):
         vmec_data = VMECIO.read_vmec_output(vmec_data)
 
+    signgs = vmec_data["signgs"]
     coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
     Rr1 = coords["Rr_desc"]
     Zr1 = coords["Zr_desc"]
     Rv1 = coords["Rv_desc"]
-    Zv1 = coords["Zv_desc"]
+    Zv1 = coords["Zv_desc"][::signgs]
     Rr2 = coords["Rr_vmec"]
     Zr2 = coords["Zr_vmec"]
-    Rv2 = coords["Rv_vmec"]
+    Rv2 = coords["Rv_vmec"][::signgs]
     Zv2 = coords["Zv_vmec"]
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta

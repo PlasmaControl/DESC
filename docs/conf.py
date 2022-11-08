@@ -207,11 +207,11 @@ latex_elements = {
     \setcounter{tocdepth}{3}
     \usepackage{amsmath,amsfonts,amssymb,amsthm}
     \usepackage{graphicx}
-    
+
     %% % reduce spaces for Table of contents, figures and tables
     %% % it is used "\addtocontents{toc}{\vskip -1.2cm}" etc. in the document
     \usepackage[notlot,nottoc,notlof]{}
-    
+
     \usepackage{color}
     \usepackage{transparent}
     \usepackage{eso-pic}
@@ -261,27 +261,27 @@ latex_elements = {
     "maketitle": r"""
     \pagenumbering{Roman} %% % to avoid page 1 conflict with actual page 1
     \begin{titlepage}
-    
+
         \vspace*{80mm} %% % * is used to give space from top
-    
+
         \centering
         \textbf{\Huge {DESC Documentation}}
-            
+
         \vspace*{2mm}
-                   
+
         \vspace*{10mm}
-        
+
         \centering
         \textbf{ \Large {Daniel Dudt, Rory Conlin, Dario Panici, Egemen Kolemen}}
-                   
+
         \vspace*{10mm}
-        
+
         \centering
         \small {Created: \today}
         %% \vfill adds at the bottom
-        
+
         \vfill
-        
+
     \end{titlepage}
     \clearpage
     %\pagenumbering{roman}

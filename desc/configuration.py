@@ -1027,8 +1027,8 @@ class _Configuration(IOAble, ABC):
         # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
         sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
         # indices where m=0
-        idx0_R = np.where((self.R_basis.modes[:, 1] == 0))[0]
-        idx0_Z = np.where((self.Z_basis.modes[:, 1] == 0))[0]
+        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
+        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
         # indices where l=0 & m=0
         idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
@@ -1096,10 +1096,8 @@ class _Configuration(IOAble, ABC):
     def i_l(self, i_l):
         if self.iota is None:
             raise ValueError(
-                (
-                    "Attempt to set rotational transform on an equilibrium "
-                    + "with fixed toroidal current"
-                )
+                "Attempt to set rotational transform on an equilibrium "
+                + "with fixed toroidal current"
             )
         self.iota.params = i_l
 
@@ -1126,10 +1124,8 @@ class _Configuration(IOAble, ABC):
     def c_l(self, c_l):
         if self.current is None:
             raise ValueError(
-                (
-                    "Attempt to set toroidal current on an equilibrium with "
-                    + "fixed rotational transform"
-                )
+                "Attempt to set toroidal current on an equilibrium with "
+                + "fixed rotational transform"
             )
         self.current.params = c_l
 
@@ -1354,7 +1350,7 @@ class _Configuration(IOAble, ABC):
 
         def cond_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol**2) & (k < maxiter)
 
         def body_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
@@ -1392,7 +1388,7 @@ class _Configuration(IOAble, ABC):
             cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
         )
 
-        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol**2
         rho = jnp.where(noconverge, jnp.nan, rhok)
         theta = jnp.where(noconverge, jnp.nan, thetak)
         phi = jnp.where(noconverge, jnp.nan, phi)

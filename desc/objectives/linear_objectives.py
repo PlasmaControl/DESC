@@ -681,10 +681,8 @@ class FixIota(_FixProfile):
         """
         if eq.iota is None:
             raise RuntimeError(
-                (
-                    "Attempt to fix rotational transform on an equilibrium with no "
-                    + "rotational transform profile assigned"
-                )
+                "Attempt to fix rotational transform on an equilibrium with no "
+                + "rotational transform profile assigned"
             )
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)
@@ -777,10 +775,8 @@ class FixCurrent(_FixProfile):
         """
         if eq.current is None:
             raise RuntimeError(
-                (
-                    "Attempting to fix toroidal current on an equilibrium with no "
-                    + "current profile assigned"
-                )
+                "Attempting to fix toroidal current on an equilibrium with no "
+                + "current profile assigned"
             )
         profile = eq.current
         super().build(eq, profile, use_jit, verbose)

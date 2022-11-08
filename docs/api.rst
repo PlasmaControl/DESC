@@ -43,7 +43,7 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
 Equilibrium
 ***********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/equilibrium
     :recursive:
     :template: class.rst
@@ -75,7 +75,7 @@ Geometry
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
     desc.geometry.ZernikeRZToroidalSection
-    
+
 Grid
 ****
 
@@ -137,7 +137,7 @@ Objective Functions
 Optimize
 ********
 
-.. autosummary:: 
+.. autosummary::
    :toctree: _api/optimize
    :recursive:
    :template: class.rst
@@ -149,7 +149,7 @@ Optimize
 Perturbations
 *************
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/perturbations
     :recursive:
 
@@ -160,7 +160,7 @@ Perturbations
 Plotting
 ********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/plotting
     :recursive:
 
@@ -187,11 +187,11 @@ Profiles
     :toctree: _api/profiles
     :recursive:
     :template: class.rst
-	       
+
     desc.profiles.PowerSeriesProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
-    
+
 Transform
 *********
 
@@ -205,7 +205,7 @@ Transform
 VMEC
 ****
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/vmec/
     :recursive:
     :template: class.rst

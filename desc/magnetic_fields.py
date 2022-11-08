@@ -462,7 +462,7 @@ class SplineMagneticField(MagneticField):
         if self._axisym:
             tempdict["fy"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
-            tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fyz"] = jnp.zeros_like(tempdict["fx"])
             tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
         else:
             tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)

@@ -353,21 +353,14 @@ class _Configuration(IOAble, ABC):
         elif current is not None:
             raise TypeError("Got unknown current profile {}".format(current))
 
-        # warning about odd profiles
-        if isinstance(self.pressure, PowerSeriesProfile):
-            if self.pressure.sym != "even":
+        # ensure profiles have the right resolution
+        for profile in ["pressure", "iota", "current"]:
+            p = getattr(self, profile)
+            if hasattr(p, "change_resolution"):
+                p.change_resolution(max(p.basis.L, self.L))
+            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
                 warnings.warn(
-                    colored("Pressure profile is not an even power series.", "yellow")
-                )
-        if isinstance(self.iota, PowerSeriesProfile):
-            if self.iota.sym != "even":
-                warnings.warn(
-                    colored("Iota profile is not an even power series.", "yellow")
-                )
-        if isinstance(self.current, PowerSeriesProfile):
-            if self.current.sym != "even":
-                warnings.warn(
-                    colored("Current profile is not an even power series.", "yellow")
+                    colored(f"{profile} profile is not an even power series.", "yellow")
                 )
 
         # ensure number of field periods agree before setting guesses
@@ -470,7 +463,7 @@ class _Configuration(IOAble, ABC):
             raise ValueError(
                 "set_initial_guess should be called with 4 or fewer arguments."
             )
-        if nargs == 0:
+        if nargs == 0 or nargs == 1 and args[0] is None:
             if hasattr(self, "_surface"):
                 # use whatever surface is already assigned
                 if hasattr(self, "_axis"):
@@ -806,10 +799,7 @@ class _Configuration(IOAble, ABC):
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
             surface.grid = LinearGrid(
-                rho=rho,
-                M=2 * surface.M,
-                N=2 * surface.N,
-                endpoint=True,
+                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
             )
             return surface
 
@@ -1405,7 +1395,7 @@ class _Configuration(IOAble, ABC):
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordianate jacobian (sqrt(g)) sign.
@@ -1423,6 +1413,8 @@ class _Configuration(IOAble, ABC):
             (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
             spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
+        msg : {None, "auto", "manual"}
+            Warning to throw if unnested.
 
         Returns
         -------
@@ -1450,7 +1442,27 @@ class _Configuration(IOAble, ABC):
             Z_transform,
         )
 
-        return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        if not nested:
+            if msg == "auto":
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early. "
+                        + "Automatic continuation method failed, consider specifying "
+                        + "continuation steps manually",
+                        "yellow",
+                    )
+                )
+            elif msg == "manual":
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
+                        "yellow",
+                    )
+                )
+        return nested
 
     def to_sfl(
         self,

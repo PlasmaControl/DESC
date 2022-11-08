@@ -52,7 +52,15 @@ def solve_continuation_automatic(  # noqa: C901
         * 3: as above plus detailed solver output
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
+    **kwargs : control continuation step sizes
 
+        Valid keyword arguments are:
+
+        mres_step: int, the amount to increase Mpol by at each continuation step
+        pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
+                          at each continuation step
+        bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
+                          at each continuation step
     Returns
     -------
     eqfam : EquilibriaFamily

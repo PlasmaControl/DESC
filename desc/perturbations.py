@@ -23,8 +23,8 @@ def get_deltas(things1, things2):
     ----------
     things1, things2 : dict
         should be dictionary with keys "surface", "iota", "pressure", etc.
-        Values should be a either objects of the appropriate type (Surface, Profile).
-        Finds deltas for a perturbation going from 1 to 2.
+        Values should be objects of the appropriate type (Surface, Profile).
+        Finds deltas for a perturbation going from things1 to things2.
         Should have same keys in both dictionaries.
 
     Returns

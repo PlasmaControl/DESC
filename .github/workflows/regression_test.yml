@@ -1,6 +1,6 @@
 name: Regression tests
 
-on: 
+on:
   push:
     branches:
       - master
@@ -50,7 +50,7 @@ jobs:
           path: |
             ./cov.xml
             ./mpl_results.html
-            ./prof.db	    
+            ./prof.db
       - name: Upload coverage
         continue-on-error: true
         id : codecov1

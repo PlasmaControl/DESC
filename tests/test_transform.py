@@ -67,7 +67,7 @@ class TestTransform:
         values = transf.transform(c, 0, 0, 0)
         derivs = transf.transform(c, 1, 0, 0)
 
-        correct_vals = c[0] + c[1] * x + c[2] * x ** 2
+        correct_vals = c[0] + c[1] * x + c[2] * x**2
         correct_ders = c[1] + c[2] * 2 * x
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)

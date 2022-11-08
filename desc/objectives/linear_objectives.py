@@ -948,6 +948,9 @@ class FixSumModesR(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    sum_weight : float, ndarray, optional
+        Weights on the coefficients in the sum, should be same length as modes.
+         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
          len(weight) = len(modes).
@@ -969,11 +972,13 @@ class FixSumModesR(_Objective):
         eq=None,
         target=None,
         weight=1,
+        sum_weights=None,
         modes=False,
         name="Fix Sum Modes R",
     ):
 
         self._modes = modes
+        self._sum_weights = sum_weights
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
 
@@ -1018,12 +1023,17 @@ class FixSumModesR(_Objective):
                         "yellow",
                     )
                 )
+        if self._sum_weights is None:
+            sum_weights = np.ones(modes.shape[0])
+        else:
+            sum_weights = np.atleast_1d(self._sum_weights)
+
         self._dim_f = np.array([1])
 
         self._A = np.zeros((1, eq.R_basis.num_modes))
         for i, (l, m, n) in enumerate(modes):
             j = eq.R_basis.get_idx(L=l, M=m, N=n)
-            self._A[0, j] = 1
+            self._A[0, j] = sum_weights[i]
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target  # target is a sum, so a single number
@@ -1032,7 +1042,7 @@ class FixSumModesR(_Objective):
 
         # use current sum as target if needed
         if None in self.target:
-            self.target = np.sum(eq.R_lmn[self._idx])
+            self.target = np.dot(sum_weights, eq.R_lmn[self._idx])
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -1041,7 +1051,7 @@ class FixSumModesR(_Objective):
         ################################################
 
     def compute(self, R_lmn, **kwargs):
-        """Compute Fixed mode R errors.
+        """Compute Sum mode R errors.
 
         Parameters
         ----------
@@ -1077,6 +1087,9 @@ class FixSumModesZ(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    sum_weight : float, ndarray, optional
+        Weights on the coefficients in the sum, should be same length as modes.
+         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
          len(weight) = len(modes).
@@ -1098,11 +1111,13 @@ class FixSumModesZ(_Objective):
         eq=None,
         target=None,
         weight=1,
+        sum_weights=None,
         modes=False,
         name="Fix Sum Modes Z",
     ):
 
         self._modes = modes
+        self._sum_weights = sum_weights
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
 
@@ -1147,12 +1162,18 @@ class FixSumModesZ(_Objective):
                         "yellow",
                     )
                 )
+
+        if self._sum_weights is None:
+            sum_weights = np.ones(modes.shape[0])
+        else:
+            sum_weights = np.atleast_1d(self._sum_weights)
+
         self._dim_f = np.array([1])
 
         self._A = np.zeros((1, eq.Z_basis.num_modes))
         for i, (l, m, n) in enumerate(modes):
             j = eq.Z_basis.get_idx(L=l, M=m, N=n)
-            self._A[0, j] = 1
+            self._A[0, j] = sum_weights[i]
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target  # target is a sum, so a single number
@@ -1161,7 +1182,7 @@ class FixSumModesZ(_Objective):
 
         # use current sum as target if needed
         if None in self.target:
-            self.target = np.sum(eq.Z_lmn[self._idx])
+            self.target = np.dot(sum_weights, eq.Z_lmn[self._idx])
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -1170,7 +1191,7 @@ class FixSumModesZ(_Objective):
         ################################################
 
     def compute(self, Z_lmn, **kwargs):
-        """Compute Fixed mode R errors.
+        """Compute Sum mode Z errors.
 
         Parameters
         ----------

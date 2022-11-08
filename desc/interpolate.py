@@ -582,10 +582,10 @@ def _make_periodic(xq, x, period, axis, *arrs):
 def _get_t_der(t, derivative, dxi):
     """Get arrays of [1,t,t^2,t^3] for cubic interpolation."""
     if derivative == 0 or derivative is None:
-        tt = jnp.array([jnp.ones_like(t), t, t ** 2, t ** 3]).T
+        tt = jnp.array([jnp.ones_like(t), t, t**2, t**3]).T
     elif derivative == 1:
         tt = (
-            jnp.array([jnp.zeros_like(t), jnp.ones_like(t), 2 * t, 3 * t ** 2]).T
+            jnp.array([jnp.zeros_like(t), jnp.ones_like(t), 2 * t, 3 * t**2]).T
             * dxi[:, np.newaxis]
         )
     elif derivative == 2:

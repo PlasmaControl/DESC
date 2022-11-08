@@ -160,7 +160,7 @@ def compute_mercier_stability(
         data["D_geodesic"] = (
             surface_integrals(grid, dS * J_dot_B / grad_psi_3) ** 2
             - surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
-            * surface_integrals(grid, dS * J_dot_B ** 2 / (data["|B|^2"] * grad_psi_3))
+            * surface_integrals(grid, dS * J_dot_B**2 / (data["|B|^2"] * grad_psi_3))
         ) / (2 * jnp.pi) ** 6
 
     if check_derivs("D_Mercier", R_transform, Z_transform, L_transform):

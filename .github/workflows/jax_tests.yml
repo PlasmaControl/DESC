@@ -7,14 +7,14 @@ on:
 
 jobs:
   jax_tests:
-    if: ${{ github.event.label.name == 'test_jax' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}  
+    if: ${{ github.event.label.name == 'test_jax' && github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         jaxlib-version: [0.3.0]
         jax-version: [0.3.0, 0.3.1]
-        include: 
+        include:
           - jaxlib-version: 0.1.66
             jax-version: 0.2.11
           - jaxlib-version: 0.1.66
@@ -308,11 +308,11 @@ jobs:
           - jaxlib-version: 0.1.76
             jax-version: 0.3.0
           - jaxlib-version: 0.1.76
-            jax-version: 0.3.1	
+            jax-version: 0.3.1
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python 3.8
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: 3.8
           cache: pip
@@ -321,7 +321,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
           pip install "jaxlib==${{ matrix.jaxlib-version }}"
-          pip install "jax==${{ matrix.jax-version }}"	  
+          pip install "jax==${{ matrix.jax-version }}"
       - name: Test with pytest
         run: |
           pwd

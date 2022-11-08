@@ -280,7 +280,7 @@ def surface_averages(
     if denominator is None:
         if sqrt_g.size == 1:
             denominator = (
-                4 * jnp.pi ** 2 if surface_label == "rho" else 2 * jnp.pi
+                4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi
             ) * sqrt_g
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)

@@ -1,19 +1,19 @@
-import numpy as np
+"""Script for creating plots in dudt2022."""
+
 import matplotlib.pyplot as plt
-
-from mpl_toolkits.axes_grid1 import make_axes_locatable
+import numpy as np
 from matplotlib.colors import LogNorm, Normalize
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-from desc.equilibrium import Equilibrium
-from desc.grid import LinearGrid, QuadratureGrid
 from desc.basis import DoubleFourierSeries
-from desc.transform import Transform
 from desc.compute import (
     compute_boozer_coords,
-    compute_quasisymmetry_error,
     compute_geometry,
+    compute_quasisymmetry_error,
 )
-
+from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid, QuadratureGrid
+from desc.transform import Transform
 
 plt.rcParams["font.size"] = 14
 dim = 11
@@ -26,7 +26,7 @@ ZBS = np.linspace(-0.05, 0.05, dim)
 eq = Equilibrium.load("data/initial.h5")
 
 grid = LinearGrid(M=6 * eq.M + 1, N=6 * eq.N + 1, NFP=eq.NFP, sym=False, rho=1.0)
-qgrid = QuadratureGrid(M=3 * eq.M + 1, N=3 * eq.N + 1,L=3*eq.L+1, NFP=eq.NFP)
+qgrid = QuadratureGrid(M=3 * eq.M + 1, N=3 * eq.N + 1, L=3 * eq.L + 1, NFP=eq.NFP)
 R_transform = Transform(qgrid, eq.R_basis, derivs=3)
 Z_transform = Transform(qgrid, eq.Z_basis, derivs=3)
 L_transform = Transform(qgrid, eq.L_basis, derivs=3)
@@ -96,12 +96,12 @@ def qs_errors(eq):
     f_C = (
         np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
         / np.mean(data["sqrt(g)"])
-        / B0 ** 3
+        / B0**3
     )
     f_T = (
         np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
         / np.mean(data["sqrt(g)"])
-        * (R0 ** 2 / B0 ** 4)
+        * (R0**2 / B0**4)
     )
 
     return f_B, f_C, f_T

@@ -55,7 +55,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Volume(
-                target=10 * np.pi ** 2, weight=1 / np.pi ** 2, eq=eq, normalize=False
+                target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
             V = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 10)

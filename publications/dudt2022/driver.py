@@ -1,20 +1,22 @@
+"""Driver script for optimization examples in dudt2022."""
+
 import numpy as np
 from scipy.linalg import block_diag, null_space
 
-from desc.utils import Timer
 from desc.equilibrium import Equilibrium
 from desc.objectives import (
-    ObjectiveFunction,
     FixedBoundaryR,
     FixedBoundaryZ,
-    FixedPressure,
     FixedIota,
+    FixedPressure,
     FixedPsi,
     LCFSBoundary,
+    ObjectiveFunction,
     QuasisymmetryBoozer,
     QuasisymmetryFluxFunction,
     QuasisymmetryTripleProduct,
 )
+from desc.utils import Timer
 
 
 def getOptSubspace(eq):
@@ -95,7 +97,6 @@ eq = eq.optimize(
     verbose=2,
     perturb_options=perturb_options,
     solve_options=solve_options,
-    # name=name,
 )
 eq.save(output_path)
 

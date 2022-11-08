@@ -876,10 +876,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     self.equilibria.append(Equilibrium(**arg))
                 else:
                     raise TypeError(
-                        (
-                            "Args to create EquilibriaFamily should either be "
-                            + "Equilibrium or dictionary"
-                        )
+                        "Args to create EquilibriaFamily should either be "
+                        + "Equilibrium or dictionary"
                     )
 
     def solve_continuation(

@@ -32,10 +32,10 @@ New Features
 - `plot_boundary` function to plot boundary surfaces and multiple toroidal angles together in a single plot. This is a popular plot format in stellarator optimization papers when comparing boundary shapes.
 
 Bug Fixes
-- Fix bugs for vacuum solve 
+- Fix bugs for vacuum solve
   - Allow for constraining arguments that aren't used in the objective (i.e pressure when minimizing current density)
   - fix bug in `CurrentDensity` where only jacobi grid was being used
-- Fixes to wrapped objective and jit compiling 
+- Fixes to wrapped objective and jit compiling
   - optimizer with wrapped objective would sometimes return the equilibrium after the final attempted step, even if that step was rejected for not lowering the objective, resulting in incorrect "optimal" result
   - Fixes a bug where the `use_jit` arg passed to `objective.build` would override any previously set value for `use_jit` (such as in the class constructor)
 - Grid spacing bugs fixed

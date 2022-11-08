@@ -1,6 +1,6 @@
 name: Unit tests
 
-on: 
+on:
   push:
     branches:
       - master
@@ -52,8 +52,7 @@ jobs:
             ./mpl_results.html
             ./prof.db
       - name: Upload coverage
-        continue-on-error: true
-        id : codecov1
+        id : codecov
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # maybe needed to avoid upload failure?

@@ -17,7 +17,7 @@ class TestCoil:
         R = 2
         y = 1
         I = 1
-        By_true = 1e-7 * 2 * np.pi * R ** 2 * I / (y ** 2 + R ** 2) ** (3 / 2)
+        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 0])
         coil = FourierXYZCoil(I)
         coil.grid = LinearGrid(zeta=100, endpoint=True)
@@ -45,7 +45,7 @@ class TestCoilSet:
         R = 10
         z = np.linspace(0, 10, 10)
         I = 1
-        Bz_true = np.sum(1e-7 * 2 * np.pi * R ** 2 * I / (z ** 2 + R ** 2) ** (3 / 2))
+        Bz_true = np.sum(1e-7 * 2 * np.pi * R**2 * I / (z**2 + R**2) ** (3 / 2))
         B_true = np.array([0, 0, Bz_true])
         coil = FourierRZCoil(0.1)
         coils = CoilSet.linspaced_linear(

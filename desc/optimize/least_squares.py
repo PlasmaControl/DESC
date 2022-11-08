@@ -159,9 +159,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     # but the geometric mean seems to work well
     init_tr = {
         "scipy": np.linalg.norm(x * scale_inv),
-        "conngould": np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2),
+        "conngould": np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2),
         "mix": np.sqrt(
-            np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
+            np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")

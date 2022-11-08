@@ -61,7 +61,7 @@ Repository Contents
 
 Contribute
 ==========
- 
+
 - `Contributing guidelines <https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst>`_
 - `Issue Tracker <https://github.com/PlasmaControl/DESC/issues>`_
 - `Source Code <https://github.com/PlasmaControl/DESC/>`_
@@ -72,9 +72,9 @@ Contribute
     :alt: License
 
 .. |DOI| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.4876504.svg
-   :target: https://doi.org/10.5281/zenodo.4876504 
+   :target: https://doi.org/10.5281/zenodo.4876504
    :alt: DOI
-   
+
 .. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation

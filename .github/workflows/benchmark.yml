@@ -1,6 +1,6 @@
-name: Benchmarks 
+name: Benchmarks
 
-on: 
+on:
   push:
   pull_request:
     types: [labeled]
@@ -69,5 +69,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           path: tests/benchmarks/commit_msg.txt
-
-          

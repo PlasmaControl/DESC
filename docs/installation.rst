@@ -2,7 +2,7 @@
 Installation
 ============
 
-Follow these instructions to install DESC and its dependencies. 
+Follow these instructions to install DESC and its dependencies.
 Note that the default installation instructions here (except for the IBM Power architecture instructions) do not install JAX with GPU support.
 To install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
 
@@ -122,4 +122,3 @@ You can also try running an example input file:
 .. code-block:: console
 
     python -m desc -vvv examples/DESC/SOLOVEV
-

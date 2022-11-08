@@ -509,7 +509,7 @@ class Transform(IOAble):
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
 
             # differentiate
-            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk ** dz * (-1) ** (dz > 1)
+            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
 
             # re-format in complex notation
             c_real = jnp.pad(

@@ -126,7 +126,7 @@ def read_ascii(filename):
     from desc.utils import copy_coeffs
 
     eq = {}
-    f = open(filename, "r")
+    f = open(filename)
     lines = list(f)
     eq["NFP"] = int(lines[0].strip("\n").split()[-1])
     eq["Psi"] = float(lines[1].strip("\n").split()[-1])

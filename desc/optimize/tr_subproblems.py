@@ -107,14 +107,14 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     try:
         R, lower = cho_factor(B)
         q = -cho_solve((R, lower), g)
-        if np.dot(q, q) <= trust_radius ** 2:
+        if np.dot(q, q) <= trust_radius**2:
             return S.dot(q), True, initial_alpha
     except np.linalg.linalg.LinAlgError:
         pass
 
-    a = B[0, 0] * trust_radius ** 2
-    b = B[0, 1] * trust_radius ** 2
-    c = B[1, 1] * trust_radius ** 2
+    a = B[0, 0] * trust_radius**2
+    b = B[0, 1] * trust_radius**2
+    c = B[1, 1] * trust_radius**2
 
     d = g[0] * trust_radius
     f = g[1] * trust_radius
@@ -123,7 +123,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     t = np.roots(coeffs)  # Can handle leading zeros.
     t = np.real(t[np.isreal(t)])
 
-    q = trust_radius * np.vstack((2 * t / (1 + t ** 2), (1 - t ** 2) / (1 + t ** 2)))
+    q = trust_radius * np.vstack((2 * t / (1 + t**2), (1 - t**2) / (1 + t**2)))
     value = 0.5 * np.sum(q * B.dot(q), axis=0) + np.dot(g, q)
     i = np.argmin(value)
     q = q[:, i]
@@ -184,10 +184,10 @@ def trust_region_step_exact_svd(
         It is defined as "norm of regularized (by alpha) least-squares
         solution minus `trust_radius`".
         """
-        denom = s ** 2 + alpha
+        denom = s**2 + alpha
         p_norm = np.linalg.norm(suf / denom)
         phi = p_norm - trust_radius
-        phi_prime = -np.sum(suf ** 2 / denom ** 3) / p_norm
+        phi_prime = -np.sum(suf**2 / denom**3) / p_norm
         return phi, phi_prime
 
     # Check if J has full rank and try Gauss-Newton step.
@@ -227,7 +227,7 @@ def trust_region_step_exact_svd(
         if np.abs(phi) < rtol * trust_radius:
             break
 
-    p = -v.dot(suf / (s ** 2 + alpha))
+    p = -v.dot(suf / (s**2 + alpha))
 
     # Make the norm of p equal to trust_radius; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region
@@ -393,7 +393,7 @@ def get_boundaries_intersections(z, d, trust_radius):
     """
     a = jnp.dot(d, d)
     b = 2 * jnp.dot(z, d)
-    c = jnp.dot(z, z) - trust_radius ** 2
+    c = jnp.dot(z, z) - trust_radius**2
     sqrt_discriminant = jnp.sqrt(b * b - 4 * a * c)
 
     # The following calculation is mathematically

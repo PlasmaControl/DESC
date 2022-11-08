@@ -143,9 +143,9 @@ class Grid(IOAble):
         # assign weights pretending _enforce_symmetry didn't change theta spacing
         temp_spacing = np.copy(self.spacing)
         temp_spacing[:, 1] /= dtheta_scale
-        temp_spacing *= (4 * np.pi ** 2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+        temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         self._weights = temp_spacing.prod(axis=1)
-        self._spacing *= (4 * np.pi ** 2 / self.spacing.prod(axis=1).sum()) ** (1 / 3)
+        self._spacing *= (4 * np.pi**2 / self.spacing.prod(axis=1).sum()) ** (1 / 3)
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.
@@ -769,7 +769,7 @@ class ConcentricGrid(Grid):
             # https://doi.org/10.1016/j.amc.2015.11.006.
             j = np.arange(1, L // 2 + 2)
             z = np.cos((2 * j - 1) * np.pi / (2 * L + 2))
-            rj = 1.1565 * z - 0.76535 * z ** 2 + 0.60517 * z ** 3
+            rj = 1.1565 * z - 0.76535 * z**2 + 0.60517 * z**3
             return np.sort(rj)
 
         pattern = {

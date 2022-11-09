@@ -6,6 +6,7 @@ import logging
 import numpy as np
 from termcolor import colored
 
+from utils import redirect_stdout
 from io import StringIO
 from termcolor import colored
 from desc.backend import jnp

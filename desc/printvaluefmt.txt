@@ -1,0 +1,27 @@
+objectives/_equilibrium.py:        self._print_value_fmt = "Total force: {:10.3e} " + units
+objectives/_equilibrium.py:        self._print_value_fmt = "Radial force: {:10.3e} " + units
+objectives/_equilibrium.py:        self._print_value_fmt = "Helical force: {:10.3e}, " + units
+objectives/_equilibrium.py:        self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
+objectives/_equilibrium.py:        self._print_value_fmt = "Total current density: {:10.3e} " + units
+objectives/_generic.py:        self._print_value_fmt = (
+objectives/_generic.py:        self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
+objectives/_geometry.py:        self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
+objectives/_geometry.py:        self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+objectives/_qs.py:        self._print_value_fmt = (
+objectives/_qs.py:        if hasattr(self, "_print_value_fmt"):
+objectives/_qs.py:            self._print_value_fmt = (
+objectives/_qs.py:        self._print_value_fmt = (
+objectives/_qs.py:        if hasattr(self, "_print_value_fmt"):
+objectives/_qs.py:            self._print_value_fmt = (
+objectives/_qs.py:        self._print_value_fmt = "Quasi-symmetry error: {:10.3e} " + units
+objectives/_stability.py:        self._print_value_fmt = "Mercier Stability: {:10.3e}"
+objectives/_stability.py:        self._print_value_fmt = "Magnetic Well: {:10.3e}"
+objectives/linear_objectives.py:        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
+objectives/linear_objectives.py:        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
+objectives/linear_objectives.py:        self._print_value_fmt = "lambda gauge error: {:10.3e} (m)"
+objectives/linear_objectives.py:        self._print_value_fmt = None
+objectives/linear_objectives.py:        self._print_value_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
+objectives/linear_objectives.py:        self._print_value_fmt = "Fixed-iota profile error: {:10.3e}"
+objectives/linear_objectives.py:        self._print_value_fmt = "Fixed-current profile error: {:10.3e}"
+objectives/linear_objectives.py:        self._print_value_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
+objectives/objective_funs.py:        print(self._print_value_fmt.format(jnp.linalg.norm(x)))

@@ -1,0 +1,38 @@
+__init__.py:import logging
+__init__.py:from logging.handlers import RotatingFileHandler
+__init__.py:#Automatic behavior is to give the logging module a NullHandler such that no output is generated without user intending it.
+__init__.py:logging.getLogger().addHandler(logging.NullHandler())
+__init__.py:def set_console_logging(console_log_output = "stdout", console_log_level = "INFO"):
+__init__.py:    be a replacement for setting up logging when using DESC in the context of a
+__init__.py:    logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
+__init__.py:        output logging to console with either "stdout" or "stderr"
+__init__.py:        level of logging to console; "DEBUG", "INFO", WARNING", "ERROR" or 
+__init__.py:        Returns True if logging setup successfully
+__init__.py:    logger = logging.getLogger(__name__)
+__init__.py:    logger.setLevel(logging.DEBUG)
+__init__.py:        console_handler = logging.StreamHandler(sys.stdout)
+__init__.py:        console_handler = logging.StreamHandler(sys.stderr)
+__init__.py:    console_formatter = logging.Formatter("%(name)s :: %(asctime)s :: %(message)s", "%Y-%m-%d %H:%M:%S")
+__init__.py:def set_logfile_logging(logfile_file = "desc.log", logfile_level = "DEBUG"):
+__init__.py:    be a replacement for setting up logging when using DESC in the context of a
+__init__.py:    logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
+__init__.py:        level of logging to logfile; "DEBUG", "INFO", WARNING", "ERROR" or 
+__init__.py:        Returns True if logging setup successfully
+__init__.py:    logger = logging.getLogger(__name__)
+__init__.py:    logger.setLevel(logging.DEBUG)
+__init__.py:    logfile_formatter = logging.Formatter("%(name)s :: %(asctime)s :: %(levelname)s :: %(message)s")
+__main__.py:import logging
+__main__.py:    logging.WARNING("Reading input from {}".format(ir.input_path))
+__main__.py:    logging.WARNING("Outputs will be written to {}".format(ir.output_path))
+__main__.py:        logging.WARNING("Initial guess from {}".format(ir.args.guess))
+__main__.py:            logging.WARNING("Plotting solution at step {}".format(i + 1))
+__main__.py:        logging.WARNING("Plotting final solution")
+io/input_reader.py:from desc import set_logfile_logging
+io/input_reader.py:from desc import set_console_logging
+io/input_reader.py:            set_console_logging("stdout", "WARNING")
+io/input_reader.py:            set_console_logging("stdout", "INFO")
+io/input_reader.py:            set_console_logging("stdout", "DEBUG")
+io/input_reader.py:        if self.args.logging == 1:
+io/input_reader.py:            set_logfile_logging("desc.log", "WARNING")
+io/input_reader.py:            set_logfile_logging("desc.log", "INFO")
+io/input_reader.py:            set_logfile_logging("desc.log", "DEBUG")

@@ -1,0 +1,41 @@
+__main__.py:    if ir.args.verbose:
+__main__.py:        verbose=ir.args.verbose, checkpoint_path=ir.output_path
+_version.py:    cfg.verbose = False
+_version.py:def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=None):
+_version.py:            if verbose:
+_version.py:        if verbose:
+_version.py:        if verbose:
+_version.py:def versions_from_parentdir(parentdir_prefix, root, verbose):
+_version.py:    if verbose:
+_version.py:def git_versions_from_keywords(keywords, tag_prefix, verbose):
+_version.py:        if verbose:
+_version.py:        if verbose:
+_version.py:    if verbose:
+_version.py:            if verbose:
+_version.py:    if verbose:
+_version.py:def git_pieces_from_vcs(tag_prefix, root, verbose, run_command=run_command):
+_version.py:        if verbose:
+_version.py:            if verbose:
+_version.py:    verbose = cfg.verbose
+_version.py:        return git_versions_from_keywords(get_keywords(), cfg.tag_prefix, verbose)
+_version.py:        pieces = git_pieces_from_vcs(cfg.tag_prefix, root, verbose)
+_version.py:            return versions_from_parentdir(cfg.parentdir_prefix, root, verbose)
+io/input_reader.py:            args.verbose = 0
+io/input_reader.py:        if self.args.verbose == 1:
+io/input_reader.py:        if self.args.verbose == 2:
+io/input_reader.py:        if self.args.verbose == 3:
+io/input_reader.py:        if self.args.verbose == 2:
+io/input_reader.py:        if self.args.verbose == 3:
+io/input_reader.py:            inputs["verbose"] = 0
+io/input_reader.py:            inputs["verbose"] = self.args.verbose
+io/input_reader.py:            inputs["verbose"] = 1
+io/input_reader.py:        "--verbose",
+objectives/_wrappers.py:    # TODO: add timing and verbose statements
+optimize/optimizer.py:        # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
+optimize/optimizer.py:        disp = verbose - 1 if verbose > 1 else verbose
+optimize/optimizer.py:            perturb_options.setdefault("verbose", 0)
+optimize/optimizer.py:            solve_options.setdefault("verbose", 0)
+optimize/optimizer.py:                verbose=disp, #fixme
+optimize/optimizer.py:                verbose=disp,
+optimize/optimizer.py:                verbose=disp,
+optimize/optimizer.py:                verbose=disp,

@@ -440,28 +440,21 @@ class Optimizer(IOAble):
                 allx.append(x_reduced)
                 return jac_wrapped(x_reduced)
 
-            runner = InteractiveConsole()
-            while True:
-                out = StringIO.StringIO()
-                err = StringIO.StringIO()
-                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                    out.flush()
-                    err.flush()
-                    result = scipy.optimize.least_squares(
-                        compute_wrapped,
-                        x0=x0_reduced,
-                        args=(),
-                        jac=jac,
-                        method=self.method[len("scipy-") :],
-                        x_scale=x_scale,
-                        ftol=ftol,
-                        xtol=xtol,
-                        gtol=gtol,
-                        max_nfev=maxiter,
-                        verbose=disp, #fixme
-                    )
-                logging.INFO(out[0], err[0])
-                logging.DEBUG(out[1:], err[1:])
+            
+            result = scipy.optimize.least_squares(
+                compute_wrapped,
+                x0=x0_reduced,
+                args=(),
+                jac=jac,
+                method=self.method[len("scipy-") :],
+                x_scale=x_scale,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                max_nfev=maxiter,
+                verbose=disp, #fixme
+            )
+
             result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:

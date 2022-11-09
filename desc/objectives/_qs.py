@@ -307,7 +307,7 @@ class QuasisymmetryTwoTerm(_Objective):
         )
 
         self._print_value_fmt = (
-            "Quasi-symmetry two-term ({},{}) error: ".format(
+            "Quasi-symmetry ({},{}) two-term error: ".format(
                 self.helicity[0], self.helicity[1]
             )
             + "{:10.3e} "

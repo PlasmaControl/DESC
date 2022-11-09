@@ -15,11 +15,11 @@ def compute_scaling_factors(eq):
     scales["a"] = np.sqrt(np.abs(R10 * Z10))
     scales["V"] = 2 * np.pi * scales["R0"] * scales["a"]
     scales["A"] = np.pi * scales["a"] ** 2
-    scales["B_T"] = eq.Psi / scales["A"]
+    scales["B_T"] = abs(eq.Psi) / scales["A"]
     iota = eq.get_profile("iota")(np.linspace(0, 1, 20))
     scales["B_P"] = scales["B_T"] * np.mean(np.abs(iota))
     scales["B"] = np.sqrt(scales["B_T"] ** 2 + scales["B_P"] ** 2)
-    scales["I"] = scales["B_P"] / (2 * np.pi * mu_0)
+    scales["I"] = scales["B_P"] * 2 * np.pi / mu_0
     scales["p"] = scales["B"] ** 2 / (2 * mu_0)
     scales["W"] = scales["p"] * scales["V"]
     scales["J"] = scales["B"] / scales["a"] / mu_0

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import put
+from desc.backend import jnp, put
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
@@ -665,8 +665,6 @@ class QuasiIsodynamic(_Objective):
         i_l,
         c_l,
         Psi,
-        Bmin,
-        Bmax,
         shape_i,
         shift_mn,
         **kwargs,
@@ -687,10 +685,6 @@ class QuasiIsodynamic(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
-        Bmin : float
-            Minimum value of magnetic field strength, |B| (T).
-        Bmax : float
-            Maximum value of magnetic field strength, |B| (T).
         shape_i : ndarray
             Magnetic well shaping parameters.
             Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
@@ -719,6 +713,8 @@ class QuasiIsodynamic(_Objective):
             self._iota,
             self._current,
         )
+        Bmin = jnp.min(data_boozer["|B|"])
+        Bmax = jnp.max(data_boozer["|B|"])
         data_qi = compute_quasiisodynamic_field(
             Bmin, Bmax, shape_i, shift_mn, self._zeta_transform
         )

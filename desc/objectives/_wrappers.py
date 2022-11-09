@@ -93,7 +93,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if isinstance(self._eq_objective.objectives[0], CurrentDensity):
             self._args.remove("p_l")
         if isinstance(self._objective.objectives[0], QuasiIsodynamic):  # FIXME: hacky
-            self._args.extend(["Bmin", "Bmax", "shape_i", "shift_mn"])
+            self._args.extend(["shape_i", "shift_mn"])
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}
@@ -138,7 +138,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 for key in x_dict
             }
             # update equilibrium with new QI parameters
-            for arg in ["Bmin", "Bmax", "shape_i", "shift_mn"]:
+            for arg in ["shape_i", "shift_mn"]:
                 dx = deltas.pop("d" + str(arg).split("_")[0])
                 setattr(self._eq, arg, getattr(self._eq, arg) + dx)
             self._eq = self._eq.perturb(
@@ -219,8 +219,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                     "i_l",
                     "c_l",
                     "Psi",
-                    "Bmin",
-                    "Bmax",
                     "shape_i",
                     "shift_mn",
                 ]
@@ -249,8 +247,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                     "i_l",
                     "c_l",
                     "Psi",
-                    "Bmin",
-                    "Bmax",
                     "shape_i",
                     "shift_mn",
                 ]

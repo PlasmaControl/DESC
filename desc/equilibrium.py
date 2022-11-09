@@ -224,10 +224,10 @@ class Equilibrium(_Configuration, IOAble):
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
-        logging.DEBUG("Spectral indexing: {}".format(self.spectral_indexing))
-        logging.DEBUG("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        logging.DEBUG("Node pattern: {}".format(self.node_pattern))
-        logging.DEBUG(
+        logging.debug("Spectral indexing: {}".format(self.spectral_indexing))
+        logging.debug("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        logging.debug("Node pattern: {}".format(self.node_pattern))
+        logging.debug(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
             )
@@ -486,7 +486,7 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        logging.WARNING("Start of solver")
+        logging.warning("Start of solver")
         objective.print_value(objective.x(eq))
 
         for key, value in result["history"].items():
@@ -494,7 +494,7 @@ class Equilibrium(_Configuration, IOAble):
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
 
-        logging.WARNING("End of solver")
+        logging.warning("End of solver")
         objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
@@ -581,7 +581,7 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        logging.WARNING("Start of solver")
+        logging.warning("Start of solver")
         objective.print_value(objective.x(eq))
 
         for key, value in result["history"].items():
@@ -589,7 +589,7 @@ class Equilibrium(_Configuration, IOAble):
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
 
-        logging.WARNING("End of solver")
+        logging.warning("End of solver")
         objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
@@ -666,10 +666,10 @@ class Equilibrium(_Configuration, IOAble):
         while success is None:
 
             timer.start("Step {} time".format(iteration))
-            logging.INFO("====================")
-            logging.INFO("Optimization Step {}".format(iteration))
-            logging.INFO("====================")
-            logging.INFO("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            logging.info("====================")
+            logging.info("Optimization Step {}".format(iteration))
+            logging.info("====================")
+            logging.info("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
             (
@@ -703,8 +703,8 @@ class Equilibrium(_Configuration, IOAble):
 
             timer.stop("Step {} time".format(iteration))
             objective.print_value(objective.x(eq_new))
-            logging.INFO("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-            logging.INFO("Reduction Ratio = {:+.3f}".format(ratio))
+            logging.info("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+            logging.info("Reduction Ratio = {:+.3f}".format(ratio))
             timer.disp("Step {} time".format(iteration))
 
             # stopping criteria
@@ -736,9 +736,9 @@ class Equilibrium(_Configuration, IOAble):
             iteration += 1
 
         timer.stop("Total time")
-        logging.WARNING("====================")
-        logging.WARNING("Done")
-        logging.WARNING(message)
+        logging.warning("====================")
+        logging.warning("Done")
+        logging.warning(message)
         timer.disp("Total time")
 
         if copy:
@@ -914,22 +914,22 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return deltas
 
     def _print_iteration(self, ii, equil):
-        logging.DEBUG("================")
-        logging.DEBUG("Step {}/{}".format(ii + 1, len(self.inputs)))
-        logging.DEBUG("================")
+        logging.debug("================")
+        logging.debug("Step {}/{}".format(ii + 1, len(self.inputs)))
+        logging.debug("================")
         equil.resolution_summary()
-        logging.DEBUG("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
-        logging.DEBUG("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+        logging.debug("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
+        logging.debug("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
         if "current" in self.inputs[ii]:
-            logging.DEBUG("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
-        logging.DEBUG("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-        logging.DEBUG("Objective: {}".format(self.inputs[ii]["objective"]))
-        logging.DEBUG("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
-        logging.DEBUG("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
-        logging.DEBUG("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
-        logging.DEBUG("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
-        logging.DEBUG("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
-        logging.DEBUG("================")
+            logging.debug("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
+        logging.debug("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
+        logging.debug("Objective: {}".format(self.inputs[ii]["objective"]))
+        logging.debug("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
+        logging.debug("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
+        logging.debug("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
+        logging.debug("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
+        logging.debug("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
+        logging.debug("================")
 
     def solve_continuation(  # noqa: C901 - FIXME: break this up into simpler pieces
         self, start_from=0, checkpoint_path=None
@@ -1002,7 +1002,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:
-                    logging.WARNING("Perturbing equilibrium")
+                    logging.warning("Perturbing equilibrium")
                     # TODO: pass Jx if available
                     equil.perturb(
                         objective=objective,
@@ -1022,7 +1022,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     )
                 )
                 if checkpoint_path is not None:
-                    logging.WARNING("Saving latest state")
+                    logging.warning("Saving latest state")
                     self.save(checkpoint_path)
                 break
 
@@ -1037,7 +1037,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             )
 
             if checkpoint_path is not None:
-                logging.WARNING("Saving latest iteration")
+                logging.warning("Saving latest iteration")
                 self.save(checkpoint_path)
             timer.stop("Iteration {} total".format(ii + 1))
             timer.disp("Iteration {} total".format(ii + 1))
@@ -1054,12 +1054,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 break
 
         timer.stop("Total time")
-        logging.WARNING("====================")
-        logging.WARNING("Done")
+        logging.warning("====================")
+        logging.warning("Done")
         timer.disp("Total time")
         if checkpoint_path is not None:
-            logging.WARNING("Output written to {}".format(checkpoint_path))
-        logging.WARNING("====================")
+            logging.warning("Output written to {}".format(checkpoint_path))
+        logging.warning("====================")
 
     @property
     def equilibria(self):

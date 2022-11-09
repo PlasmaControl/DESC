@@ -28,14 +28,14 @@ def main(cl_args=sys.argv[1:]):
     from desc.plotting import plot_section, plot_surfaces
 
 
-    logging.WARNING("Reading input from {}".format(ir.input_path))
-    logging.WARNING("Outputs will be written to {}".format(ir.output_path))
+    logging.warning("Reading input from {}".format(ir.input_path))
+    logging.warning("Outputs will be written to {}".format(ir.output_path))
 
     # initialize
     equil_fam = EquilibriaFamily(ir.inputs)
     # check vmec path input
     if ir.args.guess is not None:
-        logging.WARNING("Initial guess from {}".format(ir.args.guess))
+        logging.warning("Initial guess from {}".format(ir.args.guess))
         equil_fam[0].set_initial_guess(ir.args.guess)
     # solve equilibrium
     equil_fam.solve_continuation(
@@ -44,13 +44,13 @@ def main(cl_args=sys.argv[1:]):
 
     if ir.args.plot > 1:
         for i, eq in enumerate(equil_fam[:-1]):
-            logging.WARNING("Plotting solution at step {}".format(i + 1))
+            logging.warning("Plotting solution at step {}".format(i + 1))
             _ = plot_surfaces(eq)
             plt.show()
             _ = plot_section(eq, "|F|", log=True, norm_F=True)
             plt.show()
     if ir.args.plot > 0:
-        logging.WARNING("Plotting final solution")
+        logging.warning("Plotting final solution")
         _ = plot_surfaces(equil_fam[-1])
         plt.show()
         _ = plot_section(equil_fam[-1], "|F|", log=True, norm_F=True)

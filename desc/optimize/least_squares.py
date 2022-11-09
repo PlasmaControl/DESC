@@ -346,13 +346,13 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         message=message,
     )
     if result["success"]:
-        logging.ERROR(result["message"])
+        logging.error(result["message"])
     else:
-        logging.ERROR("Warning: " + result["message"])
-    logging.WARNING("         Current function value: {:.3e}".format(result["cost"]))
-    logging.WARNING("         Iterations: {:d}".format(result["nit"]))
-    logging.WARNING("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.WARNING("         Jacobian evaluations: {:d}".format(result["njev"]))
+        logging.error("Warning: " + result["message"])
+    logging.warning("         Current function value: {:.3e}".format(result["cost"]))
+    logging.warning("         Iterations: {:d}".format(result["nit"]))
+    logging.warning("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.warning("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:
         result["allx"] = allx

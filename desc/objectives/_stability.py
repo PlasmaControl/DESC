@@ -73,7 +73,7 @@ class MercierStability(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        logging.WARNING("Precomputing transforms")
+        logging.warning("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -216,7 +216,7 @@ class MagneticWell(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        logging.WARNING("Precomputing transforms")
+        logging.warning("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()

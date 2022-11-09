@@ -3,6 +3,7 @@
 import numpy as np
 import logging
 import contextlib
+import sys
 
 from io import StringIO
 from desc.backend import cond, fori_loop, jit, jnp, put
@@ -172,7 +173,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
 
 def print_header_nonlinear():
     """Print a pretty header."""
-    logging.INFO(
+    logging.info(
         "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
             "Iteration",
             "Total nfev",
@@ -183,10 +184,14 @@ def print_header_nonlinear():
         )
     )
 
-@contextmanager
-def redirect_outputs_to_logger():
-    """Captures stdout and stderr function outputs and redirects to logger."""
-
+@contextlib.contextmanager
+def redirect_stdout(io_stream):
+    try:
+        _stdout = sys.stdout
+        sys.stdout = io_stream
+        yield
+    finally:
+        sys.stdout = _stdout
 
 
 
@@ -224,7 +229,7 @@ def print_iteration_nonlinear(
     else:
         optimality = "{0:^15.2e}".format(optimality)
 
-    logging.DEBUG(
+    logging.debug(
         "{0}{1}{2}{3}{4}{5}".format(
             iteration, nfev, cost, cost_reduction, step_norm, optimality
         )

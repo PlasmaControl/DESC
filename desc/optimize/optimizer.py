@@ -7,7 +7,7 @@ import numpy as np
 import scipy.optimize
 import contextlib
 
-from utils import redirect_stdout
+from desc.optimize.utils import redirect_stdout
 from io import StringIO
 from termcolor import colored
 from desc.backend import jnp
@@ -302,7 +302,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        logging.WARNING("Factorizing linear constraints")
+        logging.warning("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             linear_constraints, objective.args
@@ -312,10 +312,10 @@ class Optimizer(IOAble):
 
         x0_reduced = project(objective.x(eq))
 
-        logging.WARNING("Number of parameters: {}".format(x0_reduced.size))
-        logging.WARNING("Number of objectives: {}".format(objective.dim_f))
+        logging.warning("Number of parameters: {}".format(x0_reduced.size))
+        logging.warning("Number of objectives: {}".format(objective.dim_f))
 
-        logging.WARNING("Starting optimization")
+        logging.warning("Starting optimization")
         timer.start("Solution time")
 
         def compute_wrapped(x_reduced):
@@ -415,7 +415,7 @@ class Optimizer(IOAble):
                         callback=callback,
                         options={"maxiter": maxiter, "disp": 2, **options},
                     )
-                logging.DEBUG(minimize_messages.getvalue)
+                logging.debug(minimize_messages.getvalue)
                 result["allx"] = allx
             except StopIteration:
                 result = {
@@ -426,11 +426,11 @@ class Optimizer(IOAble):
                     "nit": len(allx),
                     "success": True,
                 }
-                logging.INFO(msg[0])
-                logging.INFO(
+                logging.info(msg[0])
+                logging.info(
                     "         Current function value: {:.3e}".format(result["fun"])
                 )
-                logging.INFO("         Iterations: {:d}".format(result["nit"]))
+                logging.info("         Iterations: {:d}".format(result["nit"]))
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
@@ -457,7 +457,7 @@ class Optimizer(IOAble):
                     max_nfev=maxiter,
                     verbose=2,
                 )
-            logging.DEBUG(lsq_messages.getvalue)
+            logging.debug(lsq_messages.getvalue)
 
             result["allx"] = allx
 

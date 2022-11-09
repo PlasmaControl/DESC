@@ -7,6 +7,7 @@ import numpy as np
 import scipy.optimize
 import contextlib
 
+from utils import redirect_stdout
 from io import StringIO
 from termcolor import colored
 from desc.backend import jnp
@@ -223,8 +224,6 @@ class Optimizer(IOAble):
         """
         # TODO: document options
         timer = Timer()
-        # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
-        disp = verbose - 1 if verbose > 1 else verbose
         ftol, xtol, gtol = self._get_default_tols(ftol, xtol, gtol)
 
         if (
@@ -276,9 +275,7 @@ class Optimizer(IOAble):
                         )
                     )
             perturb_options = options.pop("perturb_options", {})
-            perturb_options.setdefault("verbose", 0)
             solve_options = options.pop("solve_options", {})
-            solve_options.setdefault("verbose", 0)
             objective = WrappedEquilibriumObjective(
                 objective,
                 eq_objective=ObjectiveFunction(nonlinear_constraints),
@@ -404,17 +401,21 @@ class Optimizer(IOAble):
 
             print_header_nonlinear()
             try:
-                result = scipy.optimize.minimize(
-                    compute_scalar_wrapped,
-                    x0=x0_reduced,
-                    args=(),
-                    method=self.method[len("scipy-") :],
-                    jac=grad_wrapped,
-                    hess=hess_wrapped,
-                    tol=gtol,
-                    callback=callback,
-                    options={"maxiter": maxiter, "disp": disp, **options},
-                )
+                #Sends stdout output of scipy method to logger
+                minimize_messages = StringIO
+                with redirect_stdout(minimize_messages):
+                    result = scipy.optimize.minimize(
+                        compute_scalar_wrapped,
+                        x0=x0_reduced,
+                        args=(),
+                        method=self.method[len("scipy-") :],
+                        jac=grad_wrapped,
+                        hess=hess_wrapped,
+                        tol=gtol,
+                        callback=callback,
+                        options={"maxiter": maxiter, "disp": 2, **options},
+                    )
+                logging.DEBUG(minimize_messages.getvalue)
                 result["allx"] = allx
             except StopIteration:
                 result = {
@@ -440,20 +441,23 @@ class Optimizer(IOAble):
                 allx.append(x_reduced)
                 return jac_wrapped(x_reduced)
 
-            
-            result = scipy.optimize.least_squares(
-                compute_wrapped,
-                x0=x0_reduced,
-                args=(),
-                jac=jac,
-                method=self.method[len("scipy-") :],
-                x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
-                max_nfev=maxiter,
-                verbose=disp, #fixme
-            )
+            #Sends stdout output of scipy method to logger
+            lsq_messages = StringIO
+            with redirect_stdout(lsq_messages):
+                result = scipy.optimize.least_squares(
+                    compute_wrapped,
+                    x0=x0_reduced,
+                    args=(),
+                    jac=jac,
+                    method=self.method[len("scipy-") :],
+                    x_scale=x_scale,
+                    ftol=ftol,
+                    xtol=xtol,
+                    gtol=gtol,
+                    max_nfev=maxiter,
+                    verbose=2,
+                )
+            logging.DEBUG(lsq_messages.getvalue)
 
             result["allx"] = allx
 
@@ -476,7 +480,6 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=disp,
                 maxiter=maxiter,
                 callback=None,
                 options=options,
@@ -493,7 +496,6 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=disp,
                 maxiter=maxiter,
                 callback=None,
                 options=options,
@@ -510,7 +512,6 @@ class Optimizer(IOAble):
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
-                verbose=disp,
                 maxiter=maxiter,
                 callback=None,
                 options=options,

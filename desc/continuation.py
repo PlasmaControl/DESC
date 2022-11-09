@@ -160,7 +160,8 @@ def solve_continuation_automatic(  # noqa: C901
             deltas = get_deltas(
                 {"pressure": eqfam[mres_steps - 1].pressure}, {"pressure": pressure}
             )
-            deltas["dp"] *= pres_step
+            if "dp" in deltas:
+                deltas["dp"] *= pres_step
             pres_ratio += pres_step
 
         elif ii >= mres_steps + pres_steps:

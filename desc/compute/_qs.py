@@ -292,11 +292,11 @@ def compute_quasiisodynamic_field(
 
     # compute well shape
     zeros = jnp.concatenate(
-        (jnp.array([0]), jnp.repeat((jnp.pi / 2 + shape_i) ** 2, 2))
+        (jnp.array([0]), -jnp.pi / 2 - shape_i, jnp.pi / 2 + shape_i)
     )
     B_i = jnp.polyint(jnp.poly(zeros))
     B0 = jnp.sum(
-        jnp.flipud(jnp.array([(jnp.pi / 2) ** (2 * i) for i in range(len(B_i))])) * B_i
+        jnp.flipud(jnp.array([(jnp.pi / 2) ** i for i in range(len(B_i))])) * B_i
     )
     B = jnp.polyval(B_i, zeta_bar)
     B = B / B0 * (Bmax - Bmin) + Bmin

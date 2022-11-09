@@ -1207,6 +1207,12 @@ class _Configuration(IOAble, ABC):
         for arg in sig.parameters.keys():
             if arg in arg_order:
                 inputs[arg] = getattr(self, arg)
+            elif arg == "Bmin":
+                data = self.compute("|B|", grid)
+                inputs[arg] = np.min(data["|B|"])
+            elif arg == "Bmax":
+                data = self.compute("|B|", grid)
+                inputs[arg] = np.max(data["|B|"])
             elif arg == "grid":
                 inputs[arg] = grid
             elif arg == "R_transform":
@@ -1239,8 +1245,10 @@ class _Configuration(IOAble, ABC):
                     derivs=1,
                 )
             elif arg == "zeta_transform":
+                zeta_grid = grid.copy()
+                zeta_grid.nodes[:, 2] = (grid.nodes[:, 2] * grid.NFP - np.pi) / 2
                 inputs[arg] = Transform(  # FIXME: M & N are hard-coded!
-                    grid, DoubleFourierSeries(M=1, N=2, sym="cos(z)", NFP=self.NFP)
+                    zeta_grid, DoubleFourierSeries(M=1, N=1, sym="cos(z)", NFP=self.NFP)
                 )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()

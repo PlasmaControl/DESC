@@ -50,7 +50,7 @@ eq = Equilibrium(
     iota=iota,
     spectral_indexing=veq.spectral_indexing,
     sym=veq.sym,
-    NFP=veq.NFP,
+    NFP=int(veq.NFP),
 )
 
 eq.change_resolution(

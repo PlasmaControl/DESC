@@ -2,6 +2,7 @@
 
 import numbers
 import warnings
+import logging
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -223,10 +224,10 @@ class Equilibrium(_Configuration, IOAble):
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
-        print("Spectral indexing: {}".format(self.spectral_indexing))
-        print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self.node_pattern))
-        print(
+        logging.DEBUG("Spectral indexing: {}".format(self.spectral_indexing))
+        logging.DEBUG("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        logging.DEBUG("Node pattern: {}".format(self.node_pattern))
+        logging.DEBUG(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
             )
@@ -392,7 +393,6 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
-        verbose=1,
         copy=False,
     ):
         """Solve to find the equilibrium configuration.
@@ -420,8 +420,6 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
-        verbose : int
-            Level of output.
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -478,22 +476,20 @@ class Equilibrium(_Configuration, IOAble):
             xtol=xtol,
             gtol=gtol,
             x_scale=x_scale,
-            verbose=verbose,
             maxiter=maxiter,
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
+        logging.WARNING("Start of solver")
+        objective.print_value(objective.x(eq))
+
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
 
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
+        logging.WARNING("End of solver")
+        objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -509,7 +505,6 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
-        verbose=1,
         copy=False,
     ):
         """Optimize an equilibrium for an objective.
@@ -537,8 +532,6 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
-        verbose : int
-            Level of output.
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -574,21 +567,20 @@ class Equilibrium(_Configuration, IOAble):
             xtol=xtol,
             gtol=gtol,
             x_scale=x_scale,
-            verbose=verbose,
             maxiter=maxiter,
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
+        logging.WARNING("Start of solver")
+        objective.print_value(objective.x(eq))
+
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
+
+        logging.WARNING("End of solver")
+        objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -600,7 +592,6 @@ class Equilibrium(_Configuration, IOAble):
         ftol=1e-6,
         xtol=1e-6,
         maxiter=50,
-        verbose=1,
         copy=False,
         solve_options={},
         perturb_options={},
@@ -619,8 +610,6 @@ class Equilibrium(_Configuration, IOAble):
             Stopping tolerance on optimization step size.
         maxiter : int
             Maximum number of optimization steps.
-        verbose : int
-            Level of output.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
         solve_options : dict
@@ -660,19 +649,17 @@ class Equilibrium(_Configuration, IOAble):
             inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
         )
 
-        if verbose > 0:
-            objective.print_value(objective.x(eq))
+        objective.print_value(objective.x(eq))
 
         iteration = 1
         success = None
         while success is None:
 
             timer.start("Step {} time".format(iteration))
-            if verbose > 0:
-                print("====================")
-                print("Optimization Step {}".format(iteration))
-                print("====================")
-                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            logging.INFO("====================")
+            logging.INFO("Optimization Step {}".format(iteration))
+            logging.INFO("====================")
+            logging.INFO("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
             (
@@ -705,12 +692,10 @@ class Equilibrium(_Configuration, IOAble):
             perturb_options["tr_ratio"] = tr_ratio
 
             timer.stop("Step {} time".format(iteration))
-            if verbose > 0:
-                objective.print_value(objective.x(eq_new))
-                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-                print("Reduction Ratio = {:+.3f}".format(ratio))
-            if verbose > 1:
-                timer.disp("Step {} time".format(iteration))
+            objective.print_value(objective.x(eq_new))
+            logging.INFO("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+            logging.INFO("Reduction Ratio = {:+.3f}".format(ratio))
+            timer.disp("Step {} time".format(iteration))
 
             # stopping criteria
             success, message = check_termination(
@@ -741,12 +726,10 @@ class Equilibrium(_Configuration, IOAble):
             iteration += 1
 
         timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 0:
-            print(message)
-        if verbose > 1:
-            timer.disp("Total time")
+        logging.WARNING("====================")
+        logging.WARNING("Done")
+        logging.WARNING(message)
+        timer.disp("Total time")
 
         if copy:
             return eq
@@ -770,7 +753,6 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
-        verbose=1,
         copy=False,
     ):
         """Perturb an equilibrium.
@@ -792,8 +774,6 @@ class Equilibrium(_Configuration, IOAble):
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
             element for the first step and so on.
-        verbose : int
-            Level of output.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
 
@@ -809,10 +789,10 @@ class Equilibrium(_Configuration, IOAble):
             constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
 
         if not objective.built:
-            objective.build(self, verbose=verbose)
+            objective.build(self)
         for constraint in constraints:
             if not constraint.built:
-                constraint.build(self, verbose=verbose)
+                constraint.build(self)
 
         eq = perturb(
             self,
@@ -829,7 +809,6 @@ class Equilibrium(_Configuration, IOAble):
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
-            verbose=verbose,
             copy=copy,
         )
         eq.solved = False

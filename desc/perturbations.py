@@ -1,6 +1,7 @@
 """Functions for perturbing equilibria."""
 
 import warnings
+import logging
 
 import numpy as np
 from termcolor import colored
@@ -88,7 +89,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     order=2,
     tr_ratio=0.1,
     weight="auto",
-    verbose=1,
     copy=True,
 ):
     """Perturb an Equilibrium with respect to input parameters.
@@ -115,8 +115,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     weight : ndarray, "auto", or None, optional
         1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
         matrices. Default is to weight by (mode number)**2. None applies no weighting.
-    verbose : int
-        Level of output.
     copy : bool
         Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 
@@ -144,10 +142,10 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         )
 
     if not objective.built:
-        objective.build(eq, verbose=verbose)
+        objective.build(eq)
     for constraint in constraints:
         if not constraint.built:
-            constraint.build(eq, verbose=verbose)
+            constraint.build(eq)
 
     if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
@@ -174,21 +172,18 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if dZb is not None and np.any(dZb):
         deltas["Zb_lmn"] = dZb
 
-    if verbose > 0:
-        print("Perturbing {}".format(", ".join(deltas.keys())))
+    logging.WARNING("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
 
-    if verbose > 0:
-        print("Factorizing linear constraints")
+    logging.WARNING("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.args
     )
     timer.stop("linear constraint factorize")
-    if verbose > 1:
-        timer.disp("linear constraint factorize")
+    timer.disp("linear constraint factorize")
 
     # state vector
     x = objective.x(eq)
@@ -254,23 +249,19 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         f = objective.compute(x)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing df")
+        logging.WARNING("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
         RHS1 = f + objective.jvp(tangents, x)
         timer.stop("df computation")
-        if verbose > 1:
-            timer.disp("df computation")
+        timer.disp("df computation")
 
-        if verbose > 0:
-            print("Factoring df")
+        logging.WARNING("Factoring df")
         timer.start("df/dx factorization")
         u, s, vt = np.linalg.svd(Jx_reduced, full_matrices=False)
         timer.stop("df/dx factorization")
-        if verbose > 1:
-            timer.disp("df/dx factorization")
+        timer.disp("df/dx factorization")
 
         dx1_h, hit, alpha = trust_region_step_exact_svd(
             RHS1,
@@ -290,14 +281,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 1:
 
         # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing d^2f")
+        logging.WARNING("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
         RHS2 = 0.5 * objective.jvp((tangents, tangents), x)
         timer.stop("d^2f computation")
-        if verbose > 1:
-            timer.disp("d^2f computation")
+        timer.disp("d^2f computation")
 
         dx2_h, hit, alpha = trust_region_step_exact_svd(
             RHS2,
@@ -317,14 +306,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 2:
 
         # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
-        if verbose > 0:
-            print("Computing d^3f")
+        logging.WARNING("Computing d^3f")
         timer.start("d^3f computation")
         RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
         RHS3 += objective.jvp((dx2, tangents), x)
         timer.stop("d^3f computation")
-        if verbose > 1:
-            timer.disp("d^3f computation")
+        imer.disp("d^3f computation")
 
         dx3_h, hit, alpha = trust_region_step_exact_svd(
             RHS3,
@@ -372,10 +359,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
-    if verbose > 0:
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
-    if verbose > 1:
-        timer.disp("Total perturbation")
+    logging.WARNING("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+    timer.disp("Total perturbation")
 
     return eq_new
 
@@ -455,9 +440,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         )
 
     if not objective_f.built:
-        objective_f.build(eq, verbose=verbose)
+        objective_f.build(eq)
     if not objective_g.built:
-        objective_g.build(eq, verbose=verbose)
+        objective_g.build(eq)
 
     deltas = {}
     if type(dR) is bool or dR is None:
@@ -502,8 +487,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
-    if verbose > 0:
-        print("Perturbing {}".format(", ".join(deltas.keys())))
+    logging.WARNING("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
@@ -525,15 +509,14 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-    if verbose > 0:
-        print("Number of parameters: {}".format(dim_opt))
-        print("Number of objectives: {}".format(objective_g.dim_f))
+    logging.WARNING("Number of parameters: {}".format(dim_opt))
+    logging.WARNING("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
     for constraint in constraints:
         if not constraint.built:
-            constraint.build(eq, verbose=verbose)
+            constraint.build(eq)
     (
         xp,
         A,
@@ -589,8 +572,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         g = objective_g.compute(xg)
 
         # 1st partial derivatives of f objective wrt both x and c
-        if verbose > 0:
-            print("Computing df")
+        logging.WARNING("Computing df")
         timer.start("df computation")
         Fx = objective_f.jac(xf)
         Fx = align_jacobian(Fx, objective_f, objective_g)
@@ -600,20 +582,17 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
         Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
         timer.stop("df computation")
-        if verbose > 1:
-            timer.disp("df computation")
+        timer.disp("df computation")
 
         # 1st partial derivatives of g objective wrt both x and c
-        if verbose > 0:
-            print("Computing dg")
+        logging.WARNING("Computing dg")
         timer.start("dg computation")
         Gx = objective_g.jac(xg)
         Gx = align_jacobian(Gx, objective_g, objective_f)
         Gx_reduced = Gx[:, unfixed_idx] @ Z
         Gc = Gx @ dxdc
         timer.stop("dg computation")
-        if verbose > 1:
-            timer.disp("dg computation")
+        timer.disp("dg computation")
 
         GxFx = Gx_reduced @ Fx_reduced_inv
         LHS = GxFx @ Fc - Gc
@@ -622,13 +601,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         # restrict to optimization subspace
         LHS_opt = LHS @ subspace
 
-        if verbose > 0:
-            print("Factoring LHS")
+        logging.WARNING("Factoring LHS")
         timer.start("LHS factorization")
         ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
         timer.stop("LHS factorization")
-        if verbose > 1:
-            timer.disp("LHS factorization")
+        timer.disp("LHS factorization")
 
         dc1_opt, bound_hit, alpha = trust_region_step_exact_svd(
             -RHS_1g,
@@ -668,24 +645,20 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dxf_dxg = np.delete(np.eye(objective_f.dim_x), idx, 1)
 
         # 2nd partial derivatives of f objective wrt both x and c
-        if verbose > 0:
-            print("Computing d^2f")
+        logging.WARNING("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
         RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), xf)
         timer.stop("d^2f computation")
-        if verbose > 1:
-            timer.disp("d^2f computation")
+        timer.disp("d^2f computation")
 
         # 2nd partial derivatives of g objective wrt both x and c
-        if verbose > 0:
-            print("Computing d^2g")
+        logging.WARNING("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
         RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
         timer.stop("d^2g computation")
-        if verbose > 1:
-            timer.disp("d^2g computation")
+        timer.disp("d^2g computation")
 
         dc2_opt, _, _ = trust_region_step_exact_svd(
             -RHS_2g,
@@ -754,10 +727,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
-    if verbose > 0:
-        print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
-    if verbose > 1:
-        timer.disp("Total perturbation")
+    logging.WARNING("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
+    logging.WARNING("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+    timer.disp("Total perturbation")
 
     return eq_new, predicted_reduction, dc_opt, dc, c_norm, bound_hit

@@ -85,7 +85,7 @@ class FixBoundaryR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -94,8 +94,6 @@ class FixBoundaryR(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self._modes is False or self._modes is None:  # no modes
@@ -233,7 +231,7 @@ class FixBoundaryZ(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -242,8 +240,6 @@ class FixBoundaryZ(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self._modes is False or self._modes is None:  # no modes
@@ -366,7 +362,7 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -375,8 +371,6 @@ class FixLambdaGauge(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         L_basis = eq.L_basis
@@ -531,7 +525,7 @@ class _FixProfile(_Objective, ABC):
         )
         self._print_value_fmt = None
 
-    def build(self, eq, profile=None, use_jit=True, verbose=1):
+    def build(self, eq, profile=None, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -542,8 +536,6 @@ class _FixProfile(_Objective, ABC):
             profile to fix
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
@@ -636,7 +628,7 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -645,8 +637,6 @@ class FixPressure(_FixProfile):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         profile = eq.pressure
@@ -741,7 +731,7 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -750,8 +740,6 @@ class FixIota(_FixProfile):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if eq.iota is None:
@@ -760,7 +748,7 @@ class FixIota(_FixProfile):
                 + "rotational transform profile assigned"
             )
         profile = eq.iota
-        super().build(eq, profile, use_jit, verbose)
+        super().build(eq, profile, use_jit)
 
     def compute(self, i_l, **kwargs):
         """Compute fixed iota errors.
@@ -846,7 +834,7 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -855,9 +843,6 @@ class FixCurrent(_FixProfile):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
         """
         if eq.current is None:
             raise RuntimeError(
@@ -940,7 +925,7 @@ class FixPsi(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -949,8 +934,6 @@ class FixPsi(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         self._dim_f = 1

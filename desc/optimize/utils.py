@@ -1,7 +1,10 @@
 """Utility functions used in optimization problems."""
 
 import numpy as np
+import logging
+import contextlib
 
+from io import StringIO
 from desc.backend import cond, fori_loop, jit, jnp, put
 
 
@@ -179,6 +182,12 @@ def print_header_nonlinear():
             "Optimality",
         )
     )
+
+@contextmanager
+def redirect_outputs_to_logger():
+    """Captures stdout and stderr function outputs and redirects to logger."""
+
+
 
 
 def print_iteration_nonlinear(

@@ -1,10 +1,13 @@
 """Class for wrapping a number of common optimization methods."""
 
 import warnings
+import logging
 
 import numpy as np
 from termcolor import colored
 
+from io import StringIO
+from termcolor import colored
 from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
@@ -152,7 +155,6 @@ class Optimizer(IOAble):
         xtol=None,
         gtol=None,
         x_scale="auto",
-        verbose=1,
         maxiter=None,
         options={},
     ):
@@ -234,13 +236,13 @@ class Optimizer(IOAble):
             )
 
         if not objective.built:
-            objective.build(eq, verbose=verbose)
+            objective.build(eq)
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            objective.compile(mode, verbose)
+            objective.compile(mode)
         for constraint in linear_constraints:
             if not constraint.built:
-                constraint.build(eq, verbose=verbose)
+                constraint.build(eq)
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
             warnings.warn(
@@ -252,8 +254,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        if verbose > 0:
-            print("Factorizing linear constraints")
+        logging.WARNING("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         (
             compute_wrapped,
@@ -265,8 +266,7 @@ class Optimizer(IOAble):
             recover,
         ) = _wrap_objective_with_constraints(objective, linear_constraints, self.method)
         timer.stop("linear constraint factorize")
-        if verbose > 1:
-            timer.disp("linear constraint factorize")
+        timer.disp("linear constraint factorize")
 
         x0_reduced = project(objective.x(eq))
 
@@ -283,8 +283,7 @@ class Optimizer(IOAble):
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))
 
-        if verbose > 0:
-            print("Starting optimization")
+        logging.WARNING("Starting optimization")
         timer.start("Solution time")
 
         if self.method in Optimizer._scipy_scalar_methods:
@@ -409,13 +408,11 @@ class Optimizer(IOAble):
                     result["history"][arg].append(kwargs[arg])
 
         timer.stop("Solution time")
-
-        if verbose > 1:
-            timer.disp("Solution time")
-            timer.pretty_print(
-                "Avg time per step",
-                timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
-            )
+        timer.disp("Solution time")
+        timer.pretty_print(
+            "Avg time per step",
+            timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
+        )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 

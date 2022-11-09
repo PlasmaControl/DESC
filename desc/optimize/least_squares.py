@@ -1,6 +1,7 @@
 """Function for solving nonlinear least squares problems."""
 
 import numpy as np
+import logging
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
@@ -30,7 +31,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
-    verbose=1,
     maxiter=None,
     tr_method="svd",
     callback=None,
@@ -72,10 +72,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
         Optimizer teriminates when ``norm(g) < gtol``, where
         If None, the termination by this condition is disabled.
-    verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
-        * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
     tr_method : {'cho', 'svd'}
@@ -190,8 +186,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     actual_reduction = np.inf
     reduction_ratio = 0
 
-    if verbose > 1:
-        print_header_nonlinear()
+    print_header_nonlinear()
 
     if return_all:
         allx = [x]
@@ -206,10 +201,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         if g_norm < gtol:
             success = True
             message = STATUS_MESSAGES["gtol"]
-        if verbose > 1:
-            print_iteration_nonlinear(
-                iteration, nfev, cost, actual_reduction, step_norm, g_norm
-            )
+        print_iteration_nonlinear(
+            iteration, nfev, cost, actual_reduction, step_norm, g_norm
+        )
         if success is not None:
             break
 

@@ -1,6 +1,7 @@
 """Function for minimizing a scalar function of multiple variables."""
 
 import numpy as np
+import logging
 from scipy.optimize import OptimizeResult
 
 from .utils import (
@@ -20,7 +21,6 @@ def sgd(
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
-    verbose=1,
     maxiter=None,
     callback=None,
     options={},
@@ -60,10 +60,6 @@ def sgd(
         Absolute tolerance for termination by the norm of the gradient. Default is 1e-6.
         Optimizer teriminates when ``norm(g) < gtol``, where
         If None, the termination by this condition is disabled.
-    verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
-        * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
     callback : callable, optional
@@ -116,8 +112,7 @@ def sgd(
     step_norm = np.inf
     df_norm = np.inf
 
-    if verbose > 1:
-        print_header_nonlinear()
+    print_header_nonlinear()
 
     if return_all:
         allx = [x]
@@ -158,8 +153,7 @@ def sgd(
 
         if return_all:
             allx.append(x)
-        if verbose > 1:
-            print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
+        print_iteration_nonlinear(iteration, nfev, f, df, step_norm, g_norm)
 
         if callback is not None:
             stop = callback(np.copy(x), *args)
@@ -180,15 +174,14 @@ def sgd(
         nit=iteration,
         message=message,
     )
-    if verbose > 0:
-        if result["success"]:
-            print(result["message"])
-        else:
-            print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Gradient evaluations: {:d}".format(result["ngev"]))
+    if result["success"]:
+        logging.ERROR(result["message"])
+    else:
+        logging.ERROR("Warning: " + result["message"])
+    logging.WARNING("         Current function value: {:.3e}".format(result["fun"]))
+    logging.WARNING("         Iterations: {:d}".format(result["nit"]))
+    logging.WARNING("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.WARNING("         Gradient evaluations: {:d}".format(result["ngev"]))
     if return_all:
         result["allx"] = allx
     return result

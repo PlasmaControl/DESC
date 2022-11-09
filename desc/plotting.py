@@ -3,6 +3,7 @@
 import numbers
 import tkinter
 import warnings
+import logging
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -3231,7 +3232,7 @@ def plot_field_lines_sfl(
     theta_coords = (
         []
     )  # list of nodes in (rho,theta,phi) corresponding to each (rho,vartheta,phi)
-    print(
+    logging.WARNING(
         (
             "Calculating field line (rho,theta,zeta) coordinates corresponding "
             + "to sfl coordinates",
@@ -3411,7 +3412,7 @@ def plot_field_lines_real_space(
     Bphi = magnetic_field["B_phi"]
 
     if B_interp is None:  # must fit RBfs to interpolate B field in R,phi,Z
-        print("Fitting magnetic field with radial basis functions in R,phi,Z")
+        logging.WARNING("Fitting magnetic field with radial basis functions in R,phi,Z")
         BRi = Rbf(Rs, Zs, phis, BR)
         BZi = Rbf(Rs, Zs, phis, BZ)
         Bphii = Rbf(Rs, Zs, phis, Bphi)
@@ -3445,7 +3446,7 @@ def plot_field_lines_real_space(
 
     for i, solution in enumerate(field_line_coords["IVP solutions"]):
         if not solution.success:
-            print(
+            logging.ERROR(
                 "Integration from seed theta %1.2f radians was not successful!"
                 % seed_thetas[i]
             )
@@ -3561,7 +3562,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
     fPhi.append(phi0)
 
     # integrate field lines in Phi
-    print(
+    logging.WARNING(
         "Integrating Magnetic Field Line Equation from seed theta = %f radians" % theta0
     )
     y0 = [fR[0], fZ[0]]

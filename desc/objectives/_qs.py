@@ -598,6 +598,13 @@ class QuasiIsodynamic(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
+        self._zeta_grid = self.grid.copy()
+        self._zeta_grid.nodes = put(
+            self.grid.nodes,
+            (np.arange(self.grid.num_nodes), 2),
+            (self.grid.nodes[:, 2] * self.grid.NFP - np.pi) / 2,
+        )
+
         if eq.iota is not None:
             self._iota = eq.iota.copy()
             self._iota.grid = self.grid
@@ -634,7 +641,7 @@ class QuasiIsodynamic(_Objective):
             build=True,
         )
         self._zeta_transform = Transform(
-            self.grid,
+            self._zeta_grid,
             DoubleFourierSeries(M=self.M_zeta, N=self.N_zeta, sym="cos(z)", NFP=eq.NFP),
             build=True,
         )

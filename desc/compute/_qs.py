@@ -287,7 +287,7 @@ def compute_quasiisodynamic_field(
     if data is None:
         data = {}
 
-    # XXX: zeta_transform must have zeta_bar grid coordinates!
+    # zeta_transform uses zeta_bar grid coordinates: -pi/2 <= zeta_bar <= pi/2
     zeta_bar = zeta_transform.grid.nodes[:, 2]
 
     # compute well shape

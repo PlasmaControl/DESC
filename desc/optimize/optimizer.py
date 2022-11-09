@@ -6,7 +6,7 @@ import logging
 import numpy as np
 from termcolor import colored
 
-from utils import redirect_stdout
+from desc.optimize.utils import redirect_stdout
 from io import StringIO
 from termcolor import colored
 from desc.backend import jnp
@@ -255,7 +255,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        logging.WARNING("Factorizing linear constraints")
+        logging.warning("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         (
             compute_wrapped,
@@ -284,7 +284,7 @@ class Optimizer(IOAble):
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))
 
-        logging.WARNING("Starting optimization")
+        logging.warning("Starting optimization")
         timer.start("Solution time")
 
         if self.method in Optimizer._scipy_scalar_methods:

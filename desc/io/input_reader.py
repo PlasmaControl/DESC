@@ -91,7 +91,7 @@ class InputReader:
         if args.version:
             import desc
 
-            logging.WARNING(desc.__version__)
+            logging.warning(desc.__version__)
             return args
 
         if len(args.input_file) == 0:
@@ -114,10 +114,7 @@ class InputReader:
             os.environ["DESC_BACKEND"] = "numpy"
         else:
             os.environ["DESC_BACKEND"] = "jax"
-
-        if args.quiet:
-            args.verbose = 0
-
+            
         if args.gpu:
             set_device("gpu")
         else:
@@ -226,10 +223,10 @@ class InputReader:
             # check if VMEC input file format
             isVMEC = re.search(r"&INDATA", line)
             if isVMEC:
-                logging.WARNING("Converting VMEC input to DESC input")
+                logging.warning("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
                 InputReader.vmec_to_desc_input(self.input_path, path)
-                logging.WARNING("Generated DESC input file {}:".format(path))
+                logging.warning("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)
 
             # extract numbers & words

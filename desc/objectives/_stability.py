@@ -97,7 +97,7 @@ class MercierStability(_Objective):
         self._data_keys = ["D_Mercier"]
 
         timer = Timer()
-        logging.WARNING("Precomputing transforms")
+        logging.warning("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -269,7 +269,7 @@ class MagneticWell(_Objective):
         self._data_keys = ["magnetic well"]
 
         timer = Timer()
-        logging.WARNING("Precomputing transforms")
+        logging.warning("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

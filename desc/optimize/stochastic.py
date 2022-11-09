@@ -175,13 +175,13 @@ def sgd(
         message=message,
     )
     if result["success"]:
-        logging.ERROR(result["message"])
+        logging.error(result["message"])
     else:
-        logging.ERROR("Warning: " + result["message"])
-    logging.WARNING("         Current function value: {:.3e}".format(result["fun"]))
-    logging.WARNING("         Iterations: {:d}".format(result["nit"]))
-    logging.WARNING("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.WARNING("         Gradient evaluations: {:d}".format(result["ngev"]))
+        logging.error("Warning: " + result["message"])
+    logging.warning("         Current function value: {:.3e}".format(result["fun"]))
+    logging.warning("         Iterations: {:d}".format(result["nit"]))
+    logging.warning("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.warning("         Gradient evaluations: {:d}".format(result["ngev"]))
     if return_all:
         result["allx"] = allx
     return result

@@ -3,6 +3,7 @@
 import numpy as np
 import logging
 import contextlib
+import sys
 
 from io import StringIO
 from desc.backend import cond, fori_loop, jit, jnp, put
@@ -183,10 +184,14 @@ def print_header_nonlinear():
         )
     )
 
-@contextmanager
-def redirect_outputs_to_logger():
-    """Captures stdout and stderr function outputs and redirects to logger."""
-
+@contextlib.contextmanager
+def redirect_stdout(io_stream):
+    try:
+        _stdout = sys.stdout
+        sys.stdout = io_stream
+        yield
+    finally:
+        sys.stdout = _stdout
 
 
 

@@ -224,10 +224,10 @@ class Equilibrium(_Configuration, IOAble):
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
-        logging.DEBUG("Spectral indexing: {}".format(self.spectral_indexing))
-        logging.DEBUG("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        logging.DEBUG("Node pattern: {}".format(self.node_pattern))
-        logging.DEBUG(
+        logging.debug("Spectral indexing: {}".format(self.spectral_indexing))
+        logging.debug("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        logging.debug("Node pattern: {}".format(self.node_pattern))
+        logging.debug(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
             )
@@ -480,7 +480,7 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        logging.WARNING("Start of solver")
+        logging.warning("Start of solver")
         objective.print_value(objective.x(eq))
 
         for key, value in result["history"].items():
@@ -488,7 +488,7 @@ class Equilibrium(_Configuration, IOAble):
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
 
-        logging.WARNING("End of solver")
+        logging.warning("End of solver")
         objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
@@ -571,7 +571,7 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        logging.WARNING("Start of solver")
+        logging.warning("Start of solver")
         objective.print_value(objective.x(eq))
 
         for key, value in result["history"].items():
@@ -579,7 +579,7 @@ class Equilibrium(_Configuration, IOAble):
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
 
-        logging.WARNING("End of solver")
+        logging.warning("End of solver")
         objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
@@ -656,10 +656,10 @@ class Equilibrium(_Configuration, IOAble):
         while success is None:
 
             timer.start("Step {} time".format(iteration))
-            logging.INFO("====================")
-            logging.INFO("Optimization Step {}".format(iteration))
-            logging.INFO("====================")
-            logging.INFO("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            logging.info("====================")
+            logging.info("Optimization Step {}".format(iteration))
+            logging.info("====================")
+            logging.info("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
             (
@@ -693,8 +693,8 @@ class Equilibrium(_Configuration, IOAble):
 
             timer.stop("Step {} time".format(iteration))
             objective.print_value(objective.x(eq_new))
-            logging.INFO("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-            logging.INFO("Reduction Ratio = {:+.3f}".format(ratio))
+            logging.info("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+            logging.info("Reduction Ratio = {:+.3f}".format(ratio))
             timer.disp("Step {} time".format(iteration))
 
             # stopping criteria
@@ -726,9 +726,9 @@ class Equilibrium(_Configuration, IOAble):
             iteration += 1
 
         timer.stop("Total time")
-        logging.WARNING("====================")
-        logging.WARNING("Done")
-        logging.WARNING(message)
+        logging.warning("====================")
+        logging.warning("Done")
+        logging.warning(message)
         timer.disp("Total time")
 
         if copy:

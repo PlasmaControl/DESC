@@ -124,7 +124,7 @@ class Timer:
         else:
             out = "{:.3f}".format(hrs)[:4] + " hrs"
 
-        logging.DEBUG(colored("Timer: {} = {}".format(name, out), "green"))
+        logging.debug(colored("Timer: {} = {}".format(name, out), "green"))
 
     def disp(self, name):
         """Pretty print elapsed time.

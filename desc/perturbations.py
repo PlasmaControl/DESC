@@ -172,12 +172,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if dZb is not None and np.any(dZb):
         deltas["Zb_lmn"] = dZb
 
-    logging.WARNING("Perturbing {}".format(", ".join(deltas.keys())))
+    logging.warning("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
 
-    logging.WARNING("Factorizing linear constraints")
+    logging.warning("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.args
@@ -249,7 +249,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         f = objective.compute(x)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
-        logging.WARNING("Computing df")
+        logging.warning("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
@@ -257,7 +257,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.stop("df computation")
         timer.disp("df computation")
 
-        logging.WARNING("Factoring df")
+        logging.warning("Factoring df")
         timer.start("df/dx factorization")
         u, s, vt = np.linalg.svd(Jx_reduced, full_matrices=False)
         timer.stop("df/dx factorization")
@@ -281,7 +281,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 1:
 
         # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
-        logging.WARNING("Computing d^2f")
+        logging.warning("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
         RHS2 = 0.5 * objective.jvp((tangents, tangents), x)
@@ -306,7 +306,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 2:
 
         # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
-        logging.WARNING("Computing d^3f")
+        logging.warning("Computing d^3f")
         timer.start("d^3f computation")
         RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
         RHS3 += objective.jvp((dx2, tangents), x)
@@ -359,7 +359,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
-    logging.WARNING("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+    logging.warning("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
     timer.disp("Total perturbation")
 
     return eq_new
@@ -487,7 +487,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
 
-    logging.WARNING("Perturbing {}".format(", ".join(deltas.keys())))
+    logging.warning("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
@@ -509,8 +509,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-    logging.WARNING("Number of parameters: {}".format(dim_opt))
-    logging.WARNING("Number of objectives: {}".format(objective_g.dim_f))
+    logging.warning("Number of parameters: {}".format(dim_opt))
+    logging.warning("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
@@ -572,7 +572,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         g = objective_g.compute(xg)
 
         # 1st partial derivatives of f objective wrt both x and c
-        logging.WARNING("Computing df")
+        logging.warning("Computing df")
         timer.start("df computation")
         Fx = objective_f.jac(xf)
         Fx = align_jacobian(Fx, objective_f, objective_g)
@@ -585,7 +585,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.disp("df computation")
 
         # 1st partial derivatives of g objective wrt both x and c
-        logging.WARNING("Computing dg")
+        logging.warning("Computing dg")
         timer.start("dg computation")
         Gx = objective_g.jac(xg)
         Gx = align_jacobian(Gx, objective_g, objective_f)
@@ -601,7 +601,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         # restrict to optimization subspace
         LHS_opt = LHS @ subspace
 
-        logging.WARNING("Factoring LHS")
+        logging.warning("Factoring LHS")
         timer.start("LHS factorization")
         ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
         timer.stop("LHS factorization")
@@ -645,7 +645,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dxf_dxg = np.delete(np.eye(objective_f.dim_x), idx, 1)
 
         # 2nd partial derivatives of f objective wrt both x and c
-        logging.WARNING("Computing d^2f")
+        logging.warning("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
         RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), xf)
@@ -653,7 +653,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.disp("d^2f computation")
 
         # 2nd partial derivatives of g objective wrt both x and c
-        logging.WARNING("Computing d^2g")
+        logging.warning("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
         RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
@@ -727,8 +727,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
-    logging.WARNING("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
-    logging.WARNING("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+    logging.warning("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
+    logging.warning("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
     timer.disp("Total perturbation")
 
     return eq_new, predicted_reduction, dc_opt, dc, c_norm, bound_hit

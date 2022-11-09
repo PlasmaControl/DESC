@@ -1,6 +1,7 @@
 """Objectives for targeting quasisymmetry."""
 
 import numpy as np
+import logging
 
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
@@ -70,7 +71,7 @@ class QuasisymmetryBoozer(_Objective):
             + units
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -79,8 +80,6 @@ class QuasisymmetryBoozer(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.M_booz is None:
@@ -93,8 +92,7 @@ class QuasisymmetryBoozer(_Objective):
             )
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -134,8 +132,7 @@ class QuasisymmetryBoozer(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         M = self.helicity[0]
         N = self.helicity[1] / eq.NFP
@@ -274,7 +271,7 @@ class QuasisymmetryTwoTerm(_Objective):
             + units
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -283,8 +280,6 @@ class QuasisymmetryTwoTerm(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -293,8 +288,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -317,8 +311,7 @@ class QuasisymmetryTwoTerm(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -428,7 +421,7 @@ class QuasisymmetryTripleProduct(_Objective):
         units = "(T^4/m^2)"
         self._print_value_fmt = "Quasi-symmetry error: {:10.3e} " + units
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -437,8 +430,6 @@ class QuasisymmetryTripleProduct(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -447,8 +438,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -471,8 +461,7 @@ class QuasisymmetryTripleProduct(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)

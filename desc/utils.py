@@ -1,6 +1,7 @@
 """Utility functions, independent of the rest of DESC."""
 
 import warnings
+import logging
 
 import numpy as np
 from termcolor import colored
@@ -123,7 +124,7 @@ class Timer:
         else:
             out = "{:.3f}".format(hrs)[:4] + " hrs"
 
-        print(colored("Timer: {} = {}".format(name, out), "green"))
+        logging.DEBUG(colored("Timer: {} = {}".format(name, out), "green"))
 
     def disp(self, name):
         """Pretty print elapsed time.

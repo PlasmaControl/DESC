@@ -2,6 +2,7 @@
 
 import numbers
 import warnings
+import logging
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -223,10 +224,10 @@ class Equilibrium(_Configuration, IOAble):
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
-        print("Spectral indexing: {}".format(self.spectral_indexing))
-        print("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
-        print("Node pattern: {}".format(self.node_pattern))
-        print(
+        logging.DEBUG("Spectral indexing: {}".format(self.spectral_indexing))
+        logging.DEBUG("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        logging.DEBUG("Node pattern: {}".format(self.node_pattern))
+        logging.DEBUG(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
             )
@@ -392,7 +393,6 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
-        verbose=1,
         copy=False,
     ):
         """Solve to find the equilibrium configuration.
@@ -424,8 +424,6 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the jacobian or hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
-        verbose : int
-            Level of output.
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -484,22 +482,20 @@ class Equilibrium(_Configuration, IOAble):
             xtol=xtol,
             gtol=gtol,
             x_scale=x_scale,
-            verbose=verbose,
             maxiter=maxiter,
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
+        logging.WARNING("Start of solver")
+        objective.print_value(objective.x(eq))
+
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
 
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
+        logging.WARNING("End of solver")
+        objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -515,7 +511,6 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
-        verbose=1,
         copy=False,
     ):
         """Optimize an equilibrium for an objective.
@@ -547,8 +542,6 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the jacobian or hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
-        verbose : int
-            Level of output.
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -584,21 +577,20 @@ class Equilibrium(_Configuration, IOAble):
             xtol=xtol,
             gtol=gtol,
             x_scale=x_scale,
-            verbose=verbose,
             maxiter=maxiter,
             options=options,
         )
 
-        if verbose > 0:
-            print("Start of solver")
-            objective.print_value(objective.x(eq))
+        logging.WARNING("Start of solver")
+        objective.print_value(objective.x(eq))
+
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
             if not (key == "c_l" or key == "i_l") or value[-1].size:
                 setattr(eq, key, value[-1])
-        if verbose > 0:
-            print("End of solver")
-            objective.print_value(objective.x(eq))
+
+        logging.WARNING("End of solver")
+        objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -610,7 +602,6 @@ class Equilibrium(_Configuration, IOAble):
         ftol=1e-6,
         xtol=1e-6,
         maxiter=50,
-        verbose=1,
         copy=False,
         solve_options={},
         perturb_options={},
@@ -629,8 +620,6 @@ class Equilibrium(_Configuration, IOAble):
             Stopping tolerance on optimization step size.
         maxiter : int
             Maximum number of optimization steps.
-        verbose : int
-            Level of output.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
         solve_options : dict
@@ -670,19 +659,17 @@ class Equilibrium(_Configuration, IOAble):
             inspect.signature(optimal_perturb).parameters["tr_ratio"].default,
         )
 
-        if verbose > 0:
-            objective.print_value(objective.x(eq))
+        objective.print_value(objective.x(eq))
 
         iteration = 1
         success = None
         while success is None:
 
             timer.start("Step {} time".format(iteration))
-            if verbose > 0:
-                print("====================")
-                print("Optimization Step {}".format(iteration))
-                print("====================")
-                print("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            logging.INFO("====================")
+            logging.INFO("Optimization Step {}".format(iteration))
+            logging.INFO("====================")
+            logging.INFO("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
             (
@@ -715,12 +702,10 @@ class Equilibrium(_Configuration, IOAble):
             perturb_options["tr_ratio"] = tr_ratio
 
             timer.stop("Step {} time".format(iteration))
-            if verbose > 0:
-                objective.print_value(objective.x(eq_new))
-                print("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-                print("Reduction Ratio = {:+.3f}".format(ratio))
-            if verbose > 1:
-                timer.disp("Step {} time".format(iteration))
+            objective.print_value(objective.x(eq_new))
+            logging.INFO("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+            logging.INFO("Reduction Ratio = {:+.3f}".format(ratio))
+            timer.disp("Step {} time".format(iteration))
 
             # stopping criteria
             success, message = check_termination(
@@ -751,12 +736,10 @@ class Equilibrium(_Configuration, IOAble):
             iteration += 1
 
         timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 0:
-            print(message)
-        if verbose > 1:
-            timer.disp("Total time")
+        logging.WARNING("====================")
+        logging.WARNING("Done")
+        logging.WARNING(message)
+        timer.disp("Total time")
 
         if copy:
             return eq
@@ -780,7 +763,6 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
-        verbose=1,
         copy=False,
     ):
         """Perturb an equilibrium.
@@ -802,8 +784,6 @@ class Equilibrium(_Configuration, IOAble):
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
             element for the first step and so on.
-        verbose : int
-            Level of output.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
 
@@ -819,10 +799,10 @@ class Equilibrium(_Configuration, IOAble):
             constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
 
         if not objective.built:
-            objective.build(self, verbose=verbose)
+            objective.build(self)
         for constraint in constraints:
             if not constraint.built:
-                constraint.build(self, verbose=verbose)
+                constraint.build(self)
 
         eq = perturb(
             self,
@@ -839,7 +819,6 @@ class Equilibrium(_Configuration, IOAble):
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
-            verbose=verbose,
             copy=copy,
         )
         eq.solved = False
@@ -935,25 +914,25 @@ class EquilibriaFamily(IOAble, MutableSequence):
         return deltas
 
     def _print_iteration(self, ii, equil):
-        print("================")
-        print("Step {}/{}".format(ii + 1, len(self.inputs)))
-        print("================")
+        logging.DEBUG("================")
+        logging.DEBUG("Step {}/{}".format(ii + 1, len(self.inputs)))
+        logging.DEBUG("================")
         equil.resolution_summary()
-        print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
-        print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
+        logging.DEBUG("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
+        logging.DEBUG("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
         if "current" in self.inputs[ii]:
-            print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
-        print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-        print("Objective: {}".format(self.inputs[ii]["objective"]))
-        print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
-        print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
-        print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
-        print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
-        print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
-        print("================")
+            logging.DEBUG("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
+        logging.DEBUG("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
+        logging.DEBUG("Objective: {}".format(self.inputs[ii]["objective"]))
+        logging.DEBUG("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
+        logging.DEBUG("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
+        logging.DEBUG("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
+        logging.DEBUG("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
+        logging.DEBUG("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
+        logging.DEBUG("================")
 
     def solve_continuation(  # noqa: C901 - FIXME: break this up into simpler pieces
-        self, start_from=0, verbose=None, checkpoint_path=None
+        self, start_from=0, checkpoint_path=None
     ):
         """Solve for an equilibrium by continuation method.
 
@@ -966,18 +945,11 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ----------
         start_from : integer
             start solution from the given index
-        verbose : integer
-            * 0: no output
-            * 1: summary of each iteration
-            * 2: as above plus timing information
-            * 3: as above plus detailed solver output
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
 
         """
         timer = Timer()
-        if verbose is None:
-            verbose = self.inputs[0]["verbose"]
         timer.start("Total time")
 
         if (
@@ -1009,8 +981,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
             if ii == start_from:
                 equil = self[ii]
-                if verbose > 0:
-                    self._print_iteration(ii, equil)
+                self._print_iteration(ii, equil)
 
             else:
                 equil = self[ii - 1].copy()
@@ -1025,22 +996,19 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 equil.M_grid = self.inputs[ii]["M_grid"]
                 equil.N_grid = self.inputs[ii]["N_grid"]
 
-                if verbose > 0:
-                    self._print_iteration(ii, equil)
+                self._print_iteration(ii, equil)
 
                 # figure out if we need perturbations
                 deltas = self._format_deltas(self.inputs[ii], equil)
 
                 if len(deltas) > 0:
-                    if verbose > 0:
-                        print("Perturbing equilibrium")
+                    logging.WARNING("Perturbing equilibrium")
                     # TODO: pass Jx if available
                     equil.perturb(
                         objective=objective,
                         constraints=constraints,
                         **deltas,
                         order=self.inputs[ii]["pert_order"],
-                        verbose=verbose,
                         copy=False,
                     )
 
@@ -1054,8 +1022,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
                     )
                 )
                 if checkpoint_path is not None:
-                    if verbose > 0:
-                        print("Saving latest state")
+                    logging.WARNING("Saving latest state")
                     self.save(checkpoint_path)
                 break
 
@@ -1066,17 +1033,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 ftol=self.inputs[ii]["ftol"],
                 xtol=self.inputs[ii]["xtol"],
                 gtol=self.inputs[ii]["gtol"],
-                verbose=verbose,
                 maxiter=self.inputs[ii]["nfev"],
             )
 
             if checkpoint_path is not None:
-                if verbose > 0:
-                    print("Saving latest iteration")
+                logging.WARNING("Saving latest iteration")
                 self.save(checkpoint_path)
             timer.stop("Iteration {} total".format(ii + 1))
-            if verbose > 1:
-                timer.disp("Iteration {} total".format(ii + 1))
+            timer.disp("Iteration {} total".format(ii + 1))
 
             if not equil.is_nested():
                 warnings.warn(
@@ -1090,13 +1054,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
                 break
 
         timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 1:
-            timer.disp("Total time")
+        logging.WARNING("====================")
+        logging.WARNING("Done")
+        timer.disp("Total time")
         if checkpoint_path is not None:
-            print("Output written to {}".format(checkpoint_path))
-        print("====================")
+            logging.WARNING("Output written to {}".format(checkpoint_path))
+        logging.WARNING("====================")
 
     @property
     def equilibria(self):

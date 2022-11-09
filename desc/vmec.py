@@ -2,6 +2,7 @@
 
 import os
 import warnings
+import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -161,7 +162,7 @@ class VMECIO:
 
         # apply boundary conditions
         constraints = (FixBoundaryR(), FixBoundaryZ())
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+        objective = ObjectiveFunction(constraints, eq=eq)
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
@@ -172,7 +173,7 @@ class VMECIO:
         return eq
 
     @classmethod
-    def save(cls, eq, path, surfs=128, verbose=1):  # noqa: C901 - FIXME - simplify
+    def save(cls, eq, path, surfs=128):  # noqa: C901 - FIXME - simplify
         """Save an Equilibrium as a netCDF file in the VMEC format.
 
         Parameters
@@ -183,11 +184,6 @@ class VMECIO:
             File path of output data.
         surfs: int
             Number of flux surfaces to interpolate at (Default = 128).
-        verbose: int
-            Level of output (Default = 1).
-            * 0: no output
-            * 1: status of quantities computed
-            * 2: as above plus timing information
 
         Returns
         -------
@@ -234,8 +230,7 @@ class VMECIO:
 
         # parameters
         timer.start("parameters")
-        if verbose > 0:
-            print("Saving parameters")
+        logging.WARNING("Saving parameters")
 
         version_ = file.createVariable("version_", np.float64)
         version_[:] = 9  # VMEC version at the time of this writing
@@ -496,8 +491,7 @@ class VMECIO:
         DMerc[:] = compress(grid, data["D_Mercier"])
 
         timer.stop("parameters")
-        if verbose > 1:
-            timer.disp("parameters")
+        timer.disp("parameters")
 
         # indepentent variables (exact conversion)
 
@@ -531,8 +525,7 @@ class VMECIO:
 
         # R
         timer.start("R")
-        if verbose > 0:
-            print("Saving R")
+        logging.WARNING("Saving R")
         rmnc = file.createVariable("rmnc", np.float64, ("radius", "mn_mode"))
         rmnc.long_name = "cos(m*t-n*p) component of cylindrical R, on full mesh"
         rmnc.units = "m"
@@ -546,13 +539,11 @@ class VMECIO:
         if not eq.sym:
             rmns[:] = s
         timer.stop("R")
-        if verbose > 1:
-            timer.disp("R")
+        timer.disp("R")
 
         # Z
         timer.start("Z")
-        if verbose > 0:
-            print("Saving Z")
+        logging.WARNING("Saving Z")
         zmns = file.createVariable("zmns", np.float64, ("radius", "mn_mode"))
         zmns.long_name = "sin(m*t-n*p) component of cylindrical Z, on full mesh"
         zmns.units = "m"
@@ -566,13 +557,11 @@ class VMECIO:
         if not eq.sym:
             zmnc[:] = c
         timer.stop("Z")
-        if verbose > 1:
-            timer.disp("Z")
+        timer.disp("Z")
 
         # lambda
         timer.start("lambda")
-        if verbose > 0:
-            print("Saving lambda")
+        logging.WARNING("Saving lambda")
         lmns = file.createVariable("lmns", np.float64, ("radius", "mn_mode"))
         lmns.long_name = "sin(m*t-n*p) component of lambda, on half mesh"
         lmns.units = "rad"
@@ -588,8 +577,7 @@ class VMECIO:
             lmnc[0, :] = 0
             lmnc[1:, :] = c
         timer.stop("lambda")
-        if verbose > 1:
-            timer.disp("lambda")
+        timer.disp("lambda")
 
         # derived quantities (approximate conversion)
 
@@ -636,8 +624,7 @@ class VMECIO:
 
         # Jacobian
         timer.start("Jacobian")
-        if verbose > 0:
-            print("Saving Jacobian")
+        logging.WARNING("Saving Jacobian")
         gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))
         gmnc.long_name = "cos(m*t-n*p) component of Jacobian, on half mesh"
         gmnc.units = "m"
@@ -671,13 +658,11 @@ class VMECIO:
             gmns[0, :] = 0
             gmns[1:, :] = s
         timer.stop("Jacobian")
-        if verbose > 1:
-            timer.disp("Jacobian")
+        timer.disp("Jacobian")
 
         # |B|
         timer.start("|B|")
-        if verbose > 0:
-            print("Saving |B|")
+        logging.WARNING("Saving |B|")
         bmnc = file.createVariable("bmnc", np.float64, ("radius", "mn_mode_nyq"))
         bmnc.long_name = "cos(m*t-n*p) component of |B|, on half mesh"
         bmnc.units = "T"
@@ -710,13 +695,11 @@ class VMECIO:
             bmns[0, :] = 0
             bmns[1:, :] = s
         timer.stop("|B|")
-        if verbose > 1:
-            timer.disp("|B|")
+        timer.disp("|B|")
 
         # B^theta
         timer.start("B^theta")
-        if verbose > 0:
-            print("Saving B^theta")
+        logging.WARNING("Saving B^theta")
         bsupumnc = file.createVariable(
             "bsupumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -753,13 +736,11 @@ class VMECIO:
             bsupumns[0, :] = 0
             bsupumns[1:, :] = s * signgs[:]
         timer.stop("B^theta")
-        if verbose > 1:
-            timer.disp("B^theta")
+        timer.disp("B^theta")
 
         # B^zeta
         timer.start("B^zeta")
-        if verbose > 0:
-            print("Saving B^zeta")
+        logging.WARNING("Saving B^zeta")
         bsupvmnc = file.createVariable(
             "bsupvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -796,13 +777,11 @@ class VMECIO:
             bsupvmns[0, :] = 0
             bsupvmns[1:, :] = s * signgs[:]
         timer.stop("B^zeta")
-        if verbose > 1:
-            timer.disp("B^zeta")
+        timer.disp("B^zeta")
 
         # B_psi
         timer.start("B_psi")
-        if verbose > 0:
-            print("Saving B_psi")
+        logging.WARNING("Saving B_psi")
         bsubsmns = file.createVariable(
             "bsubsmns", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -842,13 +821,11 @@ class VMECIO:
                 c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("B_psi")
-        if verbose > 1:
-            timer.disp("B_psi")
+        timer.disp("B_psi")
 
         # B_theta
         timer.start("B_theta")
-        if verbose > 0:
-            print("Saving B_theta")
+        logging.WARNING("Saving B_theta")
         bsubumnc = file.createVariable(
             "bsubumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -885,13 +862,11 @@ class VMECIO:
             bsubumns[0, :] = 0
             bsubumns[1:, :] = s * signgs[:]
         timer.stop("B_theta")
-        if verbose > 1:
-            timer.disp("B_theta")
+        timer.disp("B_theta")
 
         # B_zeta
         timer.start("B_zeta")
-        if verbose > 0:
-            print("Saving B_zeta")
+        logging.WARNING("Saving B_zeta")
         bsubvmnc = file.createVariable(
             "bsubvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -928,13 +903,11 @@ class VMECIO:
             bsubvmns[0, :] = 0
             bsubvmns[1:, :] = s * signgs[:]
         timer.stop("B_zeta")
-        if verbose > 1:
-            timer.disp("B_zeta")
+        timer.disp("B_zeta")
 
         # J^theta * sqrt(g)   # noqa: E800
         timer.start("J^theta")
-        if verbose > 0:
-            print("Saving J^theta")
+        logging.WARNING("Saving J^theta")
         currumnc = file.createVariable(
             "currumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -978,13 +951,11 @@ class VMECIO:
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^theta")
-        if verbose > 1:
-            timer.disp("J^theta")
+        timer.disp("J^theta")
 
         # J^zeta * sqrt(g)   # noqa: E800
         timer.start("J^zeta")
-        if verbose > 0:
-            print("Saving J^zeta")
+        logging.WARNING("Saving J^zeta")
         currvmnc = file.createVariable(
             "currvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1028,8 +999,7 @@ class VMECIO:
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^zeta")
-        if verbose > 1:
-            timer.disp("J^zeta")
+        timer.disp("J^zeta")
 
         # TODO: these output quantities need to be added
         """
@@ -1150,8 +1120,7 @@ class VMECIO:
 
         file.close()
         timer.stop("Total time")
-        if verbose > 1:
-            timer.disp("Total time")
+        timer.disp("Total time")
 
     @classmethod
     def read_vmec_output(cls, fname):

@@ -9,6 +9,7 @@ from desc.compute.utils import compress
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
+import logging
 
 from .objective_funs import _Objective
 
@@ -47,7 +48,7 @@ class GenericObjective(_Objective):
             "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -56,8 +57,6 @@ class GenericObjective(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -182,7 +181,7 @@ class ToroidalCurrent(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -191,8 +190,6 @@ class ToroidalCurrent(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -201,8 +198,7 @@ class ToroidalCurrent(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -225,8 +221,7 @@ class ToroidalCurrent(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)

@@ -1,11 +1,14 @@
 """Class for wrapping a number of common optimization methods."""
 
 import warnings
+import logging
 
 import numpy as np
 import scipy.optimize
-from termcolor import colored
+import contextlib
 
+from io import StringIO
+from termcolor import colored
 from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
@@ -166,7 +169,6 @@ class Optimizer(IOAble):
         xtol=None,
         gtol=None,
         x_scale="auto",
-        verbose=1,
         maxiter=None,
         options={},
     ):
@@ -203,10 +205,6 @@ class Optimizer(IOAble):
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
             inverse norms of the columns of the jacobian or hessian matrix.
-        verbose : integer, optional
-            * 0  : work silently.
-            * 1-2 : display a termination report.
-            * 3 : display progress during iterations
         maxiter : int, optional
             Maximum number of iterations. Defaults to size(x)*100.
         options : dict, optional
@@ -289,13 +287,13 @@ class Optimizer(IOAble):
             )
 
         if not objective.built:
-            objective.build(eq, verbose=verbose)
+            objective.build(eq)
         if not objective.compiled:
             mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
-            objective.compile(mode, verbose)
+            objective.compile(mode)
         for constraint in linear_constraints:
             if not constraint.built:
-                constraint.build(eq, verbose=verbose)
+                constraint.build(eq)
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
             warnings.warn(
@@ -307,24 +305,20 @@ class Optimizer(IOAble):
                 )
             )
 
-        if verbose > 0:
-            print("Factorizing linear constraints")
+        logging.WARNING("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             linear_constraints, objective.args
         )
         timer.stop("linear constraint factorize")
-        if verbose > 1:
-            timer.disp("linear constraint factorize")
+        timer.disp("linear constraint factorize")
 
         x0_reduced = project(objective.x(eq))
 
-        if verbose > 0:
-            print("Number of parameters: {}".format(x0_reduced.size))
-            print("Number of objectives: {}".format(objective.dim_f))
+        logging.WARNING("Number of parameters: {}".format(x0_reduced.size))
+        logging.WARNING("Number of objectives: {}".format(objective.dim_f))
 
-        if verbose > 0:
-            print("Starting optimization")
+        logging.WARNING("Starting optimization")
         timer.start("Solution time")
 
         def compute_wrapped(x_reduced):
@@ -371,10 +365,9 @@ class Optimizer(IOAble):
                         allx.append(x_reduced)
                         allf.append(fx)
                         x_norm = jnp.linalg.norm(x_reduced)
-                        if verbose > 2:
-                            print_iteration_nonlinear(
-                                len(allx), None, fx, df, dx_norm, None
-                            )
+                        print_iteration_nonlinear(
+                            len(allx), None, fx, df, dx_norm, None
+                        )
                         success, message = check_termination(
                             df,
                             fx,
@@ -405,10 +398,9 @@ class Optimizer(IOAble):
                     allf.append(fx)
                     dx_norm = None
                     x_norm = jnp.linalg.norm(x_reduced)
-                    if verbose > 2:
-                        print_iteration_nonlinear(
-                            len(allx), None, fx, df, dx_norm, None
-                        )
+                    print_iteration_nonlinear(
+                        len(allx), None, fx, df, dx_norm, None
+                    )
 
             print_header_nonlinear()
             try:
@@ -433,12 +425,11 @@ class Optimizer(IOAble):
                     "nit": len(allx),
                     "success": True,
                 }
-                if verbose > 1:
-                    print(msg[0])
-                    print(
-                        "         Current function value: {:.3e}".format(result["fun"])
-                    )
-                    print("         Iterations: {:d}".format(result["nit"]))
+                logging.INFO(msg[0])
+                logging.INFO(
+                    "         Current function value: {:.3e}".format(result["fun"])
+                )
+                logging.INFO("         Iterations: {:d}".format(result["nit"]))
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
@@ -449,19 +440,28 @@ class Optimizer(IOAble):
                 allx.append(x_reduced)
                 return jac_wrapped(x_reduced)
 
-            result = scipy.optimize.least_squares(
-                compute_wrapped,
-                x0=x0_reduced,
-                args=(),
-                jac=jac,
-                method=self.method[len("scipy-") :],
-                x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
-                max_nfev=maxiter,
-                verbose=disp,
-            )
+            runner = InteractiveConsole()
+            while True:
+                out = StringIO.StringIO()
+                err = StringIO.StringIO()
+                with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    out.flush()
+                    err.flush()
+                    result = scipy.optimize.least_squares(
+                        compute_wrapped,
+                        x0=x0_reduced,
+                        args=(),
+                        jac=jac,
+                        method=self.method[len("scipy-") :],
+                        x_scale=x_scale,
+                        ftol=ftol,
+                        xtol=xtol,
+                        gtol=gtol,
+                        max_nfev=maxiter,
+                        verbose=disp, #fixme
+                    )
+                logging.INFO(out[0], err[0])
+                logging.DEBUG(out[1:], err[1:])
             result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
@@ -546,13 +546,11 @@ class Optimizer(IOAble):
                     result["history"][arg].append(kwargs[arg])
 
         timer.stop("Solution time")
-
-        if verbose > 1:
-            timer.disp("Solution time")
-            timer.pretty_print(
-                "Avg time per step",
-                timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
-            )
+        timer.disp("Solution time")
+        timer.pretty_print(
+            "Avg time per step",
+            timer["Solution time"] / (result.get("nit", result.get("nfev")) + 1),
+        )
         for key in ["hess", "hess_inv", "jac", "grad", "active_mask"]:
             _ = result.pop(key, None)
 

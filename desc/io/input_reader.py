@@ -6,6 +6,7 @@ import os
 import pathlib
 import re
 import warnings
+import logging
 from datetime import datetime
 
 import numpy as np
@@ -13,6 +14,8 @@ from termcolor import colored
 
 from desc import set_device
 
+from desc import set_logfile_logging
+from desc import set_console_logging
 
 class InputReader:
     """Reads command line arguments and parses input files.
@@ -88,7 +91,7 @@ class InputReader:
         if args.version:
             import desc
 
-            print(desc.__version__)
+            logging.WARNING(desc.__version__)
             return args
 
         if len(args.input_file) == 0:
@@ -119,6 +122,20 @@ class InputReader:
             set_device("gpu")
         else:
             set_device("cpu")
+
+        if self.args.verbose == 1:
+            set_console_logging("stdout", "WARNING")
+        if self.args.verbose == 2:
+            set_console_logging("stdout", "INFO")
+        if self.args.verbose == 3:
+            set_console_logging("stdout", "DEBUG")
+
+        if self.args.logging == 1:
+            set_logfile_logging("desc.log", "WARNING")
+        if self.args.verbose == 2:
+            set_logfile_logging("desc.log", "INFO")
+        if self.args.verbose == 3:
+            set_logfile_logging("desc.log", "DEBUG")
 
         return args
 
@@ -209,10 +226,10 @@ class InputReader:
             # check if VMEC input file format
             isVMEC = re.search(r"&INDATA", line)
             if isVMEC:
-                print("Converting VMEC input to DESC input")
+                logging.WARNING("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
                 InputReader.vmec_to_desc_input(self.input_path, path)
-                print("Generated DESC input file {}:".format(path))
+                logging.WARNING("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)
 
             # extract numbers & words
@@ -1448,17 +1465,19 @@ def get_parser():
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Do not display any progress information.",
-    )
-    group.add_argument(
         "-v",
         "--verbose",
         action="count",
         default=1,
         help="Display detailed progress information. "
         + "Once to include timing, twice to also show individual iterations.",
+    )
+    parser.add_argument(
+        "-l",
+        "--logging",
+        action="count",
+        default=0,
+        help="Write progress information to desc.log. Once to record progress, "
+        + "twice and thrice to record further iteration information.",
     )
     return parser

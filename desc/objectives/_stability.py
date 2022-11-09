@@ -1,6 +1,7 @@
 """Objectives for targeting MHD stability."""
 
 import numpy as np
+import logging
 
 from desc.compute import compute_magnetic_well, compute_mercier_stability, data_index
 from desc.compute.utils import compress
@@ -49,7 +50,7 @@ class MercierStability(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Mercier Stability: {:10.3e}"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -58,8 +59,6 @@ class MercierStability(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -74,8 +73,7 @@ class MercierStability(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -109,8 +107,7 @@ class MercierStability(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -197,7 +194,7 @@ class MagneticWell(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Magnetic Well: {:10.3e}"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -206,8 +203,6 @@ class MagneticWell(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
         """
         if self.grid is None:
             self.grid = LinearGrid(
@@ -221,8 +216,7 @@ class MagneticWell(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -256,8 +250,7 @@ class MagneticWell(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        imer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)

@@ -25,8 +25,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Equilibrium objective to enforce.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
-    verbose : int, optional
-        Level of output.
 
     """
 
@@ -35,7 +33,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
-        verbose=1,
         perturb_options={},
         solve_options={},
     ):
@@ -50,10 +47,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._compiled = True
 
         if eq is not None:
-            self.build(eq, verbose=verbose)
+            self.build(eq,)
 
     # TODO: add timing and verbose statements
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq, use_jit=None):
         """Build the objective.
 
         Parameters
@@ -63,8 +60,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
             Note: unused by this class, should pass to sub-objectives directly.
-        verbose : int, optional
-            Level of output.
 
         """
         self._eq = eq.copy()
@@ -75,10 +70,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             and self._eq.iota is not None
         )
 
-        self._objective.build(self._eq, verbose=verbose)
-        self._eq_objective.build(self._eq, verbose=verbose)
+        self._objective.build(self._eq)
+        self._eq_objective.build(self._eq)
         for constraint in self._constraints:
-            constraint.build(self._eq, verbose=verbose)
+            constraint.build(self._eq)
         self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f

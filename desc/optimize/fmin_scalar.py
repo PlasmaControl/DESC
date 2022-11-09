@@ -1,6 +1,7 @@
 """Function for minimizing a scalar function of multiple variables."""
 
 import numpy as np
+import logging
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
@@ -32,7 +33,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
-    verbose=1,
     maxiter=None,
     callback=None,
     options={},
@@ -78,10 +78,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
         Optimizer teriminates when ``norm(g) < gtol``, where
         If None, the termination by this condition is disabled.
-    verbose : {0, 1, 2}, optional
-        * 0 (default) : work silently.
-        * 1 : display a termination report.
-        * 2 : display progress during iterations
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
     callback : callable, optional
@@ -210,8 +206,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     actual_reduction = np.inf
     ratio = 1  # ratio between actual reduction and predicted reduction
 
-    if verbose > 1:
-        print_header_nonlinear()
+    print_header_nonlinear()
 
     if return_all:
         allx = [x]
@@ -350,9 +345,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             g_h = g * scale
             H_h = scale * H * scale[:, None]
 
-            if verbose > 1:
-                print_iteration_nonlinear(
-                    iteration, nfev, f, actual_reduction, step_norm, g_norm
+            print_iteration_nonlinear(
+                iteration, nfev, f, actual_reduction, step_norm, g_norm
                 )
 
             if callback is not None:
@@ -383,16 +377,15 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         nit=iteration,
         message=message,
     )
-    if verbose > 0:
-        if result["success"]:
-            print(result["message"])
-        else:
-            print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Gradient evaluations: {:d}".format(result["ngev"]))
-        print("         Hessian evaluations: {:d}".format(result["nhev"]))
+    if result["success"]:
+        logging.ERROR(result["message"])
+    else:
+        logging.ERROR("Warning: " + result["message"])
+    logging.WARNING("         Current function value: {:.3e}".format(result["fun"]))
+    logging.WARNING("         Iterations: {:d}".format(result["nit"]))
+    logging.WARNING("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.WARNING("         Gradient evaluations: {:d}".format(result["ngev"]))
+    logging.WARNING("         Hessian evaluations: {:d}".format(result["nhev"]))
     if return_all:
         result["allx"] = allx
     if return_tr:

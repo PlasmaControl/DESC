@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
 import numpy as np
+import logging
 
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
@@ -28,15 +29,13 @@ class ObjectiveFunction(IOAble):
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
         use less memory. Note that the "blocked" hessian will only be block diagonal.
-    verbose : int, optional
-        Level of output.
 
     """
 
     _io_attrs_ = ["_objectives"]
 
     def __init__(
-        self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
+        self, objectives, eq=None, use_jit=True, deriv_mode="batched"
     ):
 
         if not isinstance(objectives, tuple):
@@ -52,7 +51,7 @@ class ObjectiveFunction(IOAble):
         self._compiled = False
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
+            self.build(eq, use_jit=self._use_jit)
 
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
@@ -132,7 +131,7 @@ class ObjectiveFunction(IOAble):
             self.grad = jit(self.grad)
             self.jvp = jit(self.jvp)
 
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq, use_jit=None):
         """Build the objective.
 
         Parameters
@@ -141,8 +140,6 @@ class ObjectiveFunction(IOAble):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if use_jit is not None:
@@ -153,9 +150,8 @@ class ObjectiveFunction(IOAble):
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
-            if verbose > 0:
-                print("Building objective: " + objective.name)
-            objective.build(eq, use_jit=self.use_jit, verbose=verbose)
+            logging.WARNING("Building objective: " + objective.name)
+            objective.build(eq, use_jit=self.use_jit)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
@@ -170,8 +166,7 @@ class ObjectiveFunction(IOAble):
 
         self._built = True
         timer.stop("Objective build")
-        if verbose > 1:
-            timer.disp("Objective build")
+        timer.disp("Objective build")
 
     def compute(self, x):
         """Compute the objective function.
@@ -226,7 +221,7 @@ class ObjectiveFunction(IOAble):
             f = self.compute_scalar(x)
         else:
             f = jnp.sum(self.compute(x) ** 2) / 2
-        print("Total (sum of squares): {:10.3e}, ".format(f))
+        logging.WARNING("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
             obj.print_value(**kwargs)
@@ -304,7 +299,7 @@ class ObjectiveFunction(IOAble):
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
-    def compile(self, mode="auto", verbose=1):
+    def compile(self, mode="auto"):
         """Call the necessary functions to ensure the function is compiled.
 
         Parameters
@@ -313,8 +308,6 @@ class ObjectiveFunction(IOAble):
             Whether to compile for least squares optimization or scalar optimization.
             "auto" compiles based on the type of objective,
             "all" compiles all derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if not self.built:
@@ -332,41 +325,34 @@ class ObjectiveFunction(IOAble):
         # variable values are irrelevant for compilation
         x = np.zeros((self.dim_x,))
 
-        if verbose > 0:
-            print("Compiling objective function and derivatives")
+        logging.WARNING("Compiling objective function and derivatives")
         timer.start("Total compilation time")
 
         if mode in ["scalar", "all"]:
             timer.start("Objective compilation time")
             _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
-            if verbose > 1:
-                timer.disp("Objective compilation time")
+            timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
             _ = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
-            if verbose > 1:
-                timer.disp("Gradient compilation time")
+            timer.disp("Gradient compilation time")
             timer.start("Hessian compilation time")
             _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
-            if verbose > 1:
-                timer.disp("Hessian compilation time")
+            timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
             _ = self.compute(x).block_until_ready()
             timer.stop("Objective compilation time")
-            if verbose > 1:
-                timer.disp("Objective compilation time")
+            timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
             _ = self.jac(x).block_until_ready()
             timer.stop("Jacobian compilation time")
-            if verbose > 1:
-                timer.disp("Jacobian compilation time")
+            timer.disp("Jacobian compilation time")
 
         timer.stop("Total compilation time")
-        if verbose > 1:
-            timer.disp("Total compilation time")
+        timer.disp("Total compilation time")
         self._compiled = True
 
     @property
@@ -540,7 +526,7 @@ class _Objective(IOAble, ABC):
         self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
 
     @abstractmethod
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays."""
 
     @abstractmethod
@@ -558,7 +544,7 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._print_value_fmt.format(jnp.linalg.norm(x)))
+        logging.WARNING(self._print_value_fmt.format(jnp.linalg.norm(x)))
 
     def _shift_scale(self, x):
         """Apply target and weighting."""

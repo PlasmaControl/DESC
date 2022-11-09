@@ -1,8 +1,9 @@
 """Objectives for solving equilibrium problems."""
 
 import warnings
+import logging
 
-from termcolor import colored
+from termcolor import coloredF
 
 from desc.backend import jnp
 from desc.compute import (
@@ -55,7 +56,7 @@ class ForceBalance(_Objective):
         units = "(N)"
         self._print_value_fmt = "Total force: {:10.3e} " + units
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -64,8 +65,6 @@ class ForceBalance(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -96,8 +95,7 @@ class ForceBalance(_Objective):
         self._dim_f = 2 * self.grid.num_nodes
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -122,8 +120,7 @@ class ForceBalance(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -214,7 +211,7 @@ class RadialForceBalance(_Objective):
         units = "(N)"
         self._print_value_fmt = "Radial force: {:10.3e} " + units
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -223,8 +220,6 @@ class RadialForceBalance(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -255,8 +250,7 @@ class RadialForceBalance(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -281,8 +275,7 @@ class RadialForceBalance(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -370,7 +363,7 @@ class HelicalForceBalance(_Objective):
         units = "(N)"
         self._print_value_fmt = "Helical force: {:10.3e}, " + units
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -379,8 +372,6 @@ class HelicalForceBalance(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -411,8 +402,7 @@ class HelicalForceBalance(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -437,8 +427,7 @@ class HelicalForceBalance(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -528,7 +517,7 @@ class Energy(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -537,8 +526,6 @@ class Energy(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -578,8 +565,7 @@ class Energy(_Objective):
         self._dim_f = 1
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -604,8 +590,7 @@ class Energy(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -705,7 +690,7 @@ class CurrentDensity(_Objective):
         units = "(A/m^2)"
         self._print_value_fmt = "Total current density: {:10.3e} " + units
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -714,8 +699,6 @@ class CurrentDensity(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -746,8 +729,7 @@ class CurrentDensity(_Objective):
         self._dim_f = 3 * self.grid.num_nodes
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -770,8 +752,7 @@ class CurrentDensity(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)

@@ -5,6 +5,8 @@ from desc.grid import QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
 
+import logging
+
 from .objective_funs import _Objective
 
 
@@ -37,7 +39,7 @@ class Volume(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -46,8 +48,6 @@ class Volume(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -58,8 +58,7 @@ class Volume(_Objective):
         self._dim_f = 1
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._R_transform = Transform(
@@ -70,8 +69,7 @@ class Volume(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -127,7 +125,7 @@ class AspectRatio(_Objective):
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -136,8 +134,6 @@ class AspectRatio(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
 
         """
         if self.grid is None:
@@ -148,8 +144,7 @@ class AspectRatio(_Objective):
         self._dim_f = 1
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.WARNING("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._R_transform = Transform(
@@ -160,8 +155,7 @@ class AspectRatio(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)

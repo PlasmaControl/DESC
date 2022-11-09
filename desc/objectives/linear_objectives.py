@@ -138,10 +138,7 @@ class FixBoundaryR(_Objective):
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.R_lmn[idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
@@ -278,10 +275,7 @@ class FixBoundaryZ(_Objective):
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.Z_lmn[idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
@@ -410,10 +404,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, L_lmn, **kwargs):
         """Compute lambda gauge symmetry errors.
@@ -521,10 +512,7 @@ class _FixProfile(_Objective, ABC):
         if None in self.target or self.target.size != self.dim_f:
             self.target = self._profile.params[self._idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
 
 class FixPressure(_FixProfile):
@@ -847,10 +835,7 @@ class FixPsi(_Objective):
         if None in self.target:
             self.target = eq.Psi
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.

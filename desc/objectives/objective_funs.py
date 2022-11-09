@@ -67,15 +67,8 @@ class ObjectiveFunction(IOAble):
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
 
-    def _set_derivatives(self, use_jit=True):
-        """Set up derivatives of the objective functions.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-
-        """
+    def _set_derivatives(self):
+        """Set up derivatives of the objective functions."""
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         for arg in self.args:
             self._derivatives["jac"][arg] = lambda x, arg=arg: jnp.vstack(
@@ -124,13 +117,35 @@ class ObjectiveFunction(IOAble):
             self._hess = Derivative(self.compute_scalar, mode="hess")
             self._jac = Derivative(self.compute, mode="fwd")
 
-        if use_jit:
-            self.compute = jit(self.compute)
-            self.compute_scalar = jit(self.compute_scalar)
-            self.jac = jit(self.jac)
-            self.hess = jit(self.hess)
-            self.grad = jit(self.grad)
-            self.jvp = jit(self.jvp)
+    def jit(self):
+        """Apply JIT to compute methods, or re-apply after updating self."""
+        # can't loop here because del doesn't work on getattr
+        # main idea is that when jitting a method, jax replaces that method
+        # with a CompiledFunction object, with self compiled in. To re-jit
+        # (ie, after updating attributes of self), we just need to delete the jax
+        # CompiledFunction object, which will then leave the raw method in its place,
+        # and then jit the raw method with the new self
+
+        # doing str name type checking to avoid importing weird jax private stuff
+        # for proper isinstance check
+        if "CompiledFunction" in str(type(self.compute)):
+            del self.compute
+        self.compute = jit(self.compute)
+        if "CompiledFunction" in str(type(self.compute_scalar)):
+            del self.compute_scalar
+        self.compute_scalar = jit(self.compute_scalar)
+        if "CompiledFunction" in str(type(self.jac)):
+            del self.jac
+        self.jac = jit(self.jac)
+        if "CompiledFunction" in str(type(self.hess)):
+            del self.hess
+        self.hess = jit(self.hess)
+        if "CompiledFunction" in str(type(self.grad)):
+            del self.grad
+        self.grad = jit(self.grad)
+        if "CompiledFunction" in str(type(self.jvp)):
+            del self.jvp
+        self.jvp = jit(self.jvp)
 
     def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
@@ -163,7 +178,9 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_state_vector()
-        self._set_derivatives(self.use_jit)
+        self._set_derivatives()
+        if self.use_jit:
+            self.jit()
 
         self._built = True
         timer.stop("Objective build")
@@ -449,6 +466,7 @@ class _Objective(IOAble, ABC):
         self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)
         self._name = name
+        self._use_jit = None
         self._built = False
 
         if eq is not None:
@@ -471,7 +489,7 @@ class _Objective(IOAble, ABC):
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
 
-    def _set_derivatives(self, use_jit=True):
+    def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
@@ -504,9 +522,27 @@ class _Objective(IOAble, ABC):
                     (self.dimensions[arg], self.dimensions[arg])
                 )
 
-        if use_jit:
-            self.compute = jit(self.compute)
-            self.compute_scalar = jit(self.compute_scalar)
+    def jit(self):
+        """Apply JIT to compute methods, or re-apply after updating self."""
+        # doing str name type checking to avoid importing weird jax private stuff
+        # for proper isinstance check
+        if "CompiledFunction" in str(type(self.compute)):
+            del self.compute
+        self.compute = jit(self.compute)
+        if "CompiledFunction" in str(type(self.compute_scalar)):
+            del self.compute_scalar
+        self.compute_scalar = jit(self.compute_scalar)
+        redo_derivs = False
+        for mode, val in self._derivatives.items():
+            for arg, deriv in val.items():
+                if "CompiledFunction" in str(type(self._derivatives[mode][arg])):
+                    redo_derivs = True
+                    break
+            if redo_derivs:
+                break
+        if redo_derivs:
+            del self._derivatives
+            self._set_derivatives()
             for mode, val in self._derivatives.items():
                 for arg, deriv in val.items():
                     self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
@@ -541,10 +577,20 @@ class _Objective(IOAble, ABC):
 
         """
         self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
+        if self.use_jit:
+            self.jit()
 
     @abstractmethod
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays."""
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives()
+        if use_jit is not None:
+            self._use_jit = use_jit
+        if self._use_jit:
+            self.jit()
+        self._built = True
 
     @abstractmethod
     def compute(self, *args, **kwargs):

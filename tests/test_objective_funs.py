@@ -23,6 +23,7 @@ from desc.objectives import (
     ToroidalCurrent,
     Volume,
 )
+from desc.objectives.objective_funs import _Objective
 from desc.profiles import PowerSeriesProfile
 
 
@@ -187,3 +188,29 @@ def test_derivative_modes():
     H1 = obj1.hess(x)
     H2 = obj2.hess(x)
     np.testing.assert_allclose(np.diag(H1), np.diag(H2), atol=1e-10)
+
+
+@pytest.mark.unit
+def test_rejit():
+    """Test that updating attributes and recompiling correctly updates."""
+
+    class DummyObjective(_Objective):
+        def __init__(self, y, eq=None, target=0, weight=1, name="dummy"):
+            self.y = y
+            super().__init__(eq=eq, target=target, weight=weight, name=name)
+
+        def build(self, eq, use_jit=True, verbose=1):
+            self._dim_f = 1
+            super().build(eq, use_jit, verbose)
+
+        def compute(self, x):
+            return self.target * self.weight + self.y * x
+
+    objective = DummyObjective(3.0)
+    objective.build(Equilibrium())
+    assert objective.compute(4.0) == 12.0
+    objective.target = 1.0
+    objective.weight = 2.0
+    assert objective.compute(4.0) == 12.0
+    objective.jit()
+    assert objective.compute(4.0) == 14.0

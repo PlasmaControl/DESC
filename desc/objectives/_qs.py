@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import put
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
@@ -10,7 +10,7 @@ from desc.compute import (
     compute_quasiisodynamic_field,
     data_index,
 )
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
 from .objective_funs import _Objective
@@ -658,8 +658,8 @@ class QuasiIsodynamic(_Objective):
         i_l,
         c_l,
         Psi,
-        B_min,
-        B_max,
+        Bmin,
+        Bmax,
         shape_i,
         shift_mn,
         **kwargs,
@@ -680,9 +680,9 @@ class QuasiIsodynamic(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
-        B_min : float
+        Bmin : float
             Minimum value of magnetic field strength, |B| (T).
-        B_max : float
+        Bmax : float
             Maximum value of magnetic field strength, |B| (T).
         shape_i : ndarray
             Magnetic well shaping parameters.
@@ -713,12 +713,14 @@ class QuasiIsodynamic(_Objective):
             self._current,
         )
         data_qi = compute_quasiisodynamic_field(
-            B_min, B_max, shape_i, shift_mn, self._zeta_transform
+            Bmin, Bmax, shape_i, shift_mn, self._zeta_transform
         )
 
-        nodes = jnp.hstack((self.grid.nodes[:, :2], data_qi["zeta_B"]))
-        grid = Grid(nodes)
-        transform = Transform(grid, self._B_transform.basis)
+        grid = self.grid.copy()
+        grid.nodes = put(
+            grid.nodes, (np.arange(self.grid.num_nodes), 2), data_qi["zeta_B"]
+        )
+        transform = Transform(grid, self._B_transform.basis, method="direct1")
         B = transform.transform(data_boozer["|B|_mn"])
         B_qi = data_qi["|B|_QI"]
 

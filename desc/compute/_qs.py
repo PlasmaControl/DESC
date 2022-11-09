@@ -258,15 +258,15 @@ def compute_quasisymmetry_error(
 
 
 def compute_quasiisodynamic_field(
-    B_min, B_max, shape_i, shift_mn, zeta_transform, data=None, **kwargs
+    Bmin, Bmax, shape_i, shift_mn, zeta_transform, data=None, **kwargs
 ):
     """Compute quasi-isodynamic field.
 
     Parameters
     ----------
-    B_min : float
+    Bmin : float
         Minimum value of magnetic field strength, |B| (T).
-    B_max : float
+    Bmax : float
         Maximum value of magnetic field strength, |B| (T).
     shape_i : ndarray
         Magnetic well shaping parameters.
@@ -295,9 +295,11 @@ def compute_quasiisodynamic_field(
         (jnp.array([0]), jnp.repeat((jnp.pi / 2 + shape_i) ** 2, 2))
     )
     B_i = jnp.polyint(jnp.poly(zeros))
-    B0 = jnp.sum(jnp.flipud([(jnp.pi / 2) ** (2 * i) for i in range(len(B_i))]) * B_i)
+    B0 = jnp.sum(
+        jnp.flipud(jnp.array([(jnp.pi / 2) ** (2 * i) for i in range(len(B_i))])) * B_i
+    )
     B = jnp.polyval(B_i, zeta_bar)
-    B = B / B0 * (B_max - B_min) + B_min
+    B = B / B0 * (Bmax - Bmin) + Bmin
     data["|B|_QI"] = B
 
     # compute well shift

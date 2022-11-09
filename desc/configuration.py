@@ -92,8 +92,8 @@ class _Configuration(IOAble, ABC):
         "_current",
         "_spectral_indexing",
         "_bdry_mode",
-        "_B_min",
-        "_B_max",
+        "_Bmin",
+        "_Bmax",
         "_shape_i",
         "_shift_mn",
     ]
@@ -395,6 +395,13 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+
+        # QI parameters
+        # FIXME: this should probably get removed
+        self._Bmin = 0
+        self._Bmax = 1
+        self._shape_i = np.array([1, 0])
+        self._shift_mn = np.zeros((6,))
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -1155,22 +1162,22 @@ class _Configuration(IOAble, ABC):
         return self._L_basis
 
     @property
-    def B_min(self):
+    def Bmin(self):
         """Minimum value of magnetic field strength, |B| (T)."""
-        return self._B_min
+        return self._Bmin
 
-    @B_min.setter
-    def B_min(self, B_min):
-        self._B_min = B_min
+    @Bmin.setter
+    def Bmin(self, Bmin):
+        self._Bmin = Bmin
 
     @property
-    def B_max(self):
+    def Bmax(self):
         """Maximum value of magnetic field strength, |B| (T)."""
-        return self._B_max
+        return self._Bmax
 
-    @B_max.setter
-    def B_max(self, B_max):
-        self._B_max = B_max
+    @Bmax.setter
+    def Bmax(self, Bmax):
+        self._Bmax = Bmax
 
     @property
     def shape_i(self):

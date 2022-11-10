@@ -50,6 +50,9 @@ class _Configuration(IOAble, ABC):
     pressure : Profile or ndarray shape(k,2) (optional)
         Pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
+    anisotropy : Profile or ndarray
+        Anisotropic pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero anisotropic pressure.
     iota : Profile or ndarray shape(k,2) (optional)
         Rotational transform profile or array of mode numbers and spectral coefficients
     current : Profile or ndarray shape(k,2) (optional)
@@ -90,6 +93,7 @@ class _Configuration(IOAble, ABC):
         "_pressure",
         "_iota",
         "_current",
+        "_anisotropy",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -102,6 +106,7 @@ class _Configuration(IOAble, ABC):
         M=None,
         N=None,
         pressure=None,
+        anisotropy=None,
         iota=None,
         current=None,
         surface=None,
@@ -308,6 +313,7 @@ class _Configuration(IOAble, ABC):
 
         # profiles
         self._pressure = None
+        self._anisotropy = None
         self._iota = None
         self._current = None
 
@@ -324,6 +330,16 @@ class _Configuration(IOAble, ABC):
             )
         else:
             raise TypeError("Got unknown pressure profile {}".format(pressure))
+
+        # anisotropy
+        if isinstance(anisotropy, Profile):
+            self._anisotropy = anisotropy
+        elif isinstance(anisotropy, (np.ndarray, jnp.ndarray)):
+            self._anisotropy = PowerSeriesProfile(
+                modes=anisotropy[:, 0], params=anisotropy[:, 1], name="anisotropy"
+            )
+        elif anisotropy is not None:
+            raise TypeError("Got unknown anisotropy profile {}".format(anisotropy))
 
         # default profile
         if iota is None and current is None:
@@ -354,7 +370,7 @@ class _Configuration(IOAble, ABC):
             raise TypeError("Got unknown current profile {}".format(current))
 
         # ensure profiles have the right resolution
-        for profile in ["pressure", "iota", "current"]:
+        for profile in ["pressure", "anisotropy", "iota", "current"]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
@@ -741,6 +757,8 @@ class _Configuration(IOAble, ABC):
 
         if L_change and hasattr(self.pressure, "change_resolution"):
             self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
+        if L_change and hasattr(self.anisotropy, "change_resolution"):
+            self.anisotropy.change_resolution(L=max(L, self.anisotropy.basis.L))
         if L_change and hasattr(self.iota, "change_resolution"):
             self.iota.change_resolution(L=max(L, self.iota.basis.L))
         if L_change and hasattr(self.current, "change_resolution"):
@@ -1074,6 +1092,29 @@ class _Configuration(IOAble, ABC):
         self.pressure.params = p_l
 
     @property
+    def anisotropy(self):
+        """Profile: Anisotropy profile."""
+        return self._anisotropy
+
+    @anisotropy.setter
+    def anisotropy(self, new):
+        if isinstance(new, Profile):
+            self._anisotropy = new
+        else:
+            raise TypeError(
+                f"anisotropy should be of type Profile or a subclass, got {new} "
+            )
+
+    @property
+    def d_lmn(self):
+        """ndarray: Coefficients of anisotropy profile."""
+        return self.anisotropy.params
+
+    @d_lmn.setter
+    def d_lmn(self, d_lmn):
+        self.anisotropy.params = d_lmn
+
+    @property
     def iota(self):
         """Profile: Rotational transform (iota) profile."""
         return self._iota
@@ -1209,6 +1250,9 @@ class _Configuration(IOAble, ABC):
                 )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()
+                inputs[arg].grid = grid
+            elif arg == "anisotropy":
+                inputs[arg] = self.anisotropy.copy()
                 inputs[arg].grid = grid
             elif arg == "iota":
                 if self.iota is not None:

@@ -1042,7 +1042,7 @@ class FixSumModesR(_Objective):
 
         # use current sum as target if needed
         if None in self.target:
-            self.target = np.dot(sum_weights, eq.R_lmn[self._idx])
+            self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
 
         self._check_dimensions()
         self._set_dimensions(eq)
@@ -1182,7 +1182,7 @@ class FixSumModesZ(_Objective):
 
         # use current sum as target if needed
         if None in self.target:
-            self.target = np.dot(sum_weights, eq.Z_lmn[self._idx])
+            self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
 
         self._check_dimensions()
         self._set_dimensions(eq)

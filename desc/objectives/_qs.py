@@ -719,13 +719,10 @@ class QuasiIsodynamic(_Objective):
             Bmin, Bmax, shape_i, shift_mn, self._zeta_transform
         )
 
-        grid = self.grid.copy()
-        grid.nodes = put(
-            grid.nodes, (np.arange(self.grid.num_nodes), 2), data_qi["zeta_B"]
-        )
-        transform = Transform(grid, self._B_transform.basis, method="direct1")
-        B = transform.transform(data_boozer["|B|_mn"])
+        nodes = jnp.array(
+            [self.grid.nodes[:, 0], self.grid.nodes[:, 1], data_qi["zeta_B"]]
+        ).T
+        B = jnp.matmul(self._B_transform.basis.evaluate(nodes), data_boozer["|B|_mn"])
         B_qi = data_qi["|B|_QI"]
-
         f = B - B_qi
         return self._shift_scale(f)

@@ -375,9 +375,8 @@ class Transform(IOAble):
 
         if self.method == "direct1":
             for d in self.derivatives:
-                # FIXME: unique=False needed to work with JAX, but otherwise want True
                 self._matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
-                    self.grid.nodes, d, unique=False
+                    self.grid.nodes, d, unique=True
                 )
 
         if self.method in ["fft", "direct2"]:

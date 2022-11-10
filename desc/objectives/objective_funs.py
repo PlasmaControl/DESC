@@ -577,7 +577,7 @@ class _Objective(IOAble, ABC):
 
         """
         self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
-        if self.use_jit:
+        if self._use_jit:
             self.jit()
 
     @abstractmethod

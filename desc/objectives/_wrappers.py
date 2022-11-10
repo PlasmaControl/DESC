@@ -94,15 +94,21 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._args.remove("p_l")
         if isinstance(self._objective.objectives[0], QuasiIsodynamic):  # FIXME: hacky
             self._args.extend(["shape_i", "shift_mn"])
+        self._full_args = np.concatenate((self.args, self._eq_objective.args))
+        self._full_args = [arg for arg in arg_order if arg in self._full_args]
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}
         for arg in self.args:
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
-
-        self._full_args = np.concatenate((self.args, self._eq_objective.args))
-        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        self._dim_full_x = 0
+        self._full_x_idx = {}
+        for arg in self._full_args:
+            self._full_x_idx[arg] = np.arange(
+                self._dim_full_x, self._dim_full_x + self.dimensions[arg]
+            )
+            self._dim_full_x += self.dimensions[arg]
 
         (
             xp,
@@ -210,61 +216,34 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         """
         self._update_equilibrium(x)
 
-        # dxf/dc
-        xf_idx = np.concatenate(
+        # dx/dc
+        x_idx = np.concatenate(
             [
-                self._eq_objective.x_idx[arg]
-                for arg in [
-                    "p_l",
-                    "i_l",
-                    "c_l",
-                    "Psi",
-                    "shape_i",
-                    "shift_mn",
-                ]
-                if arg in self._eq_objective.args
+                self._full_x_idx[arg]
+                for arg in ["p_l", "i_l", "c_l", "Psi"]
+                if arg in self._full_args
             ]
         )
-        xf_idx.sort(kind="mergesort")
-        dxfdc = np.eye(self._eq_objective.dim_x)[:, xf_idx]
-        dxfdRb = (
-            np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["R_lmn"]]
-            @ self._Ainv["R_lmn"]
+        x_idx.sort(kind="mergesort")
+        dxdc = np.eye(self._dim_full_x)[:, x_idx]
+        dxdRb = (
+            np.eye(self._dim_full_x)[:, self._full_x_idx["R_lmn"]] @ self._Ainv["R_lmn"]
         )
-        dxfdc = np.hstack((dxfdc, dxfdRb))
-        dxfdZb = (
-            np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["Z_lmn"]]
-            @ self._Ainv["Z_lmn"]
+        dxdc = np.hstack((dxdc, dxdRb))
+        dxdZb = (
+            np.eye(self._dim_full_x)[:, self._full_x_idx["Z_lmn"]] @ self._Ainv["Z_lmn"]
         )
-        dxfdc = np.hstack((dxfdc, dxfdZb))
-
-        # dxg/dc
-        xg_idx = np.concatenate(
+        dxdc = np.hstack((dxdc, dxdZb))
+        qi_idx = np.concatenate(
             [
-                self._objective.x_idx[arg]
-                for arg in [
-                    "p_l",
-                    "i_l",
-                    "c_l",
-                    "Psi",
-                    "shape_i",
-                    "shift_mn",
-                ]
-                if arg in self._objective.args
+                self._full_x_idx[arg]
+                for arg in ["shape_i", "shift_mn"]
+                if arg in self._full_args
             ]
         )
-        xg_idx.sort(kind="mergesort")
-        dxgdc = np.eye(self._objective.dim_x)[:, xg_idx]
-        dxgdRb = (
-            np.eye(self._objective.dim_x)[:, self._objective.x_idx["R_lmn"]]
-            @ self._Ainv["R_lmn"]
-        )
-        dxgdc = np.hstack((dxgdc, dxgdRb))
-        dxgdZb = (
-            np.eye(self._objective.dim_x)[:, self._objective.x_idx["Z_lmn"]]
-            @ self._Ainv["Z_lmn"]
-        )
-        dxgdc = np.hstack((dxgdc, dxgdZb))
+        qi_idx.sort(kind="mergesort")
+        dxdqi = np.eye(self._dim_full_x)[:, qi_idx]
+        dxdc = np.hstack((dxdc, dxdqi))
 
         # state vectors
         xf = self._eq_objective.x(self._eq)
@@ -277,10 +256,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
         }
         Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
-        for arg in self._eq_objective.args:
+        for arg in self._full_args:
             if arg not in Fx.keys():
                 Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-        for arg in self._objective.args:
+        for arg in self._full_args:
             if arg not in Gx.keys():
                 Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
         Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
@@ -288,10 +267,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
-        Fc = Fx @ dxfdc
-        Gc = Gx @ dxgdc
-        if Fc.shape[1] < Gc.shape[1]:
-            Fc = jnp.pad(Fc, ((0, 0), (0, Gc.shape[1] - Fc.shape[1])))
+        Fc = Fx @ dxdc
+        Gc = Gx @ dxdc
 
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
         GxFx = Gx_reduced @ Fx_reduced_inv

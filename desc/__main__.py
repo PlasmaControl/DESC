@@ -19,7 +19,8 @@ def main(cl_args=sys.argv[1:]):
 
     import desc
 
-    print(desc.BANNER)
+    if ir.args.verbose:
+        print(desc.BANNER)
 
     import matplotlib.pyplot as plt
 

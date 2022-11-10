@@ -42,7 +42,7 @@ def SOLOVEV(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy"]
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
     main(args)
 
     SOLOVEV_out = {
@@ -119,7 +119,7 @@ def test_SOLOVEV_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
 
@@ -139,7 +139,7 @@ def test_DSHAPE_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename,]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
 
@@ -159,7 +159,7 @@ def test_DSHAPE_current_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
 
@@ -179,7 +179,7 @@ def test_HELIOTRON_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
 
@@ -199,7 +199,7 @@ def test_HELIOTRON_vacuum_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     benchmark(main, args)
     return None
 
@@ -267,6 +267,7 @@ def test_perturb_1(SOLOVEV, benchmark):
             "dp": dp,
             "tr_ratio": tr_ratio,
             "order": 1,
+            "verbose": 2,
             "copy": True,
         }
         return args, kwargs
@@ -298,6 +299,7 @@ def test_perturb_2(SOLOVEV, benchmark):
             "dp": dp,
             "tr_ratio": tr_ratio,
             "order": 2,
+            "verbose": 2,
             "copy": True,
         }
         return args, kwargs

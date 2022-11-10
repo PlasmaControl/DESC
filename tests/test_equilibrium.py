@@ -123,7 +123,7 @@ def test_continuation_resolution(tmpdir_factory):
     exec_dir = os.path.join(cwd, "..")
     input_filename = os.path.join(exec_dir, input_path)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     with pytest.warns(UserWarning):
         main(args)
 

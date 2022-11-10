@@ -4,6 +4,7 @@ from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     RadialForceBalance,
 )

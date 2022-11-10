@@ -211,7 +211,7 @@ def git_versions_from_keywords(keywords, tag_prefix):
                 "date": date,
             }
     # no suitable tags, so version is "0+unknown", but full hex is still there
-    logging.error"no suitable tags, using unknown + full revision id")
+    logging.error("no suitable tags, using unknown + full revision id")
     return {
         "version": "0+unknown",
         "full-revisionid": keywords["full"].strip(),

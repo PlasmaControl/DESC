@@ -28,6 +28,7 @@ ext_field = load("./ext_field_ncsx.h5")
 eqf = desc.examples.get("NCSX", "all")
 veq = eqf[-1]
 
+veq.change_resolution(L=20, M=10, N=10, L_grid=30, M_grid=15, N_grid=15)
 veq.resolution_summary()
 
 surf = veq.get_surface_at(1)

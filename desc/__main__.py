@@ -19,8 +19,7 @@ def main(cl_args=sys.argv[1:]):
 
     import desc
 
-    if ir.args.verbose:
-        print(desc.BANNER)
+    print(desc.BANNER)
 
     import matplotlib.pyplot as plt
 
@@ -39,7 +38,7 @@ def main(cl_args=sys.argv[1:]):
         equil_fam[0].set_initial_guess(ir.args.guess)
     # solve equilibrium
     equil_fam.solve_continuation(
-        verbose=ir.args.verbose, checkpoint_path=ir.output_path
+        checkpoint_path=ir.output_path
     )
 
     if ir.args.plot > 1:

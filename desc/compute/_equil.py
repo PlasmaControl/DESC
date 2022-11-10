@@ -8,12 +8,14 @@ from ._core import (
     compute_contravariant_metric_coefficients,
     compute_geometry,
     compute_pressure,
+    compute_pressure_anisotropy,
 )
 from ._field import (
     compute_contravariant_current_density,
     compute_magnetic_field_magnitude,
+    compute_magnetic_pressure_gradient,
 )
-from .utils import check_derivs
+from .utils import check_derivs, cross, dot
 
 
 def compute_force_error(
@@ -138,6 +140,123 @@ def compute_force_error(
             jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights)
             / data["V"]
         )
+
+    return data
+
+
+def compute_force_error_anisotropic(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    p_l,
+    d_lmn,
+    i_l,
+    c_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
+    pressure,
+    anisotropy,
+    iota,
+    current,
+    data=None,
+    **kwargs,
+):
+    """Compute force error for anisotropic pressure equilibrium.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    p_l : ndarray
+        Spectral coefficients of p_{perp}(rho,theta,zeta) -- perpendicular pressure.
+    d_lmn : ndarray
+        Spectral coefficients of anisotropy term: d = (p_{||} - p_{perp})/B^2
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+    pressure : Profile
+        Transforms p_l coefficients to real space.
+    anisotropy : Profile
+        Transforms d_lmn coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of force error components.
+        Keys are of the form 'F_x', meaning the x covariant (F_x) component of the
+        force error.
+
+    """
+    data = compute_pressure(p_l, pressure, data=data)
+    data = compute_pressure_anisotropy(d_lmn, anisotropy, data=data)
+    data = compute_contravariant_current_density(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
+        data=data,
+    )
+    data = compute_magnetic_pressure_gradient(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
+        data,
+    )
+    data = compute_contravariant_metric_coefficients(
+        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+    )
+    data["grad(d)"] = (
+        data["d_r"] * data["e^rho"].T
+        + data["d_t"] * data["e^theta"].T
+        + data["d_z"] * data["e^zeta"].T
+    ).T
+    data["JxB"] = cross(data["J"], data["B"])
+    data["B.grad(d)"] = dot(data["B"], data["grad(d"])
+    data["grad(p)"] = (
+        data["p_r"] * data["e^rho"].T
+        + data["p_t"] * data["e^theta"].T
+        + data["p_z"] * data["e^zeta"].T
+    ).T
+    data["F"] = (
+        (1 - data["d"]) * data["JxB"].T
+        - data["B.grad(d)"] * data["B"].T
+        - data["d"] * data["grad(|B|^2)"].T / (2 * mu_0)
+        + data["grad(p)"].T
+    ).T
 
     return data
 

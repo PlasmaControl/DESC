@@ -251,6 +251,41 @@ def compute_pressure(
 
     data["p"] = pressure.compute(p_l, dr=0)
     data["p_r"] = pressure.compute(p_l, dr=1)
+    data["p_t"] = pressure.compute(p_l, dt=1)
+    data["p_z"] = pressure.compute(p_l, dz=1)
+
+    return data
+
+
+def compute_pressure_anisotropy(
+    d_lmn,
+    anisotropy,
+    data=None,
+    **kwargs,
+):
+    """Compute anistropic pressure term d = (p_|| - p_perp)/B^2.
+
+    Parameters
+    ----------
+    d_lmn : ndarray
+        Spectral coefficients of d(rho,theta,zeta) -- anisotropic pressure term.
+    anistropy : Profile
+        Transforms d_lmn coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of pressure profile.
+        Keys are of the form 'X_y' meaning the derivative of X wrt y.
+
+    """
+    if data is None:
+        data = {}
+
+    data["d"] = anisotropy.compute(d_lmn, dr=0)
+    data["d_r"] = anisotropy.compute(d_lmn, dr=1)
+    data["d_t"] = anisotropy.compute(d_lmn, dt=1)
+    data["d_z"] = anisotropy.compute(d_lmn, dz=1)
 
     return data
 

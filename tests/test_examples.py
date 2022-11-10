@@ -200,7 +200,6 @@ def test_1d_optimization_old(SOLOVEV):
     eq._optimize(
         objective,
         copy=False,
-        solve_options={"verbose": 0},
         perturb_options={
             "dZb": True,
             "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
@@ -248,12 +247,9 @@ def run_qh_step(n, eq):
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
-        verbose=3,
         copy=True,
         options={
-            "initial_trust_radius": 0.5,
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
+            "initial_trust_radius": 0.5
         },
     )
 

@@ -1458,15 +1458,7 @@ def get_parser():
     parser.add_argument(
         "--version", action="store_true", help="Display version number and exit."
     )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=1,
-        help="Display detailed progress information. "
-        + "Once to include timing, twice to also show individual iterations.",
-    )
+
     parser.add_argument(
         "-l",
         "--logging",

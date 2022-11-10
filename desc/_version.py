@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import logging
 
 
 def get_keywords():
@@ -43,7 +44,6 @@ def get_config():
     cfg.tag_prefix = "v"
     cfg.parentdir_prefix = "desc-"
     cfg.versionfile_source = "desc/_version.py"
-    cfg.verbose = False
     return cfg
 
 
@@ -68,7 +68,7 @@ def register_vcs_handler(vcs, method):  # decorator
     return decorate
 
 
-def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=None):
+def run_command(commands, args, cwd=None, hide_stderr=False, env=None):
     """Call the given command(s)."""
     assert isinstance(commands, list)
     p = None
@@ -88,9 +88,8 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=
             e = sys.exc_info()[1]
             if e.errno == errno.ENOENT:
                 continue
-            if verbose:
-                print("unable to run %s" % dispcmd)
-                print(e)
+            logging.error("unable to run %s" % dispcmd)
+            logging.error(e)
             return None, None
     else:
         if verbose:
@@ -100,14 +99,13 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False, env=
     if sys.version_info[0] >= 3:
         stdout = stdout.decode()
     if p.returncode != 0:
-        if verbose:
-            print("unable to run %s (error)" % dispcmd)
-            print("stdout was %s" % stdout)
+        logging.error("unable to run %s (error)" % dispcmd)
+        logging.error("stdout was %s" % stdout)
         return None, p.returncode
     return stdout, p.returncode
 
 
-def versions_from_parentdir(parentdir_prefix, root, verbose):
+def versions_from_parentdir(parentdir_prefix, root):
     """Try to determine the version from the parent directory name.
 
     Source tarballs conventionally unpack into a directory that includes both
@@ -130,11 +128,11 @@ def versions_from_parentdir(parentdir_prefix, root, verbose):
             rootdirs.append(root)
             root = os.path.dirname(root)  # up a level
 
-    if verbose:
-        print(
-            "Tried directories %s but none started with prefix %s"
-            % (str(rootdirs), parentdir_prefix)
-        )
+    
+    logging.error(
+        "Tried directories %s but none started with prefix %s"
+        % (str(rootdirs), parentdir_prefix)
+    )
     raise NotThisMethod("rootdir doesn't start with parentdir_prefix")
 
 
@@ -168,7 +166,7 @@ def git_get_keywords(versionfile_abs):
 
 
 @register_vcs_handler("git", "keywords")
-def git_versions_from_keywords(keywords, tag_prefix, verbose):
+def git_versions_from_keywords(keywords, tag_prefix):
     """Get version information from git keywords."""
     if not keywords:
         raise NotThisMethod("no keywords at all, weird")
@@ -183,8 +181,7 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
         date = date.strip().replace(" ", "T", 1).replace(" ", "", 1)
     refnames = keywords["refnames"].strip()
     if refnames.startswith("$Format"):
-        if verbose:
-            print("keywords are unexpanded, not using")
+        logging.error("keywords are unexpanded, not using")
         raise NotThisMethod("unexpanded keywords, not a git-archive tarball")
     refs = {r.strip() for r in refnames.strip("()").split(",")}
     # starting in git-1.8.3, tags are listed as "tag: foo-1.0" instead of
@@ -208,8 +205,7 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
         # sorting will prefer e.g. "2.0" over "2.0rc1"
         if ref.startswith(tag_prefix):
             r = ref[len(tag_prefix) :]
-            if verbose:
-                print("picking %s" % r)
+            logging.warning("picking %s" % r)
             return {
                 "version": r,
                 "full-revisionid": keywords["full"].strip(),
@@ -218,8 +214,7 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
                 "date": date,
             }
     # no suitable tags, so version is "0+unknown", but full hex is still there
-    if verbose:
-        print("no suitable tags, using unknown + full revision id")
+    logging.error"no suitable tags, using unknown + full revision id")
     return {
         "version": "0+unknown",
         "full-revisionid": keywords["full"].strip(),
@@ -230,7 +225,7 @@ def git_versions_from_keywords(keywords, tag_prefix, verbose):
 
 
 @register_vcs_handler("git", "pieces_from_vcs")
-def git_pieces_from_vcs(tag_prefix, root, verbose, run_command=run_command):
+def git_pieces_from_vcs(tag_prefix, root, run_command=run_command):
     """Get version from 'git describe' in the root of the source tree.
 
     This only gets called if the git-archive 'subst' keywords were *not*
@@ -243,8 +238,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, run_command=run_command):
 
     out, rc = run_command(GITS, ["rev-parse", "--git-dir"], cwd=root, hide_stderr=True)
     if rc != 0:
-        if verbose:
-            print("Directory %s not under git control" % root)
+        logging.error("Directory %s not under git control" % root)
         raise NotThisMethod("'git rev-parse --git-dir' returned error")
 
     # if there is a tag matching tag_prefix, this yields TAG-NUM-gHEX[-dirty]
@@ -512,10 +506,9 @@ def get_versions():
     # case we can only use expanded keywords.
 
     cfg = get_config()
-    verbose = cfg.verbose
 
     try:
-        return git_versions_from_keywords(get_keywords(), cfg.tag_prefix, verbose)
+        return git_versions_from_keywords(get_keywords(), cfg.tag_prefix)
     except NotThisMethod:
         pass
 
@@ -536,14 +529,14 @@ def get_versions():
         }
 
     try:
-        pieces = git_pieces_from_vcs(cfg.tag_prefix, root, verbose)
+        pieces = git_pieces_from_vcs(cfg.tag_prefix, root)
         return render(pieces, cfg.style)
     except NotThisMethod:
         pass
 
     try:
         if cfg.parentdir_prefix:
-            return versions_from_parentdir(cfg.parentdir_prefix, root, verbose)
+            return versions_from_parentdir(cfg.parentdir_prefix, root)
     except NotThisMethod:
         pass
 

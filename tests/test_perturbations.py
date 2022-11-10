@@ -37,7 +37,6 @@ def test_perturbation_orders(SOLOVEV):
         dp=dp,
         tr_ratio=tr_ratio,
         order=0,
-        verbose=2,
         copy=True,
     )
     eq1 = perturb(
@@ -47,7 +46,6 @@ def test_perturbation_orders(SOLOVEV):
         dp=dp,
         tr_ratio=tr_ratio,
         order=1,
-        verbose=2,
         copy=True,
     )
     eq2 = perturb(
@@ -57,7 +55,6 @@ def test_perturbation_orders(SOLOVEV):
         dp=dp,
         tr_ratio=tr_ratio,
         order=2,
-        verbose=2,
         copy=True,
     )
     eq3 = perturb(
@@ -67,13 +64,12 @@ def test_perturbation_orders(SOLOVEV):
         dp=dp,
         tr_ratio=tr_ratio,
         order=3,
-        verbose=2,
         copy=True,
     )
 
     # solve for "true" high-beta solution
     eqS = eq3.copy()
-    eqS.solve(objective=objective, ftol=1e-2, verbose=3)
+    eqS.solve(objective=objective, ftol=1e-2)
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")

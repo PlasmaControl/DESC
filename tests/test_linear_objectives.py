@@ -76,7 +76,7 @@ def test_bc_on_interior_surfaces():
     surf = FourierRZToroidalSurface(rho=0.5)
     iota = PowerSeriesProfile([1, 0, 0.5])
     eq = Equilibrium(L=4, M=4, N=0, surface=surf, iota=iota)
-    eq.solve()
+    eq.solve(verbose=0)
     surf5 = eq.get_surface_at(0.5)
 
     np.testing.assert_allclose(surf.R_lmn, surf5.R_lmn, atol=1e-12)

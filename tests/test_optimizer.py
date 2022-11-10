@@ -79,6 +79,7 @@ class TestFmin:
             x0,
             scalar_grad,
             scalar_hess,
+            verbose=3,
             method="dogleg",
             x_scale="hess",
             ftol=0,
@@ -98,6 +99,7 @@ class TestFmin:
             x0,
             scalar_grad,
             scalar_hess,
+            verbose=1,
             method="subspace",
             x_scale="hess",
             ftol=0,
@@ -120,6 +122,7 @@ class TestFmin:
             x0,
             rosen_der,
             hess="bfgs",
+            verbose=1,
             method="dogleg",
             x_scale=1,
             ftol=1e-8,
@@ -142,6 +145,7 @@ class TestFmin:
             x0,
             rosen_der,
             hess=BFGS(),
+            verbose=1,
             method="subspace",
             x_scale=1,
             ftol=1e-8,
@@ -164,6 +168,7 @@ class TestSGD:
             scalar_fun,
             x0,
             scalar_grad,
+            verbose=3,
             ftol=0,
             xtol=0,
             gtol=1e-12,
@@ -197,6 +202,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
+            verbose=0,
             x_scale=1,
             tr_method="cho",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -207,6 +213,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
+            verbose=0,
             x_scale=1,
             tr_method="svd",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -317,12 +324,15 @@ def test_overstepping():
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
+        verbose=3,
         gtol=-1,  # disable gradient stopping
         ftol=-1,  # disable function stopping
         xtol=1e-3,
         copy=True,
         options={
-            "initial_trust_radius": 0.5
+            "initial_trust_radius": 0.5,
+            "perturb_options": {"verbose": 0},
+            "solve_options": {"verbose": 0},
         },
     )
 

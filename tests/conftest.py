@@ -37,7 +37,7 @@ def SOLOVEV_vac(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy"]
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
     main(args)
 
     SOLOVEV_vac_out = {
@@ -68,7 +68,7 @@ def SOLOVEV(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy"]
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
     main(args)
 
     SOLOVEV_out = {
@@ -99,7 +99,7 @@ def DSHAPE(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename,]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     DSHAPE_out = {
@@ -130,7 +130,7 @@ def DSHAPE_current(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     DSHAPE_current_out = {
@@ -161,7 +161,7 @@ def HELIOTRON(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     HELIOTRON_out = {
@@ -210,7 +210,7 @@ def HELIOTRON_vac(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     HELIOTRON_vacuum_out = {
@@ -241,7 +241,7 @@ def HELIOTRON_vac2(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
     main(args)
 
     HELIOTRON_vacuum2_out = {
@@ -270,7 +270,7 @@ def precise_QH(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(initial_h5_path), input_filename]
+    args = ["-o", str(initial_h5_path), input_filename, "-vv"]
     main(args)
 
     precise_QH_out = {
@@ -351,7 +351,7 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
     eq._solved = True
     VMECIO.save(
-        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:]
+        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc

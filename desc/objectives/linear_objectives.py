@@ -271,7 +271,6 @@ class FixBoundaryZ(_Objective):
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        # logic on weight prevents an error if target is None (and )
         if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
 

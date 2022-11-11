@@ -20,6 +20,7 @@ from .linear_objectives import (
     FixCurrent,
     FixIota,
     FixLambdaGauge,
+    FixLambdaZero,
     FixModeR,
     FixModeZ,
     FixPressure,

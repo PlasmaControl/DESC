@@ -14,6 +14,7 @@ from desc.objectives import (
     FixCurrent,
     FixIota,
     FixLambdaGauge,
+    FixLambdaZero,
     FixModeR,
     FixModeZ,
     FixPressure,
@@ -193,6 +194,7 @@ def test_fixed_mode_solve():
 @pytest.mark.slow
 def test_fixed_axis_solve():
     """Test solving an equilibrium with a fixed axis constraint."""
+    # also tests zero lambda solve
     # Reset DSHAPE to initial guess, fix axis, and then resolve
     # and check that the axis stayed fix
     eq = desc.examples.get("DSHAPE")
@@ -203,7 +205,7 @@ def test_fixed_axis_solve():
     orig_Z_val = eq.axis.Z_n
 
     constraints = (
-        FixLambdaGauge(),
+        FixLambdaZero(),
         FixPressure(),
         FixIota(),
         FixPsi(),
@@ -222,3 +224,4 @@ def test_fixed_axis_solve():
 
     np.testing.assert_almost_equal(orig_R_val, eq.axis.R_n)
     np.testing.assert_almost_equal(orig_Z_val, eq.axis.Z_n)
+    np.testing.assert_array_equal(np.zeros_like(eq.L_lmn), eq.L_lmn)

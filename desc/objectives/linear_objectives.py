@@ -434,6 +434,87 @@ class FixLambdaGauge(_Objective):
         return self._shift_scale(f)
 
 
+class FixLambdaZero(_Objective):
+    """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to (always is zero)
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(self, eq=None, target=0, weight=1, name="lambda zero"):
+
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "lambda zero error: {:10.3e} (m)"
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        modes = eq.L_basis.modes
+        idx = np.arange(eq.L_basis.num_modes)
+        modes_idx = idx
+        self._idx = idx
+
+        self._dim_f = modes_idx.size
+        # use given targets and weights if specified
+
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
+            self.weight = self._weight[modes_idx]
+
+        # use axis parameters as target if needed
+        self.target = np.zeros_like(modes_idx)
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute lambda fixed to zero errors.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Lambda fixed to zero errors.
+
+        """
+        fixed_params = L_lmn[self._idx]
+        return self._shift_scale(fixed_params)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "L_lmn"
+
+
 # TODO: make base class for FixAxis?
 class FixAxisR(_Objective):
     """Fixes magnetic axis R coefficients.

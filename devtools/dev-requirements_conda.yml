@@ -28,9 +28,8 @@ dependencies:
   - sphinx_rtd_theme
 
   # linting
-  - black = 21.7b0
-  - click = 8.0.4
-  - flake8 >= 4.0.1
+  - black = 22.10.0
+  - flake8 >= 5.0.0
   - flake8-docstrings
   - flake8-eradicate
   - flake8-isort

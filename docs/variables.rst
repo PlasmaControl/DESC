@@ -9,7 +9,7 @@ The table below contains a list of variables that are used in the code and that 
   * **Description** : description of the variable
   * **Compute function** : the function in the code that computes the variable (generally only for developers)
 
-  
+
 .. csv-table:: List of Variables
    :file: variables.csv
    :widths: 10, 10, 10, 50, 20

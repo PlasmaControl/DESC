@@ -9,10 +9,9 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc.backend import use_jax
 from desc.basis import FourierZernikeBasis
 from desc.configuration import _Configuration
-from desc.geometry import FourierRZCurve, FourierRZToroidalSurface
+from desc.geometry import FourierRZCurve
 from desc.grid import LinearGrid
 from desc.io import IOAble
 from desc.objectives import (
@@ -24,7 +23,7 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.transform import Transform
-from desc.utils import Timer, isalmostequal
+from desc.utils import Timer
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -321,7 +320,7 @@ class Equilibrium(_Configuration, IOAble):
                 ntheta = 2 * M + 1
 
             inputs = {}
-            inputs["Psi"] = np.pi * r ** 2 * na_eq.spsi * na_eq.Bbar
+            inputs["Psi"] = np.pi * r**2 * na_eq.spsi * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L
             inputs["M"] = M
@@ -329,10 +328,10 @@ class Equilibrium(_Configuration, IOAble):
             inputs["sym"] = not na_eq.lasym
             inputs["spectral_indexing "] = spectral_indexing
             inputs["pressure"] = np.array(
-                [[0, -na_eq.p2 * r ** 2], [2, na_eq.p2 * r ** 2]]
+                [[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]
             )
             inputs["iota"] = None
-            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r ** 2]])
+            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]])
             inputs["axis"] = FourierRZCurve(
                 R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
                 Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
@@ -367,7 +366,7 @@ class Equilibrium(_Configuration, IOAble):
         Z_1D = np.zeros((grid.num_nodes,))
 
         for rho_i in rho:
-            idx = idx = np.where((grid.nodes[:, 0] == rho_i))[0]
+            idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
             R_2D, Z_2D, _ = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
@@ -470,10 +469,8 @@ class Equilibrium(_Configuration, IOAble):
             )
         if eq.bdry_mode == "poincare":
             raise NotImplementedError(
-                (
-                    "Solving equilibrium with poincare XS as BC is not supported yet "
-                    + "on master branch."
-                )
+                "Solving equilibrium with poincare XS as BC is not supported yet "
+                + "on master branch."
             )
 
         result = optimizer.optimize(
@@ -854,118 +851,69 @@ class EquilibriaFamily(IOAble, MutableSequence):
 
     Parameters
     ----------
-    inputs : dict or list
-        either a dictionary of inputs or list of dictionaries. For more information
-        see inputs required by ``'Equilibrium'``.
-        If solving using continuation method, a list should be given.
-
+    args : Equilibrium, dict or list of dict
+        Should be either:
+          * An Equilibrium (or several)
+          * A dictionary of inputs (or several) to create a equilibria
+          * A single list of dictionaries, one for each equilibrium in a continuation.
+          * Nothing, to create an empty family.
+        For more information see inputs required by ``'Equilibrium'``.
     """
 
     _io_attrs_ = ["_equilibria"]
 
-    def __init__(self, inputs):
-        # did we get 1 set of inputs or several?
-        if isinstance(inputs, (list, tuple)):
-            self.equilibria = [Equilibrium(**inputs[0])]
+    def __init__(self, *args):
+
+        self.equilibria = []
+        if len(args) == 1 and isinstance(args[0], list):
+            for inp in args[0]:
+                self.equilibria.append(Equilibrium(**inp))
         else:
-            self.equilibria = [Equilibrium(**inputs)]
-        self.inputs = inputs
+            for arg in args:
+                if isinstance(arg, Equilibrium):
+                    self.equilibria.append(arg)
+                elif isinstance(arg, dict):
+                    self.equilibria.append(Equilibrium(**arg))
+                else:
+                    raise TypeError(
+                        "Args to create EquilibriaFamily should either be "
+                        + "Equilibrium or dictionary"
+                    )
 
-    @staticmethod
-    def _format_deltas(inputs, equil):
-        """Format the changes in continuation parameters.
-
-        Parameters
-        ----------
-        inputs : dict
-             Dictionary of continuation parameters for next step.
-        equil : Equilibrium
-            Equilibrium being perturbed.
-
-        Returns
-        -------
-        deltas : dict
-            Dictionary of changes in parameter values.
-
-        """
-        deltas = {}
-        if equil.bdry_mode == "lcfs":
-            s = FourierRZToroidalSurface(
-                inputs["surface"][:, 3],
-                inputs["surface"][:, 4],
-                inputs["surface"][:, 1:3].astype(int),
-                inputs["surface"][:, 1:3].astype(int),
-                equil.NFP,
-                equil.sym,
-            )
-            s.change_resolution(equil.L, equil.M, equil.N)
-            Rb_lmn, Zb_lmn = s.R_lmn, s.Z_lmn
-        elif equil.bdry_mode == "poincare":
-            raise NotImplementedError(
-                "Specifying poincare XS as BC is not implemented yet on master branch."
-            )
-
-        p_l = np.zeros_like(equil.pressure.params)
-        for l, p in inputs["pressure"]:
-            idx = np.where(equil.pressure.basis.modes[:, 0] == int(l))[0]
-            p_l[idx] = p
-        if equil.iota is not None:
-            i_l = np.zeros_like(equil.iota.params)
-            for l, i in inputs["iota"]:
-                idx = np.where(equil.iota.basis.modes[:, 0] == int(l))[0]
-                i_l[idx] = i
-        if equil.current is not None:
-            c_l = np.zeros_like(equil.current.params)
-            for l, c in inputs["current"]:
-                idx = np.where(equil.current.basis.modes[:, 0] == int(l))[0]
-                c_l[idx] = c
-
-        if not np.allclose(Rb_lmn, equil.Rb_lmn):
-            deltas["dRb"] = Rb_lmn - equil.Rb_lmn
-        if not np.allclose(Zb_lmn, equil.Zb_lmn):
-            deltas["dZb"] = Zb_lmn - equil.Zb_lmn
-        if not np.allclose(p_l, equil.p_l):
-            deltas["dp"] = p_l - equil.p_l
-        if equil.iota is not None and not np.allclose(i_l, equil.i_l):
-            deltas["di"] = i_l - equil.i_l
-        if equil.current is not None and not np.allclose(c_l, equil.c_l):
-            deltas["dc"] = c_l - equil.c_l
-        if not np.allclose(inputs["Psi"], equil.Psi):
-            deltas["dPsi"] = inputs["Psi"] - equil.Psi
-        return deltas
-
-    def _print_iteration(self, ii, equil):
-        print("================")
-        print("Step {}/{}".format(ii + 1, len(self.inputs)))
-        print("================")
-        equil.resolution_summary()
-        print("Boundary ratio = {}".format(self.inputs[ii]["bdry_ratio"]))
-        print("Pressure ratio = {}".format(self.inputs[ii]["pres_ratio"]))
-        if "current" in self.inputs[ii]:
-            print("Current ratio = {}".format(self.inputs[ii]["curr_ratio"]))
-        print("Perturbation Order = {}".format(self.inputs[ii]["pert_order"]))
-        print("Objective: {}".format(self.inputs[ii]["objective"]))
-        print("Optimizer: {}".format(self.inputs[ii]["optimizer"]))
-        print("Function tolerance = {}".format(self.inputs[ii]["ftol"]))
-        print("Gradient tolerance = {}".format(self.inputs[ii]["gtol"]))
-        print("State vector tolerance = {}".format(self.inputs[ii]["xtol"]))
-        print("Max function evaluations = {}".format(self.inputs[ii]["nfev"]))
-        print("================")
-
-    def solve_continuation(  # noqa: C901 - FIXME: break this up into simpler pieces
-        self, start_from=0, verbose=None, checkpoint_path=None
+    def solve_continuation(
+        self,
+        objective="force",
+        optimizer="lsq-exact",
+        pert_order=2,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        nfev=100,
+        verbose=1,
+        checkpoint_path=None,
     ):
         """Solve for an equilibrium by continuation method.
 
-            1. Creates an initial guess from the given inputs
-            2. Find equilibrium flux surfaces by minimizing the objective function.
-            3. Step up to higher resolution and perturb the previous solution
-            4. Repeat 2 and 3 until at desired resolution
+        Steps through an EquilibriaFamily, solving each equilibrium, and uses
+        pertubations to step between different profiles/boundaries.
+
+        Uses the previous step as an initial guess for each solution.
 
         Parameters
         ----------
-        start_from : integer
-            start solution from the given index
+        eqfam : EquilibriaFamily or list of Equilibria
+            Equilibria to solve for at each step.
+        objective : str or ObjectiveFunction (optional)
+            function to solve for equilibrium solution
+        optimizer : str or Optimzer (optional)
+            optimizer to use
+        pert_order : int or array of int
+            order of perturbations to use. If array-like, should be same length as
+            family to specify different values for each step.
+        ftol, xtol, gtol : float or array-like of float
+            stopping tolerances for subproblem at each step.
+        nfev : int or array-like of int
+            maximum number of function evaluations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -974,129 +922,102 @@ class EquilibriaFamily(IOAble, MutableSequence):
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
 
+        Returns
+        -------
+        eqfam : EquilibriaFamily
+            family of equilibria for the intermediate steps, where the last member is
+            the final desired configuration,
+
         """
-        timer = Timer()
-        if verbose is None:
-            verbose = self.inputs[0]["verbose"]
-        timer.start("Total time")
+        from desc.continuation import solve_continuation
 
-        if (
-            not (
-                isalmostequal([inp["bdry_ratio"] for inp in self.inputs])
-                and isalmostequal([inp["pres_ratio"] for inp in self.inputs])
-            )
-            and not use_jax
-        ):
-            warnings.warn(
-                colored(
-                    "Computing perturbations with finite differences can be "
-                    + "highly inaccurate, consider using JAX or setting all "
-                    + "perturbation ratios to 1",
-                    "yellow",
-                )
-            )
+        return solve_continuation(
+            self,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            nfev,
+            verbose,
+            checkpoint_path,
+        )
 
-        for ii in range(start_from, len(self.inputs)):
-            timer.start("Iteration {} total".format(ii + 1))
+    @classmethod
+    def solve_continuation_automatic(
+        cls,
+        eq,
+        objective="force",
+        optimizer="lsq-exact",
+        pert_order=2,
+        ftol=1e-2,
+        xtol=1e-4,
+        gtol=1e-6,
+        nfev=100,
+        verbose=1,
+        checkpoint_path=None,
+        **kwargs,
+    ):
+        """Solve for an equilibrium using an automatic continuation method.
 
-            # TODO: make this more efficient (minimize re-building)
-            optimizer = Optimizer(self.inputs[ii]["optimizer"])
-            objective = get_equilibrium_objective(self.inputs[ii]["objective"])
-            constraints = get_fixed_boundary_constraints(
-                iota=self.inputs[ii]["objective"] != "vacuum"
-                and "iota" in self.inputs[ii]
-            )
+        By default, the method first solves for a no pressure tokamak, then a finite
+        beta tokamak, then a finite beta stellarator. Currently hard coded to take a
+        fixed number of perturbation steps based on conservative estimates and testing.
+        In the future, continuation stepping will be done adaptively.
 
-            if ii == start_from:
-                equil = self[ii]
-                if verbose > 0:
-                    self._print_iteration(ii, equil)
+        Parameters
+        ----------
+        eq : Equilibrium
+            Unsolved Equilibrium with the final desired boundary, profiles, resolution.
+        objective : str or ObjectiveFunction (optional)
+            function to solve for equilibrium solution
+        optimizer : str or Optimzer (optional)
+            optimizer to use
+        pert_order : int
+            order of perturbations to use.
+        ftol, xtol, gtol : float
+            stopping tolerances for subproblem at each step.
+        nfev : int
+            maximum number of function evaluations in each equilibrium subproblem.
+        verbose : integer
+            * 0: no output
+            * 1: summary of each iteration
+            * 2: as above plus timing information
+            * 3: as above plus detailed solver output
+        checkpoint_path : str or path-like
+            file to save checkpoint data (Default value = None)
+        **kwargs : control continuation step sizes
 
-            else:
-                equil = self[ii - 1].copy()
-                self.insert(ii, equil)
+            Valid keyword arguments are:
 
-                equil.change_resolution(
-                    L=self.inputs[ii]["L"],
-                    M=self.inputs[ii]["M"],
-                    N=self.inputs[ii]["N"],
-                )
-                equil.L_grid = self.inputs[ii]["L_grid"]
-                equil.M_grid = self.inputs[ii]["M_grid"]
-                equil.N_grid = self.inputs[ii]["N_grid"]
+            mres_step: int, the amount to increase Mpol by at each continuation step
+            pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
+                            at each continuation step
+            bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
+                            at each continuation step
+        Returns
+        -------
+        eqfam : EquilibriaFamily
+            family of equilibria for the intermediate steps, where the last member is
+            the final desired configuration,
 
-                if verbose > 0:
-                    self._print_iteration(ii, equil)
+        """
+        from desc.continuation import solve_continuation_automatic
 
-                # figure out if we need perturbations
-                deltas = self._format_deltas(self.inputs[ii], equil)
-
-                if len(deltas) > 0:
-                    if verbose > 0:
-                        print("Perturbing equilibrium")
-                    # TODO: pass Jx if available
-                    equil.perturb(
-                        objective=objective,
-                        constraints=constraints,
-                        **deltas,
-                        order=self.inputs[ii]["pert_order"],
-                        verbose=verbose,
-                        copy=False,
-                    )
-
-            if not equil.is_nested():
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller perturbation/resolution steps "
-                        + "or reducing trust radius",
-                        "yellow",
-                    )
-                )
-                if checkpoint_path is not None:
-                    if verbose > 0:
-                        print("Saving latest state")
-                    self.save(checkpoint_path)
-                break
-
-            equil.solve(
-                optimizer=optimizer,
-                objective=objective,
-                constraints=constraints,
-                ftol=self.inputs[ii]["ftol"],
-                xtol=self.inputs[ii]["xtol"],
-                gtol=self.inputs[ii]["gtol"],
-                verbose=verbose,
-                maxiter=self.inputs[ii]["nfev"],
-            )
-
-            if checkpoint_path is not None:
-                if verbose > 0:
-                    print("Saving latest iteration")
-                self.save(checkpoint_path)
-            timer.stop("Iteration {} total".format(ii + 1))
-            if verbose > 1:
-                timer.disp("Iteration {} total".format(ii + 1))
-
-            if not equil.is_nested():
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller perturbation/resolution steps "
-                        + "or reducing trust radius",
-                        "yellow",
-                    )
-                )
-                break
-
-        timer.stop("Total time")
-        print("====================")
-        print("Done")
-        if verbose > 1:
-            timer.disp("Total time")
-        if checkpoint_path is not None:
-            print("Output written to {}".format(checkpoint_path))
-        print("====================")
+        return solve_continuation_automatic(
+            eq,
+            objective,
+            optimizer,
+            pert_order,
+            ftol,
+            xtol,
+            gtol,
+            nfev,
+            verbose,
+            checkpoint_path,
+            **kwargs,
+        )
 
     @property
     def equilibria(self):
@@ -1111,7 +1032,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             equil = equil.tolist()
         elif not isinstance(equil, list):
             equil = [equil]
-        if not np.all([isinstance(eq, Equilibrium) for eq in equil]):
+        if len(equil) and not all([isinstance(eq, Equilibrium) for eq in equil]):
             raise ValueError(
                 "Members of EquilibriaFamily should be of type Equilibrium or subclass."
             )

@@ -32,7 +32,8 @@ def main(cl_args=sys.argv[1:]):
         print("Outputs will be written to {}".format(ir.output_path))
 
     # initialize
-    equil_fam = EquilibriaFamily(ir.inputs)
+    inputs = ir.inputs
+    equil_fam = EquilibriaFamily(inputs)
     # check vmec path input
     if ir.args.guess is not None:
         if ir.args.verbose:
@@ -40,7 +41,15 @@ def main(cl_args=sys.argv[1:]):
         equil_fam[0].set_initial_guess(ir.args.guess)
     # solve equilibrium
     equil_fam.solve_continuation(
-        verbose=ir.args.verbose, checkpoint_path=ir.output_path
+        objective=inputs[0]["objective"],
+        optimizer=inputs[0]["optimizer"],
+        pert_order=[inp["pert_order"] for inp in inputs],
+        ftol=[inp["ftol"] for inp in inputs],
+        xtol=[inp["xtol"] for inp in inputs],
+        gtol=[inp["gtol"] for inp in inputs],
+        nfev=[inp["nfev"] for inp in inputs],
+        verbose=ir.args.verbose,
+        checkpoint_path=ir.output_path,
     )
 
     if ir.args.plot > 1:

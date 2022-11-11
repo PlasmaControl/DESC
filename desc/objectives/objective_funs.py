@@ -532,20 +532,11 @@ class _Objective(IOAble, ABC):
         if "CompiledFunction" in str(type(self.compute_scalar)):
             del self.compute_scalar
         self.compute_scalar = jit(self.compute_scalar)
-        redo_derivs = False
+        del self._derivatives
+        self._set_derivatives()
         for mode, val in self._derivatives.items():
             for arg, deriv in val.items():
-                if "CompiledFunction" in str(type(self._derivatives[mode][arg])):
-                    redo_derivs = True
-                    break
-            if redo_derivs:
-                break
-        if redo_derivs:
-            del self._derivatives
-            self._set_derivatives()
-            for mode, val in self._derivatives.items():
-                for arg, deriv in val.items():
-                    self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
+                self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""

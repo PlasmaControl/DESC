@@ -203,14 +203,31 @@ def test_rejit():
             self._dim_f = 1
             super().build(eq, use_jit, verbose)
 
-        def compute(self, x):
-            return self.target * self.weight + self.y * x
+        def compute(self, R_lmn):
+            return self.target * self.weight + self.y * R_lmn**3
 
     objective = DummyObjective(3.0)
-    objective.build(Equilibrium())
-    assert objective.compute(4.0) == 12.0
+    eq = Equilibrium()
+    objective.build(eq)
+    assert objective.compute(4.0) == 192.0
     objective.target = 1.0
     objective.weight = 2.0
-    assert objective.compute(4.0) == 12.0
+    assert objective.compute(4.0) == 192.0
     objective.jit()
-    assert objective.compute(4.0) == 14.0
+    assert objective.compute(4.0) == 194.0
+
+    objective2 = ObjectiveFunction(objective)
+    objective2.build(eq)
+    x = objective2.x(eq)
+
+    z = objective2.compute(x)
+    J = objective2.jac(x)
+    assert z[0] == 3002.0
+    objective2.objectives[0].target = 3.0
+    objective2.objectives[0].weight = 4.0
+    objective2.objectives[0].y = 2.0
+    assert objective2.compute(x)[0] == 3002.0
+    np.testing.assert_allclose(objective2.jac(x), J)
+    objective2.jit()
+    assert objective2.compute(x)[0] == 2012.0
+    np.testing.assert_allclose(objective2.jac(x), J / 3 * 2)

@@ -184,7 +184,8 @@ class InputReader:
         }
 
         iota_flag = False
-
+        pres_flag = False
+        curr_flag = False
         inputs["output_path"] = self.output_path
 
         if self.args is not None and self.args.quiet:
@@ -196,7 +197,7 @@ class InputReader:
 
         # open files, unless they are already open files
         if not isinstance(fname, io.IOBase):
-            file = open(fname, "r")
+            file = open(fname)
         else:
             file = fname
         file.seek(0)
@@ -396,6 +397,7 @@ class InputReader:
             # profile coefficients
             match = re.search(r"\sp\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
+                pres_flag = True
                 p_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -429,6 +431,7 @@ class InputReader:
                 flag = True
             match = re.search(r"\sc\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
+                curr_flag = True
                 c_l = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -522,7 +525,7 @@ class InputReader:
 
             # catch lines that don't match a valid command
             if not flag and command not in ["", " "]:
-                raise IOError(
+                raise OSError(
                     colored(
                         "The following line is not a valid input:\n" + command, "red"
                     )
@@ -530,15 +533,26 @@ class InputReader:
 
         # error handling
         if np.any(inputs["M"] == 0):
-            raise IOError(colored("M_pol is not assigned.", "red"))
+            raise OSError(colored("M_pol is not assigned.", "red"))
         if np.sum(inputs["surface"]) == 0:
-            raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
+            raise OSError(colored("Fixed-boundary surface is not assigned.", "red"))
+        if curr_flag and iota_flag:
+            raise OSError(colored("Cannot specify both iota and current.", "red"))
 
         # remove unused profile
         if iota_flag:
-            del inputs["current"]
+            if inputs["objective"] != "vacuum":
+                del inputs["current"]
+            else:  # if vacuum objective from input file, use zero current
+                del inputs["iota"]
         else:
             del inputs["iota"]
+
+        if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
+            warnings.warn(
+                "Vacuum objective does not use any profiles, "
+                + "ignoring presssure, iota, and current"
+            )
 
         # sort axis array
         inputs["axis"] = inputs["axis"][inputs["axis"][:, 0].argsort()]
@@ -775,7 +789,7 @@ class InputReader:
 
         """
         if not isinstance(vmec_fname, io.IOBase):
-            vmec_file = open(vmec_fname, "r")
+            vmec_file = open(vmec_fname)
         else:
             vmec_file = vmec_fname
 
@@ -1283,7 +1297,7 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if len(numbers) > 0:
-                    raise IOError(
+                    raise OSError(
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
 
@@ -1297,9 +1311,7 @@ class InputReader:
         # delete surface modes below threshold magnitude
         inputs["surface"] = np.delete(
             inputs["surface"],
-            np.where((np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1)))[
-                0
-            ],
+            np.where(np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1))[0],
             axis=0,
         )
         # add radial mode numbers to surface array
@@ -1318,7 +1330,7 @@ class InputReader:
         )
         # scale current profile
         if curr_tor is not None:
-            inputs["current"][:, 1] *= curr_tor / np.sum(inputs["current"][:, 1])
+            inputs["current"][:, 1] *= curr_tor / (np.sum(inputs["current"][:, 1]) or 1)
         # delete unused profile
         if iota_flag:
             del inputs["current"]

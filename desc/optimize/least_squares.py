@@ -15,7 +15,7 @@ from .utils import (
     STATUS_MESSAGES,
     check_termination,
     compute_jac_scale,
-    evaluate_quadratic,
+    evaluate_quadratic_form_jac,
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
@@ -149,8 +149,26 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
-    # initial trust region radius
-    trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
+    g_h = g * scale
+    J_h = J * scale
+
+    # initial trust region radius is based on the geometric mean of 2 possible rules:
+    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # second is the norm of the scaled x, as used in scipy
+    # in practice for our problems the C&G one is too small, while scipy is too big,
+    # but the geometric mean seems to work well
+    init_tr = {
+        "scipy": np.linalg.norm(x * scale_inv),
+        "conngould": np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2),
+        "mix": np.sqrt(
+            np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
+        ),
+    }
+    trust_radius = options.pop("initial_trust_radius", "scipy")
+    tr_ratio = options.pop("initial_trust_ratio", 1.0)
+    trust_radius = init_tr.get(trust_radius, trust_radius)
+    trust_radius *= tr_ratio
+
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
@@ -170,7 +188,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     message = None
     step_norm = np.inf
     actual_reduction = np.inf
-    ratio = 0  # ratio between actual reduction and predicted reduction
 
     if verbose > 1:
         print_header_nonlinear()
@@ -239,7 +256,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 step_h += ga_step_h
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = -evaluate_quadratic(J_h, g_h, step_h)
+            predicted_reduction = -evaluate_quadratic_form_jac(J_h, g_h, step_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
@@ -254,7 +271,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
             # update the trust radius according to the actual/predicted ratio
             tr_old = trust_radius
-            trust_radius, ratio = update_tr_radius(
+            trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
                 predicted_reduction,
@@ -277,7 +294,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 step_norm,
                 x_norm,
                 g_norm,
-                ratio,
+                reduction_ratio,
                 ftol,
                 xtol,
                 gtol,

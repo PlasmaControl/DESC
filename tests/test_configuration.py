@@ -1,5 +1,7 @@
 """Tests for _Configuration base class."""
 
+import warnings
+
 import numpy as np
 import pytest
 
@@ -27,7 +29,7 @@ class TestConstructor:
         assert eq.M == 1
         assert eq.N == 0
         assert eq.sym is False
-        assert eq.surface.eq(FourierRZToroidalSurface())
+        assert eq.surface.eq(FourierRZToroidalSurface(sym=False))
         assert isinstance(eq.pressure, PowerSeriesProfile)
         assert isinstance(eq.current, PowerSeriesProfile)
         np.testing.assert_allclose(eq.p_l, [0])
@@ -95,8 +97,8 @@ class TestConstructor:
         assert eq.N == 2
         assert eq.NFP == 3
         assert eq.spectral_indexing == "ansi"
-        np.testing.assert_allclose(eq.p_l, [10, 5])
-        np.testing.assert_allclose(eq.i_l, [1, 3])
+        np.testing.assert_allclose(eq.p_l, [10, 5, 0])
+        np.testing.assert_allclose(eq.i_l, [1, 3, 0])
         assert isinstance(eq.surface, FourierRZToroidalSurface)
         np.testing.assert_allclose(
             eq.Rb_lmn,
@@ -288,7 +290,7 @@ class TestInitialGuess:
         surface = FourierRZToroidalSurface(rho=0.5)
         eq.set_initial_guess(surface)
         np.testing.assert_allclose(
-            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2 ** 2
+            eq.compute("V")["V"], 2 * 10 * np.pi * np.pi * 2**2
         )
 
     @pytest.mark.unit
@@ -418,7 +420,7 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(rho=rho)
         assert surf.rho == rho
         np.testing.assert_allclose(
-            surf.compute_surface_area(), 4 * np.pi ** 2 * R0 * rho
+            surf.compute_surface_area(), 4 * np.pi**2 * R0 * rho
         )
 
     @pytest.mark.unit
@@ -428,7 +430,7 @@ class TestGetSurfaces:
         surf = eq.get_surface_at(zeta=np.pi)
         assert surf.zeta == np.pi
         rho = 1
-        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho ** 2)
+        np.testing.assert_allclose(surf.compute_surface_area(), np.pi * rho**2)
 
     @pytest.mark.unit
     def test_get_theta_surface(self):
@@ -475,6 +477,17 @@ def test_is_nested():
     eq.R_lmn[eq.R_basis.get_idx(L=2, M=2, N=0)] = 1
 
     assert not eq.is_nested(grid=grid)
+    with pytest.warns(Warning) as record:
+        assert not eq.is_nested(grid=grid, msg="auto")
+    assert len(record) == 1
+    assert "Automatic" in str(record[0].message)
+    with pytest.warns(Warning) as record:
+        assert not eq.is_nested(grid=grid, msg="manual")
+    assert len(record) == 1
+    assert "perturbation" in str(record[0].message)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert not eq.is_nested(grid=grid, msg=None)
 
 
 @pytest.mark.unit

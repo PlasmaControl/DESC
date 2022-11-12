@@ -30,7 +30,7 @@ class TestGrid:
         grid = Grid(nodes)
         weights = grid.weights
 
-        w = 4 * np.pi ** 2 / (grid.num_nodes - 1)
+        w = 4 * np.pi**2 / (grid.num_nodes - 1)
         weights_ref = np.array([w, w, w / 2, w / 2, w, w])
 
         np.testing.assert_allclose(weights, weights_ref)
@@ -205,7 +205,7 @@ class TestGrid:
         """Test that quadrature grid gives correct volume integrals."""
         r = 1
         R = 10
-        vol = 2 * (np.pi ** 2) * (r ** 2) * R
+        vol = 2 * (np.pi**2) * (r**2) * R
 
         inputs = {
             "L": 1,

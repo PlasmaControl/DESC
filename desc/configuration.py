@@ -219,7 +219,7 @@ class _Configuration(IOAble, ABC):
 
         # surface
         if surface is None:
-            self._surface = FourierRZToroidalSurface(NFP=self.NFP)
+            self._surface = FourierRZToroidalSurface(NFP=self.NFP, sym=self.sym)
             self._bdry_mode = "lcfs"
         elif isinstance(surface, Surface):
             self._surface = surface
@@ -355,21 +355,14 @@ class _Configuration(IOAble, ABC):
         elif current is not None:
             raise TypeError("Got unknown current profile {}".format(current))
 
-        # warning about odd profiles
-        if isinstance(self.pressure, PowerSeriesProfile):
-            if self.pressure.sym != "even":
+        # ensure profiles have the right resolution
+        for profile in ["pressure", "iota", "current"]:
+            p = getattr(self, profile)
+            if hasattr(p, "change_resolution"):
+                p.change_resolution(max(p.basis.L, self.L))
+            if isinstance(p, PowerSeriesProfile) and p.sym != "even":
                 warnings.warn(
-                    colored("Pressure profile is not an even power series.", "yellow")
-                )
-        if isinstance(self.iota, PowerSeriesProfile):
-            if self.iota.sym != "even":
-                warnings.warn(
-                    colored("Iota profile is not an even power series.", "yellow")
-                )
-        if isinstance(self.current, PowerSeriesProfile):
-            if self.current.sym != "even":
-                warnings.warn(
-                    colored("Current profile is not an even power series.", "yellow")
+                    colored(f"{profile} profile is not an even power series.", "yellow")
                 )
 
         # ensure number of field periods agree before setting guesses
@@ -382,6 +375,11 @@ class _Configuration(IOAble, ABC):
                 "Unequal number of field periods for equilirium "
                 + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
             )
+
+        # make sure symmetry agrees
+        assert (
+            self.sym == self.surface.sym
+        ), "Surface and Equilibrium must have the same symmetry"
 
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
@@ -472,7 +470,7 @@ class _Configuration(IOAble, ABC):
             raise ValueError(
                 "set_initial_guess should be called with 4 or fewer arguments."
             )
-        if nargs == 0:
+        if nargs == 0 or nargs == 1 and args[0] is None:
             if hasattr(self, "_surface"):
                 # use whatever surface is already assigned
                 if hasattr(self, "_axis"):
@@ -808,10 +806,7 @@ class _Configuration(IOAble, ABC):
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
             surface.grid = LinearGrid(
-                rho=rho,
-                M=2 * surface.M,
-                N=2 * surface.N,
-                endpoint=True,
+                rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
             )
             return surface
 
@@ -896,6 +891,9 @@ class _Configuration(IOAble, ABC):
     @surface.setter
     def surface(self, new):
         if isinstance(new, Surface):
+            assert (
+                self.sym == new.sym
+            ), "Surface and Equilibrium must have the same symmetry"
             new.change_resolution(self.L, self.M, self.N)
             self._surface = new
         else:
@@ -1036,8 +1034,8 @@ class _Configuration(IOAble, ABC):
         # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
         sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
         # indices where m=0
-        idx0_R = np.where((self.R_basis.modes[:, 1] == 0))[0]
-        idx0_Z = np.where((self.Z_basis.modes[:, 1] == 0))[0]
+        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
+        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
         # indices where l=0 & m=0
         idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
@@ -1105,10 +1103,8 @@ class _Configuration(IOAble, ABC):
     def i_l(self, i_l):
         if self.iota is None:
             raise ValueError(
-                (
-                    "Attempt to set rotational transform on an equilibrium "
-                    + "with fixed toroidal current"
-                )
+                "Attempt to set rotational transform on an equilibrium "
+                + "with fixed toroidal current"
             )
         self.iota.params = i_l
 
@@ -1135,10 +1131,8 @@ class _Configuration(IOAble, ABC):
     def c_l(self, c_l):
         if self.current is None:
             raise ValueError(
-                (
-                    "Attempt to set toroidal current on an equilibrium with "
-                    + "fixed rotational transform"
-                )
+                "Attempt to set toroidal current on an equilibrium with "
+                + "fixed rotational transform"
             )
         self.current.params = c_l
 
@@ -1393,7 +1387,7 @@ class _Configuration(IOAble, ABC):
 
         def cond_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol**2) & (k < maxiter)
 
         def body_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
@@ -1431,14 +1425,14 @@ class _Configuration(IOAble, ABC):
             cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
         )
 
-        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol**2
         rho = jnp.where(noconverge, jnp.nan, rhok)
         theta = jnp.where(noconverge, jnp.nan, thetak)
         phi = jnp.where(noconverge, jnp.nan, phi)
 
         return jnp.vstack([rho, theta, phi]).T
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordianate jacobian (sqrt(g)) sign.
@@ -1456,6 +1450,8 @@ class _Configuration(IOAble, ABC):
             (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
             spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
+        msg : {None, "auto", "manual"}
+            Warning to throw if unnested.
 
         Returns
         -------
@@ -1483,7 +1479,27 @@ class _Configuration(IOAble, ABC):
             Z_transform,
         )
 
-        return jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+        if not nested:
+            if msg == "auto":
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early. "
+                        + "Automatic continuation method failed, consider specifying "
+                        + "continuation steps manually",
+                        "yellow",
+                    )
+                )
+            elif msg == "manual":
+                warnings.warn(
+                    colored(
+                        "WARNING: Flux surfaces are no longer nested, exiting early."
+                        + "Consider taking smaller perturbation/resolution steps "
+                        + "or reducing trust radius",
+                        "yellow",
+                    )
+                )
+        return nested
 
     def to_sfl(
         self,

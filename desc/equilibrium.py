@@ -402,7 +402,7 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
-        optimizer : string
+        optimizer : string or Optimizer object
             Optimization algorithm. Default = "lsq-exact".
         ftol : float
             Relative stopping tolerance on objective function value.
@@ -449,7 +449,10 @@ class Equilibrium(_Configuration, IOAble):
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
         if not isinstance(optimizer, Optimizer):
-            optimizer = Optimizer("lsq-exact")
+            if isinstance(optimizer, str):
+                optimizer = Optimizer(optimizer)
+            else:
+                optimizer = Optimizer("lsq-exact")
 
         if copy:
             eq = self.copy()

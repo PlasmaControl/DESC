@@ -402,8 +402,8 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
-        optimizer : string
-            Optimization algorithm. Default = "lsq-exact".
+        optimizer : str or Optimzer (optional)
+            optimizer to use
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -449,7 +449,7 @@ class Equilibrium(_Configuration, IOAble):
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
         if not isinstance(optimizer, Optimizer):
-            optimizer = Optimizer("lsq-exact")
+            optimizer = Optimizer(optimizer)
 
         if copy:
             eq = self.copy()
@@ -505,7 +505,7 @@ class Equilibrium(_Configuration, IOAble):
         self,
         objective=None,
         constraints=None,
-        optimizer=None,
+        optimizer="lsq-exact",
         ftol=1e-2,
         xtol=1e-4,
         gtol=1e-6,
@@ -523,8 +523,8 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to optimize.
         constraints : Objective or tuple of Objective
             Objective function to satisfy. Default = fixed-boundary force balance.
-        optimizer : Optimizer
-            Optimization algorithm. Default = lsq-exact.
+        optimizer : str or Optimzer (optional)
+            optimizer to use
         ftol : float
             Relative stopping tolerance on objective function value.
         xtol : float
@@ -562,8 +562,8 @@ class Equilibrium(_Configuration, IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
-        if optimizer is None:
-            optimizer = Optimizer("lsq-exact")
+        if not isinstance(optimizer, Optimizer):
+            optimizer = Optimizer(optimizer)
         if constraints is None:
             constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
             constraints = (ForceBalance(), *constraints)

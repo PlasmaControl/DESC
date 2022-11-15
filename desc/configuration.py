@@ -392,11 +392,6 @@ class _Configuration(IOAble, ABC):
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
 
-        # QI parameters
-        # FIXME: this should probably get removed
-        self._shape_i = np.array([1, 0])
-        self._shift_mn = np.zeros((3,))
-
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
     def _set_up(self):
@@ -1387,7 +1382,7 @@ class _Configuration(IOAble, ABC):
 
         def cond_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol**2) & (k < maxiter)
+            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
 
         def body_fun(k_rhok_thetak_Rk_Zk):
             k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
@@ -1425,7 +1420,7 @@ class _Configuration(IOAble, ABC):
             cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
         )
 
-        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol**2
+        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
         rho = jnp.where(noconverge, jnp.nan, rhok)
         theta = jnp.where(noconverge, jnp.nan, thetak)
         phi = jnp.where(noconverge, jnp.nan, phi)

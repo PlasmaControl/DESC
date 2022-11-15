@@ -120,18 +120,26 @@ class InputReader:
         else:
             set_device("cpu")
 
-        if self.args.verbose == 1:
+        if args.verbose == 0:
+            pass
+        if args.verbose == 1:
+            set_console_logging("stdout", "ERROR")
+        if args.verbose == 2:
             set_console_logging("stdout", "WARNING")
-        if self.args.verbose == 2:
+        if args.verbose == 3:
             set_console_logging("stdout", "INFO")
-        if self.args.verbose == 3:
+        if args.verbose == 4:
             set_console_logging("stdout", "DEBUG")
 
-        if self.args.logging == 1:
+        if args.logging == 0:
+            pass
+        if args.logging == 1:
+            set_logfile_logging("desc.log", "ERROR")
+        if args.logging == 2:
             set_logfile_logging("desc.log", "WARNING")
-        if self.args.verbose == 2:
+        if args.logging == 3:
             set_logfile_logging("desc.log", "INFO")
-        if self.args.verbose == 3:
+        if args.logging == 4:
             set_logfile_logging("desc.log", "DEBUG")
 
         return args
@@ -207,7 +215,10 @@ class InputReader:
         elif self.args is not None:
             inputs["verbose"] = self.args.verbose
         else:
-            inputs["verbose"] = 1
+            inputs["verbose"] = 0
+        
+       
+        inputs["logging"] = self.args.logging
 
         # open files, unless they are already open files
         if not isinstance(fname, io.IOBase):
@@ -1458,21 +1469,31 @@ def get_parser():
     parser.add_argument(
         "--version", action="store_true", help="Display version number and exit."
     )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=1,
-        help="Display detailed progress information. "
-        + "Once to include timing, twice to also show individual iterations.",
-    )
+
     parser.add_argument(
         "-l",
         "--logging",
         action="count",
         default=0,
-        help="Write progress information to desc.log. Once to record progress, "
-        + "twice and thrice to record further iteration information.",
+        help="Display detailed progress information to logfile. Twice to "
+        + "include iteration info, thrice to also show iteration timing and"
+        + " inner-loop inner-loop iterations.",
+    )
+
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Do not display any progress information.",
+    )
+    group.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Display detailed progress information to stdout. Twice to include"
+        + " iteration info, thrice to also show iteration timing and inner-loop"
+        + " iterations.",
     )
     return parser

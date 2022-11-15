@@ -144,7 +144,7 @@ def DSHAPE_current(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename]
     main(args)
 
     DSHAPE_current_out = {
@@ -365,7 +365,7 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
     eq._solved = True
     VMECIO.save(
-        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
+        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:]
     )
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc

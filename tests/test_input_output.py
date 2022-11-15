@@ -91,14 +91,15 @@ class TestInputReader:
         # Test defaults
         assert ir.args.plot == 0, "plot is not default 0"
         assert ir.args.quiet is False, "quiet is not default False"
-        assert ir.args.verbose == 1, "verbose is not default 1"
+        assert ir.args.verbose == 0, "verbose is not default 0"
+        assert ir.args.logging == 0, "logging is not default 0"
         assert ir.args.numpy is False, "numpy is not default False"
         assert (
             os.environ["DESC_BACKEND"] == "jax"
         ), "numpy environment variable incorrect with default argument"
         assert ir.args.version is False, "version is not default False"
         assert (
-            len(ir.inputs[0]) == 28
+            len(ir.inputs[0]) == 29
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 
@@ -116,23 +117,43 @@ class TestInputReader:
         """Test setting of quiet and verbose options."""
         ir = InputReader(self.argv2)
         assert (
-            ir.inputs[0]["verbose"] == 1
+            ir.inputs[0]["verbose"] == 0
         ), "value of inputs['verbose'] incorrect on no arguments"
         argv = self.argv2 + ["-v"]
         ir = InputReader(argv)
         assert (
-            ir.inputs[0]["verbose"] == 2
+            ir.inputs[0]["verbose"] == 1
         ), "value of inputs['verbose'] incorrect on verbose argument"
         argv = self.argv2 + ["-vv"]
         ir = InputReader(argv)
         assert (
-            ir.inputs[0]["verbose"] == 3
+            ir.inputs[0]["verbose"] == 2
         ), "value of inputs['verbose'] incorrect on double verbose argument"
         argv = self.argv2 + ["-q"]
         ir = InputReader(argv)
         assert (
             ir.inputs[0]["verbose"] == 0
         ), "value of inputs['verbose'] incorrect on quiet argument"
+
+    @pytest.mark.unit
+    def test_logfile_logging(self):
+        """Test setting of logging options."""
+        ir = InputReader(self.argv2)
+        assert (
+            ir.inputs[0]["logging"] == 0
+        ), "value of inputs['logging'] incorrect on no arguments"
+        argv = self.argv2 + ["-l"]
+        ir = InputReader(argv)
+        assert (
+            ir.inputs[0]["logging"] == 1
+        ), "value of inputs['logging'] incorrect on logging argument"
+        argv = self.argv2 + ["-ll"]
+        ir = InputReader(argv)
+        assert (
+            ir.inputs[0]["logging"] == 2
+        ), "value of inputs['logging'] incorrect on double logging argument"
+
+
 
     @pytest.mark.unit
     def test_vmec_to_desc_input(self):

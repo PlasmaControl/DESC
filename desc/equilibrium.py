@@ -402,7 +402,7 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to solve. Default = force balance on unified grid.
         constraints : Tuple
             set of constraints to enforce. Default = fixed boundary/profiles
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         ftol : float
             Relative stopping tolerance on objective function value.
@@ -523,7 +523,7 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to optimize.
         constraints : Objective or tuple of Objective
             Objective function to satisfy. Default = fixed-boundary force balance.
-        optimizer : str or Optimzer (optional)
+        optimizer : str or Optimizer (optional)
             optimizer to use
         ftol : float
             Relative stopping tolerance on objective function value.

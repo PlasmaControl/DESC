@@ -95,8 +95,12 @@ def compute_force_error(
     data = compute_geometry(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     if check_derivs("F_rho", R_transform, Z_transform, L_transform):
-        data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
-            data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
+        data["F_rho"] = (
+            -data["p_r"]
+            - data["p_t"]
+            - data["p_z"]
+            + data["sqrt(g)"]
+            * (data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"])
         )
     if check_derivs("F_theta", R_transform, Z_transform, L_transform):
         data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
@@ -122,7 +126,10 @@ def compute_force_error(
         data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
 
     if check_derivs("|grad(p)|", R_transform, Z_transform, L_transform):
-        data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+        data["|grad(p)|"] = (
+            jnp.sqrt(data["p_r"] ** 2 + data["p_t"] ** 2 + data["p_z"] ** 2)
+            * data["|grad(rho)|"]
+        )
         data["<|grad(p)|>_vol"] = (
             jnp.sum(
                 data["|grad(p)|"] * jnp.abs(data["sqrt(g)"]) * R_transform.grid.weights

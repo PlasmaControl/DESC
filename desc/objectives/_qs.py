@@ -2,12 +2,12 @@
 
 import numpy as np
 
-from desc.backend import jnp, put
+from desc.backend import put
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
     compute_quasisymmetry_error,
-    compute_quasiisodynamic_field,
+    compute_quasiisodynamic_error,
     data_index,
 )
 from desc.grid import LinearGrid
@@ -203,7 +203,6 @@ class QuasisymmetryBoozer(_Objective):
         )
         b_mn = data["|B|_mn"]
         b_mn = b_mn[self._idx]
-
         return self._shift_scale(b_mn)
 
     @property
@@ -365,7 +364,6 @@ class QuasisymmetryTwoTerm(_Objective):
             self._helicity,
         )
         f = data["f_C"] * self.grid.weights
-
         return self._shift_scale(f)
 
     @property
@@ -518,7 +516,6 @@ class QuasisymmetryTripleProduct(_Objective):
             self._current,
         )
         f = data["f_T"] * self.grid.weights
-
         return self._shift_scale(f)
 
 
@@ -599,11 +596,9 @@ class QuasiIsodynamic(_Objective):
         timer.start("Precomputing transforms")
 
         self._zeta_grid = self.grid.copy()
-        self._zeta_grid.nodes = put(
-            self.grid.nodes,
-            (np.arange(self.grid.num_nodes), 2),
-            (self.grid.nodes[:, 2] * self.grid.NFP - np.pi) / 2,
-        )
+        self._zeta_grid.nodes[:, 2] = (
+            self.grid.nodes[:, 2] * self.grid.NFP - np.pi
+        ) / 2
 
         if eq.iota is not None:
             self._iota = eq.iota.copy()
@@ -698,31 +693,23 @@ class QuasiIsodynamic(_Objective):
             Quasi-isodynamic error at each node (T).
 
         """
-        data_boozer = compute_boozer_coordinates(
+        data = compute_quasiisodynamic_error(
             R_lmn,
             Z_lmn,
             L_lmn,
             i_l,
             c_l,
             Psi,
+            shape_i,
+            shift_mn,
             self._R_transform,
             self._Z_transform,
             self._L_transform,
             self._B_transform,
             self._w_transform,
+            self._zeta_transform,
             self._iota,
             self._current,
         )
-        Bmin = jnp.min(data_boozer["|B|"])
-        Bmax = jnp.max(data_boozer["|B|"])
-        data_qi = compute_quasiisodynamic_field(
-            Bmin, Bmax, shape_i, shift_mn, self._zeta_transform
-        )
-
-        nodes = jnp.array(
-            [self.grid.nodes[:, 0], self.grid.nodes[:, 1], data_qi["zeta_B"]]
-        ).T
-        B = jnp.matmul(self._B_transform.basis.evaluate(nodes), data_boozer["|B|_mn"])
-        B_qi = data_qi["|B|_QI"]
-        f = B - B_qi
+        f = data["f_QI"] * self.grid.weights
         return self._shift_scale(f)

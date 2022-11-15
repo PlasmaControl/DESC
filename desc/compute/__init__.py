@@ -29,6 +29,7 @@ from ._field import (
 )
 from ._qs import (
     compute_boozer_coordinates,
+    compute_quasiisodynamic_error,
     compute_quasiisodynamic_field,
     compute_quasisymmetry_error,
 )

@@ -1236,8 +1236,9 @@ class _Configuration(IOAble, ABC):
             elif arg == "zeta_transform":
                 zeta_grid = grid.copy()
                 zeta_grid.nodes[:, 2] = (grid.nodes[:, 2] * grid.NFP - np.pi) / 2
-                inputs[arg] = Transform(  # FIXME: M & N are hard-coded!
-                    zeta_grid, DoubleFourierSeries(M=1, N=1, sym="cos(z)", NFP=self.NFP)
+                n = int(np.sqrt(self.shift_mn.size - 1) / np.sqrt(2))
+                inputs[arg] = Transform(  # FIXME: this assumes M=N
+                    zeta_grid, DoubleFourierSeries(M=n, N=n, sym="cos(z)", NFP=self.NFP)
                 )
             elif arg == "pressure":
                 inputs[arg] = self.pressure.copy()

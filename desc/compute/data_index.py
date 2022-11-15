@@ -3434,7 +3434,7 @@ data_index["f_C"] = {
     + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",
     "units": "T^{3}",
     "units_long": "Tesla cubed",
-    "description": "Two-term quasisymmetry metric",
+    "description": "Two-term quasi-symmetry error",
     "fun": "compute_quasisymmetry_error",
     "dim": 1,
     "R_derivs": [
@@ -3455,7 +3455,7 @@ data_index["f_T"] = {
     + "(\\mathbf{B} \\cdot \\nabla B)",
     "units": "T^{4} \\cdot m^{-2}",
     "units_long": "Tesla quarted / square meters",
-    "description": "Triple product quasisymmetry metric",
+    "description": "Triple product quasi-symmetry error",
     "fun": "compute_quasisymmetry_error",
     "dim": 1,
     "R_derivs": [
@@ -3498,6 +3498,24 @@ data_index["|B|_QI"] = {
     "description": "Magnitude of quasi-isodynamic magnetic field",
     "fun": "compute_quasiisodynamic_field",
     "dim": 1,
+}
+data_index["zeta_QI"] = {
+    "label": "\\zeta_{QI}",
+    "units": "rad",
+    "units_long": "radians",
+    "description": "Boozer toroidal angular coordinate for quasi-isodynamic field",
+    "fun": "compute_quasiisodynamic_field",
+    "dim": 1,
+}
+data_index["f_QI"] = {
+    "label": "f_{QI}",
+    "units": "T",
+    "units_long": "Tesla",
+    "description": "Quasi-isodynamic error",
+    "fun": "compute_quasiisodynamic_error",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
 
 # stability

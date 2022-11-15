@@ -206,7 +206,7 @@ def compute_quasisymmetry_error(
     -------
     data : dict
         Dictionary of ndarray, shape(num_nodes,) of quasi-symmetry errors.
-        Key "QS_FF" is the flux function metric, key "QS_TP" is the triple product.
+        Key "f_C" is the two-term metric, key "f_T" is the triple product metric.
 
     """
     data = compute_B_dot_gradB(
@@ -311,6 +311,104 @@ def compute_quasiisodynamic_field(
     shift_mn = jnp.concatenate((shift_m0, shift_mn))
     zeta = zeta_bar + zeta_transform.transform(shift_mn)
     zeta = (2 * zeta + jnp.pi) / zeta_transform.basis.NFP
-    data["zeta_B"] = zeta
+    data["zeta_QI"] = zeta
+
+    return data
+
+
+def compute_quasiisodynamic_error(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    i_l,
+    c_l,
+    Psi,
+    shape_i,
+    shift_mn,
+    R_transform,
+    Z_transform,
+    L_transform,
+    B_transform,
+    w_transform,
+    zeta_transform,
+    iota,
+    current,
+    data=None,
+    **kwargs,
+):
+    """Compute quasi-isodynamic field.
+
+    Parameters
+    ----------
+    R_lmn : ndarray
+        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate.
+    Z_lmn : ndarray
+        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate.
+    L_lmn : ndarray
+        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+    i_l : ndarray
+        Spectral coefficients of iota(rho) -- rotational transform profile.
+    c_l : ndarray
+        Spectral coefficients of I(rho) -- toroidal current profile.
+    Psi : float
+        Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    shape_i : ndarray
+        Magnetic well shaping parameters.
+        Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
+    shift_mn : ndarray
+        Magnetic well shifting parameters.
+        Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
+    R_transform : Transform
+        Transforms R_lmn coefficients to real space.
+    Z_transform : Transform
+        Transforms Z_lmn coefficients to real space.
+    L_transform : Transform
+        Transforms L_lmn coefficients to real space.
+    B_transform : Transform
+        Transforms spectral coefficients of B(rho,theta,zeta) to real space.
+        B_transform.basis should be of type DoubleFourierSeries.
+    w_transform : Transform
+        Transforms spectral coefficients of w(rho,theta,zeta) to real space.
+        w_transform.basis should be of type DoubleFourierSeries.
+    zeta_transform : Transform
+        Transforms zeta_mn coefficients to real space.
+    iota : Profile
+        Transforms i_l coefficients to real space.
+    current : Profile
+        Transforms c_l coefficients to real space.
+
+    Returns
+    -------
+    data : dict
+        Dictionary of ndarray, shape(num_nodes,) of quasi-isodynamic errors.
+
+    """
+    data = compute_boozer_coordinates(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        B_transform,
+        w_transform,
+        iota,
+        current,
+    )
+    Bmin = jnp.min(data["|B|"])
+    Bmax = jnp.max(data["|B|"])
+    data = compute_quasiisodynamic_field(
+        Bmin, Bmax, shape_i, shift_mn, zeta_transform, data=data
+    )
+
+    nodes = jnp.array(
+        [B_transform.grid.nodes[:, 0], B_transform.grid.nodes[:, 1], data["zeta_QI"]]
+    ).T
+    B = jnp.matmul(B_transform.basis.evaluate(nodes), data["|B|_mn"])
+    B_qi = data["|B|_QI"]
+    data["f_QI"] = B - B_qi
 
     return data

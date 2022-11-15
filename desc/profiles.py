@@ -1305,6 +1305,7 @@ class FourierZernikeProfile(Profile):
             A *= w[:, np.newaxis]
             f *= w
         scale = np.sqrt((A * A).sum(axis=0))
+        scale = np.where(scale == 0, 1, scale)
         A /= scale
         c, resids, rank, s = np.linalg.lstsq(A, f, rcond=None)
         c = (c.T / scale).T  # broadcast scale coefficients

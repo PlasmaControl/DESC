@@ -14,6 +14,7 @@ from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryT
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective
 from .linear_objectives import (
+    FixAnisotropy,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,

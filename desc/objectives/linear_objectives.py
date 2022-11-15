@@ -616,6 +616,96 @@ class FixPressure(_FixProfile):
         return "p_l"
 
 
+class FixAnistropy(_FixProfile):
+    """Fixes anistropic pressure coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        profile=None,
+        indices=True,
+        name="fixed-anisotropy",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+        # TODO: check units of anisotropy
+        self._print_value_fmt = "Fixed-anisotropy profile error: {:10.3e} (Pa)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        profile = eq.anisotropy
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, d_lmn, **kwargs):
+        """Compute fixed pressure profile errors.
+
+        Parameters
+        ----------
+        d_lmn : ndarray
+            parameters of the anisotropic pressure profile.
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        fixed_params = d_lmn[self._idx]
+        return self._shift_scale(fixed_params)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "d_lmn"
+
+
 class FixIota(_FixProfile):
     """Fixes rotational transform coefficients.
 

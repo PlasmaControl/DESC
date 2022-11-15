@@ -5,6 +5,7 @@ import re
 import sys
 import warnings
 import logging
+import logging.handlers
 from logging.handlers import RotatingFileHandler
 import colorama
 from termcolor import colored
@@ -112,7 +113,7 @@ def set_device(kind="cpu"):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
 
 #Automatic behavior is to give the logging module a NullHandler such that no output is generated without user intending it.
-logging.getLogger().addHandler(logging.NullHandler())
+logging.getLogger().addHandler( logging.NullHandler())
 
 def set_console_logging(console_log_output = "stdout", console_log_level = "INFO"):
     """Quickly adds console handlers to python's root logger.
@@ -135,8 +136,14 @@ def set_console_logging(console_log_output = "stdout", console_log_level = "INFO
     bool : 
         Returns True if logging setup successfully
     """
+
+    #Check to see if root logger already a logfile handler and removes it if so
+    for handler in logging.root.handlers:
+        if type(handler) == logging.StreamHandler:
+                logging.Logger.removeHandler(logging.root, hdlr=handler)
+                
     #Create logger that accepts DEBUG level logs and up
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
     # Create console handler
@@ -155,7 +162,6 @@ def set_console_logging(console_log_output = "stdout", console_log_level = "INFO
     except:
         print("Failed to set console log level: invalid level: '%s'" % console_log_level)
         return False
-
     # Set log formatting
     console_formatter = logging.Formatter("%(name)s :: %(asctime)s :: %(message)s", "%Y-%m-%d %H:%M:%S")
     console_handler.setFormatter(console_formatter)
@@ -166,7 +172,7 @@ def set_console_logging(console_log_output = "stdout", console_log_level = "INFO
     return True
 
 
-def set_logfile_logging(logfile_file = "desc.log", logfile_level = "DEBUG"):
+def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log", clear_log = False):
     """Quickly adds logfile handlers to python's root logger.
     
 
@@ -183,23 +189,28 @@ def set_logfile_logging(logfile_file = "desc.log", logfile_level = "DEBUG"):
     logfile_level : str
         level of logging to logfile; "DEBUG", "INFO", WARNING", "ERROR" or 
         "CRITICAL" are accepted values, in increasing order of severity
+    clear_log : bool
+        Set True to clear existing desc.log
     Returns
     -------
     bool : 
         Returns True if logging setup successfully
     """
-    
+
+    #Check to see if root logger already a logfile handler and removes it if so
+    for handler in logging.root.handlers:
+        if type(handler) == logging.handlers.RotatingFileHandler:
+                logging.Logger.removeHandler(logging.root, hdlr=handler)
+    if clear_log:
+        #Placeholder
+        pass
     #Create logger that accepts DEBUG level logs and up
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     
     # Create file handler
-    try:
-        logfile_handler = RotatingFileHandler(logfile_file, maxBytes=5*1024*1024, backupCount=1)
-    except Exception as exception:
-        print("Failed to set up log file: %s" % str(exception))
-        return False
-    #Set logfile log level
+    #try:
+    logfile_handler = logging.handlers.RotatingFileHandler(logfile_file, maxBytes=5*1024*1024, backupCount=1)
     try: logfile_handler.setLevel(logfile_level)
     except:
         print("Failed to set log file log level: invalid level: '%s'" % logfile_level)

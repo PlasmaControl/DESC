@@ -197,7 +197,7 @@ def test_1d_optimization_old(SOLOVEV):
     eq._optimize(
         objective,
         copy=False,
-        solve_options={"verbose": 0},
+        solve_options={},
         perturb_options={
             "dZb": True,
             "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
@@ -217,8 +217,7 @@ def run_qh_step(n, eq):
         (
             QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(target=8, weight=1e1),
-        ),
-        verbose=0,
+        )
     )
     R_modes = np.vstack(
         (
@@ -245,12 +244,11 @@ def run_qh_step(n, eq):
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
-        verbose=3,
         copy=True,
         options={
             "initial_trust_radius": 0.5,
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
+            "perturb_options": {},
+            "solve_options": {},
         },
     )
 

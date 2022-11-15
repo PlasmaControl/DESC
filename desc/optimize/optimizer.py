@@ -402,8 +402,8 @@ class Optimizer(IOAble):
             print_header_nonlinear()
             try:
                 #Sends stdout output of scipy method to logger
-                minimize_messages = StringIO
-                with redirect_stdout(minimize_messages):
+                scipy_stringIO = StringIO
+                with redirect_stdout(scipy_stringIO):
                     result = scipy.optimize.minimize(
                         compute_scalar_wrapped,
                         x0=x0_reduced,
@@ -415,7 +415,7 @@ class Optimizer(IOAble):
                         callback=callback,
                         options={"maxiter": maxiter, "disp": 2, **options},
                     )
-                logging.debug(minimize_messages.getvalue)
+                logging.debug(scipy_stringIO.getvalue)
                 result["allx"] = allx
             except StopIteration:
                 result = {
@@ -442,8 +442,8 @@ class Optimizer(IOAble):
                 return jac_wrapped(x_reduced)
 
             #Sends stdout output of scipy method to logger
-            lsq_messages = StringIO
-            with redirect_stdout(lsq_messages):
+            lsq_stringIO = StringIO
+            with redirect_stdout(lsq_stringIO):
                 result = scipy.optimize.least_squares(
                     compute_wrapped,
                     x0=x0_reduced,
@@ -457,7 +457,7 @@ class Optimizer(IOAble):
                     max_nfev=maxiter,
                     verbose=2,
                 )
-            logging.debug(lsq_messages.getvalue)
+            logging.debug(lsq_stringIO.getvalue)
 
             result["allx"] = allx
 

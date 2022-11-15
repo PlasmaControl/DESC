@@ -16,7 +16,7 @@ from ._core import (
     compute_toroidal_flux,
     compute_toroidal_flux_gradient,
 )
-from ._equil import compute_energy, compute_force_error
+from ._equil import compute_energy, compute_force_error, compute_force_error_anisotropic
 from ._field import (
     compute_B_dot_gradB,
     compute_boozer_magnetic_field,

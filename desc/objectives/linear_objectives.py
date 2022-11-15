@@ -616,8 +616,8 @@ class FixPressure(_FixProfile):
         return "p_l"
 
 
-class FixAnistropy(_FixProfile):
-    """Fixes anistropic pressure coefficients.
+class FixAnisotropy(_FixProfile):
+    """Fixes anisotropic pressure coefficients.
 
     Parameters
     ----------

@@ -66,11 +66,7 @@ class FixBoundaryR(_Objective):
         self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "R boundary error: {:10.3e} (m)"
-
-        if self._fixed_boundary:
-            self.compute = self._compute_R
-        else:
-            self.compute = self._compute_Rb
+        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -142,14 +138,8 @@ class FixBoundaryR(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        pass
-
-    def _compute_R(self, R_lmn, **kwargs):
-        Rb = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb)
-
-    def _compute_Rb(self, Rb_lmn, **kwargs):
-        Rb = jnp.dot(self._A, Rb_lmn)
+        x = kwargs.get(self.args[0], args[0])
+        Rb = jnp.dot(self._A, x)
         return self._shift_scale(Rb)
 
     @property
@@ -204,11 +194,7 @@ class FixBoundaryZ(_Objective):
         self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
-
-        if self._fixed_boundary:
-            self.compute = self._compute_Z
-        else:
-            self.compute = self._compute_Zb
+        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -279,14 +265,8 @@ class FixBoundaryZ(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        pass
-
-    def _compute_Z(self, Z_lmn, **kwargs):
-        Zb = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb)
-
-    def _compute_Zb(self, Zb_lmn, **kwargs):
-        Zb = jnp.dot(self._A, Zb_lmn)
+        x = kwargs.get(self.args[0], args[0])
+        Zb = jnp.dot(self._A, x)
         return self._shift_scale(Zb)
 
     @property

@@ -458,7 +458,7 @@ class _Objective(IOAble, ABC):
 
     """
 
-    _io_attrs_ = ["_target", "_weight", "_name"]
+    _io_attrs_ = ["_target", "_weight", "_name", "_args"]
 
     def __init__(self, eq=None, target=0, weight=1, name=None):
 
@@ -468,7 +468,7 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-
+        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
         if eq is not None:
             self.build(eq)
 
@@ -492,7 +492,6 @@ class _Objective(IOAble, ABC):
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg

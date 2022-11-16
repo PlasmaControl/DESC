@@ -136,6 +136,14 @@ class AspectRatio(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -148,10 +156,26 @@ class AspectRatio(_Objective):
     _units = "(dimensionless)"
     _print_value_fmt = "Aspect ratio: {:10.3e} "
 
-    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
+    def __init__(
+        self,
+        eq=None,
+        target=2,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="aspect ratio",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

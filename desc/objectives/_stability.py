@@ -138,10 +138,7 @@ class MercierStability(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["Psi"] ** 2 / self._dim_f
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute the Mercier stability criterion.
@@ -286,10 +283,7 @@ class MagneticWell(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute a magnetic well parameter.

@@ -128,11 +128,8 @@ class GenericObjective(_Objective):
                 else:
                     self.inputs[arg] = None
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
         self._args = args
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, **kwargs):
         """Compute the quantity.
@@ -256,10 +253,7 @@ class ToroidalCurrent(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"] / self._dim_f
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current.

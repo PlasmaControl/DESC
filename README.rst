@@ -87,8 +87,8 @@ Contribute
     :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
     :alt: RegressionTests
 
-.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg
-    :target: https://codecov.io/gh/PlasmaControl/DESC
+.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z 
+    :target: https://codecov.io/github/PlasmaControl/DESC
     :alt: Coverage
 
 .. |Issues| image:: https://img.shields.io/github/issues/PlasmaControl/DESC

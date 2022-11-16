@@ -67,11 +67,8 @@ class FixBoundaryR(_Objective):
         self._modes = modes
         self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-
-        if self._fixed_boundary:
-            self.compute = self._compute_R
-        else:
-            self.compute = self._compute_Rb
+        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
+        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -130,30 +127,21 @@ class FixBoundaryR(_Objective):
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
-        if self.target.size == modes.shape[0]:
+        if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0]:
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.R_lmn[idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        pass
-
-    def _compute_R(self, R_lmn, **kwargs):
-        Rb = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb)
-
-    def _compute_Rb(self, Rb_lmn, **kwargs):
-        Rb = jnp.dot(self._A, Rb_lmn)
+        x = kwargs.get(self.args[0], args[0])
+        Rb = jnp.dot(self._A, x)
         return self._shift_scale(Rb)
 
     @property
@@ -209,11 +197,8 @@ class FixBoundaryZ(_Objective):
         self._modes = modes
         self._surface_label = surface_label
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-
-        if self._fixed_boundary:
-            self.compute = self._compute_Z
-        else:
-            self.compute = self._compute_Zb
+        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
+        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -271,30 +256,21 @@ class FixBoundaryZ(_Objective):
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
-        if self.target.size == modes.shape[0]:
+        if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0]:
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.Z_lmn[idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        pass
-
-    def _compute_Z(self, Z_lmn, **kwargs):
-        Zb = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb)
-
-    def _compute_Zb(self, Zb_lmn, **kwargs):
-        Zb = jnp.dot(self._A, Zb_lmn)
+        x = kwargs.get(self.args[0], args[0])
+        Zb = jnp.dot(self._A, x)
         return self._shift_scale(Zb)
 
     @property
@@ -413,10 +389,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, L_lmn, **kwargs):
         """Compute lambda gauge symmetry errors.
@@ -524,10 +497,7 @@ class _FixProfile(_Objective, ABC):
         if None in self.target or self.target.size != self.dim_f:
             self.target = self._profile.params[self._idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
 
 class FixPressure(_FixProfile):
@@ -854,10 +824,7 @@ class FixPsi(_Objective):
         if None in self.target:
             self.target = eq.Psi
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.

@@ -101,10 +101,7 @@ class Volume(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -192,10 +189,7 @@ class AspectRatio(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute aspect ratio.

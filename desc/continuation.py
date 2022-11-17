@@ -128,7 +128,8 @@ def solve_continuation_automatic(  # noqa: C901
         spectral_indexing,
     )
 
-    optimizer = Optimizer(optimizer) if isinstance(optimizer, str) else optimizer
+    if not isinstance(optimizer, Optimizer):
+        optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and eq.iota is not None
     )
@@ -319,7 +320,8 @@ def solve_continuation(  # noqa: C901
     if isinstance(eqfam, (list, tuple)):
         eqfam = EquilibriaFamily(*eqfam)
 
-    optimizer = Optimizer(optimizer) if isinstance(optimizer, str) else optimizer
+    if not isinstance(optimizer, Optimizer):
+        optimizer = Optimizer(optimizer)
     objective_i = get_equilibrium_objective(objective)
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and eqfam[0].iota is not None

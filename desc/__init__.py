@@ -115,7 +115,7 @@ def set_device(kind="cpu"):
 #Automatic behavior is to give the logging module a NullHandler such that no output is generated without user intending it.
 logging.getLogger().addHandler( logging.NullHandler())
 
-def set_console_logging(console_log_output = "stdout", console_log_level = "INFO"):
+def set_console_logging(console_log_output = "stdout", console_log_level = "WARNING"):
     """Quickly adds console handlers to python's root logger.
 
     Arguments allow basic configuration of the logger, but this is not meant to
@@ -123,6 +123,8 @@ def set_console_logging(console_log_output = "stdout", console_log_level = "INFO
     larger project- primarily meant for debugging.  Selecting a lower level of 
     logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
     "ERROR" and "CRITICAL" logs would be displayed in the same location as well.
+    Accepts numeric inputs as well- levels "DEBUG", "INFO", "WARNING", "ERROR",
+    "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.
     
     Parameters
     ----------
@@ -172,7 +174,7 @@ def set_console_logging(console_log_output = "stdout", console_log_level = "INFO
     return True
 
 
-def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log", clear_log = False):
+def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log", clear_log = True):
     """Quickly adds logfile handlers to python's root logger.
     
 
@@ -181,6 +183,8 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log", clea
     larger project- primarily meant for debugging.  Selecting a lower level of 
     logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
     "ERROR" and "CRITICAL" logs would be displayed in the same location as well.
+    Accepts numeric inputs as well- levels "DEBUG", "INFO", "WARNING", "ERROR",
+    "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.
     
     Parameters
     ----------
@@ -209,12 +213,18 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log", clea
     logger.setLevel(logging.DEBUG)
     
     # Create file handler
-    #try:
-    logfile_handler = logging.handlers.RotatingFileHandler(logfile_file, maxBytes=5*1024*1024, backupCount=1)
-    try: logfile_handler.setLevel(logfile_level)
-    except:
-        print("Failed to set log file log level: invalid level: '%s'" % logfile_level)
-        return False
+    if clear_log == True:
+        logfile_handler = logging.handlers.RotatingFileHandler(logfile_file, maxBytes=5*1024*1024, backupCount=1, mode='w')
+        try: logfile_handler.setLevel(logfile_level)
+        except:
+            print("Failed to set log file log level: invalid level: '%s'" % logfile_level)
+            return False
+    else:
+        logfile_handler = logging.handlers.RotatingFileHandler(logfile_file, maxBytes=5*1024*1024, backupCount=1, mode='a')
+        try: logfile_handler.setLevel(logfile_level)
+        except:
+            print("Failed to set log file log level: invalid level: '%s'" % logfile_level)
+            return False
 
     # Set log formatting
     logfile_formatter = logging.Formatter("%(name)s :: %(asctime)s :: %(levelname)s :: %(message)s")

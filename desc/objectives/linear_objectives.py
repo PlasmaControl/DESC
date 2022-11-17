@@ -463,10 +463,7 @@ class FixLambdaZero(_Objective):
         # use axis parameters as target if needed
         self.target = np.zeros_like(modes_idx)
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, L_lmn, **kwargs):
         """Compute lambda fixed to zero errors.
@@ -598,10 +595,7 @@ class FixAxisR(_Objective):
                 j = np.argwhere(ns == n)
                 self.target[j] = Rn
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, **kwargs):
         """Compute axis R errors.
@@ -726,10 +720,7 @@ class FixAxisZ(_Objective):
                 j = np.argwhere(ns == n)
                 self.target[j] = Zn
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, Z_lmn, **kwargs):
         """Compute axis Z errors.
@@ -842,10 +833,7 @@ class FixModeR(_Objective):
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.R_lmn[self._idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, **kwargs):
         """Compute Fixed mode R errors.
@@ -963,10 +951,7 @@ class FixModeZ(_Objective):
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.Z_lmn[self._idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, Z_lmn, **kwargs):
         """Compute Fixed mode Z errors.
@@ -1101,10 +1086,7 @@ class FixSumModesR(_Objective):
         if None in self.target:
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
         ################################################
 
     def compute(self, R_lmn, **kwargs):
@@ -1241,10 +1223,7 @@ class FixSumModesZ(_Objective):
         if None in self.target:
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
         ################################################
 
     def compute(self, Z_lmn, **kwargs):

@@ -230,3 +230,13 @@ class TestProfiles:
         with pytest.raises(ValueError):
             a = sp * pp
             a.params = sp.params
+
+    @pytest.mark.unit
+    def test_profile_conversion(self):
+        """Test converting to FourierZernikeProfile."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
+        )
+        zp = pp.to_fourierzernike(L=6, M=6, N=0)
+        x = np.linspace(0, 1, 100)
+        np.testing.assert_allclose(pp(x), zp(x), atol=1e-10)

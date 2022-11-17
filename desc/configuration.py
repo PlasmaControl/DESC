@@ -392,6 +392,10 @@ class _Configuration(IOAble, ABC):
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
 
+        # FIXME: default QI parameters for initialization
+        self._shape_i = np.array([1])
+        self._shift_mn = np.array([0])
+
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
     def _set_up(self):

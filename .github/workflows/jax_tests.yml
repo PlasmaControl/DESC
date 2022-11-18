@@ -24,6 +24,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r devtools/dev-requirements.txt
+          pip uninstall jax jaxlib
           pip install "jax==${{ matrix.jax-version }}"
       - name: Test with pytest
         run: |

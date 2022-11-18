@@ -250,7 +250,7 @@ class MagneticWell(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        imer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         self._check_dimensions()
         self._set_dimensions(eq)

@@ -168,7 +168,6 @@ class TestSGD:
             scalar_fun,
             x0,
             scalar_grad,
-            verbose=3,
             ftol=0,
             xtol=0,
             gtol=1e-12,
@@ -331,8 +330,6 @@ def test_overstepping():
         copy=True,
         options={
             "initial_trust_radius": 0.5,
-            "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0},
         },
     )
 

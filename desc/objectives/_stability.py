@@ -276,7 +276,7 @@ class MagneticWell(_Objective):
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
-        imer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

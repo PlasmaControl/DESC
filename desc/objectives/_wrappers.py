@@ -50,7 +50,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if eq is not None:
             self.build(eq,)
 
-    # TODO: add timing and verbose statements
     def build(self, eq, use_jit=None):
         """Build the objective.
 

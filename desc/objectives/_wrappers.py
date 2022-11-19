@@ -40,6 +40,8 @@ from jax import core
 from jax.interpreters import ad, batching
 from desc.derivatives import FiniteDiffDerivative
 import netCDF4 as nc
+
+from shutil import copyfile
 #from desc.configuration import compute_theta_coords
 
 class WrappedEquilibriumObjective(ObjectiveFunction):
@@ -228,27 +230,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self._update_equilibrium(x)
         
-        # dx/dc linear
-#        print("x_idx is " + str(self._linear_objective.x_idx))
-#        x_idxl = np.concatenate(
-#            [
-#                self._objective.x_idx[arg]
-#                for arg in ["p_l", "i_l", "c_l", "Psi"]
-#                if arg in self._linear_objective.args
-#            ]
-#        )
-#        x_idxl.sort(kind="mergesort")
-#        dxdcl = np.eye(self._objective.dim_x)[:, x_idxl]
-#        dxdRbl = (
-#            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Rb_lmn"]]
-#            @ self._Ainvl["Rb_lmn"]
-#        )
-#        dxdcl = np.hstack((dxdcl, dxdRbl))
-#        dxdZbl = (
-#            np.eye(self._objective.dim_x)[:, self._linear_objective.x_idx["Zb_lmn"]]
-#            @ self._Ainvl["Zb_lmn"]
-#        )
-#        dxdcl = np.hstack((dxdcl, dxdZbl))
         
         # dx/dc
         x_idx = np.concatenate(
@@ -717,9 +698,8 @@ class GXWrapper(_Objective):
 
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn)
         self.write_geo()
-        #self.write_input()
-        
         self.run_gx()
+
         ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
         #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         
@@ -731,35 +711,24 @@ class GXWrapper(_Objective):
         #gamma = np.zeros(len(om))
         #for i in range(len(gamma)):
         #    gamma[i] = om[i][0][1]
-        #print(max(gamma))
-        
-        #t = str(time.time())
-        #nm = 'gx' + t + '.nc'
-        #nmg = 'gxinput_wrap' + t + '.out'
-        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gx.nc','/scratch/gpfs/pk2354/DESC/GX/' + nm)
-        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/' + nmg)
-        
+        #print(max(gamma))     
         
 
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
         os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
 
-        #gamma = 1.0
+        
         #print(gamma)
         #return self._shift_scale(jnp.atleast_1d(max(gamma)))
         return self._shift_scale(jnp.atleast_1d(qflux_avg))
     
     def compute_gx_jvp(self,values,tangents):
-        print("AT WRAPPER JVP")
-        #print("values are " + str(values))
-        #print("tangents are " + str(tangents))
+        
         R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi = values
-        #primal_out = self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi)
         primal_out = jnp.atleast_1d(0.0)
 
         n = len(values) 
         argnum = np.arange(0,n,1)
-        #fd = FiniteDiffDerivative(self.compute,argnum)
         
         jvp = FiniteDiffDerivative.compute_jvp(self.compute,argnum,tangents,*values,rel_step=1e-2)
         
@@ -774,64 +743,6 @@ class GXWrapper(_Objective):
         
         res = jnp.array([0.0])
 
-        #The shape of R_lmn is M x N, where M is the number of tangnents, and N is the number of R_lmn modes.
-        
-#        numparam = 6
-#        idx = jnp.zeros(numparam,dtype=int)
-#        count = 0
-#        for i in range(numparam):
-#            #idx[i] = count + values[i][:].shape[1]
-#            print("shape is " + str(values[i][:].shape[1]))
-#            print("new value is " + str(count + values[i][:].shape[1]))
-#            idx = put(idx,i,count + values[i][:].shape[1])
-#            count = idx[i]
-#        idx = put(idx,len(idx)-1,count+1)
-#        print("idx is " + str(idx))
-#
-#        Rtan = values[0][:]
-#        Ztan = values[1][:]
-#        Ltan = values[2][:]
-#        itan = values[3][:]
-#        ptan = values[4][:]
-#        Psitan = values[5][:]
-#        MT = jnp.hstack([Rtan,Ztan,Ltan,itan,ptan,Psitan])
-#        M = jnp.transpose(MT)
-#        print("M is " + str(M))
-#        Mnorm = jnp.linalg.norm(M,axis=0)
-#        U,S,V = jnp.linalg.svd(M/Mnorm)
-#        u1 = U[:,0]
-#        v1 = V[0,:]
-#        s1 = S[0]
-#        print("U is " + str(U))
-#        
-#        u1T = jnp.transpose(u1)*s1
-#        print("u1T is " + str(u1T))
-#        Rsvd = u1T[0:idx[0]]
-#        Zsvd = u1T[idx[0]:idx[1]]
-#        Lsvd = u1T[idx[1]:idx[2]]
-#        isvd = u1T[idx[2]:idx[3]]
-#        psvd = gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn):
-#        Psisvd = u1T[idx[4]:idx[5]]
-
-#        print("Rsvd is " + str(Rsvd))
-#        print("Zsvd is " + str(Zsvd))
-#        print("Lsvd is " + str(Lsvd))
-#        print("isvd is " + str(isvd))
-#        print("psvd is " + str(psvd))
-#        print("Psisvd is " + str(Psisvd))
-
-
-#        print("R shape is " + str(values[0][:].shape))
-#        print("Z shape is " + str(values[1][:].shape))
-#        Rnorm = jnp.linalg.norm(values[0][:],axis=0)
-#        Znorm = jnp.linalg.norm(values[1][:],axis=0)
-#        Lnorm = jnp.linalg.norm(values[2][:],axis=0)
-#        uR,sR,vR = jnp.linalg.svd(values[0][:]/Rnorm)
-#        uZ,sZ,vZ = jnp.linalg.svd(values[1][:]/Znorm)
-#        uL,sL,vL = jnp.linalg.svd(values[2][:]/Lnorm)
-#        print("The singular values of R_lmn are " + str(sR))
-#        print("The singular values of Z_lmn are " + str(sZ))
-#        print("The singular values of L_lmn are " + str(sL))
         for i in range(numdiff):
             R_lmn = values[0][i]
             Z_lmn = values[1][i]
@@ -844,8 +755,6 @@ class GXWrapper(_Objective):
 
         res = res[1:]
 
-#        qflux = self.compute(Rsvd,Zsvd,Lsvd,isvd,psvd,Psisvd)
-#        res = qflux*s1*jnp.transpose(v1)
 
         return res, axis[0]
 
@@ -860,13 +769,11 @@ class GXWrapper(_Objective):
         if axis == 0:
             for i in range(len(values)):
                 R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values[i,:]
-                #res = res + (self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi),)
                 res = jnp.vstack([res,self.compute(r_lmn, z_lmn, l_lmn, i_l, p_l, psi)])
 
         else:
             for i in range(len(values[0])):
                 R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi = values[:,i]
-                #res = res + (self.compute(R_lmn, Z_lmn, L_lmn, i_l, p_l, Psi),)
                 res = jnp.vstack([res,self.compute(r_lmn, z_lmn, l_lmn, i_l, p_l, psi)])
 
         return res, axis
@@ -918,17 +825,11 @@ class GXWrapper(_Objective):
 
 
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
-        #l = 2*nzgrid + 1
         geo_array_gx = np.zeros(len(geo_array))
         
         f = interp1d(zgrid,geo_array,kind='cubic')
-        #print("The old grid is " + str(zgrid))
-        #print("The new grid is " + str(uniform_grid))
 
         for i in range(len(geo_array_gx)):
-            #print("zeta old is " + str(zgrid[i]))
-            #print("zeta new is " + str(uniform_grid[i]))
-            
             geo_array_gx[i] = f(np.round(uniform_grid[i],5))
         
         return geo_array_gx
@@ -991,7 +892,8 @@ class GXWrapper(_Objective):
         kxfac = 1.0
         #print("At write geo: " + str(self.gbdrift_gx[0]) + str(self.gds2_gx[0]) + str(self.bmag_gx[0]))
         #open('gxinput_wrap.out', 'w').close()
-        f = open('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out', "w")
+        fname = '/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out'
+        f = open(fname, "w")
         f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale")
         f.write("\n"+str(self.nzgrid)+" "+str(nperiod)+" "+str(2*self.nzgrid)+" "+str(1.0)+" "+ str(1/self.Lref)+" "+str(self.shat)+" "+str(kxfac)+" "+str(1/self.iota[0]) + " " + str(2*self.npol-1))
 
@@ -1013,15 +915,32 @@ class GXWrapper(_Objective):
             
         f.close()
 
-    #def write_input(self)
+    def write_input(self,t):
+        fname = '/scratch/gpfs/pk2354/DESC/GX/gx_nl.in'
+        fname_new = '/scratch/gpfs/pk2354/DESC/GX/gx_nl_' + t + '.in'
+
+        geo = 'gxinput_wrap_old.out'
+        geo_new = 'gxinput_wrap_old_' + t + '.out'
+        copyfile(fname,fname_new)
+
+        f = open(fname_new,"r")
+        data = f.read()
+
+        data = data.replace(geo,geo_new)
+        f.close()
+
+        f = open(fname_new,"r")
+        f.write(data)
+
     
     
 
     def run_gx(self):
         fs = open('stdout.out','w')
         path = '/home/pk2354/src/gx/'
-        #cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx.in']
-        cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx_nl.in']
+        path_in = '/scratch/gpfs/pk2354/DESC/GX/gx_nl.in'
+        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx',path_in]
+        #cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx_nl.in']
         #process = []
         #print(cmd)
         p = subprocess.run(cmd,stdout=fs)

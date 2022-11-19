@@ -129,7 +129,7 @@ def stoch(
     delta = np.zeros(len(x))
     alpha = 0.75
     for i in range(maxiter):
-        step = 0.00025 
+        step = 0.0001
         f = fun(x, *args)
         m = f.size
         nfev += 1

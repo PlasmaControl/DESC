@@ -448,17 +448,15 @@ class Optimizer(IOAble):
             result["allx"] = allx
 
         elif self.method in Optimizer._scipy_derivative_free_methods:
-            init_simplex = np.zeros((2,1))
-            init_simplex[0][0] = 0
-            init_simplex[1][0] = -0.02
+        
             result = scipy.optimize.minimize(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
                 args=(),
                 method='Nelder-Mead',
-                bounds = ((-0.2,0.0),),
+                bounds = ((-0.2,0.0),(0.0,0.2)),
                 callback=None,
-                options={"maxiter": maxiter, 'initial_simplex': init_simplex,"disp": True, **options},
+                options={"maxiter": maxiter, "disp": True, **options},
             )
             #result["allx"] = allx
 

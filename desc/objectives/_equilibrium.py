@@ -279,6 +279,7 @@ class ForceBalanceGalerkin(_Objective):
 
         #self._R_transform.build_pinv()
         #self._Z_transform.build_pinv()
+        #self._L_transform.build_pinv()
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -332,14 +333,26 @@ class ForceBalanceGalerkin(_Objective):
         fb = data["F_beta"] * data["|beta|"]
         fb = fb * data["sqrt(g)"] * self.grid.weights
         
+        F = data["F"]
+        Fr = F[:,1]*data["sqrt(g)"]*self.grid.weights
+        Fp = F[:,2]*data["sqrt(g)"]*self.grid.weights
+        Fz = F[:,3]*data["sqrt(g)"]*self.grid.weights
+
+        #Fr_proj = self._R_transform.project(Fr)
+        #Fp_proj = self._L_transform.project(Fp)
+        #Fz_proj = self._Z_transform.project(Fz)
+
         fr_proj = self._R_transform.project(fr)
         fb_proj = self._Z_transform.project(fb)
 
         #fr_proj = self._R_transform.fit(fr)
         #fb_proj = self._Z_transform.fit(fb)
 
-        
+
         f = jnp.concatenate([fr_proj, fb_proj])
+        print("The shape of f is " + str(f.shape))
+
+        #f = jnp.concatenate([Fr_proj,Fp_proj,Fz_proj])
         
         if self.lb:
             return -self._shift_scale(f)
@@ -351,12 +364,13 @@ class GradientForceBalance(_Objective):
     _scalar = False
     _linear = False
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force"):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force",equality=True):
         
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(N)"
         self._callback_fmt = "Total force: {:10.3e} " + units
+        self.equality = equality
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1125,12 +1139,14 @@ class CurrentDensity(_Objective):
         weight=1,
         grid=None,
         name="current density",
+        equality = True
     ):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         units = "(A/m^2)"
         self._callback_fmt = "Total current density: {:10.3e} " + units
+        self.equality = equality
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1223,5 +1239,5 @@ class CurrentDensity(_Objective):
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
         jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
 
-        f = jnp.concatenate([jr, jt, jz])
+        f = mu_0*jnp.concatenate([jr, jt, jz])
         return self._shift_scale(f)

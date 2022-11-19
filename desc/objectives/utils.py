@@ -78,7 +78,7 @@ def get_equilibrium_objective(mode="force"):
     elif mode == "gradient force":
         objectives = GradientForceBalance()
     elif mode == "force_gal":
-        objectives = (ForceBalanceGalerkin(),SpectralCondensation(weight=0.01))
+        objectives = (ForceBalanceGalerkin())
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)

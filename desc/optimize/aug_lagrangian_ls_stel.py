@@ -22,7 +22,7 @@ from .tr_subproblems import (
     solve_trust_region_2d_subspace,
     update_tr_radius,
 )
-from scipy.optimize import OptimizeResult
+from scipy.optimize import OptimizeResult, least_squares
 
 from desc.optimize.fmin_scalar import fmintr
 from desc.optimize.least_squares import lsqtr
@@ -144,6 +144,7 @@ def fmin_lag_ls_stel(
     while iteration < maxiter:
         #print(gtolk)
         xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter = int(10),verbose=2)
+        #xk = least_squares(L.compute,x,gradL,args=(lmbda,mu),gtol=gtolk,max_nfev=int(10),verbose=2)
         x = xk['x']
 
         c = 0
@@ -155,7 +156,8 @@ def fmin_lag_ls_stel(
         
         f = fun(recover(x))
         cv = L.compute_constraints(x)
-        c = np.linalg.norm(cv)
+        #c = np.linalg.norm(cv)
+        c = np.max(cv)
         print("The slack variable is now: " + str(x[len(x)-1]))
 
         if np.linalg.norm(xold - x) < xtol:
@@ -167,8 +169,11 @@ def fmin_lag_ls_stel(
             mu = mu / 2
             print("Decreasing mu. mu is now " + str(np.mean(mu)))
         elif c < ctolk:
+        #if c < ctolk:
+        #if True:
 
             if c < ctol and conv_test(x,L.compute(x,lmbda,mu),gradL(x,lmbda,mu)) < gtol:
+            #if c < ctol and np.max(np.dot(gradL(x,lmbda,mu).T,L.compute(x,lmbda,mu))) < gtol:
                 break
 
             else:
@@ -179,10 +184,18 @@ def fmin_lag_ls_stel(
                 ctolk = ctolk/(np.max(mu)**(0.9))
                 gtolk = gtolk/(np.max(mu))
         else:
-             mu = 5 * mu
+             #penalty = mu[0]*np.dot(cv,cv)/2
+             #if 10 * penalty < np.linalg.norm(f):
+             #    mu = 10.0 * mu
+             #else:
+             #    print("PENALTY IS " + str(penalty))
+             #    print("OBJECTIVE IS " + str(np.linalg.norm(f)))
+             #    mu = np.linalg.norm(f)/penalty*jnp.ones(len(mu))
+             mu = 5.0 * mu
              #ctolk = 1/(np.linalg.norm(mu)**(0.1))
              #gtolk = gtolk/np.linalg.norm(mu)
              ctolk = ctolk/(np.max(mu)**(0.1))
+             #ctolk = 1/(np.max(mu)**(0.1))
              gtolk = gtolk/np.max(mu)
         
         
@@ -193,9 +206,13 @@ def fmin_lag_ls_stel(
         #print("\n")
         #print(x)
 
-        
+        print("mu is now " + str(mu)) 
+        print("The average c is " + str(np.mean(cv)))
+        print("The max c is " + str(np.max(cv)))
         print("The objective function is " + str(np.linalg.norm(f)))
-        print("The constraints are " + str(c))
+        print("The constraints are " + str(np.linalg.norm(cv)))
+        penalty = mu[0]*np.dot(cv,cv)/2
+        print("The penalty term is " + str(penalty))
         print("The aspect ratio constraint is " + str(cv[-1]))
         print("x is " + str(recover(x)))
         print("The iteration is " + str(iteration))

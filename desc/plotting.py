@@ -796,7 +796,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         if eq.N == 0:
             nzeta = int(kwargs.get("nzeta", 1))
         else:
-            nzeta = int(kwargs.get("nzeta", 6))
+            nzeta = int(kwargs.get("nzeta", 4))
         nfp = eq.NFP
         grid_kwargs = {
             "L": 25,

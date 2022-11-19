@@ -29,7 +29,7 @@ jobs:
           pip uninstall jax jaxlib -y
       - name: install jax
         run: |
-          pip install "jax==${{ matrix.jax-version }}"
+          pip install "jax[cpu]==${{ matrix.jax-version }}"
       - name: Test with pytest
         run: |
           pwd

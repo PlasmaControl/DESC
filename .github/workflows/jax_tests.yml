@@ -26,7 +26,7 @@ jobs:
           pip install -r devtools/dev-requirements.txt
       - name: Remove jax
         run: |
-          pip uninstall jax jaxlib
+          pip uninstall jax jaxlib -y
       - name: install jax
         run: |
           pip install "jax==${{ matrix.jax-version }}"

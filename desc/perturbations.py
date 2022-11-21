@@ -251,13 +251,15 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         scale_inv = W
         scale = np.linalg.inv(scale_inv)
 
+        f = objective.compute(x)
+
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
-        RHS1 = objective.jvp(tangents, x)
+        RHS1 = f + objective.jvp(tangents, x)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")

@@ -488,6 +488,7 @@ class _Objective(IOAble, ABC):
         self._dimensions["Psi"] = 1
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
+        self._dimensions["B_mag"] = 2
         self._dimensions["shape_i"] = eq.shape_i.size
         self._dimensions["shift_mn"] = eq.shift_mn.size
 

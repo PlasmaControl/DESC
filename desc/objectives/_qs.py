@@ -648,6 +648,7 @@ class QuasiIsodynamic(_Objective):
         i_l,
         c_l,
         Psi,
+        B_mag,
         shape_i,
         shift_mn,
         **kwargs,
@@ -668,6 +669,8 @@ class QuasiIsodynamic(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        B_mag : ndarray
+            Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
         shape_i : ndarray
             Magnetic well shaping parameters.
             Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
@@ -688,6 +691,7 @@ class QuasiIsodynamic(_Objective):
             i_l,
             c_l,
             Psi,
+            B_mag,
             shape_i,
             shift_mn,
             self._R_transform,

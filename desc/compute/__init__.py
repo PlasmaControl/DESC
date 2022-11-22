@@ -47,6 +47,7 @@ arg_order = (
     "Psi",
     "Rb_lmn",
     "Zb_lmn",
+    "B_mag",
     "shape_i",
     "shift_mn",
 )

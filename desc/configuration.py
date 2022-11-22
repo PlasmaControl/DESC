@@ -92,6 +92,7 @@ class _Configuration(IOAble, ABC):
         "_current",
         "_spectral_indexing",
         "_bdry_mode",
+        "_B_mag",
         "_shape_i",
         "_shift_mn",
     ]
@@ -393,6 +394,7 @@ class _Configuration(IOAble, ABC):
             self.L_lmn = kwargs.pop("L_lmn")
 
         # FIXME: default QI parameters for initialization
+        self._B_mag = np.array([0.5, 1.5])
         self._shape_i = np.array([1])
         self._shift_mn = np.array([0])
 
@@ -1151,8 +1153,17 @@ class _Configuration(IOAble, ABC):
         return self._L_basis
 
     @property
+    def B_mag(self):
+        """Magnetic well scaling parameters [B_min, B_max]."""
+        return self._B_mag
+
+    @B_mag.setter
+    def B_mag(self, B_mag):
+        self._B_mag = B_mag
+
+    @property
     def shape_i(self):
-        """Magnetic well shaping parameters. Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2."""
+        """Magnetic well shaping parameters."""
         return self._shape_i
 
     @shape_i.setter
@@ -1161,7 +1172,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def shift_mn(self):
-        """Magnetic well shifting parameters. Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar)."""
+        """Magnetic well shifting parameters."""
         return self._shift_mn
 
     @shift_mn.setter

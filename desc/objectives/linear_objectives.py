@@ -839,6 +839,73 @@ class FixPsi(_Objective):
         return "Psi"
 
 
+class FixQiScale(_Objective):
+    """Fixes QI magnetic well scale parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(self, eq=None, target=None, weight=1, name="fixed QI scale"):
+
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "Fixed QI scale error: {:10.3e} (T)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = eq.B_mag.size
+
+        if None in self.target:
+            self.target = eq.B_mag
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, B_mag, **kwargs):
+        """Compute fixed QI scale error.
+
+        Parameters
+        ----------
+        B_mag : ndarray
+            Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
+
+        Returns
+        -------
+        f : ndarray
+            Total QI magnetic well shape error.
+
+        """
+        return self._shift_scale(B_mag)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "B_mag"
+
+
 class FixQiShape(_Objective):
     """Fixes QI magnetic well shape parameters.
 

@@ -258,16 +258,14 @@ def compute_quasisymmetry_error(
 
 
 def compute_quasiisodynamic_field(
-    Bmin, Bmax, shape_i, shift_mn, zeta_transform, data=None, **kwargs
+    B_mag, shape_i, shift_mn, zeta_transform, data=None, **kwargs
 ):
     """Compute quasi-isodynamic field.
 
     Parameters
     ----------
-    Bmin : float
-        Minimum value of magnetic field strength, |B| (T).
-    Bmax : float
-        Maximum value of magnetic field strength, |B| (T).
+    B_mag : ndarray
+        Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
     shape_i : ndarray
         Magnetic well shaping parameters.
         Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
@@ -303,7 +301,7 @@ def compute_quasiisodynamic_field(
         jnp.flipud(jnp.array([(jnp.pi / 2) ** i for i in range(len(B_i))])) * B_i
     )
     B = jnp.polyval(B_i, zeta_bar)
-    B = B / B0 * (Bmax - Bmin) + Bmin
+    B = B / B0 * (B_mag[1] - B_mag[0]) + B_mag[0]
     data["|B|_QI"] = B
 
     # compute well shift
@@ -327,6 +325,7 @@ def compute_quasiisodynamic_error(
     i_l,
     c_l,
     Psi,
+    B_mag,
     shape_i,
     shift_mn,
     R_transform,
@@ -356,6 +355,8 @@ def compute_quasiisodynamic_error(
         Spectral coefficients of I(rho) -- toroidal current profile.
     Psi : float
         Total toroidal magnetic flux within the last closed flux surface, in Webers.
+    B_mag : ndarray
+        Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
     shape_i : ndarray
         Magnetic well shaping parameters.
         Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
@@ -402,10 +403,8 @@ def compute_quasiisodynamic_error(
         iota,
         current,
     )
-    Bmin = jnp.min(data["|B|"])
-    Bmax = jnp.max(data["|B|"])
     data = compute_quasiisodynamic_field(
-        Bmin, Bmax, shape_i, shift_mn, zeta_transform, data=data
+        B_mag, shape_i, shift_mn, zeta_transform, data=data
     )
 
     nodes = jnp.array(

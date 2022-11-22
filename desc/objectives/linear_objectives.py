@@ -837,3 +837,139 @@ class FixPsi(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Psi"
+
+
+class FixQiShape(_Objective):
+    """Fixes QI magnetic well shape parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(self, eq=None, target=None, weight=1, name="fixed QI shape"):
+
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "Fixed QI shape error: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = eq.shape_i.size
+
+        if None in self.target:
+            self.target = eq.shape_i
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, shape_i, **kwargs):
+        """Compute fixed QI shape error.
+
+        Parameters
+        ----------
+        shape_i : ndarray
+            Magnetic well shaping parameters.
+            Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
+
+        Returns
+        -------
+        f : ndarray
+            Total QI magnetic well shape error.
+
+        """
+        return self._shift_scale(shape_i)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "shape_i"
+
+
+class FixQiShift(_Objective):
+    """Fixes QI magnetic well shift parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+
+    def __init__(self, eq=None, target=None, weight=1, name="fixed QI shift"):
+
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "Fixed QI shift error: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = eq.shift_mn.size
+
+        if None in self.target:
+            self.target = eq.shift_mn
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, shift_mn, **kwargs):
+        """Compute fixed QI shift error.
+
+        Parameters
+        ----------
+        shift_mn : ndarray
+            Magnetic well shifting parameters.
+            Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
+
+        Returns
+        -------
+        f : ndarray
+            Total QI magnetic well shift error.
+
+        """
+        return self._shift_scale(shift_mn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "shift_mn"

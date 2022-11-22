@@ -343,3 +343,30 @@ def test_overstepping():
     assert len(history["alltr"]) > 1
     # but all steps increase cost so expect original x at the end
     np.testing.assert_allclose(x0, x1, rtol=1e-14, atol=1e-14)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_maxiter_1_and_0_solve():
+    """Test that solves with maxiter 1 and 0 terminate correctly."""
+    # correctly meaning they terminate, instead of looping infinitely
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+    )
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+    eq = desc.examples.get("SOLOVEV")
+    for opt in ["lsq-exact", "dogleg-bfgs"]:
+        eq, result = eq.solve(
+            maxiter=1, constraints=constraints, objective=obj, optimizer=opt
+        )
+        assert result["nfev"] <= 2
+    for opt in ["lsq-exact", "dogleg-bfgs"]:
+        eq, result = eq.solve(
+            maxiter=0, constraints=constraints, objective=obj, optimizer=opt
+        )
+        assert result["nfev"] <= 1

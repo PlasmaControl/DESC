@@ -707,7 +707,9 @@ class _Configuration(IOAble, ABC):
             new = copy.copy(self)
         return new
 
-    def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):
+    def change_resolution(
+        self, L=None, M=None, N=None, NFP=None, sym=None, *args, **kwargs
+    ):
         """Set the spectral resolution.
 
         Parameters
@@ -720,9 +722,11 @@ class _Configuration(IOAble, ABC):
             maximum toroidal fourier mode number
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = NFP_change = sym_change = False
         if L is not None and L != self.L:
             L_change = True
             self._L = L
@@ -735,17 +739,26 @@ class _Configuration(IOAble, ABC):
         if NFP is not None and NFP != self.NFP:
             NFP_change = True
             self._NFP = NFP
+        if sym is not None and sym != self.sym:
+            sym_change = True
+            self._sym = sym
 
-        if not np.any([L_change, M_change, N_change, NFP_change]):
+        if not np.any([L_change, M_change, N_change, NFP_change, sym_change]):
             return
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
+        self.R_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+        )
+        self.Z_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.L_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
 
         if L_change and hasattr(self.pressure, "change_resolution"):
             self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
@@ -754,7 +767,9 @@ class _Configuration(IOAble, ABC):
         if L_change and hasattr(self.current, "change_resolution"):
             self.current.change_resolution(L=max(L, self.current.basis.L))
 
-        self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
+        self.surface.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+        )
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)

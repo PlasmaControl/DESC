@@ -167,7 +167,7 @@ class FourierRZToroidalSurface(Surface):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
@@ -177,8 +177,10 @@ class FourierRZToroidalSurface(Surface):
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
         NFP = kwargs.pop("NFP", None)
+        sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         self._NFP = NFP if NFP is not None else self.NFP
+        self._sym = sym if sym is not None else self.sym
         if L is not None:
             warnings.warn(
                 "FourierRZToroidalSurface does not have radial resolution, ignoring L"
@@ -197,8 +199,12 @@ class FourierRZToroidalSurface(Surface):
             N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(M=M, N=N, NFP=self.NFP)
-            self.Z_basis.change_resolution(M=M, N=N, NFP=self.NFP)
+            self.R_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+            )
+            self.Z_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            )
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)

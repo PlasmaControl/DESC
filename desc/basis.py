@@ -539,7 +539,7 @@ class DoubleFourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return poloidal * toroidal
 
-    def change_resolution(self, M, N, NFP=None):
+    def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -550,6 +550,8 @@ class DoubleFourierSeries(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         Returns
         -------
@@ -557,9 +559,10 @@ class DoubleFourierSeries(Basis):
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if M != self.M or N != self.N:
+        if M != self.M or N != self.N or sym != self.sym:
             self._M = M
             self._N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
 
@@ -751,7 +754,7 @@ class ZernikePolynomial(Basis):
             poloidal = poloidal[toutidx][:, moutidx]
         return radial * poloidal
 
-    def change_resolution(self, L, M):
+    def change_resolution(self, L, M, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -760,11 +763,18 @@ class ZernikePolynomial(Basis):
             Maximum radial resolution.
         M : int
             Maximum poloidal resolution.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
 
         """
-        if L != self.L or M != self.M:
+        if L != self.L or M != self.M or sym != self.sym:
             self._L = L
             self._M = M
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
@@ -980,7 +990,7 @@ class FourierZernikeBasis(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -993,13 +1003,20 @@ class FourierZernikeBasis(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N:
+        if L != self.L or M != self.M or N != self.N or sym != self.sym:
             self._L = L
             self._M = M
             self._N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )
@@ -1216,25 +1233,25 @@ def zernike_radial(r, l, m, dr=0):
     n = (l - m) // 2
     s = (-1) ** n
     if dr == 0:
-        out = r**m * _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        out = r ** m * _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
     elif dr == 1:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
         out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
     elif dr == 2:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
         out = (
             m * (m - 1) * r ** jnp.maximum((m - 2), 0) * f
-            - 2 * 4 * m * r**m * df
-            + r**m * (16 * r**2 * d2f - 4 * df)
+            - 2 * 4 * m * r ** m * df
+            + r ** m * (16 * r ** 2 * d2f - 4 * df)
         )
     elif dr == 3:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
-        d3f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 3)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        d3f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 3)
         out = (
             (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
             - 12 * (m - 1) * m * r ** jnp.maximum(m - 1, 0) * df
@@ -1320,7 +1337,7 @@ def fourier(theta, m, NFP=1, dt=0):
     m_pos = (m >= 0).astype(int)
     m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
-    return m_abs**dt * jnp.sin(m_abs * theta + shift)
+    return m_abs ** dt * jnp.sin(m_abs * theta + shift)
 
 
 @jit

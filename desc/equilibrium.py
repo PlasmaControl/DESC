@@ -232,7 +232,15 @@ class Equilibrium(_Configuration, IOAble):
         )
 
     def change_resolution(
-        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None, NFP=None
+        self,
+        L=None,
+        M=None,
+        N=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+        NFP=None,
+        sym=None,
     ):
         """Set the spectral resolution and real space grid resolution.
 
@@ -252,9 +260,11 @@ class Equilibrium(_Configuration, IOAble):
             toroidal real space grid resolution.
         NFP : int
             number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = NFP_change = sym_change = False
         if L is not None and L != self.L:
             L_change = True
         if M is not None and M != self.M:
@@ -263,9 +273,11 @@ class Equilibrium(_Configuration, IOAble):
             N_change = True
         if NFP is not None and NFP != self.NFP:
             NFP_change = True
+        if sym is not None and sym != self.sym:
+            sym_change = True
 
-        if any([L_change, M_change, N_change, NFP_change]):
-            super().change_resolution(L, M, N, NFP)
+        if any([L_change, M_change, N_change, NFP_change, sym_change]):
+            super().change_resolution(L, M, N, NFP, sym)
 
         if L_grid is not None and L_grid != self.L_grid:
             self._L_grid = L_grid
@@ -320,7 +332,7 @@ class Equilibrium(_Configuration, IOAble):
                 ntheta = 2 * M + 1
 
             inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.spsi * na_eq.Bbar
+            inputs["Psi"] = np.pi * r ** 2 * na_eq.spsi * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L
             inputs["M"] = M
@@ -328,10 +340,10 @@ class Equilibrium(_Configuration, IOAble):
             inputs["sym"] = not na_eq.lasym
             inputs["spectral_indexing "] = spectral_indexing
             inputs["pressure"] = np.array(
-                [[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]
+                [[0, -na_eq.p2 * r ** 2], [2, na_eq.p2 * r ** 2]]
             )
             inputs["iota"] = None
-            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]])
+            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r ** 2]])
             inputs["axis"] = FourierRZCurve(
                 R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
                 Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),

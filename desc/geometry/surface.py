@@ -483,7 +483,9 @@ class FourierRZToroidalSurface(Surface):
         return surf
 
     @classmethod
-    def from_near_axis(cls, aspect_ratio, elongation, mirror_ratio, axis_Z, NFP=1):
+    def from_near_axis(
+        cls, aspect_ratio, elongation, mirror_ratio, axis_Z, NFP=1, sym=True
+    ):
         """Create a surface from a near-axis model for quasi-poloidal/quasi-isodynamic.
 
         Parameters
@@ -500,6 +502,8 @@ class FourierRZToroidalSurface(Surface):
             Coefficient of sin(2*phi).
         NFP : int
             Number of field periods.
+        sym : bool (optional)
+            Whether to enforce stellarator symmetry.
 
         Returns
         -------
@@ -510,7 +514,7 @@ class FourierRZToroidalSurface(Surface):
         assert mirror_ratio <= 2
         a = np.sqrt(elongation) / aspect_ratio  # major axis
         b = 1 / (aspect_ratio * np.sqrt(elongation))  # minor axis
-        epsilon = (2 - np.sqrt(4 - mirror_ratio**2)) / mirror_ratio
+        epsilon = (2 - np.sqrt(4 - mirror_ratio ** 2)) / mirror_ratio
 
         R_lmn = np.array(
             [
@@ -534,7 +538,9 @@ class FourierRZToroidalSurface(Surface):
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])
         modes_Z = np.array([[-1, 0], [0, -2], [-1, 1], [1, -2], [-1, 2]])
 
-        surf = cls(R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP)
+        surf = cls(
+            R_lmn=R_lmn, Z_lmn=Z_lmn, modes_R=modes_R, modes_Z=modes_Z, NFP=NFP, sym=sym
+        )
         return surf
 
 

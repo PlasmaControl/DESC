@@ -149,10 +149,7 @@ def factorize_linear_constraints(constraints, objective_args):
         constraint_args.append(arg)
         if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
-            target = (
-                obj.target / obj.normalization if obj._normalize_target else obj.target
-            )
-            xp = put(xp, x_idx[obj.target_arg], target)
+            xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))

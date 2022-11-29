@@ -395,7 +395,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
-    cutoff=1e-6,
+    cutoff=None,
     verbose=1,
     copy=True,
 ):
@@ -425,6 +425,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         element for the first step and so on.
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
+        Default is np.finfo(A.dtype).eps*max(A.shape) where A is the Jacobian matrix.
     verbose : int
         Level of output.
     copy : bool
@@ -599,6 +600,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Fx = np.hstack([Fx[arg] for arg in arg_order if arg in Fx])
         Fx_reduced = Fx[:, unfixed_idx] @ Z
         Fc = Fx @ dxdc
+        if cutoff is None:
+            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
         Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
         timer.stop("df computation")
         if verbose > 1:

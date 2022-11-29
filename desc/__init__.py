@@ -165,7 +165,7 @@ def set_console_logging(console_log_output = "stdout", console_log_level = "INFO
         print("Failed to set console log level: invalid level: '%s'" % console_log_level)
         return False
     # Set log formatting
-    console_formatter = logging.Formatter("%(name)s :: %(asctime)s :: %(message)s", "%Y-%m-%d %H:%M:%S")
+    console_formatter = logging.Formatter("%(asctime)s :: File: %(module)s  Func: %(funcName)s  Line: %(lineno)s :: %(message)s ", datefmt="%H:%M:%S")
     console_handler.setFormatter(console_formatter)
 
     # Assign handlers to logger
@@ -227,7 +227,7 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log", clea
             return False
 
     # Set log formatting
-    logfile_formatter = logging.Formatter("%(name)s :: %(asctime)s :: %(levelname)s :: %(message)s")
+    logfile_formatter = logging.Formatter("%(asctime)s :: %(loglevel)s ::  File: %(module)s  Func: %(funcName)s  Line: %(lineno)s :: %(message)s ", datefmt="%Y-%m-%d %H:%M:%S")
     logfile_handler.setFormatter(logfile_formatter)
 
     # Assign handler to logger

@@ -73,7 +73,7 @@ class MercierStability(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -137,7 +137,7 @@ class MercierStability(_Objective):
         Returns
         -------
         D_Mercier : ndarray
-            Mercier stability criterion.
+            Mercier stability criterion.compress
 
         """
         data = compute_mercier_stability(
@@ -216,7 +216,7 @@ class MagneticWell(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()

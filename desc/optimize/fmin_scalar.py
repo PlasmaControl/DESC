@@ -1,6 +1,7 @@
 """Function for minimizing a scalar function of multiple variables."""
 
 import numpy as np
+import warnings
 import logging
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
@@ -378,14 +379,14 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         message=message,
     )
     if result["success"]:
-        logging.error(result["message"])
+        logging.info(result["message"])
     else:
-        logging.error("Warning: " + result["message"])
-    logging.warning("         Current function value: {:.3e}".format(result["fun"]))
-    logging.warning("         Iterations: {:d}".format(result["nit"]))
-    logging.warning("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.warning("         Gradient evaluations: {:d}".format(result["ngev"]))
-    logging.warning("         Hessian evaluations: {:d}".format(result["nhev"]))
+        warnings.warn("Warning: " + result["message"])
+    logging.info("         Current function value: {:.3e}".format(result["fun"]))
+    logging.info("         Iterations: {:d}".format(result["nit"]))
+    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
+    logging.info("         Hessian evaluations: {:d}".format(result["nhev"]))
     if return_all:
         result["allx"] = allx
     if return_tr:

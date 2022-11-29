@@ -230,7 +230,7 @@ class VMECIO:
 
         # parameters
         timer.start("parameters")
-        logging.warning("Saving parameters")
+        logging.info("Saving parameters")
 
         version_ = file.createVariable("version_", np.float64)
         version_[:] = 9  # VMEC version at the time of this writing
@@ -525,7 +525,7 @@ class VMECIO:
 
         # R
         timer.start("R")
-        logging.warning("Saving R")
+        logging.info("Saving R")
         rmnc = file.createVariable("rmnc", np.float64, ("radius", "mn_mode"))
         rmnc.long_name = "cos(m*t-n*p) component of cylindrical R, on full mesh"
         rmnc.units = "m"
@@ -543,7 +543,7 @@ class VMECIO:
 
         # Z
         timer.start("Z")
-        logging.warning("Saving Z")
+        logging.info("Saving Z")
         zmns = file.createVariable("zmns", np.float64, ("radius", "mn_mode"))
         zmns.long_name = "sin(m*t-n*p) component of cylindrical Z, on full mesh"
         zmns.units = "m"
@@ -561,7 +561,7 @@ class VMECIO:
 
         # lambda
         timer.start("lambda")
-        logging.warning("Saving lambda")
+        logging.info("Saving lambda")
         lmns = file.createVariable("lmns", np.float64, ("radius", "mn_mode"))
         lmns.long_name = "sin(m*t-n*p) component of lambda, on half mesh"
         lmns.units = "rad"
@@ -624,7 +624,7 @@ class VMECIO:
 
         # Jacobian
         timer.start("Jacobian")
-        logging.warning("Saving Jacobian")
+        logging.info("Saving Jacobian")
         gmnc = file.createVariable("gmnc", np.float64, ("radius", "mn_mode_nyq"))
         gmnc.long_name = "cos(m*t-n*p) component of Jacobian, on half mesh"
         gmnc.units = "m"
@@ -662,7 +662,7 @@ class VMECIO:
 
         # |B|
         timer.start("|B|")
-        logging.warning("Saving |B|")
+        logging.info("Saving |B|")
         bmnc = file.createVariable("bmnc", np.float64, ("radius", "mn_mode_nyq"))
         bmnc.long_name = "cos(m*t-n*p) component of |B|, on half mesh"
         bmnc.units = "T"
@@ -699,7 +699,7 @@ class VMECIO:
 
         # B^theta
         timer.start("B^theta")
-        logging.warning("Saving B^theta")
+        logging.info("Saving B^theta")
         bsupumnc = file.createVariable(
             "bsupumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -740,7 +740,7 @@ class VMECIO:
 
         # B^zeta
         timer.start("B^zeta")
-        logging.warning("Saving B^zeta")
+        logging.info("Saving B^zeta")
         bsupvmnc = file.createVariable(
             "bsupvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -781,7 +781,7 @@ class VMECIO:
 
         # B_psi
         timer.start("B_psi")
-        logging.warning("Saving B_psi")
+        logging.info("Saving B_psi")
         bsubsmns = file.createVariable(
             "bsubsmns", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -825,7 +825,7 @@ class VMECIO:
 
         # B_theta
         timer.start("B_theta")
-        logging.warning("Saving B_theta")
+        logging.info("Saving B_theta")
         bsubumnc = file.createVariable(
             "bsubumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -866,7 +866,7 @@ class VMECIO:
 
         # B_zeta
         timer.start("B_zeta")
-        logging.warning("Saving B_zeta")
+        logging.info("Saving B_zeta")
         bsubvmnc = file.createVariable(
             "bsubvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -907,7 +907,7 @@ class VMECIO:
 
         # J^theta * sqrt(g)   # noqa: E800
         timer.start("J^theta")
-        logging.warning("Saving J^theta")
+        logging.info("Saving J^theta")
         currumnc = file.createVariable(
             "currumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -955,7 +955,7 @@ class VMECIO:
 
         # J^zeta * sqrt(g)   # noqa: E800
         timer.start("J^zeta")
-        logging.warning("Saving J^zeta")
+        logging.info("Saving J^zeta")
         currvmnc = file.createVariable(
             "currvmnc", np.float64, ("radius", "mn_mode_nyq")
         )

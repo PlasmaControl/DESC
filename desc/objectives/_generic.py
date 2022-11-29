@@ -198,7 +198,7 @@ class ToroidalCurrent(_Objective):
         self._dim_f = self.grid.num_rho
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:

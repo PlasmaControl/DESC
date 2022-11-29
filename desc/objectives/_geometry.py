@@ -58,7 +58,7 @@ class Volume(_Objective):
         self._dim_f = 1
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._R_transform = Transform(
@@ -144,7 +144,7 @@ class AspectRatio(_Objective):
         self._dim_f = 1
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._R_transform = Transform(

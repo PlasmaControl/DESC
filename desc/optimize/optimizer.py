@@ -302,7 +302,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        logging.warning("Factorizing linear constraints")
+        logging.info("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             linear_constraints, objective.args
@@ -312,10 +312,10 @@ class Optimizer(IOAble):
 
         x0_reduced = project(objective.x(eq))
 
-        logging.warning("Number of parameters: {}".format(x0_reduced.size))
-        logging.warning("Number of objectives: {}".format(objective.dim_f))
+        logging.info("Number of parameters: {}".format(x0_reduced.size))
+        logging.info("Number of objectives: {}".format(objective.dim_f))
 
-        logging.warning("Starting optimization")
+        logging.info("Starting optimization")
         timer.start("Solution time")
 
         def compute_wrapped(x_reduced):

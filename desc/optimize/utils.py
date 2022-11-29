@@ -173,7 +173,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
 
 def print_header_nonlinear():
     """Print a pretty header."""
-    logging.info(
+    logging.debug(
         "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
             "Iteration",
             "Total nfev",
@@ -229,7 +229,7 @@ def print_iteration_nonlinear(
     else:
         optimality = "{0:^15.2e}".format(optimality)
 
-    logging.info(
+    logging.debug(
         "{0}{1}{2}{3}{4}{5}".format(
             iteration, nfev, cost, cost_reduction, step_norm, optimality
         )

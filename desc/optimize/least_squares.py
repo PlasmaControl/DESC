@@ -2,6 +2,7 @@
 
 import numpy as np
 import logging
+import warnings
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
@@ -346,13 +347,13 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         message=message,
     )
     if result["success"]:
-        logging.error(result["message"])
+        logging.info(result["message"])
     else:
-        logging.error("Warning: " + result["message"])
-    logging.warning("         Current function value: {:.3e}".format(result["cost"]))
-    logging.warning("         Iterations: {:d}".format(result["nit"]))
-    logging.warning("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.warning("         Jacobian evaluations: {:d}".format(result["njev"]))
+        warnings.warn("Warning: " + result["message"])
+    logging.info("         Current function value: {:.3e}".format(result["cost"]))
+    logging.info("         Iterations: {:d}".format(result["nit"]))
+    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.info("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:
         result["allx"] = allx

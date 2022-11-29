@@ -95,7 +95,7 @@ class ForceBalance(_Objective):
         self._dim_f = 2 * self.grid.num_nodes
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -250,7 +250,7 @@ class RadialForceBalance(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -402,7 +402,7 @@ class HelicalForceBalance(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -565,7 +565,7 @@ class Energy(_Objective):
         self._dim_f = 1
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._pressure = eq.pressure.copy()
@@ -729,7 +729,7 @@ class CurrentDensity(_Objective):
         self._dim_f = 3 * self.grid.num_nodes
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:

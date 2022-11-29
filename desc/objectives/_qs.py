@@ -92,7 +92,7 @@ class QuasisymmetryBoozer(_Objective):
             )
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -288,7 +288,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:
@@ -438,7 +438,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self._dim_f = self.grid.num_nodes
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         if eq.iota is not None:

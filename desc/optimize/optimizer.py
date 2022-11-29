@@ -147,15 +147,6 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    def _get_default_tols(self, ftol, xtol, gtol):
-        if xtol is None:
-            xtol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-4
-        if ftol is None:
-            ftol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-2
-        if gtol is None:
-            gtol = 1e-4
-        return ftol, xtol, gtol
-
     # TODO: add copy argument and return the equilibrium?
     def optimize(  # noqa: C901 - FIXME: simplify this
         self,
@@ -208,7 +199,7 @@ class Optimizer(IOAble):
             * 1-2 : display a termination report.
             * 3 : display progress during iterations
         maxiter : int, optional
-            Maximum number of iterations. Defaults to size(x)*100.
+            Maximum number of iterations. Defaults to len(x0).
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
@@ -227,7 +218,6 @@ class Optimizer(IOAble):
         timer = Timer()
         # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
         disp = verbose - 1 if verbose > 1 else verbose
-        ftol, xtol, gtol = self._get_default_tols(ftol, xtol, gtol)
 
         if (
             self.method in Optimizer._desc_methods
@@ -285,6 +275,10 @@ class Optimizer(IOAble):
 
         x0_reduced = project(objective.x(eq))
 
+        stoptol = _get_default_tols(
+            self.method, ftol, xtol, gtol, maxiter, options, x0_reduced.size
+        )
+
         if verbose > 0:
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))
@@ -321,11 +315,11 @@ class Optimizer(IOAble):
                             x_norm,
                             jnp.inf,
                             1,
-                            ftol,
-                            xtol,
+                            stoptol["ftol"],
+                            stoptol["xtol"],
                             0,
                             len(allx),
-                            maxiter,
+                            stoptol["maxiter"],
                             0,
                             jnp.inf,
                             0,
@@ -358,9 +352,9 @@ class Optimizer(IOAble):
                     method=self.method[len("scipy-") :],
                     jac=grad_wrapped,
                     hess=hess_wrapped,
-                    tol=gtol,
+                    tol=stoptol["gtol"],
                     callback=callback,
-                    options={"maxiter": maxiter, "disp": disp, **options},
+                    options={"maxiter": stoptol["maxiter"], "disp": disp, **options},
                 )
                 result["allx"] = allx
             except StopIteration:
@@ -395,10 +389,10 @@ class Optimizer(IOAble):
                 jac=jac,
                 method=self.method[len("scipy-") :],
                 x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
-                max_nfev=maxiter,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                max_nfev=stoptol["maxiter"],
                 verbose=disp,
             )
             result["allx"] = allx
@@ -423,11 +417,11 @@ class Optimizer(IOAble):
                 args=(),
                 method=method,
                 x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
                 verbose=disp,
-                maxiter=maxiter,
                 callback=None,
                 options=options,
             )
@@ -440,11 +434,11 @@ class Optimizer(IOAble):
                 grad=grad_wrapped,
                 args=(),
                 method=self.method,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
                 verbose=disp,
-                maxiter=maxiter,
                 callback=None,
                 options=options,
             )
@@ -457,11 +451,11 @@ class Optimizer(IOAble):
                 jac=jac_wrapped,
                 args=(),
                 x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
                 verbose=disp,
-                maxiter=maxiter,
                 callback=None,
                 options=options,
             )
@@ -592,3 +586,47 @@ def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, option
         solve_options=solve_options,
     )
     return objective
+
+
+def _get_default_tols(
+    method,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=None,
+    options=None,
+    xsize=1,
+):
+    """Parse and set defaults for stopping tolerances."""
+    if options is None:
+        options = {}
+    stoptol = {}
+    if xtol is not None:
+        stoptol["xtol"] = xtol
+    if ftol is not None:
+        stoptol["ftol"] = ftol
+    if gtol is not None:
+        stoptol["gtol"] = gtol
+    if maxiter is not None:
+        stoptol["maxiter"] = maxiter
+    stoptol.setdefault(
+        "xtol",
+        options.pop(
+            "xtol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-4
+        ),
+    )
+    stoptol.setdefault(
+        "ftol",
+        options.pop(
+            "ftol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-2
+        ),
+    )
+    stoptol.setdefault("gtol", options.pop("gtol", 1e-4))
+    stoptol.setdefault("maxiter", options.pop("maxiter", xsize))
+
+    stoptol["max_nfev"] = options.pop("max_nfev", np.inf)
+    stoptol["max_ngev"] = options.pop("max_ngev", np.inf)
+    stoptol["max_njev"] = options.pop("max_njev", np.inf)
+    stoptol["max_nhev"] = options.pop("max_nhev", np.inf)
+
+    return stoptol

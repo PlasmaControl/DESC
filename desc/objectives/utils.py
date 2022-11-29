@@ -25,7 +25,7 @@ from .linear_objectives import (
 from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(profiles=True, iota=True):
+def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -34,6 +34,8 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
+    normalize : bool
+        Whether to apply constraints in normalized units.
 
     Returns
     -------
@@ -42,22 +44,28 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
 
     """
     constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
-        FixLambdaGauge(),
-        FixPsi(),
+        FixBoundaryR(
+            fixed_boundary=True, normalize=normalize, normalize_target=normalize
+        ),
+        FixBoundaryZ(
+            fixed_boundary=True, normalize=normalize, normalize_target=normalize
+        ),
+        FixLambdaGauge(normalize=normalize, normalize_target=normalize),
+        FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (FixPressure(),)
+        constraints += (FixPressure(normalize=normalize, normalize_target=normalize),)
 
         if iota:
-            constraints += (FixIota(),)
+            constraints += (FixIota(normalize=normalize, normalize_target=normalize),)
         else:
-            constraints += (FixCurrent(),)
+            constraints += (
+                FixCurrent(normalize=normalize, normalize_target=normalize),
+            )
     return constraints
 
 
-def get_equilibrium_objective(mode="force"):
+def get_equilibrium_objective(mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -66,6 +74,8 @@ def get_equilibrium_objective(mode="force"):
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
+    normalize : bool
+        Whether to normalize units of objective.
 
     Returns
     -------
@@ -74,13 +84,16 @@ def get_equilibrium_objective(mode="force"):
 
     """
     if mode == "energy":
-        objectives = Energy()
+        objectives = Energy(normalize=normalize, normalize_target=normalize)
     elif mode == "force":
-        objectives = ForceBalance()
+        objectives = ForceBalance(normalize=normalize, normalize_target=normalize)
     elif mode == "forces":
-        objectives = (RadialForceBalance(), HelicalForceBalance())
+        objectives = (
+            RadialForceBalance(normalize=normalize, normalize_target=normalize),
+            HelicalForceBalance(normalize=normalize, normalize_target=normalize),
+        )
     elif mode == "vacuum":
-        objectives = CurrentDensity()
+        objectives = CurrentDensity(normalize=normalize, normalize_target=normalize)
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)

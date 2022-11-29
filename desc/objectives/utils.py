@@ -174,7 +174,8 @@ def factorize_linear_constraints(constraints, objective_args):
                 Ainv_ = A_.T
             A[arg] = A_
             b[arg] = b_
-            Ainv[arg] = Ainv_
+            # need to undo scaling here to work with perturbations
+            Ainv[arg] = Ainv_ * obj.weight / obj.normalization
 
     # catch any arguments that are not constrained
     for arg in x_idx.keys():

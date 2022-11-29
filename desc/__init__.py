@@ -115,7 +115,7 @@ def set_device(kind="cpu"):
 #Automatic behavior is to give the logging module a NullHandler such that no output is generated without user intending it.
 logging.getLogger().addHandler( logging.NullHandler())
 
-def set_console_logging(console_log_output = "stdout", console_log_level = "WARNING"):
+def set_console_logging(console_log_output = "stdout", console_log_level = "INFO"):
     """Quickly adds console handlers to python's root logger.
 
     Arguments allow basic configuration of the logger, but this is not meant to

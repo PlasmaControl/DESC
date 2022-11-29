@@ -3232,7 +3232,7 @@ def plot_field_lines_sfl(
     theta_coords = (
         []
     )  # list of nodes in (rho,theta,phi) corresponding to each (rho,vartheta,phi)
-    logging.warning(
+    logging.info(
         (
             "Calculating field line (rho,theta,zeta) coordinates corresponding "
             + "to sfl coordinates",
@@ -3246,9 +3246,11 @@ def plot_field_lines_sfl(
     # calculate R,phi,Z of nodes in grid
     # only need to do this after finding the grid corresponding to
     # desired rho, vartheta, phi
-    print(
-        "Calculating field line (R,phi,Z) coordinates corresponding to "
-        + "(rho,theta,zeta) coordinates"
+    logging.info(
+        (
+            "Calculating field line (R,phi,Z) coordinates corresponding to "
+            + "(rho,theta,zeta) coordinates"
+        )
     )
     field_line_coords = {"R": [], "Z": [], "phi": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
@@ -3412,7 +3414,7 @@ def plot_field_lines_real_space(
     Bphi = magnetic_field["B_phi"]
 
     if B_interp is None:  # must fit RBfs to interpolate B field in R,phi,Z
-        logging.warning("Fitting magnetic field with radial basis functions in R,phi,Z")
+        logging.info("Fitting magnetic field with radial basis functions in R,phi,Z")
         BRi = Rbf(Rs, Zs, phis, BR)
         BZi = Rbf(Rs, Zs, phis, BZ)
         Bphii = Rbf(Rs, Zs, phis, Bphi)
@@ -3562,7 +3564,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
     fPhi.append(phi0)
 
     # integrate field lines in Phi
-    logging.warning(
+    logging.info(
         "Integrating Magnetic Field Line Equation from seed theta = %f radians" % theta0
     )
     y0 = [fR[0], fZ[0]]

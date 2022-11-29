@@ -120,7 +120,7 @@ class ForceBalance(_Objective):
         ]
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -282,7 +282,7 @@ class RadialForceBalance(_Objective):
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -441,7 +441,7 @@ class HelicalForceBalance(_Objective):
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -613,7 +613,7 @@ class Energy(_Objective):
         self._data_keys = ["W"]
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -776,7 +776,7 @@ class CurrentDensity(_Objective):
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

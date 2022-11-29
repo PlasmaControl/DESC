@@ -192,7 +192,7 @@ class ToroidalCurrent(_Objective):
         self._data_keys = ["current"]
 
         timer = Timer()
-        logging.warning("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

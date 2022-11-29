@@ -91,7 +91,7 @@ class InputReader:
         if args.version:
             import desc
 
-            logging.warning(desc.__version__)
+            print(desc.__version__)
             return args
 
         if len(args.input_file) == 0:
@@ -123,23 +123,15 @@ class InputReader:
         if args.verbose == 0:
             pass
         if args.verbose == 1:
-            set_console_logging("stdout", "ERROR")
-        if args.verbose == 2:
-            set_console_logging("stdout", "WARNING")
-        if args.verbose == 3:
             set_console_logging("stdout", "INFO")
-        if args.verbose == 4:
+        if args.verbose == 2:
             set_console_logging("stdout", "DEBUG")
 
         if args.logging == 0:
             pass
         if args.logging == 1:
-            set_logfile_logging("desc.log", "ERROR")
-        if args.logging == 2:
-            set_logfile_logging("desc.log", "WARNING")
-        if args.logging == 3:
             set_logfile_logging("desc.log", "INFO")
-        if args.logging == 4:
+        if args.logging == 2:
             set_logfile_logging("desc.log", "DEBUG")
 
         return args
@@ -234,10 +226,10 @@ class InputReader:
             # check if VMEC input file format
             isVMEC = re.search(r"&INDATA", line)
             if isVMEC:
-                logging.warning("Converting VMEC input to DESC input")
+                logging.info("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
                 InputReader.vmec_to_desc_input(self.input_path, path)
-                logging.warning("Generated DESC input file {}:".format(path))
+                logging.info("Generated DESC input file {}:".format(path))
                 return self.parse_inputs(path)
 
             # extract numbers & words
@@ -1475,9 +1467,8 @@ def get_parser():
         "--logging",
         action="count",
         default=0,
-        help="Display detailed progress information to logfile. Twice to "
-        + "include iteration info, thrice to also show iteration timing and"
-        + " inner-loop inner-loop iterations.",
+        help="Display detailed progress information to logfile. Twice to include"
+        + " iteration and timing information",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -1493,7 +1484,6 @@ def get_parser():
         action="count",
         default=0,
         help="Display detailed progress information to stdout. Twice to include"
-        + " iteration info, thrice to also show iteration timing and inner-loop"
-        + " iterations.",
+        + " iteration and timing information.",
     )
     return parser

@@ -1,6 +1,7 @@
 """Function for minimizing a scalar function of multiple variables."""
 
 import numpy as np
+import warnings
 import logging
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored

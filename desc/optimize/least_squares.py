@@ -2,6 +2,7 @@
 
 import numpy as np
 import logging
+import warnings
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
@@ -366,16 +367,14 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         nit=iteration,
         message=message,
     )
-    if verbose > 0:
-        if result["success"]:
-            print(result["message"])
-        else:
-            print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["cost"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-        print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Jacobian evaluations: {:d}".format(result["njev"]))
+    if result["success"]:
+        logging.info(result["message"])
+    else:
+        warnings.warn("Warning: " + result["message"])
+    logging.info("         Current function value: {:.3e}".format(result["cost"]))
+    logging.info("         Iterations: {:d}".format(result["nit"]))
+    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.info("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:
         result["allx"] = allx

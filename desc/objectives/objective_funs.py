@@ -167,7 +167,7 @@ class ObjectiveFunction(IOAble):
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
-            logging.warning("Building objective: " + objective.name)
+            logging.info("Building objective: " + objective.name)
             objective.build(eq, use_jit=self.use_jit)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
@@ -237,7 +237,7 @@ class ObjectiveFunction(IOAble):
             f = self.compute_scalar(x)
         else:
             f = jnp.sum(self.compute(x) ** 2) / 2
-        logging.warning("Total (sum of squares): {:10.3e}, ".format(f))
+        logging.info("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
             obj.print_value(**kwargs)
@@ -341,7 +341,7 @@ class ObjectiveFunction(IOAble):
         # variable values are irrelevant for compilation
         x = np.zeros((self.dim_x,))
 
-        logging.warning("Compiling objective function and derivatives")
+        logging.info("Compiling objective function and derivatives")
         timer.start("Total compilation time")
 
         if mode in ["scalar", "all"]:

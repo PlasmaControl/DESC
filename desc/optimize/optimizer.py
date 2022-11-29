@@ -255,7 +255,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        logging.warning("Factorizing linear constraints")
+        logging.info("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         (
             compute_wrapped,
@@ -284,7 +284,7 @@ class Optimizer(IOAble):
             print("Number of parameters: {}".format(x0_reduced.size))
             print("Number of objectives: {}".format(objective.dim_f))
 
-        logging.warning("Starting optimization")
+        logging.info("Starting optimization")
         timer.start("Solution time")
 
         if self.method in Optimizer._scipy_scalar_methods:

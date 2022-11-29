@@ -237,53 +237,15 @@ class Optimizer(IOAble):
                 options.setdefault("initial_trust_radius", 0.5)
                 options.setdefault("max_trust_radius", 1.0)
 
-        if not isinstance(constraints, tuple):
-            constraints = (constraints,)
-        linear_constraints = tuple(
-            constraint for constraint in constraints if constraint.linear
-        )
-        nonlinear_constraints = tuple(
-            constraint for constraint in constraints if not constraint.linear
-        )
-        if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
-            isinstance(lc, FixIota) for lc in linear_constraints
-        ):
-            raise ValueError(
-                "Toroidal current and rotational transform cannot be "
-                + "constrained simultaneously."
-            )
-
+        linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
         # wrap nonlinear constraints if necessary
         wrapped = False
         if len(nonlinear_constraints) > 0 and (
             self.method not in Optimizer._constrained_methods
         ):
             wrapped = True
-            for constraint in nonlinear_constraints:
-                if not isinstance(
-                    constraint,
-                    (
-                        ForceBalance,
-                        RadialForceBalance,
-                        HelicalForceBalance,
-                        CurrentDensity,
-                    ),
-                ):
-                    raise ValueError(
-                        "optimizer method {} ".format(self.method)
-                        + "cannot handle general nonlinear constraint {}.".format(
-                            constraint
-                        )
-                    )
-            perturb_options = options.pop("perturb_options", {})
-            perturb_options.setdefault("verbose", 0)
-            solve_options = options.pop("solve_options", {})
-            solve_options.setdefault("verbose", 0)
-            objective = WrappedEquilibriumObjective(
-                objective,
-                eq_objective=ObjectiveFunction(nonlinear_constraints),
-                perturb_options=perturb_options,
-                solve_options=solve_options,
+            objective = _wrap_nonlinear_constraints(
+                objective, nonlinear_constraints, self.method, options
             )
 
         if not objective.built:
@@ -308,9 +270,15 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
-        _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            linear_constraints, objective.args
-        )
+        (
+            compute_wrapped,
+            compute_scalar_wrapped,
+            grad_wrapped,
+            hess_wrapped,
+            jac_wrapped,
+            project,
+            recover,
+        ) = _wrap_objective_with_constraints(objective, linear_constraints, self.method)
         timer.stop("linear constraint factorize")
         if verbose > 1:
             timer.disp("linear constraint factorize")
@@ -324,33 +292,6 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Starting optimization")
         timer.start("Solution time")
-
-        def compute_wrapped(x_reduced):
-            x = recover(x_reduced)
-            f = objective.compute(x)
-            if self.method in Optimizer._scalar_methods:
-                return f.squeeze()
-            else:
-                return jnp.atleast_1d(f)
-
-        def compute_scalar_wrapped(x_reduced):
-            x = recover(x_reduced)
-            return objective.compute_scalar(x)
-
-        def grad_wrapped(x_reduced):
-            x = recover(x_reduced)
-            df = objective.grad(x)
-            return df[unfixed_idx] @ Z
-
-        def hess_wrapped(x_reduced):
-            x = recover(x_reduced)
-            df = objective.hess(x)
-            return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
-
-        def jac_wrapped(x_reduced):
-            x = recover(x_reduced)
-            df = objective.jac(x)
-            return df[:, unfixed_idx] @ Z
 
         if self.method in Optimizer._scipy_scalar_methods:
 
@@ -559,3 +500,95 @@ class Optimizer(IOAble):
             _ = result.pop(key, None)
 
         return result
+
+
+def _parse_constraints(constraints):
+    if not isinstance(constraints, tuple):
+        constraints = (constraints,)
+    linear_constraints = tuple(
+        constraint for constraint in constraints if constraint.linear
+    )
+    nonlinear_constraints = tuple(
+        constraint for constraint in constraints if not constraint.linear
+    )
+    if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
+        isinstance(lc, FixIota) for lc in linear_constraints
+    ):
+        raise ValueError(
+            "Toroidal current and rotational transform cannot be "
+            + "constrained simultaneously."
+        )
+    return linear_constraints, nonlinear_constraints
+
+
+def _wrap_objective_with_constraints(objective, linear_constraints, method):
+    """Factorize constraints and make new functions that project/recover + evaluate."""
+    _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        linear_constraints, objective.args
+    )
+
+    def compute_wrapped(x_reduced):
+        x = recover(x_reduced)
+        f = objective.compute(x)
+        if method in Optimizer._scalar_methods:
+            return f.squeeze()
+        else:
+            return jnp.atleast_1d(f)
+
+    def compute_scalar_wrapped(x_reduced):
+        x = recover(x_reduced)
+        return objective.compute_scalar(x)
+
+    def grad_wrapped(x_reduced):
+        x = recover(x_reduced)
+        df = objective.grad(x)
+        return df[unfixed_idx] @ Z
+
+    def hess_wrapped(x_reduced):
+        x = recover(x_reduced)
+        df = objective.hess(x)
+        return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
+
+    def jac_wrapped(x_reduced):
+        x = recover(x_reduced)
+        df = objective.jac(x)
+        return df[:, unfixed_idx] @ Z
+
+    return (
+        compute_wrapped,
+        compute_scalar_wrapped,
+        grad_wrapped,
+        hess_wrapped,
+        jac_wrapped,
+        project,
+        recover,
+    )
+
+
+def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, options):
+    """Use WrappedEquilibriumObjective to hanle nonlinear equilibrium constraints."""
+    for constraint in nonlinear_constraints:
+        if not isinstance(
+            constraint,
+            (
+                ForceBalance,
+                RadialForceBalance,
+                HelicalForceBalance,
+                CurrentDensity,
+            ),
+        ):
+            raise ValueError(
+                "optimizer method {} ".format(method)
+                + "cannot handle general nonlinear constraint {}.".format(constraint)
+            )
+    perturb_options = options.pop("perturb_options", {})
+    perturb_options.setdefault("verbose", 0)
+    solve_options = options.pop("solve_options", {})
+    solve_options.setdefault("verbose", 0)
+    objective = WrappedEquilibriumObjective(
+        objective,
+        eq_objective=ObjectiveFunction(nonlinear_constraints),
+        perturb_options=perturb_options,
+        solve_options=solve_options,
+    )
+    return objective

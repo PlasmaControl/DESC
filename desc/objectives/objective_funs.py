@@ -662,6 +662,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def normalization(self):
+        """float: normalizing scale factor."""
         if self._normalize and not self.built:
             raise ValueError("Objective must be built first")
         return self._normalization

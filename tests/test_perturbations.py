@@ -106,14 +106,9 @@ def test_optimal_perturb():
     eq1 = desc.examples.get("DSHAPE")
     eq1.change_resolution(N=1, N_grid=5)
     objective = ObjectiveFunction(
-        ToroidalCurrent(
-            grid=QuadratureGrid(eq1.L, eq1.M, eq1.N),
-            target=0,
-            weight=1,
-            normalize=False,
-        )
+        ToroidalCurrent(grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1)
     )
-    constraint = ObjectiveFunction(ForceBalance(target=0, normalize=False))
+    constraint = ObjectiveFunction(ForceBalance(target=0))
 
     objective.build(eq1)
     constraint.build(eq1)

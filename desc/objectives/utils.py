@@ -205,3 +205,35 @@ def factorize_linear_constraints(constraints, objective_args):
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
+
+
+def align_jacobian(Fx, objective_f, objective_g):
+    """Pad jacobian with zeros in the right places so that the arguments line up.
+
+    Parameters
+    ----------
+    Fx : ndarray
+        jacobian wrt args the objective_f takes
+    objective_f : ObjectiveFunction
+        Objective corresponding to Fx
+    objective_g : ObjectiveFunction
+        Other objective we want to align jacobian against
+
+    Returns
+    -------
+    A : ndarray
+        Jacobian matrix, reordered and padded so that it broadcasts
+        correctly against the other jacobian
+    """
+    x_idx = objective_f.x_idx
+    args = objective_f.args
+
+    dim_f = Fx.shape[:1]
+    A = {arg: Fx.T[x_idx[arg]] for arg in args}
+    allargs = np.concatenate([objective_f.args, objective_g.args])
+    allargs = [arg for arg in arg_order if arg in allargs]
+    for arg in allargs:
+        if arg not in A.keys():
+            A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
+    A = jnp.concatenate([A[arg] for arg in allargs])
+    return A.T

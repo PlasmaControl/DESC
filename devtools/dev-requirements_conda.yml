@@ -29,12 +29,10 @@ dependencies:
 
   # linting
   - black = 22.10.0
-  - flake8 >= 5.0.0
-  - flake8-docstrings
-  - flake8-eradicate
-  - flake8-isort <= 5.0.0
-  - pydocstyle >= 2.0.0
-  - pylint >= 2.12.2
+  - flake8 >= 5.0.0, <=6.0.0
+  - flake8-docstrings >= 1.0.0, <=2.0.0
+  - flake8-eradicate >= 1.0.0, <=2.0.0
+  - flake8-isort >=5.0.0, <= 6.0.0
 
   # testing and benchmarking
   - codecov

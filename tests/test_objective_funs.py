@@ -111,10 +111,10 @@ class TestObjectiveFunction:
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
             fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
-            np.testing.assert_allclose(fb, 0)
+            np.testing.assert_allclose(fb, 0, atol=1e-12)
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        test(Equilibrium(L=2, M=2, N=1, iota=PowerSeriesProfile(0)))
+        test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
     def test_qs_twoterm(self):

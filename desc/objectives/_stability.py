@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.compute import compute_magnetic_well, compute_mercier_stability, data_index
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
@@ -136,7 +137,7 @@ class MercierStability(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["Psi"] ** 2 / self._dim_f
+            self._normalization = 1 / scales["Psi"] ** 2 / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -181,7 +182,9 @@ class MercierStability(_Objective):
             self._iota,
             self._current,
         )
-        return self._shift_scale(compress(self.grid, data["D_Mercier"]))
+        f = compress(self.grid, data["D_Mercier"], surface_label="rho")
+        w = compress(self.grid, self.grid.weights, surface_label="rho")
+        return self._shift_scale(f * w)
 
 
 class MagneticWell(_Objective):
@@ -350,4 +353,6 @@ class MagneticWell(_Objective):
             self._iota,
             self._current,
         )
-        return self._shift_scale(compress(self.grid, data["magnetic well"]))
+        f = compress(self.grid, data["magnetic_well"], surface_label="rho")
+        w = compress(self.grid, self.grid.weights, surface_label="rho")
+        return self._shift_scale(f * w)

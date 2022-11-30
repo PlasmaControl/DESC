@@ -3,6 +3,7 @@
 from inspect import signature
 
 import desc.compute as compute_funs
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import arg_order, compute_boozer_magnetic_field, data_index
 from desc.compute.utils import compress
@@ -171,7 +172,7 @@ class GenericObjective(_Objective):
 
         """
         data = self.fun(**kwargs, **self.inputs)
-        f = data[self.f]
+        f = data[self.f] * self.grid.weights
         return self._shift_scale(f)
 
 
@@ -276,7 +277,7 @@ class ToroidalCurrent(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["I"] / self._dim_f
+            self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -318,4 +319,5 @@ class ToroidalCurrent(_Objective):
             self._current,
         )
         I = compress(self.grid, data["current"], surface_label="rho")
-        return self._shift_scale(I)
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return self._shift_scale(I * w)

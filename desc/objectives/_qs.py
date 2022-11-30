@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
@@ -175,7 +176,7 @@ class QuasisymmetryBoozer(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] / self._dim_f
+            self._normalization = scales["B"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -358,7 +359,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 3 / self._dim_f
+            self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -528,7 +529,9 @@ class QuasisymmetryTripleProduct(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 4 / scales["a"] ** 2 / self._dim_f
+            self._normalization = (
+                scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
+            )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

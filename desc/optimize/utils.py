@@ -336,3 +336,12 @@ def find_matching_inds(arr1, arr2):
         if len(j):
             inds.append(i)
     return np.asarray(inds)
+
+
+def f_where_x(x, xs, fs):
+    """Return fs where x==xs."""
+    x, xs, fs = map(np.asarray, (x, xs, fs))
+    assert len(xs) == len(fs)
+    assert len(xs) == 0 or x.shape == xs[0].shape
+    i = np.where(np.all(x == xs, axis=1))
+    return fs[i].squeeze()

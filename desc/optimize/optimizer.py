@@ -21,6 +21,7 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
+from ._scipy_wrappers import _optimize_scipy_least_squares
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
@@ -375,27 +376,19 @@ class Optimizer(IOAble):
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
-            allx = []
             x_scale = "jac" if x_scale == "auto" else x_scale
+            method = self.method[len("scipy-") :]
 
-            def jac(x_reduced):
-                allx.append(x_reduced)
-                return jac_wrapped(x_reduced)
-
-            result = scipy.optimize.least_squares(
+            result = _optimize_scipy_least_squares(
                 compute_wrapped,
-                x0=x0_reduced,
-                args=(),
-                jac=jac,
-                method=self.method[len("scipy-") :],
-                x_scale=x_scale,
-                ftol=stoptol["ftol"],
-                xtol=stoptol["xtol"],
-                gtol=stoptol["gtol"],
-                max_nfev=stoptol["maxiter"],
-                verbose=disp,
+                jac_wrapped,
+                x0_reduced,
+                method,
+                x_scale,
+                verbose,
+                stoptol,
+                options,
             )
-            result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
 

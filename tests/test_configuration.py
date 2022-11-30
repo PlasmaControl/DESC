@@ -407,6 +407,18 @@ class TestInitialGuess:
         np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn)
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn)
 
+    @pytest.mark.unit
+    def test_guess_from_coordinate_mapping(self):
+        """Test that we can initialize strongly shaped equilibria correctly."""
+        Rb = np.array([3.51, 1.1, 0.706, -0.3])
+        R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 0]])
+        Zb = np.array([0.0, -0.16, 1.47])
+        Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
+        surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
+        eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+
+        assert eq.is_nested()
+
 
 class TestGetSurfaces:
     """Tests for get_surface method."""

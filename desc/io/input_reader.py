@@ -170,7 +170,7 @@ class InputReader:
             "ftol": np.atleast_1d(1e-2),
             "xtol": np.atleast_1d(1e-6),
             "gtol": np.atleast_1d(1e-6),
-            "nfev": np.atleast_1d(None),
+            "nfev": np.atleast_1d(100),
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",

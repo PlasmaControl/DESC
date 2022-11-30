@@ -3,7 +3,6 @@
 import warnings
 
 import numpy as np
-import scipy.optimize
 from termcolor import colored
 
 from desc.backend import jnp
@@ -21,16 +20,11 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
-from ._scipy_wrappers import _optimize_scipy_least_squares
+from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
-from .utils import (
-    check_termination,
-    find_matching_inds,
-    print_header_nonlinear,
-    print_iteration_nonlinear,
-)
+from .utils import find_matching_inds
 
 
 class Optimizer(IOAble):
@@ -290,89 +284,23 @@ class Optimizer(IOAble):
 
         if self.method in Optimizer._scipy_scalar_methods:
 
-            allx = []
-            allf = []
-            msg = [""]
-
-            def callback(x_reduced):
-                x = recover(x_reduced)
-                if len(allx) > 0:
-                    dx = allx[-1] - x_reduced
-                    dx_norm = jnp.linalg.norm(dx)
-                    if dx_norm > 0:
-                        fx = objective.compute_scalar(x)
-                        df = allf[-1] - fx
-                        allx.append(x_reduced)
-                        allf.append(fx)
-                        x_norm = jnp.linalg.norm(x_reduced)
-                        if verbose > 2:
-                            print_iteration_nonlinear(
-                                len(allx), None, fx, df, dx_norm, None
-                            )
-                        success, message = check_termination(
-                            df,
-                            fx,
-                            dx_norm,
-                            x_norm,
-                            jnp.inf,
-                            1,
-                            stoptol["ftol"],
-                            stoptol["xtol"],
-                            0,
-                            len(allx),
-                            stoptol["maxiter"],
-                            0,
-                            jnp.inf,
-                            0,
-                            jnp.inf,
-                            0,
-                            jnp.inf,
-                        )
-                        if success:
-                            msg[0] = message
-                            raise StopIteration
-                else:
-                    dx = None
-                    df = None
-                    fx = objective.compute_scalar(x)
-                    allx.append(x_reduced)
-                    allf.append(fx)
-                    dx_norm = None
-                    x_norm = jnp.linalg.norm(x_reduced)
-                    if verbose > 2:
-                        print_iteration_nonlinear(
-                            len(allx), None, fx, df, dx_norm, None
-                        )
-
-            print_header_nonlinear()
-            try:
-                result = scipy.optimize.minimize(
-                    compute_scalar_wrapped,
-                    x0=x0_reduced,
-                    args=(),
-                    method=self.method[len("scipy-") :],
-                    jac=grad_wrapped,
-                    hess=hess_wrapped,
-                    tol=stoptol["gtol"],
-                    callback=callback,
-                    options={"maxiter": stoptol["maxiter"], "disp": disp, **options},
+            method = self.method[len("scipy-") :]
+            x_scale = 1 if x_scale == "auto" else x_scale
+            if isinstance(x_scale, str):
+                raise ValueError(
+                    f"Method {self.method} does not support x_scale type {x_scale}"
                 )
-                result["allx"] = allx
-            except StopIteration:
-                result = {
-                    "x": allx[-1],
-                    "allx": allx,
-                    "fun": allf[-1],
-                    "message": msg[0],
-                    "nit": len(allx),
-                    "success": True,
-                }
-                if verbose > 1:
-                    print(msg[0])
-                    print(
-                        "         Current function value: {:.3e}".format(result["fun"])
-                    )
-                    print("         Iterations: {:d}".format(result["nit"]))
+            result = _optimize_scipy_minimize(
+                compute_scalar_wrapped,
+                grad_wrapped,
+                hess_wrapped,
+                x0_reduced,
+                method,
+                x_scale,
+                verbose,
+                stoptol,
+                options,
+            )
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 

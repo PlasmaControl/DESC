@@ -85,7 +85,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 axisR = None
                 axisZ = None
             coord = eq.surface.rho if hasattr(eq.surface, "rho") else None
-            eq.R_lmn = eq._initial_guess_surface(
+            eq.R_lmn = _initial_guess_surface(
                 eq.R_basis,
                 eq.Rb_lmn,
                 eq.surface.R_basis,
@@ -93,7 +93,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 "lcfs",
                 coord,
             )
-            eq.Z_lmn = eq._initial_guess_surface(
+            eq.Z_lmn = _initial_guess_surface(
                 eq.Z_basis,
                 eq.Zb_lmn,
                 eq.surface.Z_basis,

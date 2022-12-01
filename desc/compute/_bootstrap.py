@@ -7,7 +7,7 @@ from desc.backend import jnp, put
 from .utils import check_derivs
 
 
-def trapped_fraction(modB, sqrtg, n_gauss=20):
+def trapped_fraction(modB, sqrt_g, n_gauss=20):
     r"""Evaluate the effective trapped particle fraction.
 
     Compute the effective fraction of trapped particles, which enters
@@ -36,9 +36,9 @@ def trapped_fraction(modB, sqrtg, n_gauss=20):
 
     Parameters
     ----------
-    modB : array of size (ntheta, nphi, ns)
+    modB : array of size (ntheta, nzeta, ns)
         :math:`|B|` on the grid points.
-    sqrtg: array of size (ntheta, nphi, ns)
+    sqrt_g: array of size (ntheta, nzeta, ns)
         The Jacobian :math:`1/(\nabla\rho\times\nabla\theta\cdot\nabla\zeta)`
         on the grid points.
     n_gauss: int
@@ -57,14 +57,14 @@ def trapped_fraction(modB, sqrtg, n_gauss=20):
           where :math:`\left< \ldots \right>` denotes a flux surface average.
         - ``"f_t"``: A 1D array, with the effective trapped fraction on each surface.
     """
-    assert modB.shape == sqrtg.shape
+    assert modB.shape == sqrt_g.shape
     assert len(modB.shape) == 3
     nr = modB.shape[2]
 
     fourpisq = 4 * jnp.pi * jnp.pi
-    d_V_d_rho = jnp.mean(sqrtg, axis=(0, 1)) / fourpisq
-    fsa_B2 = jnp.mean(modB * modB * sqrtg, axis=(0, 1)) / (fourpisq * d_V_d_rho)
-    fsa_1overB = jnp.mean(sqrtg / modB, axis=(0, 1)) / (fourpisq * d_V_d_rho)
+    d_V_d_rho = jnp.mean(sqrt_g, axis=(0, 1)) / fourpisq
+    fsa_B2 = jnp.mean(modB * modB * sqrt_g, axis=(0, 1)) / (fourpisq * d_V_d_rho)
+    fsa_1overB = jnp.mean(sqrt_g / modB, axis=(0, 1)) / (fourpisq * d_V_d_rho)
 
     Bmax = jnp.max(modB, axis=(0, 1))
     Bmin = jnp.min(modB, axis=(0, 1))
@@ -82,10 +82,12 @@ def trapped_fraction(modB, sqrtg, n_gauss=20):
         weights = base_weights * 0.5 / Bmax[jr]
         
         # Evaluate <sqrt(1 - lambda B)>:
-        flux_surf_avg_term = (jnp.mean(
-            jnp.sqrt(1 - lambd[None, None, :] * modB[:, :, jr, None]) * sqrtg[:, :, jr, None],
+        flux_surf_avg_term = (
+            jnp.mean(
+            jnp.sqrt(1 - lambd[None, None, :] * modB[:, :, jr, None]) * sqrt_g[:, :, jr, None],
             axis=(0, 1)) 
-            / (fourpisq * d_V_d_rho[jr]))
+            / (fourpisq * d_V_d_rho[jr])
+        )
         
         integrand = lambd / flux_surf_avg_term
         

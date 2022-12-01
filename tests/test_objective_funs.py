@@ -44,7 +44,10 @@ class TestObjectiveFunction:
                 "c_l": eq.c_l,
                 "Psi": eq.Psi,
             }
-            np.testing.assert_allclose(obj.compute(**kwargs), eq.compute(f)[f])
+            np.testing.assert_allclose(
+                obj.compute(**kwargs),
+                eq.compute(f, grid=obj.grid)[f] * obj.grid.weights,
+            )
 
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))

@@ -63,7 +63,11 @@ class TestObjectiveFunction:
             )
             V = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 10)
+            V = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(V, 10)
             V_compute_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(V_compute_scalar, 10)
+            V_compute_scalar = obj.compute_scalar(*obj.xs(eq))
             np.testing.assert_allclose(V_compute_scalar, 10)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -76,6 +80,8 @@ class TestObjectiveFunction:
         def test(eq):
             obj = AspectRatio(target=5, weight=2, eq=eq)
             AR = obj.compute(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(AR, 10)
+            AR = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(AR, 10)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -90,6 +96,7 @@ class TestObjectiveFunction:
             W = obj.compute(
                 eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
             )
+            W = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(W, 10)
 
         test(Equilibrium(node_pattern="quad", iota=PowerSeriesProfile(0)))

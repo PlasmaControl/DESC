@@ -639,6 +639,10 @@ class _Objective(IOAble, ABC):
         )
         return x / self.weight * self.normalization + target
 
+    def xs(self, eq):
+        """Return a tuple of args required by this objective from the Equilibrium eq."""
+        return tuple(getattr(eq, arg) for arg in self.args)
+
     @property
     def target(self):
         """float: Target value(s) of the objective."""

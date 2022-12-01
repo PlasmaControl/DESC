@@ -385,9 +385,9 @@ class Equilibrium(_Configuration, IOAble):
         objective="force",
         constraints=None,
         optimizer="lsq-exact",
-        ftol=1e-2,
-        xtol=1e-4,
-        gtol=1e-6,
+        ftol=None,
+        xtol=None,
+        gtol=None,
         maxiter=50,
         x_scale="auto",
         options={},
@@ -404,12 +404,8 @@ class Equilibrium(_Configuration, IOAble):
             set of constraints to enforce. Default = fixed boundary/profiles
         optimizer : str or Optimizer (optional)
             optimizer to use
-        ftol : float
-            Relative stopping tolerance on objective function value.
-        xtol : float
-            Stopping tolerance on step size.
-        gtol : float
-            Stopping tolerance on norm of gradient.
+        ftol, xtol, gtol : float
+            stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
         x_scale : array_like or ``'auto'``, optional
@@ -506,9 +502,9 @@ class Equilibrium(_Configuration, IOAble):
         objective=None,
         constraints=None,
         optimizer="lsq-exact",
-        ftol=1e-2,
-        xtol=1e-4,
-        gtol=1e-6,
+        ftol=None,
+        xtol=None,
+        gtol=None,
         maxiter=50,
         x_scale="auto",
         options={},
@@ -525,12 +521,8 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : str or Optimizer (optional)
             optimizer to use
-        ftol : float
-            Relative stopping tolerance on objective function value.
-        xtol : float
-            Stopping tolerance on step size.
-        gtol : float
-            Stopping tolerance on norm of gradient.
+        ftol, xtol, gtol : float
+            stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
         x_scale : array_like or ``'auto'``, optional
@@ -885,9 +877,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
         objective="force",
         optimizer="lsq-exact",
         pert_order=2,
-        ftol=1e-2,
-        xtol=1e-4,
-        gtol=1e-6,
+        ftol=None,
+        xtol=None,
+        gtol=None,
         nfev=100,
         verbose=1,
         checkpoint_path=None,
@@ -911,7 +903,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
             order of perturbations to use. If array-like, should be same length as
             family to specify different values for each step.
         ftol, xtol, gtol : float or array-like of float
-            stopping tolerances for subproblem at each step.
+            stopping tolerances for subproblem at each step. `None` will use defaults
+            for given optimizer.
         nfev : int or array-like of int
             maximum number of function evaluations in each equilibrium subproblem.
         verbose : integer
@@ -951,9 +944,9 @@ class EquilibriaFamily(IOAble, MutableSequence):
         objective="force",
         optimizer="lsq-exact",
         pert_order=2,
-        ftol=1e-2,
-        xtol=1e-4,
-        gtol=1e-6,
+        ftol=None,
+        xtol=None,
+        gtol=None,
         nfev=100,
         verbose=1,
         checkpoint_path=None,
@@ -977,7 +970,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         pert_order : int
             order of perturbations to use.
         ftol, xtol, gtol : float
-            stopping tolerances for subproblem at each step.
+            stopping tolerances for subproblem at each step. `None` will use defaults
+            for given optimizer.
         nfev : int
             maximum number of function evaluations in each equilibrium subproblem.
         verbose : integer

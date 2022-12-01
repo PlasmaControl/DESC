@@ -1007,7 +1007,7 @@ class FixSumModesR(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = True
+    _fixed = False
 
     def __init__(
         self,
@@ -1143,7 +1143,7 @@ class FixSumModesZ(_Objective):
 
     _scalar = False
     _linear = True
-    _fixed = True
+    _fixed = False
 
     def __init__(
         self,

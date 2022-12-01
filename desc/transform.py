@@ -26,7 +26,7 @@ class Transform(IOAble):
         * if an array, derivative orders specified explicitly. Shape should be (N,3),
           where each row is one set of partial derivatives [dr, dt, dz]
     rcond : float
-         relative cutoff for singular values for inverse fitting
+        relative cutoff for singular values for inverse fitting
     build : bool
         whether to precompute the transforms now or do it later
     build_pinv : bool

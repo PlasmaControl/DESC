@@ -551,7 +551,7 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym="auto", name=""):
+    def __init__(self, params=[0], modes=None, grid=None, sym="auto", name=""):
         super().__init__(grid, name)
 
         params = np.atleast_1d(params)
@@ -755,7 +755,9 @@ class SplineProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
 
-    def __init__(self, values, knots=None, grid=None, method="cubic2", name=""):
+    def __init__(
+        self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
+    ):
 
         super().__init__(grid, name)
 
@@ -872,7 +874,7 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params, grid=None, name=""):
+    def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
 
         super().__init__(grid, name)
 
@@ -1124,7 +1126,7 @@ class FourierZernikeProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params, modes=None, grid=None, sym="auto", NFP=1, name=""):
+    def __init__(self, params=[0], modes=None, grid=None, sym="auto", NFP=1, name=""):
         super().__init__(grid, name)
 
         params = np.atleast_1d(params)

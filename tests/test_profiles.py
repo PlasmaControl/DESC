@@ -5,7 +5,12 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.io import InputReader
-from desc.profiles import FourierZernikeProfile, PowerSeriesProfile
+from desc.profiles import (
+    FourierZernikeProfile,
+    MTanhProfile,
+    PowerSeriesProfile,
+    SplineProfile,
+)
 
 from .utils import area_difference, compute_coords
 
@@ -240,3 +245,17 @@ class TestProfiles:
         zp = pp.to_fourierzernike(L=6, M=6, N=0)
         x = np.linspace(0, 1, 100)
         np.testing.assert_allclose(pp(x), zp(x), atol=1e-10)
+
+    @pytest.mark.unit
+    def test_default_profiles(self):
+        """Test that default profiles are just zeros."""
+        pp = PowerSeriesProfile()
+        sp = SplineProfile()
+        mp = MTanhProfile()
+        zp = FourierZernikeProfile()
+
+        x = np.linspace(0, 1, 10)
+        np.testing.assert_allclose(pp(x), 0)
+        np.testing.assert_allclose(sp(x), 0)
+        np.testing.assert_allclose(mp(x), 0)
+        np.testing.assert_allclose(zp(x), 0)

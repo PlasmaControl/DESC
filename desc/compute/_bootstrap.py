@@ -8,7 +8,8 @@ from .utils import check_derivs
 
 
 def trapped_fraction(modB, sqrt_g, n_gauss=20):
-    r"""Evaluate the effective trapped particle fraction.
+    r"""
+    Evaluate the effective trapped particle fraction.
 
     Compute the effective fraction of trapped particles, which enters
     several formulae for neoclassical transport, as well as several
@@ -34,28 +35,34 @@ def trapped_fraction(modB, sqrt_g, n_gauss=20):
     axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
     \epsilon \cos\theta) R_0`.
 
+    This function operates on plain numpy/jax arrays, not Equilibrium objects,
+    so it can be applied to and tested on analytic magnetic fields.
+
+    This function returns a Dictionary containing the following data,
+    all 1D arrays of shape ``(nr,)``:
+    - ``"Bmin"``: The minimum of :math:`|B|` on each surface.
+    - ``"Bmax"``: The maximum of :math:`|B|` on each surface.
+    - ``"epsilon"``: The effective inverse aspect ratio on each surface.
+    - ``"<1/B>"``: :math:`\left<B^2\right>` on each surface,
+      where :math:`\left< \ldots \right>` denotes a flux surface average.
+    - ``"<1/B>"``: :math:`\left<1/B\right>` on each surface,
+      where :math:`\left< \ldots \right>` denotes a flux surface average.
+    - ``"f_t"``: The effective trapped fraction on each surface.
+
     Parameters
     ----------
-    modB : array of size (ntheta, nzeta, ns)
+    modB : array of size ``(ntheta, nzeta, nr)``
         :math:`|B|` on the grid points.
-    sqrt_g: array of size (ntheta, nzeta, ns)
+    sqrt_g : array of size ``(ntheta, nzeta, nr)``
         The Jacobian :math:`1/(\nabla\rho\times\nabla\theta\cdot\nabla\zeta)`
         on the grid points.
-    n_gauss: int
+    n_gauss : int
         Number of Gauss-Legendre integration points for the lambda integral.
 
     Returns
     -------
-    data : dict
-        Dictionary containing the following:
-        - ``"Bmin"``: A 1D array, with the minimum of :math:`|B|` on each surface.
-        - ``"Bmax"``: A 1D array, with the maximum of :math:`|B|` on each surface.
-        - ``"epsilon"``: A 1D array, with the effective inverse aspect ratio on each surface.
-        - ``"<1/B>"``: A 1D array with :math:`\left<B^2\right>` on each surface,
-          where :math:`\left< \ldots \right>` denotes a flux surface average.
-        - ``"<1/B>"``: A 1D array with :math:`\left<1/B\right>` on each surface,
-          where :math:`\left< \ldots \right>` denotes a flux surface average.
-        - ``"f_t"``: A 1D array, with the effective trapped fraction on each surface.
+    f_t_data : dict
+        Dictionary containing the computed data listed above.
     """
     assert modB.shape == sqrt_g.shape
     assert len(modB.shape) == 3
@@ -73,29 +80,28 @@ def trapped_fraction(modB, sqrt_g, n_gauss=20):
 
     # Get nodes and weights for Gauss-Legendre integration:
     base_nodes, base_weights = roots_legendre(n_gauss)
-    
+
     f_t = jnp.zeros(nr)
     for jr in range(nr):
         # Shift and scale integration nodes and weights for the interval
         # [0, 1 / Bmax]:
         lambd = (base_nodes + 1) * 0.5 / Bmax[jr]
         weights = base_weights * 0.5 / Bmax[jr]
-        
+
         # Evaluate <sqrt(1 - lambda B)>:
-        flux_surf_avg_term = (
-            jnp.mean(
-            jnp.sqrt(1 - lambd[None, None, :] * modB[:, :, jr, None]) * sqrt_g[:, :, jr, None],
-            axis=(0, 1)) 
-            / (fourpisq * d_V_d_rho[jr])
-        )
-        
+        flux_surf_avg_term = jnp.mean(
+            jnp.sqrt(1 - lambd[None, None, :] * modB[:, :, jr, None])
+            * sqrt_g[:, :, jr, None],
+            axis=(0, 1),
+        ) / (fourpisq * d_V_d_rho[jr])
+
         integrand = lambd / flux_surf_avg_term
-        
+
         integral = jnp.sum(weights * integrand)
-        
+
         f_t = put(f_t, jr, 1 - 0.75 * fsa_B2[jr] * integral)
 
-    results = {
+    f_t_data = {
         "<B**2>": fsa_B2,
         "<1/B>": fsa_1overB,
         "Bmin": Bmin,
@@ -103,4 +109,4 @@ def trapped_fraction(modB, sqrt_g, n_gauss=20):
         "epsilon": epsilon,
         "f_t": f_t,
     }
-    return results
+    return f_t_data

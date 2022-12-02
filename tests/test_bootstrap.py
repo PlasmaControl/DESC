@@ -18,7 +18,6 @@ class TestBootstrap:
         nr = 2
         ntheta = 200
         nfp = 3
-        results = []
         for nzeta in [1, 50]:
             modB = np.zeros((ntheta, nzeta, nr))
             sqrt_g = np.zeros((ntheta, nzeta, nr))
@@ -33,20 +32,26 @@ class TestBootstrap:
             modB[:, :, 0] = 13.0 + 2.6 * np.cos(theta)
             modB[:, :, 1] = 9.0 + 3.7 * np.sin(theta - nfp * zeta)
 
-            results = trapped_fraction(modB, sqrt_g)
+            f_t_data = trapped_fraction(modB, sqrt_g)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
-                results["<B**2>"],
-                [13.0 ** 2 + 0.5 * 2.6 ** 2, 9.0 ** 2 + 0.5 * 3.7 ** 2]
+                f_t_data["<B**2>"],
+                [13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2],
             )
             np.testing.assert_allclose(
-                results["<1/B>"],
-                [1 / np.sqrt(13.0 ** 2 - 2.6 ** 2), 1 / np.sqrt(9.0 ** 2 - 3.7 ** 2)]
+                f_t_data["<1/B>"],
+                [1 / np.sqrt(13.0**2 - 2.6**2), 1 / np.sqrt(9.0**2 - 3.7**2)],
             )
-            np.testing.assert_allclose(results["Bmin"], [13.0 - 2.6, 9.0 - 3.7], rtol=1e-4)
-            np.testing.assert_allclose(results["Bmax"], [13.0 + 2.6, 9.0 + 3.7], rtol=1e-4)
-            np.testing.assert_allclose(results["epsilon"], [2.6 / 13.0, 3.7 / 9.0], rtol=1e-3)
-            
+            np.testing.assert_allclose(
+                f_t_data["Bmin"], [13.0 - 2.6, 9.0 - 3.7], rtol=1e-4
+            )
+            np.testing.assert_allclose(
+                f_t_data["Bmax"], [13.0 + 2.6, 9.0 + 3.7], rtol=1e-4
+            )
+            np.testing.assert_allclose(
+                f_t_data["epsilon"], [2.6 / 13.0, 3.7 / 9.0], rtol=1e-3
+            )
+
     @pytest.mark.unit
     def test_trapped_fraction_Kim(self):
         """
@@ -56,7 +61,9 @@ class TestBootstrap:
         nr = 50
         ntheta = 100
         B0 = 7.5
-        epsilon_in = np.linspace(0, 1, nr, endpoint=False)  # Avoid divide-by-0 when epsilon=1
+        epsilon_in = np.linspace(
+            0, 1, nr, endpoint=False
+        )  # Avoid divide-by-0 when epsilon=1
         theta1d = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
         nfp = 3
         for nzeta in [1, 13]:
@@ -71,19 +78,22 @@ class TestBootstrap:
                 # times an arbitrary overall scale factor
                 sqrt_g[:, :, jr] = 6.7 * (1 + epsilon_in[jr] * np.cos(theta))
 
-            results = trapped_fraction(modB, sqrt_g)
+            f_t_data = trapped_fraction(modB, sqrt_g)
 
-            f_t_Kim = 1.46 * np.sqrt(epsilon_in) - 0.46 * epsilon_in  # Eq (C18) in Kim et al
+            # Eq (C18) in Kim et al:
+            f_t_Kim = 1.46 * np.sqrt(epsilon_in) - 0.46 * epsilon_in
 
-            np.testing.assert_allclose(results["Bmin"], B0 / (1 + epsilon_in))
-            np.testing.assert_allclose(results["Bmax"], B0 / (1 - epsilon_in))
-            np.testing.assert_allclose(epsilon_in, results["epsilon"])
+            np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + epsilon_in))
+            np.testing.assert_allclose(f_t_data["Bmax"], B0 / (1 - epsilon_in))
+            np.testing.assert_allclose(epsilon_in, f_t_data["epsilon"])
             # Eq (A8):
             np.testing.assert_allclose(
-                results["<B**2>"],
-                B0 * B0 / np.sqrt(1 - epsilon_in ** 2),
+                f_t_data["<B**2>"],
+                B0 * B0 / np.sqrt(1 - epsilon_in**2),
                 rtol=1e-6,
             )
             # Note the loose tolerance for this next test since we do not expect precise agreement.
-            np.testing.assert_allclose(results["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
-            np.testing.assert_allclose(results["<1/B>"], (2 + epsilon_in ** 2) / (2 * B0))
+            np.testing.assert_allclose(f_t_data["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
+            np.testing.assert_allclose(
+                f_t_data["<1/B>"], (2 + epsilon_in**2) / (2 * B0)
+            )

@@ -1,5 +1,6 @@
 """Functions for flux surface averages and vector algebra operations."""
 
+import copy
 import warnings
 
 import numpy as np
@@ -9,6 +10,182 @@ from desc.backend import jnp
 from desc.grid import ConcentricGrid
 
 from .data_index import data_index
+
+
+def get_data_deps(*keys):
+    """Get list of data keys needed to compute a given quantity.
+
+    Parameters
+    ----------
+    keys : str
+        Name of the desired quantity from the data index
+
+    Returns
+    -------
+    deps : list of str
+        Names of quantities needed to compute key
+    """
+
+    def _get_deps_1_key(key):
+        deps = data_index[key]["dependencies"]["data"]
+        if len(deps) == 0:
+            return deps
+        out = deps.copy()
+        for dep in deps:
+            out += _get_deps_1_key(dep)
+        return list(set(out))
+
+    out = []
+    for key in keys:
+        out += _get_deps_1_key(key)
+    return sorted(list(set(out)))
+
+
+def get_derivs(*keys):
+    """Get dict of derivative orders needed to compute a given quantity.
+
+    Parameters
+    ----------
+    keys : str
+        Name of the desired quantity from the data index
+
+    Returns
+    -------
+    derivs : dict of list of int
+        Orders of derivatives needed to compute key.
+        Keys for R, Z, L, etc
+    """
+    deps = get_data_deps(*keys)
+    derivs = {}
+    for dep in deps:
+        for key, val in data_index[dep]["dependencies"]["transforms"].items():
+            if key not in derivs:
+                derivs[key] = []
+            derivs[key] += val
+    return {key: np.unique(val, axis=0) for key, val in derivs.items()}
+
+
+def get_profiles(*keys, eq=None, grid=None, **kwargs):
+    """Get profiles needed to compute a given quantity on a given grid.
+
+    Parameters
+    ----------
+    keys : str
+        Name of the desired quantity from the data index
+    eq : Equilibrium
+        Equilibrium to compute quantity for.
+    grid : Grid
+        Grid to compute quantity on
+
+    Returns
+    -------
+    profiles : list of str or dict of Profile
+        Profiles needed to compute key.
+        if eq is None, returns a list of the names of profiles needed
+        otherwise, returns a dict of Profiles
+        Keys for pressure, iota, etc.
+    """
+    deps = get_data_deps(*keys)
+    profs = []
+    for key in deps:
+        profs += data_index[key]["dependencies"]["profiles"]
+    profs = sorted(list(set(profs)))
+    if eq is None:
+        return profs
+    # need to use copy here because profile may be None
+    profiles = {name: copy.deepcopy(getattr(eq, name)) for name in profs}
+    if grid is None:
+        return profiles
+    for val in profiles.values():
+        if val is not None:
+            val.grid = grid
+    return profiles
+
+
+def get_params(*keys, eq=None, **kwargs):
+    """Get parameters needed to compute a given quantity.
+
+    Parameters
+    ----------
+    keys : str
+        Name of the desired quantity from the data index
+    eq : Equilibrium
+        Equilibrium to compute quantity for.
+
+    Returns
+    -------
+    profiles : list of str or dict of ndarray
+        Parameters needed to compute key.
+        If eq is None, returns a list of the names of params needed
+        otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
+    """
+    deps = get_data_deps(*keys)
+    params = []
+    for key in deps:
+        params += data_index[key]["dependencies"]["params"]
+    params = sorted(list(set(params)))
+    if eq is None:
+        return params
+    params = {name: getattr(eq, name).copy() for name in params}
+    return params
+
+
+def get_transforms(*keys, eq, grid, **kwargs):
+    """Get transforms needed to compute a given quantity on a given grid.
+
+    Parameters
+    ----------
+    keys : str
+        Name of the desired quantity from the data index
+    eq : Equilibrium
+        Equilibrium to compute quantity for.
+    grid : Grid
+        Grid to compute quantity on
+
+    Returns
+    -------
+    transforms : dict of Transform
+        Transforms needed to compute key.
+        Keys for R, Z, L, etc
+
+    """
+    from desc.basis import DoubleFourierSeries
+    from desc.transform import Transform
+
+    derivs = get_derivs(*keys)
+    transforms = {"grid": grid}
+    for c in ["R", "L", "Z"]:
+        if c in derivs:
+            transforms[c] = Transform(
+                grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
+            )
+    if "B" in derivs:
+        transforms["B"] = Transform(
+            grid,
+            DoubleFourierSeries(
+                M=kwargs.get("M_booz", 2 * eq.M),
+                N=kwargs.get("N_booz", 2 * eq.N),
+                NFP=eq.NFP,
+                sym=eq.R_basis.sym,
+            ),
+            derivs=derivs["B"],
+            build=True,
+            build_pinv=True,
+        )
+    if "w" in derivs:
+        transforms["w"] = Transform(
+            grid,
+            DoubleFourierSeries(
+                M=kwargs.get("M_booz", 2 * eq.M),
+                N=kwargs.get("N_booz", 2 * eq.N),
+                NFP=eq.NFP,
+                sym=eq.R_basis.sym,
+            ),
+            derivs=derivs["w"],
+            build=True,
+            build_pinv=True,
+        )
+    return transforms
 
 
 def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):

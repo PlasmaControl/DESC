@@ -355,7 +355,7 @@ def compute_magnetic_field_magnitude(
             * (
                 data["B^zeta_t"]
                 * (
-                    dot(data["e_theta_t"], data["e_zeta"])
+                    dot(data["e_theta_t"], data["e_zeta"])  # TODO: this is just g_tz_t
                     + dot(data["e_theta"], data["e_zeta_t"])
                 )
                 + 2 * data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"])
@@ -734,7 +734,6 @@ def compute_boozer_magnetic_field(
     **kwargs,
 ):
     """Compute covariant magnetic field components in Boozer coordinates."""
-    grid = transforms["R"].grid
     data = compute_covariant_magnetic_field(
         params,
         transforms,
@@ -744,15 +743,15 @@ def compute_boozer_magnetic_field(
     )
 
     if check_derivs("I", transforms["R"], transforms["Z"], transforms["L"]):
-        data["I"] = surface_averages(grid, data["B_theta"])
+        data["I"] = surface_averages(transforms["grid"], data["B_theta"])
         data["current"] = 2 * jnp.pi / mu_0 * data["I"]
     if check_derivs("I_r", transforms["R"], transforms["Z"], transforms["L"]):
-        data["I_r"] = surface_averages(grid, data["B_theta_r"])
+        data["I_r"] = surface_averages(transforms["grid"], data["B_theta_r"])
         data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
     if check_derivs("G", transforms["R"], transforms["Z"], transforms["L"]):
-        data["G"] = surface_averages(grid, data["B_zeta"])
+        data["G"] = surface_averages(transforms["grid"], data["B_zeta"])
     if check_derivs("G_r", transforms["R"], transforms["Z"], transforms["L"]):
-        data["G_r"] = surface_averages(grid, data["B_zeta_r"])
+        data["G_r"] = surface_averages(transforms["grid"], data["B_zeta_r"])
 
     # TODO: add K(rho,theta,zeta)*grad(rho) term
     return data

@@ -21,7 +21,6 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
         Implements equations 4.16 through 4.20 in M. Landreman & R. Jorge (2020)
         doi:10.1017/S002237782000121X.
     """
-    grid = transforms["R"].grid
     data = compute_pressure(
         params,
         transforms,
@@ -66,7 +65,7 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
     )
 
     dS = jnp.abs(data["sqrt(g)"]) * data["|grad(rho)|"]
-    grad_psi_3 = data["|grad(psi)|"] ** 3
+    data["|grad(psi)|^3"] = data["|grad(psi)|"] ** 3
 
     if check_derivs("D_shear", transforms["R"], transforms["Z"], transforms["L"]):
         data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
@@ -80,7 +79,9 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
             / (2 * jnp.pi) ** 4
             * data["iota_r"]
             / data["psi_r"]
-            * surface_integrals(grid, dS / grad_psi_3 * dot(Xi, data["B"]))
+            * surface_integrals(
+                transforms["grid"], dS / data["|grad(psi)|^3"] * dot(Xi, data["B"])
+            )
         )
 
     if check_derivs("D_well", transforms["R"], transforms["Z"], transforms["L"]):
@@ -93,18 +94,33 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
             * (
                 jnp.sign(data["psi"]) * d2V_dpsi2
                 - dp_dpsi
-                * surface_integrals(grid, dS / (data["|B|^2"] * data["|grad(psi)|"]))
+                * surface_integrals(
+                    transforms["grid"], dS / (data["|B|^2"] * data["|grad(psi)|"])
+                )
             )
-            * surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
+            * surface_integrals(
+                transforms["grid"], dS * data["|B|^2"] / data["|grad(psi)|^3"]
+            )
             / (2 * jnp.pi) ** 6
         )
 
     if check_derivs("D_geodesic", transforms["R"], transforms["Z"], transforms["L"]):
-        J_dot_B = mu_0 * dot(data["J"], data["B"])
+        data["J*B"] = dot(data["J"], data["B"])
         data["D_geodesic"] = (
-            surface_integrals(grid, dS * J_dot_B / grad_psi_3) ** 2
-            - surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
-            * surface_integrals(grid, dS * J_dot_B**2 / (data["|B|^2"] * grad_psi_3))
+            surface_integrals(
+                transforms["grid"], dS * mu_0 * data["J*B"] / data["|grad(psi)|^3"]
+            )
+            ** 2
+            - surface_integrals(
+                transforms["grid"], dS * data["|B|^2"] / data["|grad(psi)|^3"]
+            )
+            * surface_integrals(
+                transforms["grid"],
+                dS
+                * mu_0**2
+                * data["J*B"] ** 2
+                / (data["|B|^2"] * data["|grad(psi)|^3"]),
+            )
         ) / (2 * jnp.pi) ** 6
 
     if check_derivs("D_Mercier", transforms["R"], transforms["Z"], transforms["L"]):
@@ -123,7 +139,6 @@ def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
         Implements equation 3.2 in M. Landreman & R. Jorge (2020)
         doi:10.1017/S002237782000121X.
     """
-    grid = transforms["R"].grid
     data = compute_pressure(
         params,
         transforms,
@@ -147,8 +162,8 @@ def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
     )
 
     if check_derivs("magnetic well", transforms["R"], transforms["Z"], transforms["L"]):
-        B2_avg = surface_averages(
-            grid,
+        data["<B^2>"] = surface_averages(
+            transforms["grid"],
             data["|B|^2"],
             jnp.abs(data["sqrt(g)"]),
             denominator=data["V_r(r)"],
@@ -157,17 +172,18 @@ def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
         # The surface average operation is an additive homomorphism.
         # Thermal pressure is constant over a rho surface.
         # surface average(pressure) = thermal + surface average(magnetic)
-        dp_drho = 2 * mu_0 * data["p_r"]
-        dB2_avg_drho = (
+        data["<B^2>_r"] = (
             surface_integrals(
-                grid,
+                transforms["grid"],
                 data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"]) * data["|B|^2"]
                 + jnp.abs(data["sqrt(g)"]) * 2 * dot(data["B"], data["B_r"]),
             )
-            - data["V_rr(r)"] * B2_avg
+            - data["V_rr(r)"] * data["<B^2>"]
         ) / data["V_r(r)"]
         data["magnetic well"] = (
-            data["V(r)"] * (dp_drho + dB2_avg_drho) / (data["V_r(r)"] * B2_avg)
+            data["V(r)"]
+            * (2 * mu_0 * data["p_r"] + data["<B^2>_r"])
+            / (data["V_r(r)"] * data["<B^2>"])
         )
 
     return data

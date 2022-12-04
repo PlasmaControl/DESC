@@ -32,6 +32,38 @@ def compute_toroidal_flux(params, transforms, profiles, data=None, **kwargs):
     return data
 
 
+def compute_toroidal_flux_gradient(
+    params,
+    transforms,
+    profiles,
+    data=None,
+    **kwargs,
+):
+    """Compute grad(psi)."""
+    data = compute_toroidal_flux(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_contravariant_metric_coefficients(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+
+    if check_derivs("grad(psi)", transforms["R"], transforms["Z"]):
+        data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
+    if check_derivs("|grad(psi)|", transforms["R"], transforms["Z"]):
+        data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
+        data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+
+    return data
+
+
 def compute_toroidal_coords(params, transforms, profiles, data=None, **kwargs):
     """Compute toroidal coordinates (R,phi,Z)."""
     if data is None:
@@ -164,7 +196,6 @@ def compute_rotational_transform(params, transforms, profiles, data=None, **kwar
     if data is None:
         data = {}
 
-    grid = transforms["R"].grid
     if profiles["iota"] is not None:
         data["iota"] = profiles["iota"].compute(params["i_l"], dr=0)
         data["iota_r"] = profiles["iota"].compute(params["i_l"], dr=1)
@@ -211,8 +242,8 @@ def compute_rotational_transform(params, transforms, profiles, data=None, **kwar
                 data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
             ) / data["sqrt(g)"]
             den = data["g_tt"] / data["sqrt(g)"]
-            num_avg = surface_averages(grid, num)
-            den_avg = surface_averages(grid, den)
+            num_avg = surface_averages(transforms["grid"], num)
+            den_avg = surface_averages(transforms["grid"], den)
             data["iota"] = (current_term + num_avg) / den_avg
 
         if check_derivs("iota_r", transforms["R"], transforms["Z"], transforms["L"]):
@@ -233,8 +264,8 @@ def compute_rotational_transform(params, transforms, profiles, data=None, **kwar
                 data["g_tt_r"] / data["sqrt(g)"]
                 - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
             )
-            num_avg_r = surface_averages(grid, num_r)
-            den_avg_r = surface_averages(grid, den_r)
+            num_avg_r = surface_averages(transforms["grid"], num_r)
+            den_avg_r = surface_averages(transforms["grid"], den_r)
             data["iota_r"] = (
                 current_term_r + num_avg_r - data["iota"] * den_avg_r
             ) / den_avg
@@ -300,6 +331,7 @@ def compute_covariant_basis(  # noqa: C901
         data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]]).T
     if check_derivs("e_rho_tz", transforms["R"], transforms["Z"]):
         data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
+
     if check_derivs("e_theta_rr", transforms["R"], transforms["Z"]):
         data["e_theta_rr"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
     if check_derivs("e_theta_tt", transforms["R"], transforms["Z"]):
@@ -312,6 +344,7 @@ def compute_covariant_basis(  # noqa: C901
         data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
     if check_derivs("e_theta_tz", transforms["R"], transforms["Z"]):
         data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]]).T
+
     if check_derivs("e_zeta_rr", transforms["R"], transforms["Z"]):
         data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]]).T
     if check_derivs("e_zeta_tt", transforms["R"], transforms["Z"]):
@@ -464,6 +497,7 @@ def compute_covariant_metric_coefficients(
     if check_derivs("g_tz", transforms["R"], transforms["Z"]):
         data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
 
+    # todo: add other derivatives
     if check_derivs("g_tt_r", transforms["R"], transforms["Z"]):
         data["g_tt_r"] = 2 * dot(data["e_theta"], data["e_theta_r"])
     if check_derivs("g_tz_r", transforms["R"], transforms["Z"]):
@@ -513,41 +547,8 @@ def compute_contravariant_metric_coefficients(
     return data
 
 
-def compute_toroidal_flux_gradient(
-    params,
-    transforms,
-    profiles,
-    data=None,
-    **kwargs,
-):
-    """Compute reciprocal metric coefficients."""
-    data = compute_toroidal_flux(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_contravariant_metric_coefficients(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if check_derivs("grad(psi)", transforms["R"], transforms["Z"]):
-        data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
-    if check_derivs("|grad(psi)|", transforms["R"], transforms["Z"]):
-        data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
-        data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
-
-    return data
-
-
 def compute_geometry(params, transforms, profiles, data=None, **kwargs):
     """Compute geometric quantities such as plasma volume, aspect ratio, etc."""
-    grid = transforms["R"].grid
     data = compute_jacobian(
         params,
         transforms,
@@ -560,25 +561,28 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
         # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
         data["V(r)"] = jnp.abs(
             surface_integrals(
-                grid, cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"]
+                transforms["grid"],
+                cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"],
             )
         )
     if check_derivs("V_r(r)", transforms["R"], transforms["Z"]):
         # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
-        data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
-        data["S(r)"] = surface_integrals(grid, data["|e_theta x e_zeta|"])
-        data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
+        data["V_r(r)"] = surface_integrals(transforms["grid"], jnp.abs(data["sqrt(g)"]))
+        data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
+        data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
         data["A"] = jnp.mean(
             surface_integrals(
-                grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
+                transforms["grid"],
+                jnp.abs(data["sqrt(g)"] / data["R"]),
+                surface_label="zeta",
             )
         )
         data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
         data["a"] = jnp.sqrt(data["A"] / jnp.pi)
-        data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
+        data["R0/a"] = data["R0"] / data["a"]
     if check_derivs("V_rr(r)", transforms["R"], transforms["Z"]):
         data["V_rr(r)"] = surface_integrals(
-            grid, data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
+            transforms["grid"], data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
         )
 
     return data

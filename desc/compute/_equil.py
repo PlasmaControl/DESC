@@ -80,7 +80,7 @@ def compute_force_error(params, transforms, profiles, data=None, **kwargs):
             jnp.sum(
                 data["|grad(p)|"]
                 * jnp.abs(data["sqrt(g)"])
-                * transforms["R"].grid.weights
+                * transforms["grid"].weights
             )
             / data["V"]
         )
@@ -92,9 +92,7 @@ def compute_force_error(params, transforms, profiles, data=None, **kwargs):
         )
     if check_derivs("<|F|>_vol", transforms["R"], transforms["Z"], transforms["L"]):
         data["<|F|>_vol"] = (
-            jnp.sum(
-                data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["R"].grid.weights
-            )
+            jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
             / data["V"]
         )
 
@@ -120,11 +118,11 @@ def compute_energy(params, transforms, profiles, data=None, **kwargs):
 
     if check_derivs("W_B", transforms["R"], transforms["Z"], transforms["L"]):
         data["W_B"] = jnp.sum(
-            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["R"].grid.weights
+            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
         ) / (2 * mu_0)
     if check_derivs("W_p", transforms["R"], transforms["Z"], transforms["L"]):
         data["W_p"] = jnp.sum(
-            data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["R"].grid.weights
+            data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
         ) / (kwargs["gamma"] - 1)
     if check_derivs("W", transforms["R"], transforms["Z"], transforms["L"]):
         data["W"] = data["W_B"] + data["W_p"]

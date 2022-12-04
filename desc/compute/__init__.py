@@ -1,4 +1,27 @@
-"""Functions for computing field and plasma quantities from an equilibrium."""
+"""Functions for computing field and plasma quantities from an equilibrium.
+
+All compute functions take the following arguments:
+
+Parameters
+----------
+params : dict of ndarray
+    Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+transforms : dict of Transform
+    Transforms for R, Z, lambda, etc
+profiles : dict of Profile
+    Profile objects for pressure, iota, current, etc
+data : dict of ndarray
+    Data computed so far, generally output from other compute functions
+kwargs : dict
+    Other arguments needed by some functions, such as helicity
+
+Returns
+-------
+data : dict of ndarray
+    Dictionary of ndarray, shape(num_nodes,) of computed quantities.
+    Keys are of the form 'X_y' meaning the derivative of X wrt y.
+
+"""
 
 from ._core import (
     compute_cartesian_coords,

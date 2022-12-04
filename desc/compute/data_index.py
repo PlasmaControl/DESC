@@ -1068,10 +1068,10 @@ data_index["iota"] = {
     "fun": "compute_rotational_transform",
     "dim": 1,
     "dependencies": {
-        "params": [("i_l",), ("c_l")],
+        "params": ["i_l", "c_l"],
         "transforms": {},
-        "profiles": [("iota",), ("current",)],
-        "data": [(), ("psi_r", "lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)")],
+        "profiles": ["iota", "current"],
+        "data": ["psi_r", "lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)"],
     },
 }
 data_index["iota_r"] = {
@@ -1082,25 +1082,22 @@ data_index["iota_r"] = {
     "fun": "compute_rotational_transform",
     "dim": 1,
     "dependencies": {
-        "params": [("i_l",), ("c_l")],
+        "params": ["i_l", "c_l"],
         "transforms": {},
-        "profiles": [("iota",), ("current",)],
+        "profiles": ["iota", "current"],
         "data": [
-            (),
-            (
-                "psi_r",
-                "psi_rr",
-                "lambda_t",
-                "lambda_z",
-                "lambda_rt",
-                "lambda_rz",
-                "g_tt",
-                "g_tt_r",
-                "g_tz",
-                "g_tz_r",
-                "sqrt(g)",
-                "sqrt(g)_r",
-            ),
+            "psi_r",
+            "psi_rr",
+            "lambda_t",
+            "lambda_z",
+            "lambda_rt",
+            "lambda_rz",
+            "g_tt",
+            "g_tt_r",
+            "g_tz",
+            "g_tz_r",
+            "sqrt(g)",
+            "sqrt(g)_r",
         ],
     },
 }
@@ -2108,7 +2105,7 @@ data_index["V_r(r)"] = {
         "params": [],
         "transforms": {"grid": []},
         "profiles": [],
-        "data": ["sqrt(g0"],
+        "data": ["sqrt(g)"],
     },
 }
 data_index["V_rr(r)"] = {
@@ -2136,7 +2133,7 @@ data_index["S(r)"] = {
         "params": [],
         "transforms": {"grid": []},
         "profiles": [],
-        "data": ["|e_thetea x e_zeta|"],
+        "data": ["|e_theta x e_zeta|"],
     },
 }
 
@@ -2208,7 +2205,7 @@ data_index["B"] = {
         "params": [],
         "transforms": {},
         "profiles": [],
-        "data": ["B^thetea", "e_theta", "B^zeta", "e_zeta"],
+        "data": ["B^theta", "e_theta", "B^zeta", "e_zeta"],
     },
 }
 data_index["B_R"] = {
@@ -2278,7 +2275,7 @@ data_index["B^theta_r"] = {
         "params": [],
         "transforms": {},
         "profiles": [],
-        "data": ["B0_r", "iota", "lambda_z", "B0", "iota_r", "labmda_rz"],
+        "data": ["B0_r", "iota", "lambda_z", "B0", "iota_r", "lambda_rz"],
     },
 }
 data_index["B^zeta_r"] = {
@@ -3840,7 +3837,7 @@ data_index["f_C"] = {
         "data": [
             "iota",
             "psi_r",
-            "sqrt(G)",
+            "sqrt(g)",
             "B_theta",
             "B_zeta",
             "|B|_t",
@@ -4000,8 +3997,10 @@ data_index["<B^2>_r"] = {
             "sqrt(g)",
             "sqrt(g)_r",
             "B",
-            "B_r" "|B|^2",
-            "<B^2>" "V_r(r)",
+            "B_r",
+            "|B|^2",
+            "<B^2>",
+            "V_r(r)",
             "V_rr(r)",
         ],
     },

@@ -2,10 +2,14 @@
 
 import numpy as np
 
-from desc.compute import compute_magnetic_well, compute_mercier_stability, data_index
+from desc.compute import (
+    compute_magnetic_well,
+    compute_mercier_stability,
+    get_profiles,
+    get_transforms,
+)
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 from .objective_funs import _Objective
@@ -72,41 +76,15 @@ class MercierStability(_Objective):
             )
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["D_Mercier"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid,
-            eq.R_basis,
-            derivs=data_index["D_Mercier"]["R_derivs"],
-            build=True,
-        )
-        self._Z_transform = Transform(
-            self.grid,
-            eq.Z_basis,
-            derivs=data_index["D_Mercier"]["R_derivs"],
-            build=True,
-        )
-        self._L_transform = Transform(
-            self.grid,
-            eq.L_basis,
-            derivs=data_index["D_Mercier"]["L_derivs"],
-            build=True,
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -140,20 +118,19 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_mercier_stability(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         return self._shift_scale(compress(self.grid, data["D_Mercier"]))
 
@@ -216,41 +193,15 @@ class MagneticWell(_Objective):
             )
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["magnetic well"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid,
-            eq.R_basis,
-            derivs=data_index["magnetic well"]["R_derivs"],
-            build=True,
-        )
-        self._Z_transform = Transform(
-            self.grid,
-            eq.Z_basis,
-            derivs=data_index["magnetic well"]["R_derivs"],
-            build=True,
-        )
-        self._L_transform = Transform(
-            self.grid,
-            eq.L_basis,
-            derivs=data_index["magnetic well"]["L_derivs"],
-            build=True,
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -284,19 +235,18 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_magnetic_well(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         return self._shift_scale(compress(self.grid, data["magnetic well"]))

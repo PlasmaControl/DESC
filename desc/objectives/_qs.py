@@ -2,14 +2,13 @@
 
 import numpy as np
 
-from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
     compute_quasisymmetry_error,
-    data_index,
+    get_profiles,
+    get_transforms,
 )
 from desc.grid import LinearGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 from .objective_funs import _Objective
@@ -91,46 +90,20 @@ class QuasisymmetryBoozer(_Objective):
             self.grid = LinearGrid(
                 M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
             )
+        self._data_keys = ["|B|_mn"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["|B|_mn"]["L_derivs"], build=True
-        )
-        self._B_transform = Transform(
-            self.grid,
-            DoubleFourierSeries(
-                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.R_basis.sym
-            ),
-            derivs=data_index["|B|_mn"]["R_derivs"],
-            build=True,
-            build_pinv=True,
-        )
-        self._w_transform = Transform(
-            self.grid,
-            DoubleFourierSeries(
-                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.Z_basis.sym
-            ),
-            derivs=data_index["|B|_mn"]["L_derivs"],
-            build=True,
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(
+            *self._data_keys,
+            eq=eq,
+            grid=self.grid,
+            M_booz=self.M_booz,
+            N_booz=self.N_booz
         )
 
         timer.stop("Precomputing transforms")
@@ -140,17 +113,17 @@ class QuasisymmetryBoozer(_Objective):
         M = self.helicity[0]
         N = self.helicity[1] / eq.NFP
         self._idx_00 = np.where(
-            (self._B_transform.basis.modes == [0, 0, 0]).all(axis=1)
+            (self._transforms["B"].basis.modes == [0, 0, 0]).all(axis=1)
         )[0]
         if N == 0:
-            self._idx_MN = np.where(self._B_transform.basis.modes[:, 2] == 0)[0]
+            self._idx_MN = np.where(self._transforms["B"].basis.modes[:, 2] == 0)[0]
         else:
             self._idx_MN = np.where(
-                self._B_transform.basis.modes[:, 1]
-                / self._B_transform.basis.modes[:, 2]
+                self._transforms["B"].basis.modes[:, 1]
+                / self._transforms["B"].basis.modes[:, 2]
                 == M / N
             )[0]
-        self._idx = np.ones((self._B_transform.basis.num_modes,), bool)
+        self._idx = np.ones((self._transforms["B"].basis.num_modes,), bool)
         self._idx[self._idx_00] = False
         self._idx[self._idx_MN] = False
 
@@ -182,20 +155,18 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_boozer_coordinates(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._B_transform,
-            self._w_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         b_mn = data["|B|_mn"]
         b_mn = b_mn[self._idx]
@@ -288,30 +259,15 @@ class QuasisymmetryTwoTerm(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["f_C"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["f_C"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["f_C"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["f_C"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -343,19 +299,19 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
-            self._helicity,
+            params,
+            self._transforms,
+            self._profiles,
+            helicity=self._helicity,
         )
         f = data["f_C"] * self.grid.weights
 
@@ -439,30 +395,15 @@ class QuasisymmetryTripleProduct(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["f_T"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["f_T"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["f_T"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["f_T"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -494,18 +435,18 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         f = data["f_T"] * self.grid.weights
 

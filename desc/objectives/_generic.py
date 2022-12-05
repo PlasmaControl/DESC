@@ -1,13 +1,9 @@
 """Generic objectives that don't belong anywhere else."""
 
-from inspect import signature
-
 import desc.compute as compute_funs
-from desc.basis import DoubleFourierSeries
-from desc.compute import arg_order, compute_boozer_magnetic_field, data_index
-from desc.compute.utils import compress
+from desc.compute import compute_boozer_magnetic_field, data_index
+from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 from .objective_funs import _Objective
@@ -63,74 +59,14 @@ class GenericObjective(_Objective):
         if self.grid is None:
             self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-        args = []
         self._dim_f = self.grid.num_nodes
-
         self.fun = getattr(compute_funs, data_index[self.f]["fun"])
-        self.sig = signature(self.fun)
-        self.inputs = {"data": None}
-
-        for arg in self.sig.parameters.keys():
-            if arg in arg_order:
-                args.append(arg)
-            elif arg == "R_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    eq.R_basis,
-                    derivs=data_index[self.f]["R_derivs"],
-                    build=True,
-                )
-            elif arg == "Z_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    eq.Z_basis,
-                    derivs=data_index[self.f]["R_derivs"],
-                    build=True,
-                )
-            elif arg == "L_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    eq.L_basis,
-                    derivs=data_index[self.f]["L_derivs"],
-                    build=True,
-                )
-            elif arg == "B_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    DoubleFourierSeries(
-                        M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP
-                    ),
-                    derivs=0,
-                    build_pinv=True,
-                )
-            elif arg == "w_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    DoubleFourierSeries(
-                        M=2 * eq.M, N=2 * eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP
-                    ),
-                    derivs=1,
-                )
-            elif arg == "pressure":
-                self.inputs[arg] = eq.pressure.copy()
-                self.inputs[arg].grid = self.grid
-            elif arg == "iota":
-                if eq.iota is not None:
-                    self.inputs[arg] = eq.iota.copy()
-                    self.inputs[arg].grid = self.grid
-                else:
-                    self.inputs[arg] = None
-            elif arg == "current":
-                if eq.current is not None:
-                    self.inputs[arg] = eq.current.copy()
-                    self.inputs[arg].grid = self.grid
-                else:
-                    self.inputs[arg] = None
-
-        self._args = args
+        self._args = get_params(self.f)
+        self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, **kwargs):
+    def compute(self, **params):
         """Compute the quantity.
 
         Parameters
@@ -144,7 +80,7 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        data = self.fun(**kwargs, **self.inputs)
+        data = self.fun(params, self._transforms, self._profiles)
         f = data[self.f]
         return self._shift_scale(f)
 
@@ -196,30 +132,15 @@ class ToroidalCurrent(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["current"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["current"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["current"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["current"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -251,18 +172,18 @@ class ToroidalCurrent(_Objective):
             Toroidal current (A).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_boozer_magnetic_field(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         I = compress(self.grid, data["current"], surface_label="rho")
         return self._shift_scale(I)

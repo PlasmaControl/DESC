@@ -95,12 +95,13 @@ def compute_toroidal_coords(params, transforms, profiles, data=None, **kwargs):
     for d in derivs:
         keyR = "R" + d
         keyZ = "Z" + d
-        if check_derivs(keyR, transforms["R"], transforms["Z"]):
+        if check_derivs(keyR, R_transform=transforms["R"]):
             data[keyR] = transforms["R"].transform(
-                params["R_lmn"], *data_index[keyR]["R_derivs"][0]
+                params["R_lmn"], *data_index[keyR]["dependencies"]["transforms"]["R"][0]
             )
+        if check_derivs(keyZ, Z_transform=transforms["Z"]):
             data[keyZ] = transforms["Z"].transform(
-                params["Z_lmn"], *data_index[keyZ]["R_derivs"][0]
+                params["Z_lmn"], *data_index[keyZ]["dependencies"]["transforms"]["Z"][0]
             )
 
     return data
@@ -161,7 +162,7 @@ def compute_lambda(params, transforms, profiles, data=None, **kwargs):
     for key in keys:
         if check_derivs(key, L_transform=transforms["L"]):
             data[key] = transforms["L"].transform(
-                params["L_lmn"], *data_index[key]["L_derivs"][0]
+                params["L_lmn"], *data_index[key]["dependencies"]["transforms"]["L"][0]
             )
 
     return data

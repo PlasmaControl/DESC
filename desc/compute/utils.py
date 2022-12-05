@@ -55,14 +55,14 @@ def get_derivs(*keys):
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
     """
-    deps = get_data_deps(*keys)
+    deps = list(keys) + get_data_deps(*keys)
     derivs = {}
     for dep in deps:
         for key, val in data_index[dep]["dependencies"]["transforms"].items():
             if key not in derivs:
                 derivs[key] = []
             derivs[key] += val
-    return {key: np.unique(val, axis=0) for key, val in derivs.items()}
+    return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
 def get_profiles(*keys, eq=None, grid=None, **kwargs):
@@ -208,22 +208,24 @@ def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
         True if the Transforms can compute requested derivatives, False otherwise.
 
     """
-    if "R_derivs" not in data_index[key]:
+    derivs = get_derivs(key)
+    if "R" not in derivs:
         R_flag = True
-        Z_flag = True
     else:
         R_flag = np.array(
-            [d in R_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+            [d in R_transform.derivatives.tolist() for d in derivs["R"]]
         ).all()
+    if "Z" not in derivs:
+        Z_flag = True
+    else:
         Z_flag = np.array(
-            [d in Z_transform.derivatives.tolist() for d in data_index[key]["R_derivs"]]
+            [d in Z_transform.derivatives.tolist() for d in derivs["Z"]]
         ).all()
-
-    if "L_derivs" not in data_index[key]:
+    if "L" not in derivs:
         L_flag = True
     else:
         L_flag = np.array(
-            [d in L_transform.derivatives.tolist() for d in data_index[key]["L_derivs"]]
+            [d in L_transform.derivatives.tolist() for d in derivs["L"]]
         ).all()
 
     return R_flag and Z_flag and L_flag

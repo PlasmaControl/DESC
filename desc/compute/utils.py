@@ -85,7 +85,7 @@ def get_profiles(*keys, eq=None, grid=None, **kwargs):
         otherwise, returns a dict of Profiles
         Keys for pressure, iota, etc.
     """
-    deps = get_data_deps(*keys)
+    deps = list(keys) + get_data_deps(*keys)
     profs = []
     for key in deps:
         profs += data_index[key]["dependencies"]["profiles"]
@@ -119,7 +119,7 @@ def get_params(*keys, eq=None, **kwargs):
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
     """
-    deps = get_data_deps(*keys)
+    deps = list(keys) + get_data_deps(*keys)
     params = []
     for key in deps:
         params += data_index[key]["dependencies"]["params"]
@@ -179,7 +179,7 @@ def get_transforms(*keys, eq, grid, **kwargs):
                 M=kwargs.get("M_booz", 2 * eq.M),
                 N=kwargs.get("N_booz", 2 * eq.N),
                 NFP=eq.NFP,
-                sym=eq.R_basis.sym,
+                sym=eq.Z_basis.sym,
             ),
             derivs=derivs["w"],
             build=True,

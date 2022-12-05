@@ -108,8 +108,8 @@ def compute_quasisymmetry_error(params, transforms, profiles, data=None, **kwarg
         **kwargs,
     )
 
-    M = kwargs["helicity"][0]
-    N = kwargs["helicity"][1]
+    M = kwargs.get("helicity", (1, 0))[0]
+    N = kwargs.get("helicity", (1, 0))[1]
 
     # QS two-term (T^3)
     if check_derivs("f_C", transforms["R"], transforms["Z"], transforms["L"]):

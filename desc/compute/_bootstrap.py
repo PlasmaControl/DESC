@@ -4,12 +4,19 @@ import warnings
 from scipy.special import roots_legendre
 from scipy.constants import elementary_charge
 
-from ..backend import jnp, put
+from ..backend import jnp, fori_loop
 from ..profiles import Profile, PowerSeriesProfile
-from .utils import check_derivs
+from .utils import (
+    compress,
+    expand,
+    surface_integrals,
+    surface_averages,
+    surface_min,
+    surface_max,
+)
 
 
-def trapped_fraction(modB, sqrt_g, n_gauss=20):
+def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
     r"""
     Evaluate the effective trapped particle fraction.
 
@@ -37,11 +44,13 @@ def trapped_fraction(modB, sqrt_g, n_gauss=20):
     axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
     \epsilon \cos\theta) R_0`.
 
-    This function operates on plain numpy/jax arrays, not Equilibrium objects,
-    so it can be applied to and tested on analytic magnetic fields.
+    This function operates on plain numpy/jax arrays, not the
+    Equilibrium attributes used as arguments to other ``compute_*``
+    functions. This is so this function can be applied to and tested
+    on analytic magnetic fields.
 
     This function returns a Dictionary containing the following data,
-    all 1D arrays of shape ``(nr,)``:
+    all 1D arrays of shape ``(grid.num_rho,)``:
     - ``"Bmin"``: The minimum of :math:`|B|` on each surface.
     - ``"Bmax"``: The maximum of :math:`|B|` on each surface.
     - ``"epsilon"``: The effective inverse aspect ratio on each surface.
@@ -53,56 +62,58 @@ def trapped_fraction(modB, sqrt_g, n_gauss=20):
 
     Parameters
     ----------
-    modB : array of size ``(ntheta, nzeta, nr)``
-        :math:`|B|` on the grid points.
-    sqrt_g : array of size ``(ntheta, nzeta, nr)``
-        The Jacobian :math:`1/(\nabla\rho\times\nabla\theta\cdot\nabla\zeta)`
+    grid : A ``Grid`` object.
+    modB : Magnetic field strength :math:`|B|` on the grid points.
+    sqrt_g : The Jacobian :math:`1/(\nabla\rho\times\nabla\theta\cdot\nabla\zeta)`
         on the grid points.
     n_gauss : int
-        Number of Gauss-Legendre integration points for the lambda integral.
+        Number of Gauss-Legendre integration points for the :math:`\lambda` integral.
 
     Returns
     -------
     f_t_data : dict
         Dictionary containing the computed data listed above.
     """
-    assert modB.shape == sqrt_g.shape
-    assert len(modB.shape) == 3
-    nr = modB.shape[2]
 
-    fourpisq = 4 * jnp.pi * jnp.pi
-    d_V_d_rho = jnp.mean(sqrt_g, axis=(0, 1)) / fourpisq
-    fsa_B2 = jnp.mean(modB * modB * sqrt_g, axis=(0, 1)) / (fourpisq * d_V_d_rho)
-    fsa_1overB = jnp.mean(sqrt_g / modB, axis=(0, 1)) / (fourpisq * d_V_d_rho)
+    denominator = surface_integrals(grid, sqrt_g)
+    fsa_B2 = compress(
+        grid, surface_averages(grid, modB * modB, sqrt_g, denominator=denominator)
+    )
+    fsa_1overB = compress(
+        grid, surface_averages(grid, 1 / modB, sqrt_g, denominator=denominator)
+    )
 
-    Bmax = jnp.max(modB, axis=(0, 1))
-    Bmin = jnp.min(modB, axis=(0, 1))
+    Bmax = surface_max(grid, modB)
+    Bmin = surface_min(grid, modB)
     w = Bmax / Bmin
     epsilon = (w - 1) / (w + 1)
 
     # Get nodes and weights for Gauss-Legendre integration:
     base_nodes, base_weights = roots_legendre(n_gauss)
+    # Rescale for integration on [0, 1], not [-1, 1]:
+    lambd = (base_nodes + 1) * 0.5
+    lambda_weights = base_weights * 0.5
 
-    f_t = jnp.zeros(nr)
-    for jr in range(nr):
-        # Shift and scale integration nodes and weights for the interval
-        # [0, 1 / Bmax]:
-        lambd = (base_nodes + 1) * 0.5 / Bmax[jr]
-        weights = base_weights * 0.5 / Bmax[jr]
+    modB_over_Bmax = modB / expand(grid, Bmax)
 
-        # Evaluate <sqrt(1 - lambda B)>:
-        flux_surf_avg_term = jnp.mean(
-            jnp.sqrt(1 - lambd[None, None, :] * modB[:, :, jr, None])
-            * sqrt_g[:, :, jr, None],
-            axis=(0, 1),
-        ) / (fourpisq * d_V_d_rho[jr])
+    # Sum over the lambda grid points, using fori_loop for efficiency.
+    lambd = jnp.asarray(lambd)
+    lambda_weights = jnp.asarray(lambda_weights)
 
-        integrand = lambd / flux_surf_avg_term
+    def body_fun(jlambda, lambda_integral):
+        flux_surf_avg_term = surface_averages(
+            grid,
+            jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
+            sqrt_g,
+            denominator=denominator,
+        )
+        return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
+            Bmax * Bmax * compress(grid, flux_surf_avg_term)
+        )
 
-        integral = jnp.sum(weights * integrand)
+    lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
 
-        f_t = put(f_t, jr, 1 - 0.75 * fsa_B2[jr] * integral)
-
+    f_t = 1 - 0.75 * fsa_B2 * lambda_integral
     f_t_data = {
         "<B**2>": fsa_B2,
         "<1/B>": fsa_1overB,
@@ -129,7 +140,7 @@ def j_dot_B_Redl(
     Redl et al, Physics of Plasmas 28, 022502 (2021).
 
     The profiles of ne, Te, Ti, and Zeff should all be instances of
-    subclasses of :obj:`simsopt.mhd.profiles.Profile`, i.e. they should
+    subclasses of :obj:`desc.Profile`, i.e. they should
     have ``__call__()`` and ``dfds()`` functions. If ``Zeff == None``, a
     constant 1 is assumed. If ``Zeff`` is a float, a constant profile will
     be assumed.
@@ -160,10 +171,10 @@ def j_dot_B_Redl(
 
     Parameters
     ----------
-    ne: A :obj:`~simsopt.mhd.profiles.Profile` object with the electron density profile.
-    Te: A :obj:`~simsopt.mhd.profiles.Profile` object with the electron temperature profile.
-    Ti: A :obj:`~simsopt.mhd.profiles.Profile` object with the ion temperature profile.
-    Zeff: A :obj:`~simsopt.mhd.profiles.Profile` object with the profile of the average
+    ne: A :obj:`~Profile` object with the electron density profile.
+    Te: A :obj:`~Profile` object with the electron temperature profile.
+    Ti: A :obj:`~Profile` object with the ion temperature profile.
+    Zeff: A :obj:`~Profile` object with the profile of the average
         impurity charge :math:`Z_{eff}`. Or, a single number can be provided if this profile is constant.
         Or, if ``None``, Zeff = 1 will be used.
     helicity_n: 0 for quasi-axisymmetry, or +/- 1 for quasi-helical symmetry.

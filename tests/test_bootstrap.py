@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from scipy.constants import elementary_charge
 
+from desc.grid import LinearGrid
 from desc.profiles import PowerSeriesProfile
 from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
 
@@ -18,23 +19,30 @@ class TestBootstrap:
         match analytic results for a model magnetic field.
         """
         nr = 2
-        ntheta = 200
-        nfp = 3
-        for nzeta in [1, 50]:
-            modB = np.zeros((ntheta, nzeta, nr))
-            sqrt_g = np.zeros((ntheta, nzeta, nr))
+        M = 100
+        NFP = 3
+        for N in [0, 25]:
+            grid = LinearGrid(
+                rho=[0.5, 1],
+                M=M,
+                N=N,
+                NFP=NFP,
+            )
+            rho = grid.nodes[:, 0]
+            theta = grid.nodes[:, 1]
+            zeta = grid.nodes[:, 2]
+            modB = np.zeros_like(theta)
+            sqrt_g = np.zeros_like(theta)
 
-            theta1d = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
-            zeta1d = np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False)
-            zeta, theta = np.meshgrid(zeta1d, theta1d)
+            sqrt_g[grid.inverse_rho_idx == 0] = 10.0
+            sqrt_g[grid.inverse_rho_idx == 1] = -25.0
 
-            sqrt_g[:, :, 0] = 10.0
-            sqrt_g[:, :, 1] = -25.0
+            modB = 13.0 + 2.6 * np.cos(theta)
+            modB_1 = 9.0 + 3.7 * np.sin(theta - NFP * zeta)
+            mask = grid.inverse_rho_idx == 1
+            modB[mask] = modB_1[mask]
 
-            modB[:, :, 0] = 13.0 + 2.6 * np.cos(theta)
-            modB[:, :, 1] = 9.0 + 3.7 * np.sin(theta - nfp * zeta)
-
-            f_t_data = trapped_fraction(modB, sqrt_g)
+            f_t_data = trapped_fraction(grid, modB, sqrt_g)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<B**2>"],
@@ -62,44 +70,49 @@ class TestBootstrap:
         a rough approximation for f_t.
         """
         nr = 50
-        ntheta = 100
+        M = 200
         B0 = 7.5
-        epsilon_in = np.linspace(
-            0, 1, nr, endpoint=False
-        )  # Avoid divide-by-0 when epsilon=1
-        theta1d = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
-        nfp = 3
-        for nzeta in [1, 13]:
-            zeta1d = np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False)
-            zeta, theta = np.meshgrid(zeta1d, theta1d)
-            modB = np.zeros((ntheta, nzeta, nr))
-            sqrt_g = np.zeros((ntheta, nzeta, nr))
-            for jr in range(nr):
-                # Eq (A6)
-                modB[:, :, jr] = B0 / (1 + epsilon_in[jr] * np.cos(theta))
-                # For Jacobian, use eq (A7) for the theta dependence,
-                # times an arbitrary overall scale factor
-                sqrt_g[:, :, jr] = 6.7 * (1 + epsilon_in[jr] * np.cos(theta))
+        rho_in = np.linspace(
+            0,
+            0.96,
+            nr,
+        )  # Avoid divide-by-0 when rho=1
+        NFP = 3
+        for N in [0, 13]:
+            grid = LinearGrid(
+                rho=rho_in,
+                M=M,
+                N=N,
+                NFP=NFP,
+            )
+            rho = grid.nodes[:, 0]
+            theta = grid.nodes[:, 1]
+            zeta = grid.nodes[:, 2]
 
-            f_t_data = trapped_fraction(modB, sqrt_g)
+            # Eq (A6)
+            modB = B0 / (1 + rho * np.cos(theta))
+            # For Jacobian, use eq (A7) for the theta dependence,
+            # times an arbitrary overall scale factor
+            sqrt_g = 6.7 * (1 + rho * np.cos(theta))
+
+            f_t_data = trapped_fraction(grid, modB, sqrt_g)
 
             # Eq (C18) in Kim et al:
-            f_t_Kim = 1.46 * np.sqrt(epsilon_in) - 0.46 * epsilon_in
+            f_t_Kim = 1.46 * np.sqrt(rho_in) - 0.46 * rho_in
 
-            np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + epsilon_in))
-            np.testing.assert_allclose(f_t_data["Bmax"], B0 / (1 - epsilon_in))
-            np.testing.assert_allclose(epsilon_in, f_t_data["epsilon"])
+            np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + rho_in))
+            # Looser tolerance for Bmax since there is no grid point there:
+            np.testing.assert_allclose(f_t_data["Bmax"], B0 / (1 - rho_in), rtol=0.001)
+            np.testing.assert_allclose(rho_in, f_t_data["epsilon"], rtol=1e-4)
             # Eq (A8):
             np.testing.assert_allclose(
                 f_t_data["<B**2>"],
-                B0 * B0 / np.sqrt(1 - epsilon_in**2),
+                B0 * B0 / np.sqrt(1 - rho_in**2),
                 rtol=1e-6,
             )
+            np.testing.assert_allclose(f_t_data["<1/B>"], (2 + rho_in**2) / (2 * B0))
             # Note the loose tolerance for this next test since we do not expect precise agreement.
             np.testing.assert_allclose(f_t_data["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
-            np.testing.assert_allclose(
-                f_t_data["<1/B>"], (2 + epsilon_in**2) / (2 * B0)
-            )
 
     @pytest.mark.unit
     def test_Redl_second_pass(self):

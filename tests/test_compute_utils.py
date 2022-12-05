@@ -10,8 +10,10 @@ from desc.compute.utils import (
     expand,
     surface_averages,
     surface_integrals,
+    surface_max,
+    surface_min,
 )
-from desc.grid import ConcentricGrid, LinearGrid
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
 def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
@@ -183,3 +185,25 @@ class TestComputeUtils:
 
         test(DSHAPE_current)
         test(HELIOTRON_vac)
+
+    @pytest.mark.unit
+    def test_min_max(self):
+        """Test the surface_min and surface_max functions."""
+        for grid_type in ["LinearGrid", "QuadratureGrid", "ConcentricGrid"]:
+            grid = eval(grid_type + "(L=3, M=4, N=5, NFP=3)")
+            rho = grid.nodes[:, 0]
+            theta = grid.nodes[:, 1]
+            zeta = grid.nodes[:, 2]
+            # Make up an arbitrary function of the coordinates:
+            B = (
+                1.7
+                + 0.4 * rho * np.cos(theta)
+                + 0.8 * rho * rho * np.cos(2 * theta - 3 * zeta)
+            )
+            Bmax_alt = np.zeros(grid.num_rho)
+            Bmin_alt = np.zeros(grid.num_rho)
+            for j in range(grid.num_rho):
+                Bmax_alt[j] = np.max(B[grid.inverse_rho_idx == j])
+                Bmin_alt[j] = np.min(B[grid.inverse_rho_idx == j])
+            np.testing.assert_allclose(Bmax_alt, surface_max(grid, B))
+            np.testing.assert_allclose(Bmin_alt, surface_min(grid, B))

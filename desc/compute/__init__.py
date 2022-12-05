@@ -53,6 +53,7 @@ from ._field import (
 from ._qs import compute_boozer_coordinates, compute_quasisymmetry_error
 from ._stability import compute_magnetic_well, compute_mercier_stability
 from .data_index import data_index
+from .utils import get_data_deps, get_params, get_profiles, get_transforms
 
 # defines the order in which objective arguments get concatenated into the state vector
 arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")

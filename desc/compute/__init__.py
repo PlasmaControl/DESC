@@ -34,6 +34,7 @@ from ._core import (
     compute_jacobian,
     compute_lambda,
     compute_pressure,
+    compute_pressure_gradient,
     compute_rotational_transform,
     compute_toroidal_coords,
     compute_toroidal_flux,

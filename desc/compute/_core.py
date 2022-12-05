@@ -95,11 +95,11 @@ def compute_toroidal_coords(params, transforms, profiles, data=None, **kwargs):
     for d in derivs:
         keyR = "R" + d
         keyZ = "Z" + d
-        if check_derivs(keyR, R_transform=transforms["R"]):
+        if "R" in transforms and check_derivs(keyR, R_transform=transforms["R"]):
             data[keyR] = transforms["R"].transform(
                 params["R_lmn"], *data_index[keyR]["dependencies"]["transforms"]["R"][0]
             )
-        if check_derivs(keyZ, Z_transform=transforms["Z"]):
+        if "Z" in transforms and check_derivs(keyZ, Z_transform=transforms["Z"]):
             data[keyZ] = transforms["Z"].transform(
                 params["Z_lmn"], *data_index[keyZ]["dependencies"]["transforms"]["Z"][0]
             )
@@ -160,7 +160,7 @@ def compute_lambda(params, transforms, profiles, data=None, **kwargs):
     ]
 
     for key in keys:
-        if check_derivs(key, L_transform=transforms["L"]):
+        if "L" in transforms and check_derivs(key, L_transform=transforms["L"]):
             data[key] = transforms["L"].transform(
                 params["L_lmn"], *data_index[key]["dependencies"]["transforms"]["L"][0]
             )
@@ -176,6 +176,42 @@ def compute_pressure(params, transforms, profiles, data=None, **kwargs):
     data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
     data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
 
+    return data
+
+
+def compute_pressure_gradient(params, transforms, profiles, data=None, **kwargs):
+    """Compute pressure gradient and volume average."""
+    data = compute_pressure(
+        params,
+        transforms,
+        profiles,
+        data,
+    )
+    data = compute_contravariant_metric_coefficients(
+        params,
+        transforms,
+        profiles,
+        data,
+    )
+    data = compute_geometry(
+        params,
+        transforms,
+        profiles,
+        data,
+    )
+    if check_derivs("grad(p)", transforms["R"], transforms["Z"]):
+        data["grad(p)"] = (data["p_r"] * data["e^rho"].T).T
+    if check_derivs("|grad(p)|", transforms["R"], transforms["Z"]):
+        data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
+    if check_derivs("<|grad(p)|>_vol", transforms["R"], transforms["Z"]):
+        data["<|grad(p)|>_vol"] = (
+            jnp.sum(
+                data["|grad(p)|"]
+                * jnp.abs(data["sqrt(g)"])
+                * transforms["grid"].weights
+            )
+            / data["V"]
+        )
     return data
 
 
@@ -395,12 +431,15 @@ def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
 
     if check_derivs("sqrt(g)", transforms["R"], transforms["Z"]):
         data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"]))
+    if check_derivs("|e_theta x e_zeta|", transforms["R"], transforms["Z"]):
         data["|e_theta x e_zeta|"] = jnp.linalg.norm(
             cross(data["e_theta"], data["e_zeta"]), axis=1
         )
+    if check_derivs("|e_zeta x e_rho|", transforms["R"], transforms["Z"]):
         data["|e_zeta x e_rho|"] = jnp.linalg.norm(
             cross(data["e_zeta"], data["e_rho"]), axis=1
         )
+    if check_derivs("|e_rho x e_theta|", transforms["R"], transforms["Z"]):
         data["|e_rho x e_theta|"] = jnp.linalg.norm(
             cross(data["e_rho"], data["e_theta"]), axis=1
         )
@@ -569,8 +608,11 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
     if check_derivs("V_r(r)", transforms["R"], transforms["Z"]):
         # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
         data["V_r(r)"] = surface_integrals(transforms["grid"], jnp.abs(data["sqrt(g)"]))
+    if check_derivs("S(r)", transforms["R"], transforms["Z"]):
         data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
+    if check_derivs("V", transforms["R"], transforms["Z"]):
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
+    if check_derivs("A", transforms["R"], transforms["Z"]):
         data["A"] = jnp.mean(
             surface_integrals(
                 transforms["grid"],
@@ -578,8 +620,11 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
                 surface_label="zeta",
             )
         )
+    if check_derivs("R0", transforms["R"], transforms["Z"]):
         data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
+    if check_derivs("a", transforms["R"], transforms["Z"]):
         data["a"] = jnp.sqrt(data["A"] / jnp.pi)
+    if check_derivs("R0/a", transforms["R"], transforms["Z"]):
         data["R0/a"] = data["R0"] / data["a"]
     if check_derivs("V_rr(r)", transforms["R"], transforms["Z"]):
         data["V_rr(r)"] = surface_integrals(

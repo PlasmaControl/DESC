@@ -74,16 +74,6 @@ def compute_force_error(params, transforms, profiles, data=None, **kwargs):
         )
         data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
 
-    if check_derivs("|grad(p)|", transforms["R"], transforms["Z"], transforms["L"]):
-        data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
-        data["<|grad(p)|>_vol"] = (
-            jnp.sum(
-                data["|grad(p)|"]
-                * jnp.abs(data["sqrt(g)"])
-                * transforms["grid"].weights
-            )
-            / data["V"]
-        )
     if check_derivs("|beta|", transforms["R"], transforms["Z"], transforms["L"]):
         data["|beta|"] = jnp.sqrt(
             data["B^zeta"] ** 2 * data["g^tt"]

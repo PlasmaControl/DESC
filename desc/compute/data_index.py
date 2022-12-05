@@ -64,7 +64,7 @@ data_index["psi"] = {
     "dim": 1,
     "dependencies": {
         "params": ["Psi"],
-        "transforms": ["grid"],
+        "transforms": {"grid": []},
         "profiles": [],
         "data": [],
     },
@@ -1056,6 +1056,48 @@ data_index["p_r"] = {
         "transforms": {},
         "profiles": ["pressure"],
         "data": [],
+    },
+}
+data_index["grad(p)"] = {
+    "label": "\\nabla p",
+    "units": "N \\cdot m^{-3}",
+    "units_long": "Newtons / cubic meter",
+    "description": "Pressure gradient",
+    "fun": "compute_pressure_gradient",
+    "dim": 3,
+    "dependencies": {
+        "params": [],
+        "transforms": {},
+        "profiles": [],
+        "data": ["p_r", "e^rho"],
+    },
+}
+data_index["|grad(p)|"] = {
+    "label": "|\\nabla p|",
+    "units": "N \\cdot m^{-3}",
+    "units_long": "Newtons / cubic meter",
+    "description": "Magnitude of pressure gradient",
+    "fun": "compute_pressure_gradient",
+    "dim": 1,
+    "dependencies": {
+        "params": [],
+        "transforms": {},
+        "profiles": [],
+        "data": ["p_r", "|grad(rho)|"],
+    },
+}
+data_index["<|grad(p)|>_vol"] = {
+    "label": "<|\\nabla p|>_{vol}",
+    "units": "N \\cdot m^{-3}",
+    "units_long": "Newtons / cubic meter",
+    "description": "Volume average of magnitude of pressure gradient",
+    "fun": "compute_pressure_gradient",
+    "dim": 0,
+    "dependencies": {
+        "params": [],
+        "transforms": {"grid": []},
+        "profiles": [],
+        "data": ["|grad(p)|", "sqrt(g)", "V"],
     },
 }
 
@@ -3663,34 +3705,6 @@ data_index["<|F|>_vol"] = {
         "transforms": {"grid": []},
         "profiles": [],
         "data": ["|F|", "sqrt(g)", "V"],
-    },
-}
-data_index["|grad(p)|"] = {
-    "label": "|\\nabla p|",
-    "units": "N \\cdot m^{-3}",
-    "units_long": "Newtons / cubic meter",
-    "description": "Magnitude of pressure gradient",
-    "fun": "compute_force_error",
-    "dim": 1,
-    "dependencies": {
-        "params": [],
-        "transforms": {},
-        "profiles": [],
-        "data": ["p_r", "|grad(rho)|"],
-    },
-}
-data_index["<|grad(p)|>_vol"] = {
-    "label": "<|\\nabla p|>_{vol}",
-    "units": "N \\cdot m^{-3}",
-    "units_long": "Newtons / cubic meter",
-    "description": "Volume average of magnitude of pressure gradient",
-    "fun": "compute_force_error",
-    "dim": 0,
-    "dependencies": {
-        "params": [],
-        "transforms": {"grid": []},
-        "profiles": [],
-        "data": ["|grad(p)|", "sqrt(g)", "V"],
     },
 }
 data_index["|beta|"] = {

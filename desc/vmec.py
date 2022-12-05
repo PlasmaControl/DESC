@@ -323,7 +323,9 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -398,7 +400,7 @@ class VMECIO:
         else:
             # value closest to axis will be nan
             grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
-            iotaf[:] = compress(grid, eq.compute("iota", grid)["iota"])
+            iotaf[:] = compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
@@ -407,7 +409,7 @@ class VMECIO:
             iotas[1:] = eq.iota(r_half)
         else:
             grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
-            iotas[1:] = compress(grid, eq.compute("iota", grid)["iota"])
+            iotas[1:] = compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -592,7 +594,7 @@ class VMECIO:
         # derived quantities (approximate conversion)
 
         grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
-        coords = eq.compute("R", grid)
+        coords = eq.compute("R", "Z", grid=grid)
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
         full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
@@ -625,12 +627,12 @@ class VMECIO:
 
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        data_half_grid = eq.compute("|B|", half_grid)
-        data_half_grid = eq.compute("J", half_grid, data=data_half_grid)
+        data_half_grid = eq.compute("|B|", grid=half_grid)
+        data_half_grid = eq.compute("J", grid=half_grid, data=data_half_grid)
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute("J", full_grid)
+        data_full_grid = eq.compute("J", grid=full_grid)
 
         # Jacobian
         timer.start("Jacobian")
@@ -1359,8 +1361,8 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-        r_coords_desc = equil.compute("R", r_grid)
-        v_coords_desc = equil.compute("R", v_grid)
+        r_coords_desc = equil.compute("R", "Z", grid=r_grid)
+        v_coords_desc = equil.compute("R", "Z", grid=v_grid)
 
         # rho contours
         Rr_desc = r_coords_desc["R"].reshape(

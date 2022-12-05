@@ -24,7 +24,7 @@ def test_total_volume(DummyStellarator):
     )
 
     grid = LinearGrid(M=12, N=12, NFP=eq.NFP, sym=eq.sym)  # rho = 1
-    lcfs_volume = eq.compute("V(r)", grid)["V(r)"].mean()
+    lcfs_volume = eq.compute("V(r)", grid=grid)["V(r)"].mean()
     total_volume = eq.compute("V")["V"]  # default quadrature grid
     np.testing.assert_allclose(lcfs_volume, total_volume)
 
@@ -35,7 +35,7 @@ def test_enclosed_volumes():
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute("V_rr(r)", grid=grid)
+    data = eq.compute("V_rr(r)", "R0", "V(r)", grid=grid)
     np.testing.assert_allclose(
         2 * data["R0"] * (np.pi * rho) ** 2,
         compress(grid, data["V(r)"]),
@@ -56,7 +56,7 @@ def test_surface_areas():
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute("S(r)", grid=grid)
+    data = eq.compute("S(r)", "R0", grid=grid)
     S = 4 * data["R0"] * np.pi**2 * rho
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
@@ -71,9 +71,9 @@ def test_surface_areas_2():
     grid_t = LinearGrid(rho=10, theta=1, zeta=10)
     grid_z = LinearGrid(rho=10, theta=10, zeta=1)
 
-    data_r = eq.compute("|e_theta x e_zeta|", grid_r)
-    data_t = eq.compute("|e_zeta x e_rho|", grid_t)
-    data_z = eq.compute("|e_rho x e_theta|", grid_z)
+    data_r = eq.compute("|e_theta x e_zeta|", grid=grid_r)
+    data_t = eq.compute("|e_zeta x e_rho|", grid=grid_t)
+    data_z = eq.compute("|e_rho x e_theta|", grid=grid_z)
 
     Ar = np.sum(
         data_r["|e_theta x e_zeta|"] * grid_r.spacing[:, 1] * grid_r.spacing[:, 2]
@@ -102,7 +102,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     num_rho = 75
     grid = LinearGrid(rho=num_rho, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
-    data = eq.compute("J", grid)
+    data = eq.compute("J", grid=grid)
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
     B_sup_zeta_r = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / drho
@@ -145,8 +145,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     num_theta = 120
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute("J", grid)
-    data = eq.compute("|B|_tt", grid, data=data)
+    data = eq.compute("J", grid=grid)
+    data = eq.compute("|B|_tt", grid=grid, data=data)
 
     B_sup_theta_t = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dtheta
     B_sup_theta_tt = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dtheta**2
@@ -210,8 +210,8 @@ def test_magnetic_field_derivatives(DummyStellarator):
     num_zeta = 120
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute("J", grid)
-    data = eq.compute("|B|_zz", grid, data=data)
+    data = eq.compute("J", grid=grid)
+    data = eq.compute("|B|_zz", grid=grid, data=data)
 
     B_sup_theta_z = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dzeta
     B_sup_theta_zz = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dzeta**2
@@ -277,7 +277,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta, zeta=num_zeta)
     dtheta = grid.nodes[:, 1].reshape((num_zeta, num_theta))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((num_zeta, num_theta))[1, 0]
-    data = eq.compute("|B|_tz", grid)
+    data = eq.compute("|B|_tz", grid=grid)
 
     B_sup_theta = data["B^theta"].reshape((num_zeta, num_theta))
     B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_theta))
@@ -334,8 +334,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_rho = 110
     grid = LinearGrid(NFP=eq.NFP, rho=num_rho)
     drho = grid.nodes[1, 0]
-    data = eq.compute("|B|", grid)
-    data = eq.compute("grad(|B|^2)_rho", grid, data=data)
+    data = eq.compute("|B|", grid=grid)
+    data = eq.compute("grad(|B|^2)_rho", grid=grid, data=data)
     B2_r = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / drho
     np.testing.assert_allclose(
         data["grad(|B|^2)_rho"][3:-2],
@@ -348,8 +348,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_theta = 90
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute("|B|", grid)
-    data = eq.compute("grad(|B|^2)_theta", grid, data=data)
+    data = eq.compute("|B|", grid=grid)
+    data = eq.compute("grad(|B|^2)_theta", grid=grid, data=data)
     B2_t = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["grad(|B|^2)_theta"][2:-2],
@@ -362,8 +362,8 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     num_zeta = 90
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute("|B|", grid)
-    data = eq.compute("grad(|B|^2)_zeta", grid, data=data)
+    data = eq.compute("|B|", grid=grid)
+    data = eq.compute("grad(|B|^2)_zeta", grid=grid, data=data)
     B2_z = np.convolve(data["|B|"] ** 2, FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["grad(|B|^2)_zeta"][2:-2],
@@ -382,9 +382,9 @@ def test_currents(DSHAPE_current):
     grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
 
-    data_booz = eq.compute("|B|_mn", grid_full, M_booz=eq.M, N_booz=eq.N)
-    data_full = eq.compute("I", grid_full)
-    data_sym = eq.compute("I", grid_sym)
+    data_booz = eq.compute("|B|_mn", grid=grid_full, M_booz=eq.M, N_booz=eq.N)
+    data_full = eq.compute("I", grid=grid_full)
+    data_sym = eq.compute("I", grid=grid_sym)
 
     np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
     np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)
@@ -404,7 +404,7 @@ def test_BdotgradB(DummyStellarator):
     num_theta = 120
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
-    data = eq.compute("(B*grad(|B|))_t", grid)
+    data = eq.compute("(B*grad(|B|))_t", grid=grid)
     Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
     np.testing.assert_allclose(
         data["(B*grad(|B|))_t"][2:-2],
@@ -417,7 +417,7 @@ def test_BdotgradB(DummyStellarator):
     num_zeta = 120
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
-    data = eq.compute("(B*grad(|B|))_z", grid)
+    data = eq.compute("(B*grad(|B|))_z", grid=grid)
     Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
     np.testing.assert_allclose(
         data["(B*grad(|B|))_z"][2:-2],
@@ -434,7 +434,7 @@ def test_boozer_transform(DSHAPE_current):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-    data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
+    data = eq.compute("|B|_mn", grid=grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
         [
             2.49792355e-01,

@@ -94,7 +94,7 @@ class TestInterp3D:
         z = np.linspace(0, np.pi, 1000)
         xxp, yyp, zzp = np.meshgrid(xp, yp, zp, indexing="ij")
 
-        f = lambda x, y, z: np.sin(x) * np.cos(y) * z ** 2
+        f = lambda x, y, z: np.sin(x) * np.cos(y) * z**2
         fp = f(xxp, yyp, zzp)
 
         fq = interp3d(x, y, z, xp, yp, zp, fp)

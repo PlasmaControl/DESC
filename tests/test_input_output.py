@@ -47,6 +47,8 @@ def test_near_axis_input_files():
         np.testing.assert_allclose(
             inputs_desc[arg], inputs_vmec[arg], rtol=1e-6, atol=1e-8
         )
+    if os.path.exists(".//tests//inputs//input.QSC_r2_5.5_vmec_desc"):
+        os.remove(".//tests//inputs//input.QSC_r2_5.5_vmec_desc")
 
 
 @pytest.mark.unit
@@ -138,6 +140,17 @@ class TestInputReader:
         # FIXME: maybe just store a file we know is converted correctly,
         #  and checksum compare a live conversion to it
         pass
+
+    @pytest.mark.unit
+    def test_vacuum_objective_with_iota_yields_current(self):
+        """Test that input file with vacuum objective always uses zero current."""
+        input_path = ".//tests//inputs//HELIOTRON_vacuum"
+        # load an input file with vacuum obj but also an iota profile specified
+        with pytest.warns(UserWarning):
+            ir = InputReader(input_path)
+        # ensure that a current profile instead of an iota profile is used
+        assert "iota" not in ir.inputs[0].keys()
+        assert "current" in ir.inputs[0].keys()
 
 
 class MockObject:

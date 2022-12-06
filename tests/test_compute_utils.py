@@ -99,7 +99,7 @@ class TestComputeUtils:
                 else ConcentricGrid(L=11, M=11, N=9, NFP=5, sym=True)
             )
             areas = surface_integrals(grid, surface_label=surface_label)
-            correct_area = 4 * np.pi ** 2 if surface_label == "rho" else 2 * np.pi
+            correct_area = 4 * np.pi**2 if surface_label == "rho" else 2 * np.pi
             np.testing.assert_allclose(areas, correct_area)
 
         test("rho")

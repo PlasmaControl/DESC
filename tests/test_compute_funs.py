@@ -41,11 +41,11 @@ def test_enclosed_volumes():
         compress(grid, data["V(r)"]),
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi ** 2 * rho,
+        4 * data["R0"] * np.pi**2 * rho,
         compress(grid, data["V_r(r)"]),
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi ** 2,
+        4 * data["R0"] * np.pi**2,
         compress(grid, data["V_rr(r)"]),
     )
 
@@ -57,7 +57,7 @@ def test_surface_areas():
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute("S(r)", grid=grid)
-    S = 4 * data["R0"] * np.pi ** 2 * rho
+    S = 4 * data["R0"] * np.pi**2 * rho
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
@@ -85,8 +85,8 @@ def test_surface_areas_2():
         data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
     )
 
-    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
-    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi**2)
+    np.testing.assert_allclose(At, np.pi * (11**2 - 10**2))
     np.testing.assert_allclose(Az, np.pi)
 
 
@@ -149,13 +149,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
     data = eq.compute("|B|_tt", grid, data=data)
 
     B_sup_theta_t = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dtheta
-    B_sup_theta_tt = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dtheta ** 2
+    B_sup_theta_tt = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dtheta**2
     B_sup_zeta_t = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dtheta
-    B_sup_zeta_tt = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dtheta ** 2
+    B_sup_zeta_tt = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dtheta**2
     B_sub_rho_t = np.convolve(data["B_rho"], FD_COEF_1_4, "same") / dtheta
     B_sub_zeta_t = np.convolve(data["B_zeta"], FD_COEF_1_4, "same") / dtheta
     B_t = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dtheta
-    B_tt = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dtheta ** 2
+    B_tt = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dtheta**2
 
     np.testing.assert_allclose(
         data["B^theta_t"][2:-2],
@@ -214,13 +214,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
     data = eq.compute("|B|_zz", grid, data=data)
 
     B_sup_theta_z = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dzeta
-    B_sup_theta_zz = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dzeta ** 2
+    B_sup_theta_zz = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dzeta**2
     B_sup_zeta_z = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dzeta
-    B_sup_zeta_zz = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dzeta ** 2
+    B_sup_zeta_zz = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dzeta**2
     B_sub_rho_z = np.convolve(data["B_rho"], FD_COEF_1_4, "same") / dzeta
     B_sub_theta_z = np.convolve(data["B_theta"], FD_COEF_1_4, "same") / dzeta
     B_z = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dzeta
-    B_zz = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dzeta ** 2
+    B_zz = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dzeta**2
 
     np.testing.assert_allclose(
         data["B^theta_z"][2:-2],
@@ -283,33 +283,24 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_theta))
     B = data["|B|"].reshape((num_zeta, num_theta))
 
-    B_sup_theta_tz = (
-        convolve2d(
-            B_sup_theta,
-            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-            mode="same",
-            boundary="wrap",
-        )
-        / (dtheta * dzeta)
-    )
-    B_sup_zeta_tz = (
-        convolve2d(
-            B_sup_zeta,
-            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-            mode="same",
-            boundary="wrap",
-        )
-        / (dtheta * dzeta)
-    )
-    B_tz = (
-        convolve2d(
-            B,
-            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-            mode="same",
-            boundary="wrap",
-        )
-        / (dtheta * dzeta)
-    )
+    B_sup_theta_tz = convolve2d(
+        B_sup_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_sup_zeta_tz = convolve2d(
+        B_sup_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_tz = convolve2d(
+        B,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
 
     np.testing.assert_allclose(
         data["B^theta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],

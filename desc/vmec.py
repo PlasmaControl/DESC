@@ -30,7 +30,9 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=None, M=None, N=None, spectral_indexing="ansi"):
+    def load(
+        cls, path, L=None, M=None, N=None, spectral_indexing="ansi", profile="iota"
+    ):
         """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
@@ -45,6 +47,8 @@ class VMECIO:
             Toroidal resolution. Default = NTOR from VMEC solution.
         spectral_indexing : str, optional
             Type of Zernike indexing scheme to use. (Default = ``'ansi'``)
+        profile : {"iota", "current"}
+             Which profile to use as the equilibrium constraint. (Default = ``'iota'``)
 
         Returns
         -------
@@ -52,17 +56,16 @@ class VMECIO:
             Equilibrium that resembles the VMEC data.
 
         """
+        assert profile in ["iota", "current"]
         file = Dataset(path, mode="r")
         inputs = {}
 
         version = file.variables["version_"][0]
         if version < 9:
             warnings.warn(
-                (
-                    "VMEC output appears to be from version {}".format(str(version))
-                    + " while DESC is only designed for compatibility with VMEC version"
-                    + " 9. Some data may not be loaded correctly."
-                )
+                "VMEC output appears to be from version {}".format(str(version))
+                + " while DESC is only designed for compatibility with VMEC version"
+                + " 9. Some data may not be loaded correctly."
             )
 
         # parameters
@@ -96,13 +99,43 @@ class VMECIO:
 
         # profiles
         preset = file.dimensions["preset"].size
+        pmass_type = "".join(file.variables["pmass_type"][:].astype(str)).strip()
+        if pmass_type != "power_series":
+            warnings.warn("Pressure is not a power series!")
         p0 = file.variables["presf"][0] / file.variables["am"][0]
         inputs["pressure"] = np.zeros((preset, 2))
         inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
         inputs["pressure"][:, 1] = file.variables["am"][:] * p0
-        inputs["iota"] = np.zeros((preset, 2))
-        inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
-        inputs["iota"][:, 1] = file.variables["ai"][:]
+        if profile == "iota":
+            piota_type = "".join(file.variables["piota_type"][:].astype(str)).strip()
+            if piota_type != "power_series":
+                warnings.warn("Iota is not a power series!")
+            inputs["iota"] = np.zeros((preset, 2))
+            inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
+            inputs["iota"][:, 1] = file.variables["ai"][:]
+            inputs["current"] = None
+        if profile == "current":
+            pcurr_type = "".join(file.variables["pcurr_type"][:].astype(str)).strip()
+            if pcurr_type != "power_series":
+                warnings.warn("Current is not a power series!")
+            inputs["current"] = np.zeros((preset, 2))
+            inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
+            inputs["current"][:, 1] = file.variables["ac"][:]
+            # integrate current profile wrt s=rho^2
+            inputs["current"] = np.pad(
+                np.vstack(
+                    (
+                        inputs["current"][:, 0] + 2,
+                        inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
+                    )
+                ).T,
+                ((1, 0), (0, 0)),
+            )
+            # scale total current to correct value
+            inputs["current"][:, 1] *= (
+                file.variables["ctor"][:] / (np.sum(inputs["current"][:, 1]) or 1),
+            )
+            inputs["iota"] = None
 
         file.close()
 

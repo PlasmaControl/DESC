@@ -18,7 +18,7 @@ class TestFourierRZToroidalSurface:
         grid = LinearGrid(M=24, N=24)
         s.grid = grid
 
-        area = 4 * np.pi ** 2 * 10
+        area = 4 * np.pi**2 * 10
         np.testing.assert_allclose(s.compute_surface_area(), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=10), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=(10, 15)), area)
@@ -137,7 +137,7 @@ class TestZernikeRZToroidalSection:
         grid = LinearGrid(L=10, M=10)
         s.grid = grid
 
-        area = np.pi * 1 ** 2
+        area = np.pi * 1**2
         np.testing.assert_allclose(s.compute_surface_area(), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=15), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=(5, 5)), area)

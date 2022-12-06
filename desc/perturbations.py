@@ -10,10 +10,66 @@ from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.optimize.utils import evaluate_quadratic
+from desc.optimize.utils import evaluate_quadratic_form_jac
 from desc.utils import Timer
 
-__all__ = ["perturb", "optimal_perturb"]
+__all__ = ["get_deltas", "perturb", "optimal_perturb"]
+
+
+def get_deltas(things1, things2):
+    """Compute differences between parameters for perturbations.
+
+    Parameters
+    ----------
+    things1, things2 : dict
+        should be dictionary with keys "surface", "iota", "pressure", etc.
+        Values should be objects of the appropriate type (Surface, Profile).
+        Finds deltas for a perturbation going from things1 to things2.
+        Should have same keys in both dictionaries.
+
+    Returns
+    -------
+    deltas : dict of ndarray
+        deltas to pass in to perturb
+
+    """
+    deltas = {}
+    assert things1.keys() == things2.keys(), "Must have same keys in both dictionaries"
+
+    if "surface" in things1:
+        s1 = things1.pop("surface")
+        s2 = things2.pop("surface")
+        if s1 is not None and s2 is not None:
+            s1 = s1.copy()
+            s2 = s2.copy()
+            s1.change_resolution(s2.L, s2.M, s2.N)
+            if not np.allclose(s2.R_lmn, s1.R_lmn):
+                deltas["dRb"] = s2.R_lmn - s1.R_lmn
+            if not np.allclose(s2.Z_lmn, s1.Z_lmn):
+                deltas["dZb"] = s2.Z_lmn - s1.Z_lmn
+
+    for key in ["iota", "pressure", "current"]:
+        if key in things1:
+            t1 = things1.pop(key)
+            t2 = things2.pop(key)
+            if t1 is not None and t2 is not None:
+                t1 = t1.copy()
+                t2 = t2.copy()
+                if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
+                    t1.change_resolution(t2.basis.L)
+                if not np.allclose(t2.params, t1.params):
+                    deltas["d" + key[0]] = t2.params - t1.params
+
+    if "Psi" in things1:
+        psi1 = things1.pop("Psi")
+        psi2 = things2.pop("Psi")
+        if psi1 is not None and not np.allclose(psi2, psi1):
+            deltas["dPsi"] = psi2 - psi1
+
+    assert len(things1) == 0, "get_deltas got an unexpected key: {}".format(
+        things1.keys()
+    )
+    return deltas
 
 
 def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
@@ -468,12 +524,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-    if objective_g.dim_f < dim_opt:
-        raise ValueError(
-            "Cannot perturb {} parameters with {} objectives.".format(
-                dim_opt, objective_g.dim_f
-            )
-        )
+    if verbose > 0:
+        print("Number of parameters: {}".format(dim_opt))
+        print("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
@@ -692,8 +745,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced
-    dx = recover(dx_reduced) - xp
-    args = objective_f.unpack_state(xf + dx)
+    x_new = recover(x_reduced + dx_reduced)
+    args = objective_f.unpack_state(x_new)
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
@@ -703,7 +756,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
+    predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:

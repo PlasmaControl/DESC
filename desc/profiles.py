@@ -897,10 +897,8 @@ class MTanhProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                (
-                    "params should have at least 5 elements [ped, offset, sym, width,"
-                    + f"*core_poly]  got only {new.size} values"
-                )
+                "params should have at least 5 elements [ped, offset, sym, width,"
+                + f"*core_poly]  got only {new.size} values"
             )
 
     @staticmethod
@@ -937,7 +935,7 @@ class MTanhProfile(Profile):
         elif dx == 1:
             y = -1 / (2 * width) * (1 - jnp.tanh(z) ** 2) * (ped - offset)
         elif dx == 2:
-            y = (ped - offset) * (jnp.tanh(-z) ** 2 - 1) * jnp.tanh(-z) / width ** 2
+            y = (ped - offset) * (jnp.tanh(-z) ** 2 - 1) * jnp.tanh(-z) / width**2
 
         e2z = jnp.exp(2 * z)
         zz = z / (1 + e2z)
@@ -952,10 +950,10 @@ class MTanhProfile(Profile):
                 4
                 * (-width * (1 + e2z) + (1 - e2z) * (sym - x))
                 * e2z
-                / (width ** 3 * (e2z + 1) ** 3)
+                / (width**3 * (e2z + 1) ** 3)
             )
             f = (
-                jnp.polyval(jnp.polyder(core_poly[::-1], 2), zz) * dz ** 2
+                jnp.polyval(jnp.polyder(core_poly[::-1], 2), zz) * dz**2
                 + jnp.polyval(jnp.polyder(core_poly[::-1], 1), zz) * ddz
             )
 
@@ -1213,10 +1211,8 @@ class FourierZernikeProfile(Profile):
             self._params = jnp.asarray(new)
         else:
             raise ValueError(
-                (
-                    f"params should have the same size as the basis, got {new.size} "
-                    + f"for basis with {self._basis.num_modes} modes"
-                )
+                f"params should have the same size as the basis, got {new.size} "
+                + f"for basis with {self._basis.num_modes} modes"
             )
 
     def get_params(self, l, m, n):
@@ -1309,6 +1305,7 @@ class FourierZernikeProfile(Profile):
             A *= w[:, np.newaxis]
             f *= w
         scale = np.sqrt((A * A).sum(axis=0))
+        scale = np.where(scale == 0, 1, scale)
         A /= scale
         c, resids, rank, s = np.linalg.lstsq(A, f, rcond=None)
         c = (c.T / scale).T  # broadcast scale coefficients

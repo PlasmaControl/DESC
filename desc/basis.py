@@ -1212,25 +1212,25 @@ def zernike_radial(r, l, m, dr=0):
     n = (l - m) // 2
     s = (-1) ** n
     if dr == 0:
-        out = r ** m * _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        out = r**m * _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
     elif dr == 1:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
         out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
     elif dr == 2:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
         out = (
             m * (m - 1) * r ** jnp.maximum((m - 2), 0) * f
-            - 2 * 4 * m * r ** m * df
-            + r ** m * (16 * r ** 2 * d2f - 4 * df)
+            - 2 * 4 * m * r**m * df
+            + r**m * (16 * r**2 * d2f - 4 * df)
         )
     elif dr == 3:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
-        d3f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 3)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
+        d3f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 3)
         out = (
             (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
             - 12 * (m - 1) * m * r ** jnp.maximum(m - 1, 0) * df
@@ -1241,10 +1241,8 @@ def zernike_radial(r, l, m, dr=0):
         )
     else:
         raise NotImplementedError(
-            (
-                "Analytic radial derivatives of zernike polynomials for order>3 "
-                + "have not been implemented"
-            )
+            "Analytic radial derivatives of zernike polynomials for order>3 "
+            + "have not been implemented"
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)
 
@@ -1318,7 +1316,7 @@ def fourier(theta, m, NFP=1, dt=0):
     m_pos = (m >= 0).astype(int)
     m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
-    return m_abs ** dt * jnp.sin(m_abs * theta + shift)
+    return m_abs**dt * jnp.sin(m_abs * theta + shift)
 
 
 @jit

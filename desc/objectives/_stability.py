@@ -183,7 +183,7 @@ class MercierStability(_Objective):
             self._current,
         )
         f = compress(self.grid, data["D_Mercier"], surface_label="rho")
-        w = compress(self.grid, self.grid.weights, surface_label="rho")
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f * w)
 
 
@@ -354,5 +354,5 @@ class MagneticWell(_Objective):
             self._current,
         )
         f = compress(self.grid, data["magnetic well"], surface_label="rho")
-        w = compress(self.grid, self.grid.weights, surface_label="rho")
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f * w)

@@ -28,12 +28,12 @@ def get_data_deps(*keys):
 
     def _get_deps_1_key(key):
         deps = data_index[key]["dependencies"]["data"]
-        if len(deps) == 0:
+        if len(deps) == 0 or data_index[key]["dependencies"].get("built"):
             return deps
         out = deps.copy()
         for dep in deps:
             out += _get_deps_1_key(dep)
-        return list(set(out))
+        return sorted(list(set(out)))
 
     out = []
     for key in keys:
@@ -55,13 +55,26 @@ def get_derivs(*keys):
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
     """
-    deps = list(keys) + get_data_deps(*keys)
+
+    def _get_derivs_1_key(key):
+        if data_index[key]["dependencies"].get("built"):
+            return data_index[key]["dependencies"]["transforms"]
+        deps = [key] + get_data_deps(key)
+        derivs = {}
+        for dep in deps:
+            for key, val in data_index[dep]["dependencies"]["transforms"].items():
+                if key not in derivs:
+                    derivs[key] = []
+                derivs[key] += val
+        return derivs
+
     derivs = {}
-    for dep in deps:
-        for key, val in data_index[dep]["dependencies"]["transforms"].items():
-            if key not in derivs:
-                derivs[key] = []
-            derivs[key] += val
+    for key in keys:
+        derivs1 = _get_derivs_1_key(key)
+        for key1, val in derivs1.items():
+            if key1 not in derivs:
+                derivs[key1] = []
+            derivs[key1] += val
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 

@@ -93,9 +93,6 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq, normalize=False)
-            W = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
             W = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(W, 10)
 

@@ -1893,7 +1893,7 @@ def plot_boozer_modes(
 
 
 def plot_boozer_surface(
-    eq, grid_compute=None, grid_plot=None, fill=True, ncontours=100, ax=None, **kwargs
+    eq, grid_compute=None, grid_plot=None, fill=False, ncontours=100, ax=None, **kwargs
 ):
     """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
 
@@ -2106,7 +2106,7 @@ def plot_qs_error(
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                / B0**3
+                / B0 ** 3
             )
             f_C = np.append(f_C, f_c)
         if fT:
@@ -2114,8 +2114,8 @@ def plot_qs_error(
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                * R0**2
-                / B0**4
+                * R0 ** 2
+                / B0 ** 4
             )
             f_T = np.append(f_T, f_t)
 
@@ -2575,7 +2575,7 @@ def plot_logo(savepath=None, **kwargs):
     fig_width = kwargs.get("fig_width", 3)
     fig_height = fig_width / 2
     contour_lw_ratio = kwargs.get("contour_lw_ratio", 0.3)
-    lw = fig_width**0.5
+    lw = fig_width ** 0.5
 
     transparent = False
     if BGcolor == "dark":

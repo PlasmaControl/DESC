@@ -188,6 +188,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     message = None
     step_norm = np.inf
     actual_reduction = np.inf
+    reduction_ratio = 0
 
     if verbose > 1:
         print_header_nonlinear()
@@ -220,6 +221,26 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             B_h = jnp.dot(J_h.T, J_h)
 
         actual_reduction = -1
+
+        success, message = check_termination(
+            actual_reduction,
+            cost,
+            step_norm,
+            x_norm,
+            g_norm,
+            reduction_ratio=reduction_ratio,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            iteration=iteration,
+            maxiter=maxiter,
+            nfev=nfev,
+            max_nfev=max_nfev,
+            ngev=0,
+            max_ngev=np.inf,
+            nhev=njev,
+            max_nhev=max_njev,
+        )
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.

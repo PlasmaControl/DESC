@@ -1,11 +1,31 @@
 Changelog
 =========
 
+v0.6.3
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.2...v0.6.3)
+
+Major Changes
+- Adds new function ``desc.continuation.solve_continuation`` which is a functional interface to the ``EquilibriaFamily.solve_continuation`` method
+- Adds new function ``desc.continuation.solve_continuation_automatic`` which uses conservative default settings in a continuation method for solving complicated equilibria.
+- Adds method ``Objective.xs(eq)`` for getting needed arguments for an objective. For example, ``objective.compute(*objective.xs(eq))``.
+- Adds utility ``desc.perturbations.get_deltas`` for finding the differences between surfaces and profiles for perturbations.
+
+Minor Changes
+- ``EquilibriaFamily`` can now be created with one or more ``Equilibrium`` objects, or no arguments to create an empty family
+- ``SplineMagneticField`` can now interpolate axisymmetric fields more efficiently.
+
+Bug Fixes
+- Fix bug preventing ``lsqtr`` from terminating when ``maxiter`` is zero.
+- Fix bug when converting profiles to ``FourierZernikeProfile``.
+- Fix bug where a ``FixBoundary`` constraint with only 1 mode constrained would throw an error during ``objective.build``
+ 
+
 v0.6.2
 ------
 
-[Github
-Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.1...v0.6.2)
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.1...v0.6.2)
 
 Minor Changes:
 - Remove ``parent`` and ``children`` from ``Equilibrium`` - this was generally unused and caused memory leaks in long optimization runs.
@@ -24,8 +44,7 @@ Bug fixes:
 v0.6.1
 ------
 
-[Github
-Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.0...v0.6.1)
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.0...v0.6.1)
 
 
 New Features
@@ -46,8 +65,7 @@ Bug Fixes
 v0.6.0
 ------
 
-[Github
-Commits](https://github.com/PlasmaControl/DESC/compare/v0.5.2...v0.6.0)
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.5.2...v0.6.0)
 
 Major changes
 
@@ -135,8 +153,7 @@ Bug fixes
 v0.5.2
 ------
 
-[Github
-Commits](https://github.com/PlasmaControl/DESC/compare/v0.5.1...v0.5.2)
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.5.1...v0.5.2)
 
 Major Changes
 

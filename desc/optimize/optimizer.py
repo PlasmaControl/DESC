@@ -468,8 +468,12 @@ class Optimizer(IOAble):
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            x_scale = "hess" if x_scale == "auto" else x_scale
-
+            if isinstance(x_scale, str):
+                if x_scale == "auto":
+                    if "bfgs" not in self.method:
+                        x_scale = "hess"
+                    else:
+                        x_scale = 1
             result = fmintr(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
@@ -494,7 +498,7 @@ class Optimizer(IOAble):
                 x0=x0_reduced,
                 grad=grad_wrapped,
                 args=(),
-                method=method,
+                method=self.method,
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,

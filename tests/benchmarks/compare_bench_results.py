@@ -93,7 +93,8 @@ for i, (dt, dpct, sdt, sdpct) in enumerate(
     commit_msg_lines.append(line)
 
 commit_msg_lines.append("```")
-print("\n".join(commit_msg_lines))
+commit_msg_lines = [line + "\n" for line in commit_msg_lines]
+print("".join(commit_msg_lines))
 # write out commit msg
 
 fname = "commit_msg.txt"

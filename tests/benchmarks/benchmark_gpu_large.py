@@ -1,10 +1,13 @@
-"""Benchmarks for timing comparison."""
+"""Benchmarks for timing comparison on gpu backend."""
 
 import os
 
 import numpy as np
 import pytest
 
+import desc
+
+desc.set_device("gpu")
 from desc.__main__ import main
 from desc.basis import FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily
@@ -39,7 +42,7 @@ def SOLOVEV(tmpdir_factory):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv", "-g"]
     main(args)
 
     SOLOVEV_out = {
@@ -116,7 +119,7 @@ def test_SOLOVEV_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
     benchmark(main, args)
     return None
 
@@ -136,7 +139,7 @@ def test_DSHAPE_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
     benchmark(main, args)
     return None
 
@@ -156,7 +159,7 @@ def test_DSHAPE_current_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
     benchmark(main, args)
     return None
 
@@ -176,7 +179,7 @@ def test_HELIOTRON_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
     benchmark(main, args)
     return None
 
@@ -196,7 +199,47 @@ def test_HELIOTRON_vacuum_run(tmpdir_factory, benchmark):
     print("exec_dir=", exec_dir)
     print("cwd=", cwd)
 
-    args = ["-o", str(desc_h5_path), input_filename, "-vv"]
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
+    benchmark(main, args)
+    return None
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark(min_rounds=3, max_time=300, disable_gc=True, warmup=False)
+def test_ESTELL_run(tmpdir_factory, benchmark):
+    """Benchmark the ESTELL example."""
+    input_path = ".//examples//DESC//ESTELL"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("ESTELL_out.h5")
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "../..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running ESTELL test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
+    benchmark(main, args)
+    return None
+
+
+@pytest.mark.slow
+@pytest.mark.benchmark(min_rounds=3, max_time=300, disable_gc=True, warmup=False)
+def test_W7X_run(tmpdir_factory, benchmark):
+    """Benchmark the W7X example."""
+    input_path = ".//examples//DESC//W7-X"
+    output_dir = tmpdir_factory.mktemp("result")
+    desc_h5_path = output_dir.join("W7X_out.h5")
+    cwd = os.path.dirname(__file__)
+    exec_dir = os.path.join(cwd, "../..")
+    input_filename = os.path.join(exec_dir, input_path)
+
+    print("Running W7X test.")
+    print("exec_dir=", exec_dir)
+    print("cwd=", cwd)
+
+    args = ["-o", str(desc_h5_path), input_filename, "-vv", "-g"]
     benchmark(main, args)
     return None
 

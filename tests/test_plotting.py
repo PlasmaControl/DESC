@@ -22,6 +22,7 @@ from desc.plotting import (
     plot_boozer_modes,
     plot_boozer_surface,
     plot_boundary,
+    plot_boundaries,
     plot_coefficients,
     plot_coils,
     plot_comparison,
@@ -320,6 +321,17 @@ def test_plot_boundary():
     return fig
 
 
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_boundaries():
+    """Test plotting boundaries."""
+    eq1 = get("SOLOVEV")
+    eq2 = get("DSHAPE")
+    eq3 = get("W7-X")
+    fig, ax = plot_boundaries((eq1, eq2, eq3), zeta=4)
+    return fig
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
@@ -575,7 +587,7 @@ def test_plot_boozer_modes(DSHAPE_current):
 def test_plot_boozer_surface(DSHAPE_current):
     """Test plotting B in boozer coordinates."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_boozer_surface(eq, figsize=(4, 4))
+    fig, ax = plot_boozer_surface(eq, figsize=(4, 4), fill=True)
     return fig
 
 

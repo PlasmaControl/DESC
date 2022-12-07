@@ -62,11 +62,12 @@ arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Z
 
 def _build_data_index():
     for key in data_index.keys():
-        data_index[key]["dependencies"]["data"] = get_data_deps(key)
-        data_index[key]["dependencies"]["transforms"] = get_derivs(key)
-        data_index[key]["dependencies"]["params"] = get_params(key)
-        data_index[key]["dependencies"]["profiles"] = get_profiles(key)
-        data_index[key]["dependencies"]["built"] = True
+        full = {}
+        full["data"] = get_data_deps(key)
+        full["transforms"] = get_derivs(key)
+        full["params"] = get_params(key)
+        full["profiles"] = get_profiles(key)
+        data_index[key]["full_dependencies"] = full
 
 
 _build_data_index()

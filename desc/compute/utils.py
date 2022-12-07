@@ -28,8 +28,10 @@ def get_data_deps(*keys):
 
     def _get_deps_1_key(key):
         deps = data_index[key]["dependencies"]["data"]
-        if len(deps) == 0 or data_index[key]["dependencies"].get("built"):
+        if len(deps) == 0:
             return deps
+        if "full_dependencies" in data_index[key]:
+            return data_index[key]["full_dependencies"]["data"]
         out = deps.copy()
         for dep in deps:
             out += _get_deps_1_key(dep)
@@ -57,8 +59,8 @@ def get_derivs(*keys):
     """
 
     def _get_derivs_1_key(key):
-        if data_index[key]["dependencies"].get("built"):
-            return data_index[key]["dependencies"]["transforms"]
+        if "full_dependencies" in data_index[key]:
+            return data_index[key]["full_dependencies"]["transforms"]
         deps = [key] + get_data_deps(key)
         derivs = {}
         for dep in deps:
@@ -102,6 +104,8 @@ def get_profiles(*keys, eq=None, grid=None, **kwargs):
     profs = []
     for key in deps:
         profs += data_index[key]["dependencies"]["profiles"]
+    # kludge for now to always get all profiles until we break up compute funs
+    profs += ["iota", "current"]
     profs = sorted(list(set(profs)))
     if eq is None:
         return profs
@@ -247,7 +251,7 @@ def _has_profiles(qty, profiles):
 
 def _has_transforms(qty, transforms):
     flags = {}
-    derivs = get_derivs(qty)
+    derivs = data_index[qty]["dependencies"]["transforms"]
     for key in ["R", "Z", "L", "w", "B"]:
         if key not in derivs:
             flags[key] = True

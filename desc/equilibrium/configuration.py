@@ -953,8 +953,7 @@ class _Configuration(IOAble, ABC):
             "c_l": self.c_l,
             "Psi": self.Psi,
         }
-        # Adding F here for now to get all profiles until we break up compute funs
-        profiles = get_profiles(*names, "F", eq=self, grid=grid)
+        profiles = get_profiles(*names, eq=self, grid=grid)
         transforms = get_transforms(*names, eq=self, grid=grid, **kwargs)
         for name in names:
             fun = getattr(compute_funs, data_index[name]["fun"])

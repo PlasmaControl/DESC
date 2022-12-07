@@ -3,8 +3,9 @@
 import numpy as np
 import pytest
 from scipy.constants import elementary_charge
+from scipy.integrate import quad
 
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile
 from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
 
@@ -18,7 +19,6 @@ class TestBootstrap:
         Confirm that the quantities computed by trapped_fraction()
         match analytic results for a model magnetic field.
         """
-        nr = 2
         M = 100
         NFP = 3
         for N in [0, 25]:
@@ -28,7 +28,6 @@ class TestBootstrap:
                 N=N,
                 NFP=NFP,
             )
-            rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
             modB = np.zeros_like(theta)
@@ -69,7 +68,7 @@ class TestBootstrap:
         Groebner, Physics of Fluids B 3, 2050 (1991), which gives
         a rough approximation for f_t.
         """
-        nr = 50
+        L = 50
         M = 200
         B0 = 7.5
 
@@ -77,22 +76,17 @@ class TestBootstrap:
         # It is slightly less than 1 to avoid divide-by-0.
         epsilon_max = 0.96
 
-        rho_in = np.linspace(
-            0,
-            1.0,
-            nr,
-        )
         NFP = 3
-        for N in [0, 13]:
-            grid = LinearGrid(
-                rho=rho_in,
+
+        def test(N, grid_type):
+            grid = grid_type(
+                L=L,
                 M=M,
                 N=N,
                 NFP=NFP,
             )
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
-            zeta = grid.nodes[:, 2]
             epsilon_3D = rho * epsilon_max
             # Pick out unique values:
             epsilon = np.array(sorted(list(set(epsilon_3D))))
@@ -110,17 +104,56 @@ class TestBootstrap:
 
             np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + epsilon))
             # Looser tolerance for Bmax since there is no grid point there:
-            np.testing.assert_allclose(f_t_data["Bmax"], B0 / (1 - epsilon), rtol=0.001)
+            Bmax = B0 / (1 - epsilon)
+            np.testing.assert_allclose(f_t_data["Bmax"], Bmax, rtol=0.001)
             np.testing.assert_allclose(epsilon, f_t_data["epsilon"], rtol=1e-4)
             # Eq (A8):
+            fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
                 f_t_data["<B**2>"],
-                B0 * B0 / np.sqrt(1 - epsilon**2),
+                fsa_B2,
                 rtol=1e-6,
             )
             np.testing.assert_allclose(f_t_data["<1/B>"], (2 + epsilon**2) / (2 * B0))
             # Note the loose tolerance for this next test since we do not expect precise agreement.
             np.testing.assert_allclose(f_t_data["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
+
+            # Now compute f_t numerically by a different algorithm:
+            modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
+            sqrt_g = sqrt_g.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
+            fourpisq = 4 * np.pi * np.pi
+            d_V_d_rho = np.mean(sqrt_g, axis=(0, 2)) / fourpisq
+            f_t = np.zeros(grid.num_rho)
+            for jr in range(grid.num_rho):
+
+                def integrand(lambd):
+                    # This function gives lambda / <sqrt(1 - lambda B)>:
+                    return lambd / (
+                        np.mean(np.sqrt(1 - lambd * modB[:, jr, :]) * sqrt_g[:, jr, :])
+                        / (fourpisq * d_V_d_rho[jr])
+                    )
+
+                integral = quad(integrand, 0, 1 / Bmax[jr])
+                f_t[jr] = 1 - 0.75 * fsa_B2[jr] * integral[0]
+            np.testing.assert_allclose(
+                f_t_data["f_t"][1:], f_t[1:], rtol=0.001, atol=0.001
+            )
+
+            # Use True in this "if" statement to plot extra info:
+            if False:
+                import matplotlib.pyplot as plt
+
+                plt.plot(epsilon, f_t_Kim, label="Kim")
+                plt.plot(epsilon, f_t_data["f_t"], label="desc")
+                plt.plot(epsilon, f_t, ":", label="Alternative algorithm")
+                plt.xlabel("epsilon")
+                plt.ylabel("Effective trapped fraction $f_t$")
+                plt.legend(loc=0)
+                plt.show()
+
+        for N in [0, 13]:
+            for grid_type in [LinearGrid, QuadratureGrid]:
+                test(N, grid_type)
 
     @pytest.mark.unit
     def test_Redl_second_pass(self):

@@ -175,8 +175,8 @@ def j_dot_B_Redl(
     Te: A :obj:`~Profile` object with the electron temperature profile.
     Ti: A :obj:`~Profile` object with the ion temperature profile.
     Zeff: A :obj:`~Profile` object with the profile of the average
-        impurity charge :math:`Z_{eff}`. Or, a single number can be provided if this profile is constant.
-        Or, if ``None``, Zeff = 1 will be used.
+        impurity charge :math:`Z_{eff}`. Or, a single number can be provided if this profile is
+        constant. Or, if ``None``, Zeff = 1 will be used.
     helicity_n: 0 for quasi-axisymmetry, or +/- 1 for quasi-helical symmetry.
         This quantity is used to apply the quasisymmetry isomorphism to map the collisionality
         and bootstrap current from the tokamak expressions to quasi-helical symmetry.

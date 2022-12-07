@@ -189,8 +189,8 @@ class TestComputeUtils:
     @pytest.mark.unit
     def test_min_max(self):
         """Test the surface_min and surface_max functions."""
-        for grid_type in ["LinearGrid", "QuadratureGrid", "ConcentricGrid"]:
-            grid = eval(grid_type + "(L=3, M=4, N=5, NFP=3)")
+        for grid_type in [LinearGrid, QuadratureGrid, ConcentricGrid]:
+            grid = grid_type(L=3, M=4, N=5, NFP=3)
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]

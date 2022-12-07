@@ -10,7 +10,6 @@ from scipy.constants import mu_0
 from termcolor import colored
 
 from desc.basis import FourierZernikeBasis
-from desc.configuration import _Configuration
 from desc.geometry import FourierRZCurve
 from desc.grid import LinearGrid
 from desc.io import IOAble
@@ -24,6 +23,8 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.transform import Transform
 from desc.utils import Timer
+
+from .configuration import _Configuration
 
 
 class Equilibrium(_Configuration, IOAble):

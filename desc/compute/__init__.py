@@ -60,6 +60,9 @@ from .utils import get_data_deps, get_derivs, get_params, get_profiles, get_tran
 arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
 
 
+# rather than having to recursively compute the full dependencies every time we
+# compute something, its easier to just do it once for all quantities when we first
+# import the compute module.
 def _build_data_index():
     for key in data_index.keys():
         full = {}

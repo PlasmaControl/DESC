@@ -5,7 +5,15 @@ units = (str) Units of the quantity in LaTeX format.
 units_long (str) Full units without abbreviations.
 description (str) Description of the quantity.
 fun = (str) Function name in compute_funs.py that computes the quantity.
-dim = (int) Dimension of the quantity: 0-D, 1-D, or 3-D.
+dim = (int) Dimension of the quantity: 0-D (global qty), 1-D (local scalar qty),
+    or 3-D (local vector qty).
+dependencies : dictionary of things required to compute the quantity
+    params : parameters of equilibrium needed, eg R_lmn, Z_lmn
+    transforms : dict of keys anrsd derivative orders [rho, theta, zeta] for R, Z, etc.
+    profiles : profiles needed, eg iota, pressure
+    data : other items in the data index needed to compute qty
+NOTE: should only list *direct* dependencies. The full dependencies will be built
+recursively at runtime using each quantities direct dependencies.
 """
 
 data_index = {}

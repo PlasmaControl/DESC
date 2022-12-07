@@ -10,7 +10,7 @@ from ._field import (
     compute_contravariant_current_density,
     compute_magnetic_field_magnitude,
 )
-from .utils import check_derivs, dot, surface_averages, surface_integrals
+from .utils import dot, has_dependencies, surface_averages, surface_integrals
 
 
 def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs):
@@ -67,10 +67,10 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
     dS = jnp.abs(data["sqrt(g)"]) * data["|grad(rho)|"]
     data["|grad(psi)|^3"] = data["|grad(psi)|"] ** 3
 
-    if check_derivs("D_shear", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("D_shear", params, transforms, profiles, data):
         data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
 
-    if check_derivs("D_current", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("D_current", params, transforms, profiles, data):
         Xi = (
             mu_0 * data["J"] - jnp.atleast_2d(data["I_r"] / data["psi_r"]).T * data["B"]
         )
@@ -84,7 +84,7 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
             )
         )
 
-    if check_derivs("D_well", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("D_well", params, transforms, profiles, data):
         dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
         d2V_dpsi2 = (
             data["V_rr(r)"] - data["V_r(r)"] * data["psi_rr"] / data["psi_r"]
@@ -104,7 +104,7 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
             / (2 * jnp.pi) ** 6
         )
 
-    if check_derivs("D_geodesic", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("D_geodesic", params, transforms, profiles, data):
         data["J*B"] = dot(data["J"], data["B"])
         data["D_geodesic"] = (
             surface_integrals(
@@ -123,7 +123,7 @@ def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs)
             )
         ) / (2 * jnp.pi) ** 6
 
-    if check_derivs("D_Mercier", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("D_Mercier", params, transforms, profiles, data):
         data["D_Mercier"] = (
             data["D_shear"] + data["D_current"] + data["D_well"] + data["D_geodesic"]
         )
@@ -161,7 +161,7 @@ def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    if check_derivs("magnetic well", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("<B^2>", params, transforms, profiles, data):
         data["<B^2>"] = surface_averages(
             transforms["grid"],
             data["|B|^2"],
@@ -172,6 +172,7 @@ def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
         # The surface average operation is an additive homomorphism.
         # Thermal pressure is constant over a rho surface.
         # surface average(pressure) = thermal + surface average(magnetic)
+    if has_dependencies("<B^2>_r", params, transforms, profiles, data):
         data["<B^2>_r"] = (
             surface_integrals(
                 transforms["grid"],
@@ -180,6 +181,7 @@ def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
             )
             - data["V_rr(r)"] * data["<B^2>"]
         ) / data["V_r(r)"]
+    if has_dependencies("magnetic well", params, transforms, profiles, data):
         data["magnetic well"] = (
             data["V(r)"]
             * (2 * mu_0 * data["p_r"] + data["<B^2>_r"])

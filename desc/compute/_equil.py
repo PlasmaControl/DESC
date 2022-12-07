@@ -13,7 +13,7 @@ from ._field import (
     compute_contravariant_current_density,
     compute_magnetic_field_magnitude,
 )
-from .utils import check_derivs
+from .utils import has_dependencies
 
 
 def compute_force_error(params, transforms, profiles, data=None, **kwargs):
@@ -47,23 +47,23 @@ def compute_force_error(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    if check_derivs("F_rho", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("F_rho", params, transforms, profiles, data):
         data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
             data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
         )
-    if check_derivs("F_theta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("F_theta", params, transforms, profiles, data):
         data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
-    if check_derivs("F_zeta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("F_zeta", params, transforms, profiles, data):
         data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
-    if check_derivs("F_beta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("F_beta", params, transforms, profiles, data):
         data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
-    if check_derivs("F", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("F", params, transforms, profiles, data):
         data["F"] = (
             data["F_rho"] * data["e^rho"].T
             + data["F_theta"] * data["e^theta"].T
             + data["F_zeta"] * data["e^zeta"].T
         ).T
-    if check_derivs("|F|", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|F|", params, transforms, profiles, data):
         data["|F|"] = jnp.sqrt(
             data["F_rho"] ** 2 * data["g^rr"]
             + data["F_theta"] ** 2 * data["g^tt"]
@@ -72,15 +72,16 @@ def compute_force_error(params, transforms, profiles, data=None, **kwargs):
             + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
             + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
         )
+    if has_dependencies("div(J_perp)", params, transforms, profiles, data):
         data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
 
-    if check_derivs("|beta|", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|beta|", params, transforms, profiles, data):
         data["|beta|"] = jnp.sqrt(
             data["B^zeta"] ** 2 * data["g^tt"]
             + data["B^theta"] ** 2 * data["g^zz"]
             - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
         )
-    if check_derivs("<|F|>_vol", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("<|F|>_vol", params, transforms, profiles, data):
         data["<|F|>_vol"] = (
             jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
             / data["V"]
@@ -106,15 +107,15 @@ def compute_energy(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    if check_derivs("W_B", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("W_B", params, transforms, profiles, data):
         data["W_B"] = jnp.sum(
             data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
         ) / (2 * mu_0)
-    if check_derivs("W_p", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("W_p", params, transforms, profiles, data):
         data["W_p"] = jnp.sum(
             data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-        ) / (kwargs["gamma"] - 1)
-    if check_derivs("W", transforms["R"], transforms["Z"], transforms["L"]):
+        ) / (kwargs.get("gamma", 0) - 1)
+    if has_dependencies("W", params, transforms, profiles, data):
         data["W"] = data["W_B"] + data["W_p"]
 
     return data

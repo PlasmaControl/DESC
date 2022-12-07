@@ -139,7 +139,7 @@ def get_params(*keys, eq=None, **kwargs):
     params = sorted(list(set(params)))
     if eq is None:
         return params
-    params = {name: getattr(eq, name).copy() for name in params}
+    params = {name: np.atleast_1d(getattr(eq, name)).copy() for name in params}
     return params
 
 
@@ -201,47 +201,64 @@ def get_transforms(*keys, eq, grid, **kwargs):
     return transforms
 
 
-def check_derivs(key, R_transform=None, Z_transform=None, L_transform=None):
-    """Check if Transforms can compute required derivatives of R, Z, lambda.
+def has_dependencies(qty, params, transforms, profiles, data):
+    """Determine if we have the ingredients needed to compute qty.
 
     Parameters
     ----------
-    key : str
-        Key indicating a quantity from data_index.
-    R_transform : Transform, optional
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform, optional
-        Transforms Z_lmn coefficients to real space.
-    L_transform : Transform, optional
-        Transforms L_lmn coefficients to real space.
+    qty : str
+        Name of something from the data index.
+    params : dict of ndarray
+        Dictionary of parameters we have.
+    transforms : dict of Transform
+        Dictionary of transforms we have.
+    profiles : dict of Profile
+        Dictionary of profiles we have.
+    data : dict of ndarray
+        Dictionary of what we've computed so far.
 
     Returns
     -------
-    flag : bool
-        True if the Transforms can compute requested derivatives, False otherwise.
-
+    has_dependencies : bool
+        Whether we have what we need.
     """
-    derivs = get_derivs(key)
-    if "R" not in derivs:
-        R_flag = True
-    else:
-        R_flag = np.array(
-            [d in R_transform.derivatives.tolist() for d in derivs["R"]]
-        ).all()
-    if "Z" not in derivs:
-        Z_flag = True
-    else:
-        Z_flag = np.array(
-            [d in Z_transform.derivatives.tolist() for d in derivs["Z"]]
-        ).all()
-    if "L" not in derivs:
-        L_flag = True
-    else:
-        L_flag = np.array(
-            [d in L_transform.derivatives.tolist() for d in derivs["L"]]
-        ).all()
+    return (
+        _has_data(qty, data)
+        and _has_params(qty, params)
+        and _has_profiles(qty, profiles)
+        and _has_transforms(qty, transforms)
+    )
 
-    return R_flag and Z_flag and L_flag
+
+def _has_data(qty, data):
+    deps = data_index[qty]["dependencies"]["data"]
+    return all(d in data for d in deps)
+
+
+def _has_params(qty, params):
+    deps = data_index[qty]["dependencies"]["params"]
+    return all(d in params for d in deps)
+
+
+def _has_profiles(qty, profiles):
+    deps = data_index[qty]["dependencies"]["profiles"]
+    return all(d in profiles for d in deps)
+
+
+def _has_transforms(qty, transforms):
+    flags = {}
+    derivs = get_derivs(qty)
+    for key in ["R", "Z", "L", "w", "B"]:
+        if key not in derivs:
+            flags[key] = True
+        elif key not in transforms:
+            return False
+        else:
+            flags[key] = np.array(
+                [d in transforms[key].derivatives.tolist() for d in derivs[key]]
+            ).all()
+
+    return all(flags.values())
 
 
 def dot(a, b, axis=-1):

@@ -2133,7 +2133,7 @@ data_index["V(r)"] = {
         "params": [],
         "transforms": {"grid": []},
         "profiles": [],
-        "data": ["e^theta", "e_zeta", "Z"],
+        "data": ["e_theta", "e_zeta", "Z"],
     },
 }
 data_index["V_r(r)"] = {
@@ -2349,7 +2349,7 @@ data_index["B_r"] = {
             "B^theta_r",
             "B^theta",
             "B^zeta_r",
-            "B_zeta",
+            "B^zeta",
             "e_theta",
             "e_theta_r",
             "e_zeta",
@@ -2414,7 +2414,7 @@ data_index["B_t"] = {
             "B^theta_t",
             "B^theta",
             "B^zeta_t",
-            "B_zeta",
+            "B^zeta",
             "e_theta",
             "e_theta_t",
             "e_zeta",
@@ -2479,7 +2479,7 @@ data_index["B_z"] = {
             "B^theta_z",
             "B^theta",
             "B^zeta_z",
-            "B_zeta",
+            "B^zeta",
             "e_theta",
             "e_theta_z",
             "e_zeta",
@@ -3735,7 +3735,7 @@ data_index["nu"] = {
         "params": [],
         "transforms": {"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
         "profiles": [],
-        "data": ["I", "G", "lambda", "B_theta", "B_zeta"],
+        "data": ["lambda", "B_theta", "B_zeta"],
     },
 }
 data_index["nu_t"] = {
@@ -3749,7 +3749,7 @@ data_index["nu_t"] = {
         "params": [],
         "transforms": {"w": [[0, 1, 0]], "B": [[0, 0, 0]]},
         "profiles": [],
-        "data": ["I", "G", "lambda_t", "B_theta", "B_zeta"],
+        "data": ["lambda_t", "B_theta", "B_zeta"],
     },
 }
 data_index["nu_z"] = {
@@ -3763,7 +3763,7 @@ data_index["nu_z"] = {
         "params": [],
         "transforms": {"w": [[0, 0, 1]], "B": [[0, 0, 0]]},
         "profiles": [],
-        "data": ["I", "G", "lambda_z", "B_theta", "B_zeta"],
+        "data": ["lambda_z", "B_theta", "B_zeta"],
     },
 }
 data_index["theta_B"] = {
@@ -3833,7 +3833,7 @@ data_index["B modes"] = {
         "params": [],
         "transforms": {"B": [[0, 0, 0]]},
         "profiles": [],
-        "data": [],
+        "data": ["|B|_mn"],
     },
 }
 data_index["f_C"] = {

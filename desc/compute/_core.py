@@ -5,7 +5,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import data_index
-from .utils import check_derivs, cross, dot, surface_averages, surface_integrals
+from .utils import cross, dot, has_dependencies, surface_averages, surface_integrals
 
 
 def compute_flux_coords(params, transforms, profiles, data=None, **kwargs):
@@ -25,9 +25,12 @@ def compute_toroidal_flux(params, transforms, profiles, data=None, **kwargs):
     data = compute_flux_coords(params, transforms, profiles, data=data, **kwargs)
 
     # psi = params["Psi"] / 2*pi  # noqa: E800
-    data["psi"] = params["Psi"] * data["rho"] ** 2 / (2 * jnp.pi)
-    data["psi_r"] = 2 * params["Psi"] * data["rho"] / (2 * jnp.pi)
-    data["psi_rr"] = 2 * params["Psi"] * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
+    if has_dependencies("psi", params, transforms, profiles, data):
+        data["psi"] = params["Psi"] * data["rho"] ** 2 / (2 * jnp.pi)
+    if has_dependencies("psi_r", params, transforms, profiles, data):
+        data["psi_r"] = 2 * params["Psi"] * data["rho"] / (2 * jnp.pi)
+    if has_dependencies("psi_rr", params, transforms, profiles, data):
+        data["psi_rr"] = 2 * params["Psi"] * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
 
     return data
 
@@ -55,10 +58,11 @@ def compute_toroidal_flux_gradient(
         **kwargs,
     )
 
-    if check_derivs("grad(psi)", transforms["R"], transforms["Z"]):
+    if has_dependencies("grad(psi)", params, transforms, profiles, data):
         data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
-    if check_derivs("|grad(psi)|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|grad(psi)|^2", params, transforms, profiles, data):
         data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
+    if has_dependencies("|grad(psi)|", params, transforms, profiles, data):
         data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
 
     return data
@@ -95,11 +99,11 @@ def compute_toroidal_coords(params, transforms, profiles, data=None, **kwargs):
     for d in derivs:
         keyR = "R" + d
         keyZ = "Z" + d
-        if "R" in transforms and check_derivs(keyR, R_transform=transforms["R"]):
+        if has_dependencies(keyR, params, transforms, profiles, data):
             data[keyR] = transforms["R"].transform(
                 params["R_lmn"], *data_index[keyR]["dependencies"]["transforms"]["R"][0]
             )
-        if "Z" in transforms and check_derivs(keyZ, Z_transform=transforms["Z"]):
+        if has_dependencies(keyZ, params, transforms, profiles, data):
             data[keyZ] = transforms["Z"].transform(
                 params["Z_lmn"], *data_index[keyZ]["dependencies"]["transforms"]["Z"][0]
             )
@@ -124,9 +128,12 @@ def compute_cartesian_coords(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    data["phi"] = data["zeta"]
-    data["X"] = data["R"] * jnp.cos(data["phi"])
-    data["Y"] = data["R"] * jnp.sin(data["phi"])
+    if has_dependencies("phi", params, transforms, profiles, data):
+        data["phi"] = data["zeta"]
+    if has_dependencies("X", params, transforms, profiles, data):
+        data["X"] = data["R"] * jnp.cos(data["phi"])
+    if has_dependencies("Y", params, transforms, profiles, data):
+        data["Y"] = data["R"] * jnp.sin(data["phi"])
 
     return data
 
@@ -160,7 +167,7 @@ def compute_lambda(params, transforms, profiles, data=None, **kwargs):
     ]
 
     for key in keys:
-        if "L" in transforms and check_derivs(key, L_transform=transforms["L"]):
+        if has_dependencies(key, params, transforms, profiles, data):
             data[key] = transforms["L"].transform(
                 params["L_lmn"], *data_index[key]["dependencies"]["transforms"]["L"][0]
             )
@@ -173,8 +180,10 @@ def compute_pressure(params, transforms, profiles, data=None, **kwargs):
     if data is None:
         data = {}
 
-    data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
-    data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
+    if has_dependencies("p", params, transforms, profiles, data):
+        data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
+    if has_dependencies("p_r", params, transforms, profiles, data):
+        data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
 
     return data
 
@@ -199,11 +208,11 @@ def compute_pressure_gradient(params, transforms, profiles, data=None, **kwargs)
         profiles,
         data,
     )
-    if check_derivs("grad(p)", transforms["R"], transforms["Z"]):
+    if has_dependencies("grad(p)", params, transforms, profiles, data):
         data["grad(p)"] = (data["p_r"] * data["e^rho"].T).T
-    if check_derivs("|grad(p)|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|grad(p)|", params, transforms, profiles, data):
         data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
-    if check_derivs("<|grad(p)|>_vol", transforms["R"], transforms["Z"]):
+    if has_dependencies("<|grad(p)|>_vol", params, transforms, profiles, data):
         data["<|grad(p)|>_vol"] = (
             jnp.sum(
                 data["|grad(p)|"]
@@ -267,7 +276,7 @@ def compute_rotational_transform(params, transforms, profiles, data=None, **kwar
             **kwargs,
         )
 
-        if check_derivs("iota", transforms["R"], transforms["Z"], transforms["L"]):
+        if has_dependencies("iota", params, transforms, profiles, data):
             # current_term = 2*pi * I / params["Psi"]_r = mu_0 / 2*pi * current / psi_r
             current_term = (
                 mu_0
@@ -283,7 +292,7 @@ def compute_rotational_transform(params, transforms, profiles, data=None, **kwar
             den_avg = surface_averages(transforms["grid"], den)
             data["iota"] = (current_term + num_avg) / den_avg
 
-        if check_derivs("iota_r", transforms["R"], transforms["Z"], transforms["L"]):
+        if has_dependencies("iota_r", params, transforms, profiles, data):
             current_term_r = (
                 mu_0
                 / (2 * jnp.pi)
@@ -325,74 +334,74 @@ def compute_covariant_basis(  # noqa: C901
         data=data,
         **kwargs,
     )
-    data["0"] = jnp.zeros(transforms["R"].num_nodes)
+    data["0"] = jnp.zeros(transforms["grid"].num_nodes)
 
     # 0th order derivatives
-    if check_derivs("e_rho", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho", params, transforms, profiles, data):
         data["e_rho"] = jnp.array([data["R_r"], data["0"], data["Z_r"]]).T
-    if check_derivs("e_theta", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta", params, transforms, profiles, data):
         data["e_theta"] = jnp.array([data["R_t"], data["0"], data["Z_t"]]).T
-    if check_derivs("e_zeta", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta", params, transforms, profiles, data):
         data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]]).T
 
     # 1st order derivatives
-    if check_derivs("e_rho_r", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_r", params, transforms, profiles, data):
         data["e_rho_r"] = jnp.array([data["R_rr"], data["0"], data["Z_rr"]]).T
-    if check_derivs("e_rho_t", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_t", params, transforms, profiles, data):
         data["e_rho_t"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]]).T
-    if check_derivs("e_rho_z", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_z", params, transforms, profiles, data):
         data["e_rho_z"] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]]).T
-    if check_derivs("e_theta_r", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_r", params, transforms, profiles, data):
         data["e_theta_r"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]]).T
-    if check_derivs("e_theta_t", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_t", params, transforms, profiles, data):
         data["e_theta_t"] = jnp.array([data["R_tt"], data["0"], data["Z_tt"]]).T
-    if check_derivs("e_theta_z", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_z", params, transforms, profiles, data):
         data["e_theta_z"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]]).T
-    if check_derivs("e_zeta_r", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_r", params, transforms, profiles, data):
         data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]]).T
-    if check_derivs("e_zeta_t", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_t", params, transforms, profiles, data):
         data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]]).T
-    if check_derivs("e_zeta_z", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_z", params, transforms, profiles, data):
         data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]]).T
 
     # 2nd order derivatives
-    if check_derivs("e_rho_rr", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_rr", params, transforms, profiles, data):
         data["e_rho_rr"] = jnp.array([data["R_rrr"], data["0"], data["Z_rrr"]]).T
-    if check_derivs("e_rho_tt", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_tt", params, transforms, profiles, data):
         data["e_rho_tt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]]).T
-    if check_derivs("e_rho_zz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_zz", params, transforms, profiles, data):
         data["e_rho_zz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]]).T
-    if check_derivs("e_rho_rt", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_rt", params, transforms, profiles, data):
         data["e_rho_rt"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
-    if check_derivs("e_rho_rz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_rz", params, transforms, profiles, data):
         data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]]).T
-    if check_derivs("e_rho_tz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_rho_tz", params, transforms, profiles, data):
         data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
 
-    if check_derivs("e_theta_rr", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_rr", params, transforms, profiles, data):
         data["e_theta_rr"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
-    if check_derivs("e_theta_tt", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_tt", params, transforms, profiles, data):
         data["e_theta_tt"] = jnp.array([data["R_ttt"], data["0"], data["Z_ttt"]]).T
-    if check_derivs("e_theta_zz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_zz", params, transforms, profiles, data):
         data["e_theta_zz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]]).T
-    if check_derivs("e_theta_rt", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_rt", params, transforms, profiles, data):
         data["e_theta_rt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]]).T
-    if check_derivs("e_theta_rz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_rz", params, transforms, profiles, data):
         data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
-    if check_derivs("e_theta_tz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_theta_tz", params, transforms, profiles, data):
         data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]]).T
 
-    if check_derivs("e_zeta_rr", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_rr", params, transforms, profiles, data):
         data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]]).T
-    if check_derivs("e_zeta_tt", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_tt", params, transforms, profiles, data):
         data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]]).T
-    if check_derivs("e_zeta_zz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_zz", params, transforms, profiles, data):
         data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]]).T
-    if check_derivs("e_zeta_rt", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_rt", params, transforms, profiles, data):
         data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]]).T
-    if check_derivs("e_zeta_rz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_rz", params, transforms, profiles, data):
         data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]]).T
-    if check_derivs("e_zeta_tz", transforms["R"], transforms["Z"]):
+    if has_dependencies("e_zeta_tz", params, transforms, profiles, data):
         data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]]).T
 
     return data
@@ -409,11 +418,11 @@ def compute_contravariant_basis(params, transforms, profiles, data=None, **kwarg
             **kwargs,
         )
 
-    if check_derivs("e^rho", transforms["R"], transforms["Z"]):
+    if has_dependencies("e^rho", params, transforms, profiles, data):
         data["e^rho"] = (cross(data["e_theta"], data["e_zeta"]).T / data["sqrt(g)"]).T
-    if check_derivs("e^theta", transforms["R"], transforms["Z"]):
+    if has_dependencies("e^theta", params, transforms, profiles, data):
         data["e^theta"] = (cross(data["e_zeta"], data["e_rho"]).T / data["sqrt(g)"]).T
-    if check_derivs("e^zeta", transforms["R"], transforms["Z"]):
+    if has_dependencies("e^zeta", params, transforms, profiles, data):
         data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]]).T
 
     return data
@@ -429,35 +438,35 @@ def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    if check_derivs("sqrt(g)", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)", params, transforms, profiles, data):
         data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"]))
-    if check_derivs("|e_theta x e_zeta|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|e_theta x e_zeta|", params, transforms, profiles, data):
         data["|e_theta x e_zeta|"] = jnp.linalg.norm(
             cross(data["e_theta"], data["e_zeta"]), axis=1
         )
-    if check_derivs("|e_zeta x e_rho|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|e_zeta x e_rho|", params, transforms, profiles, data):
         data["|e_zeta x e_rho|"] = jnp.linalg.norm(
             cross(data["e_zeta"], data["e_rho"]), axis=1
         )
-    if check_derivs("|e_rho x e_theta|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|e_rho x e_theta|", params, transforms, profiles, data):
         data["|e_rho x e_theta|"] = jnp.linalg.norm(
             cross(data["e_rho"], data["e_theta"]), axis=1
         )
 
     # 1st order derivatives
-    if check_derivs("sqrt(g)_r", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_r", params, transforms, profiles, data):
         data["sqrt(g)_r"] = (
             dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_r"]))
         )
-    if check_derivs("sqrt(g)_t", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_t", params, transforms, profiles, data):
         data["sqrt(g)_t"] = (
             dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_t"]))
         )
-    if check_derivs("sqrt(g)_z", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_z", params, transforms, profiles, data):
         data["sqrt(g)_z"] = (
             dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta"]))
@@ -465,7 +474,7 @@ def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
         )
 
     # 2nd order derivatives
-    if check_derivs("sqrt(g)_rr", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_rr", params, transforms, profiles, data):
         data["sqrt(g)_rr"] = (
             dot(data["e_rho_rr"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta_rr"], data["e_zeta"]))
@@ -474,7 +483,7 @@ def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
             + 2 * dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_r"]))
             + 2 * dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_r"]))
         )
-    if check_derivs("sqrt(g)_tt", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_tt", params, transforms, profiles, data):
         data["sqrt(g)_tt"] = (
             dot(data["e_rho_tt"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta_tt"], data["e_zeta"]))
@@ -483,7 +492,7 @@ def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
             + 2 * dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_t"]))
             + 2 * dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_t"]))
         )
-    if check_derivs("sqrt(g)_zz", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_zz", params, transforms, profiles, data):
         data["sqrt(g)_zz"] = (
             dot(data["e_rho_zz"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho"], cross(data["e_theta_zz"], data["e_zeta"]))
@@ -492,7 +501,7 @@ def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
             + 2 * dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_z"]))
             + 2 * dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_z"]))
         )
-    if check_derivs("sqrt(g)_tz", transforms["R"], transforms["Z"]):
+    if has_dependencies("sqrt(g)_tz", params, transforms, profiles, data):
         data["sqrt(g)_tz"] = (
             dot(data["e_rho_tz"], cross(data["e_theta"], data["e_zeta"]))
             + dot(data["e_rho_z"], cross(data["e_theta_t"], data["e_zeta"]))
@@ -524,23 +533,23 @@ def compute_covariant_metric_coefficients(
         **kwargs,
     )
 
-    if check_derivs("g_rr", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_rr", params, transforms, profiles, data):
         data["g_rr"] = dot(data["e_rho"], data["e_rho"])
-    if check_derivs("g_tt", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_tt", params, transforms, profiles, data):
         data["g_tt"] = dot(data["e_theta"], data["e_theta"])
-    if check_derivs("g_zz", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_zz", params, transforms, profiles, data):
         data["g_zz"] = dot(data["e_zeta"], data["e_zeta"])
-    if check_derivs("g_rt", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_rt", params, transforms, profiles, data):
         data["g_rt"] = dot(data["e_rho"], data["e_theta"])
-    if check_derivs("g_rz", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_rz", params, transforms, profiles, data):
         data["g_rz"] = dot(data["e_rho"], data["e_zeta"])
-    if check_derivs("g_tz", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_tz", params, transforms, profiles, data):
         data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
 
     # todo: add other derivatives
-    if check_derivs("g_tt_r", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_tt_r", params, transforms, profiles, data):
         data["g_tt_r"] = 2 * dot(data["e_theta"], data["e_theta_r"])
-    if check_derivs("g_tz_r", transforms["R"], transforms["Z"]):
+    if has_dependencies("g_tz_r", params, transforms, profiles, data):
         data["g_tz_r"] = dot(data["e_theta_r"], data["e_zeta"]) + dot(
             data["e_theta"], data["e_zeta_r"]
         )
@@ -564,24 +573,24 @@ def compute_contravariant_metric_coefficients(
         **kwargs,
     )
 
-    if check_derivs("g^rr", transforms["R"], transforms["Z"]):
+    if has_dependencies("g^rr", params, transforms, profiles, data):
         data["g^rr"] = dot(data["e^rho"], data["e^rho"])
-    if check_derivs("g^tt", transforms["R"], transforms["Z"]):
+    if has_dependencies("g^tt", params, transforms, profiles, data):
         data["g^tt"] = dot(data["e^theta"], data["e^theta"])
-    if check_derivs("g^zz", transforms["R"], transforms["Z"]):
+    if has_dependencies("g^zz", params, transforms, profiles, data):
         data["g^zz"] = dot(data["e^zeta"], data["e^zeta"])
-    if check_derivs("g^rt", transforms["R"], transforms["Z"]):
+    if has_dependencies("g^rt", params, transforms, profiles, data):
         data["g^rt"] = dot(data["e^rho"], data["e^theta"])
-    if check_derivs("g^rz", transforms["R"], transforms["Z"]):
+    if has_dependencies("g^rz", params, transforms, profiles, data):
         data["g^rz"] = dot(data["e^rho"], data["e^zeta"])
-    if check_derivs("g^tz", transforms["R"], transforms["Z"]):
+    if has_dependencies("g^tz", params, transforms, profiles, data):
         data["g^tz"] = dot(data["e^theta"], data["e^zeta"])
 
-    if check_derivs("|grad(rho)|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|grad(rho)|", params, transforms, profiles, data):
         data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
-    if check_derivs("|grad(theta)|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|grad(theta)|", params, transforms, profiles, data):
         data["|grad(theta)|"] = jnp.sqrt(data["g^tt"])
-    if check_derivs("|grad(zeta)|", transforms["R"], transforms["Z"]):
+    if has_dependencies("|grad(zeta)|", params, transforms, profiles, data):
         data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])
 
     return data
@@ -597,7 +606,7 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    if check_derivs("V(r)", transforms["R"], transforms["Z"]):
+    if has_dependencies("V(r)", params, transforms, profiles, data):
         # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
         data["V(r)"] = jnp.abs(
             surface_integrals(
@@ -605,14 +614,14 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
                 cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"],
             )
         )
-    if check_derivs("V_r(r)", transforms["R"], transforms["Z"]):
+    if has_dependencies("V_r(r)", params, transforms, profiles, data):
         # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
         data["V_r(r)"] = surface_integrals(transforms["grid"], jnp.abs(data["sqrt(g)"]))
-    if check_derivs("S(r)", transforms["R"], transforms["Z"]):
+    if has_dependencies("S(r)", params, transforms, profiles, data):
         data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
-    if check_derivs("V", transforms["R"], transforms["Z"]):
+    if has_dependencies("V", params, transforms, profiles, data):
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
-    if check_derivs("A", transforms["R"], transforms["Z"]):
+    if has_dependencies("A", params, transforms, profiles, data):
         data["A"] = jnp.mean(
             surface_integrals(
                 transforms["grid"],
@@ -620,13 +629,13 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
                 surface_label="zeta",
             )
         )
-    if check_derivs("R0", transforms["R"], transforms["Z"]):
+    if has_dependencies("R0", params, transforms, profiles, data):
         data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
-    if check_derivs("a", transforms["R"], transforms["Z"]):
+    if has_dependencies("a", params, transforms, profiles, data):
         data["a"] = jnp.sqrt(data["A"] / jnp.pi)
-    if check_derivs("R0/a", transforms["R"], transforms["Z"]):
+    if has_dependencies("R0/a", params, transforms, profiles, data):
         data["R0/a"] = data["R0"] / data["a"]
-    if check_derivs("V_rr(r)", transforms["R"], transforms["Z"]):
+    if has_dependencies("V_rr(r)", params, transforms, profiles, data):
         data["V_rr(r)"] = surface_integrals(
             transforms["grid"], data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
         )

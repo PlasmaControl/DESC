@@ -12,7 +12,7 @@ from ._core import (
     compute_rotational_transform,
     compute_toroidal_flux,
 )
-from .utils import check_derivs, dot, surface_averages
+from .utils import dot, has_dependencies, surface_averages
 
 
 def compute_contravariant_magnetic_field(  # noqa: C901
@@ -53,15 +53,15 @@ def compute_contravariant_magnetic_field(  # noqa: C901
     )
 
     # 0th order terms
-    if check_derivs("B0", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0", params, transforms, profiles, data):
         data["B0"] = data["psi_r"] / data["sqrt(g)"]
-    if check_derivs("B^rho", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^rho", params, transforms, profiles, data):
         data["B^rho"] = data["0"]
-    if check_derivs("B^theta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta", params, transforms, profiles, data):
         data["B^theta"] = data["B0"] * (data["iota"] - data["lambda_z"])
-    if check_derivs("B^zeta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta", params, transforms, profiles, data):
         data["B^zeta"] = data["B0"] * (1 + data["lambda_t"])
-    if check_derivs("B", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B", params, transforms, profiles, data):
         data["B"] = (
             data["B^theta"] * data["e_theta"].T + data["B^zeta"] * data["e_zeta"].T
         ).T
@@ -70,56 +70,56 @@ def compute_contravariant_magnetic_field(  # noqa: C901
         data["B_Z"] = data["B"][:, 2]
 
     # 1st order derivatives
-    if check_derivs("B0_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0_r", params, transforms, profiles, data):
         data["B0_r"] = (
             data["psi_rr"] / data["sqrt(g)"]
             - data["psi_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
         )
-    if check_derivs("B^theta_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta_r", params, transforms, profiles, data):
         data["B^theta_r"] = data["B0_r"] * (data["iota"] - data["lambda_z"]) + data[
             "B0"
         ] * (data["iota_r"] - data["lambda_rz"])
-    if check_derivs("B^zeta_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta_r", params, transforms, profiles, data):
         data["B^zeta_r"] = (
             data["B0_r"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_rt"]
         )
-    if check_derivs("B_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_r", params, transforms, profiles, data):
         data["B_r"] = (
             data["B^theta_r"] * data["e_theta"].T
             + data["B^theta"] * data["e_theta_r"].T
             + data["B^zeta_r"] * data["e_zeta"].T
             + data["B^zeta"] * data["e_zeta_r"].T
         ).T
-    if check_derivs("B0_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0_t", params, transforms, profiles, data):
         data["B0_t"] = -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2
-    if check_derivs("B^theta_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta_t", params, transforms, profiles, data):
         data["B^theta_t"] = (
             data["B0_t"] * (data["iota"] - data["lambda_z"])
             - data["B0"] * data["lambda_tz"]
         )
-    if check_derivs("B^zeta_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta_t", params, transforms, profiles, data):
         data["B^zeta_t"] = (
             data["B0_t"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_tt"]
         )
-    if check_derivs("B_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_t", params, transforms, profiles, data):
         data["B_t"] = (
             data["B^theta_t"] * data["e_theta"].T
             + data["B^theta"] * data["e_theta_t"].T
             + data["B^zeta_t"] * data["e_zeta"].T
             + data["B^zeta"] * data["e_zeta_t"].T
         ).T
-    if check_derivs("B0_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0_z", params, transforms, profiles, data):
         data["B0_z"] = -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
-    if check_derivs("B^theta_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta_z", params, transforms, profiles, data):
         data["B^theta_z"] = (
             data["B0_z"] * (data["iota"] - data["lambda_z"])
             - data["B0"] * data["lambda_zz"]
         )
-    if check_derivs("B^zeta_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta_z", params, transforms, profiles, data):
         data["B^zeta_z"] = (
             data["B0_z"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_tz"]
         )
-    if check_derivs("B_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_z", params, transforms, profiles, data):
         data["B_z"] = (
             data["B^theta_z"] * data["e_theta"].T
             + data["B^theta"] * data["e_theta_z"].T
@@ -128,43 +128,43 @@ def compute_contravariant_magnetic_field(  # noqa: C901
         ).T
 
     # 2nd order derivatives
-    if check_derivs("B0_tt", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0_tt", params, transforms, profiles, data):
         data["B0_tt"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
             * (data["sqrt(g)_tt"] - 2 * data["sqrt(g)_t"] ** 2 / data["sqrt(g)"])
         )
-    if check_derivs("B^theta_tt", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta_tt", params, transforms, profiles, data):
         data["B^theta_tt"] = (
             data["B0_tt"] * (data["iota"] - data["lambda_z"])
             - 2 * data["B0_t"] * data["lambda_tz"]
             - data["B0"] * data["lambda_ttz"]
         )
-    if check_derivs("B^zeta_tt", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta_tt", params, transforms, profiles, data):
         data["B^zeta_tt"] = (
             data["B0_tt"] * (1 + data["lambda_t"])
             + 2 * data["B0_t"] * data["lambda_tt"]
             + data["B0"] * data["lambda_ttt"]
         )
-    if check_derivs("B0_zz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0_zz", params, transforms, profiles, data):
         data["B0_zz"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
             * (data["sqrt(g)_zz"] - 2 * data["sqrt(g)_z"] ** 2 / data["sqrt(g)"])
         )
-    if check_derivs("B^theta_zz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta_zz", params, transforms, profiles, data):
         data["B^theta_zz"] = (
             data["B0_zz"] * (data["iota"] - data["lambda_z"])
             - 2 * data["B0_z"] * data["lambda_zz"]
             - data["B0"] * data["lambda_zzz"]
         )
-    if check_derivs("B^zeta_zz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta_zz", params, transforms, profiles, data):
         data["B^zeta_zz"] = (
             data["B0_zz"] * (1 + data["lambda_t"])
             + 2 * data["B0_z"] * data["lambda_tz"]
             + data["B0"] * data["lambda_tzz"]
         )
-    if check_derivs("B0_tz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B0_tz", params, transforms, profiles, data):
         data["B0_tz"] = -(
             data["psi_r"]
             / data["sqrt(g)"] ** 2
@@ -173,14 +173,14 @@ def compute_contravariant_magnetic_field(  # noqa: C901
                 - 2 * data["sqrt(g)_t"] * data["sqrt(g)_z"] / data["sqrt(g)"]
             )
         )
-    if check_derivs("B^theta_tz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^theta_tz", params, transforms, profiles, data):
         data["B^theta_tz"] = (
             data["B0_tz"] * (data["iota"] - data["lambda_z"])
             - data["B0_t"] * data["lambda_zz"]
             - data["B0_z"] * data["lambda_tz"]
             - data["B0"] * data["lambda_tzz"]
         )
-    if check_derivs("B^zeta_tz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B^zeta_tz", params, transforms, profiles, data):
         data["B^zeta_tz"] = (
             data["B0_tz"] * (1 + data["lambda_t"])
             + data["B0_t"] * data["lambda_tz"]
@@ -208,47 +208,47 @@ def compute_covariant_magnetic_field(
     )
 
     # 0th order terms
-    if check_derivs("B_rho", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_rho", params, transforms, profiles, data):
         data["B_rho"] = dot(data["B"], data["e_rho"])
-    if check_derivs("B_theta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_theta", params, transforms, profiles, data):
         data["B_theta"] = dot(data["B"], data["e_theta"])
-    if check_derivs("B_zeta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_zeta", params, transforms, profiles, data):
         data["B_zeta"] = dot(data["B"], data["e_zeta"])
 
     # 1st order derivatives
-    if check_derivs("B_rho_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_rho_r", params, transforms, profiles, data):
         data["B_rho_r"] = dot(data["B_r"], data["e_rho"]) + dot(
             data["B"], data["e_rho_r"]
         )
-    if check_derivs("B_theta_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_theta_r", params, transforms, profiles, data):
         data["B_theta_r"] = dot(data["B_r"], data["e_theta"]) + dot(
             data["B"], data["e_theta_r"]
         )
-    if check_derivs("B_zeta_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_zeta_r", params, transforms, profiles, data):
         data["B_zeta_r"] = dot(data["B_r"], data["e_zeta"]) + dot(
             data["B"], data["e_zeta_r"]
         )
-    if check_derivs("B_rho_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_rho_t", params, transforms, profiles, data):
         data["B_rho_t"] = dot(data["B_t"], data["e_rho"]) + dot(
             data["B"], data["e_rho_t"]
         )
-    if check_derivs("B_theta_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_theta_t", params, transforms, profiles, data):
         data["B_theta_t"] = dot(data["B_t"], data["e_theta"]) + dot(
             data["B"], data["e_theta_t"]
         )
-    if check_derivs("B_zeta_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_zeta_t", params, transforms, profiles, data):
         data["B_zeta_t"] = dot(data["B_t"], data["e_zeta"]) + dot(
             data["B"], data["e_zeta_t"]
         )
-    if check_derivs("B_rho_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_rho_z", params, transforms, profiles, data):
         data["B_rho_z"] = dot(data["B_z"], data["e_rho"]) + dot(
             data["B"], data["e_rho_z"]
         )
-    if check_derivs("B_theta_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_theta_z", params, transforms, profiles, data):
         data["B_theta_z"] = dot(data["B_z"], data["e_theta"]) + dot(
             data["B"], data["e_theta_z"]
         )
-    if check_derivs("B_zeta_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B_zeta_z", params, transforms, profiles, data):
         data["B_zeta_z"] = dot(data["B_z"], data["e_zeta"]) + dot(
             data["B"], data["e_zeta_z"]
         )
@@ -282,7 +282,7 @@ def compute_magnetic_field_magnitude(
     # TODO: would it be simpler to compute this as B^theta*B_theta+B^zeta*B_zeta?
 
     # 0th order term
-    if check_derivs("|B|", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|B|^2", params, transforms, profiles, data):
         data["|B|^2"] = (
             data["B^theta"] ** 2 * data["g_tt"]
             + data["B^zeta"] ** 2 * data["g_zz"]
@@ -292,7 +292,7 @@ def compute_magnetic_field_magnitude(
 
     # 1st order derivatives
     # TODO: |B|_r
-    if check_derivs("|B|_t", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|B|_t", params, transforms, profiles, data):
         data["|B|_t"] = (
             data["B^theta"]
             * (
@@ -313,7 +313,7 @@ def compute_magnetic_field_magnitude(
                 + dot(data["e_zeta_t"], data["e_theta"])
             )
         ) / data["|B|"]
-    if check_derivs("|B|_z", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|B|_z", params, transforms, profiles, data):
         data["|B|_z"] = (
             data["B^theta"]
             * (
@@ -337,7 +337,7 @@ def compute_magnetic_field_magnitude(
 
     # 2nd order derivatives
     # TODO: |B|_rr
-    if check_derivs("|B|_tt", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|B|_tt", params, transforms, profiles, data):
         data["|B|_tt"] = (
             data["B^theta_t"]
             * (
@@ -404,7 +404,7 @@ def compute_magnetic_field_magnitude(
                 + 2 * dot(data["e_zeta_t"], data["e_theta_t"])
             )
         ) / data["|B|"] - data["|B|_t"] ** 2 / data["|B|"]
-    if check_derivs("|B|_zz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|B|_zz", params, transforms, profiles, data):
         data["|B|_zz"] = (
             data["B^theta_z"]
             * (
@@ -473,7 +473,7 @@ def compute_magnetic_field_magnitude(
         ) / data["|B|"] - data["|B|_z"] ** 2 / data["|B|"]
     # TODO: |B|_rt
     # TODO: |B|_rz
-    if check_derivs("|B|_tz", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("|B|_tz", params, transforms, profiles, data):
         data["|B|_tz"] = (
             data["B^theta_z"]
             * (
@@ -565,27 +565,21 @@ def compute_magnetic_pressure_gradient(
     )
 
     # covariant components
-    if check_derivs(
-        "grad(|B|^2)_rho", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("grad(|B|^2)_rho", params, transforms, profiles, data):
         data["grad(|B|^2)_rho"] = (
             data["B^theta"] * data["B_theta_r"]
             + data["B_theta"] * data["B^theta_r"]
             + data["B^zeta"] * data["B_zeta_r"]
             + data["B_zeta"] * data["B^zeta_r"]
         )
-    if check_derivs(
-        "grad(|B|^2)_theta", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("grad(|B|^2)_theta", params, transforms, profiles, data):
         data["grad(|B|^2)_theta"] = (
             data["B^theta"] * data["B_theta_t"]
             + data["B_theta"] * data["B^theta_t"]
             + data["B^zeta"] * data["B_zeta_t"]
             + data["B_zeta"] * data["B^zeta_t"]
         )
-    if check_derivs(
-        "grad(|B|^2)_zeta", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("grad(|B|^2)_zeta", params, transforms, profiles, data):
         data["grad(|B|^2)_zeta"] = (
             data["B^theta"] * data["B_theta_z"]
             + data["B_theta"] * data["B^theta_z"]
@@ -594,7 +588,7 @@ def compute_magnetic_pressure_gradient(
         )
 
     # gradient vector
-    if check_derivs("grad(|B|^2)", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("grad(|B|^2)", params, transforms, profiles, data):
         data["grad(|B|^2)"] = (
             data["grad(|B|^2)_rho"] * data["e^rho"].T
             + data["grad(|B|^2)_theta"] * data["e^theta"].T
@@ -602,9 +596,7 @@ def compute_magnetic_pressure_gradient(
         ).T
 
     # magnitude
-    if check_derivs(
-        "|grad(|B|^2)|/2mu0", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("|grad(|B|^2)|/2mu0", params, transforms, profiles, data):
         data["|grad(|B|^2)|/2mu0"] = (
             jnp.sqrt(
                 data["grad(|B|^2)_rho"] ** 2 * data["g^rr"]
@@ -641,27 +633,21 @@ def compute_magnetic_tension(params, transforms, profiles, data=None, **kwargs):
         **kwargs,
     )
 
-    if check_derivs(
-        "(curl(B)xB)_rho", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("(curl(B)xB)_rho", params, transforms, profiles, data):
         data["(curl(B)xB)_rho"] = (
             mu_0
             * data["sqrt(g)"]
             * (data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"])
         )
-    if check_derivs(
-        "(curl(B)xB)_theta", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("(curl(B)xB)_theta", params, transforms, profiles, data):
         data["(curl(B)xB)_theta"] = (
             -mu_0 * data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
         )
-    if check_derivs(
-        "(curl(B)xB)_zeta", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("(curl(B)xB)_zeta", params, transforms, profiles, data):
         data["(curl(B)xB)_zeta"] = (
             mu_0 * data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
         )
-    if check_derivs("curl(B)xB", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("curl(B)xB", params, transforms, profiles, data):
         data["curl(B)xB"] = (
             data["(curl(B)xB)_rho"] * data["e^rho"].T
             + data["(curl(B)xB)_theta"] * data["e^theta"].T
@@ -669,7 +655,7 @@ def compute_magnetic_tension(params, transforms, profiles, data=None, **kwargs):
         ).T
 
     # tension vector
-    if check_derivs("(B*grad)B", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("(B*grad)B", params, transforms, profiles, data):
         data["(B*grad)B"] = data["curl(B)xB"] + data["grad(|B|^2)"] / 2
         data["((B*grad)B)_rho"] = dot(data["(B*grad)B"], data["e_rho"])
         data["((B*grad)B)_theta"] = dot(data["(B*grad)B"], data["e_theta"])
@@ -697,25 +683,21 @@ def compute_B_dot_gradB(params, transforms, profiles, data=None, **kwargs):
     )
 
     # 0th order term
-    if check_derivs("B*grad(|B|)", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("B*grad(|B|)", params, transforms, profiles, data):
         data["B*grad(|B|)"] = (
             data["B^theta"] * data["|B|_t"] + data["B^zeta"] * data["|B|_z"]
         )
 
     # 1st order derivatives
     # TODO: (B*grad(|B|))_r
-    if check_derivs(
-        "(B*grad(|B|))_t", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("(B*grad(|B|))_t", params, transforms, profiles, data):
         data["(B*grad(|B|))_t"] = (
             data["B^theta_t"] * data["|B|_t"]
             + data["B^zeta_t"] * data["|B|_z"]
             + data["B^theta"] * data["|B|_tt"]
             + data["B^zeta"] * data["|B|_tz"]
         )
-    if check_derivs(
-        "(B*grad(|B|))_z", transforms["R"], transforms["Z"], transforms["L"]
-    ):
+    if has_dependencies("(B*grad(|B|))_z", params, transforms, profiles, data):
         data["(B*grad(|B|))_z"] = (
             data["B^theta_z"] * data["|B|_t"]
             + data["B^zeta_z"] * data["|B|_z"]
@@ -742,15 +724,15 @@ def compute_boozer_magnetic_field(
         **kwargs,
     )
 
-    if check_derivs("I", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("I", params, transforms, profiles, data):
         data["I"] = surface_averages(transforms["grid"], data["B_theta"])
         data["current"] = 2 * jnp.pi / mu_0 * data["I"]
-    if check_derivs("I_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("I_r", params, transforms, profiles, data):
         data["I_r"] = surface_averages(transforms["grid"], data["B_theta_r"])
         data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
-    if check_derivs("G", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("G", params, transforms, profiles, data):
         data["G"] = surface_averages(transforms["grid"], data["B_zeta"])
-    if check_derivs("G_r", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("G_r", params, transforms, profiles, data):
         data["G_r"] = surface_averages(transforms["grid"], data["B_zeta_r"])
 
     # TODO: add K(rho,theta,zeta)*grad(rho) term
@@ -781,19 +763,19 @@ def compute_contravariant_current_density(
         **kwargs,
     )
 
-    if check_derivs("J^rho", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("J^rho", params, transforms, profiles, data):
         data["J^rho"] = (data["B_zeta_t"] - data["B_theta_z"]) / (
             mu_0 * data["sqrt(g)"]
         )
-    if check_derivs("J^theta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("J^theta", params, transforms, profiles, data):
         data["J^theta"] = (data["B_rho_z"] - data["B_zeta_r"]) / (
             mu_0 * data["sqrt(g)"]
         )
-    if check_derivs("J^zeta", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("J^zeta", params, transforms, profiles, data):
         data["J^zeta"] = (data["B_theta_r"] - data["B_rho_t"]) / (
             mu_0 * data["sqrt(g)"]
         )
-    if check_derivs("J", transforms["R"], transforms["Z"], transforms["L"]):
+    if has_dependencies("J", params, transforms, profiles, data):
         data["J"] = (
             data["J^rho"] * data["e_rho"].T
             + data["J^theta"] * data["e_theta"].T
@@ -802,6 +784,7 @@ def compute_contravariant_current_density(
         data["J_R"] = data["J"][:, 0]
         data["J_phi"] = data["J"][:, 1]
         data["J_Z"] = data["J"][:, 2]
+    if has_dependencies("|J|", params, transforms, profiles, data):
         data["|J|"] = jnp.sqrt(
             data["J^rho"] ** 2 * data["g_rr"]
             + data["J^theta"] ** 2 * data["g_tt"]
@@ -810,6 +793,7 @@ def compute_contravariant_current_density(
             + 2 * data["J^rho"] * data["J^zeta"] * data["g_rz"]
             + 2 * data["J^theta"] * data["J^zeta"] * data["g_tz"]
         )
+    if has_dependencies("J_parallel", params, transforms, profiles, data):
         data["J_parallel"] = (
             data["J^rho"] * data["B_rho"]
             + data["J^theta"] * data["B_theta"]

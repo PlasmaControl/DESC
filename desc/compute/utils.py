@@ -27,11 +27,11 @@ def get_data_deps(*keys):
     """
 
     def _get_deps_1_key(key):
+        if "full_dependencies" in data_index[key]:
+            return data_index[key]["full_dependencies"]["data"]
         deps = data_index[key]["dependencies"]["data"]
         if len(deps) == 0:
             return deps
-        if "full_dependencies" in data_index[key]:
-            return data_index[key]["full_dependencies"]["data"]
         out = deps.copy()
         for dep in deps:
             out += _get_deps_1_key(dep)
@@ -235,6 +235,8 @@ def has_dependencies(qty, params, transforms, profiles, data):
 
 
 def _has_data(qty, data):
+    if qty in data:  # don't compute something that's already been computed
+        return False
     deps = data_index[qty]["dependencies"]["data"]
     return all(d in data for d in deps)
 

@@ -72,11 +72,16 @@ class TestBootstrap:
         nr = 50
         M = 200
         B0 = 7.5
+
+        # Maximum inverse aspect ratio to consider.
+        # It is slightly less than 1 to avoid divide-by-0.
+        epsilon_max = 0.96
+
         rho_in = np.linspace(
             0,
-            0.96,
+            1.0,
             nr,
-        )  # Avoid divide-by-0 when rho=1
+        )
         NFP = 3
         for N in [0, 13]:
             grid = LinearGrid(
@@ -88,29 +93,32 @@ class TestBootstrap:
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
+            epsilon_3D = rho * epsilon_max
+            # Pick out unique values:
+            epsilon = np.array(sorted(list(set(epsilon_3D))))
 
             # Eq (A6)
-            modB = B0 / (1 + rho * np.cos(theta))
+            modB = B0 / (1 + epsilon_3D * np.cos(theta))
             # For Jacobian, use eq (A7) for the theta dependence,
             # times an arbitrary overall scale factor
-            sqrt_g = 6.7 * (1 + rho * np.cos(theta))
+            sqrt_g = 6.7 * (1 + epsilon_3D * np.cos(theta))
 
             f_t_data = trapped_fraction(grid, modB, sqrt_g)
 
             # Eq (C18) in Kim et al:
-            f_t_Kim = 1.46 * np.sqrt(rho_in) - 0.46 * rho_in
+            f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
 
-            np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + rho_in))
+            np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + epsilon))
             # Looser tolerance for Bmax since there is no grid point there:
-            np.testing.assert_allclose(f_t_data["Bmax"], B0 / (1 - rho_in), rtol=0.001)
-            np.testing.assert_allclose(rho_in, f_t_data["epsilon"], rtol=1e-4)
+            np.testing.assert_allclose(f_t_data["Bmax"], B0 / (1 - epsilon), rtol=0.001)
+            np.testing.assert_allclose(epsilon, f_t_data["epsilon"], rtol=1e-4)
             # Eq (A8):
             np.testing.assert_allclose(
                 f_t_data["<B**2>"],
-                B0 * B0 / np.sqrt(1 - rho_in**2),
+                B0 * B0 / np.sqrt(1 - epsilon**2),
                 rtol=1e-6,
             )
-            np.testing.assert_allclose(f_t_data["<1/B>"], (2 + rho_in**2) / (2 * B0))
+            np.testing.assert_allclose(f_t_data["<1/B>"], (2 + epsilon**2) / (2 * B0))
             # Note the loose tolerance for this next test since we do not expect precise agreement.
             np.testing.assert_allclose(f_t_data["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
 

@@ -89,8 +89,6 @@ class FixBoundaryR(_Objective):
             idx = np.arange(eq.surface.R_basis.num_modes)
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
-            if np.isfortran(modes):
-                modes = np.ascontiguousarray(modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],
@@ -219,8 +217,6 @@ class FixBoundaryZ(_Objective):
             idx = np.arange(eq.surface.Z_basis.num_modes)
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
-            if np.isfortran(modes):
-                modes = np.ascontiguousarray(modes)
             dtype = {
                 "names": ["f{}".format(i) for i in range(3)],
                 "formats": 3 * [modes.dtype],

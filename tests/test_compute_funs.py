@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
+from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
@@ -467,3 +468,13 @@ def test_compute_grad_p_volume_avg():
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
+
+
+@pytest.mark.unit
+def test_compute_everything():
+    """Make sure we can compute everything without errors."""
+    eq = Equilibrium(1, 1, 1)
+    grid = LinearGrid(1, 1, 1)
+    for key in data_index.keys():
+        data = eq.compute(key, grid=grid)
+        assert key in data

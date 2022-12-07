@@ -16,10 +16,10 @@ The theoretical approach and numerical methods used by DESC are presented in the
 and documented at Theory_.
 Please cite our work if you use DESC!
 
-.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://aip.scitation.org/doi/full/10.1063/5.0020743>`_]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf>`_]
-.. [2] Panici, D. et al (2022). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`arxiv <https://arxiv.org/abs/2203.17173>`_]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/panici2022/panici2022equilibria.pdf>`_]
-.. [3] Conlin, R. et al. (2022). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`arxiv <https://arxiv.org/abs/2203.15927>`_]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/conlin2022/conlin2022perturbations.pdf>`_]
-.. [4] Dudt, D. et al. (2022). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`arxiv <https://arxiv.org/abs/2204.00078>`_]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/dudt2022/dudt2022optimization.pdf>`_]
+.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://aip.scitation.org/doi/full/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf>`__]
+.. [2] Panici, D. et al (2022). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`arxiv <https://arxiv.org/abs/2203.17173>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/panici2022/panici2022equilibria.pdf>`__]
+.. [3] Conlin, R. et al. (2022). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`arxiv <https://arxiv.org/abs/2203.15927>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/conlin2022/conlin2022perturbations.pdf>`__]
+.. [4] Dudt, D. et al. (2022). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`arxiv <https://arxiv.org/abs/2204.00078>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/dudt2022/dudt2022optimization.pdf>`__]
 .. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
 
 Quick Start

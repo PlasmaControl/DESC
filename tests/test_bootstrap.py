@@ -662,12 +662,14 @@ class TestBootstrap:
                 np.testing.assert_array_less(L31s[0, 2], 0.66)
                 assert L31s[0, 2] > 0.63
 
+    @pytest.mark.unit
     def test_Redl_sfincs_tokamak_benchmark(self):
         """
-        Compare the Redl <j dot B> to a SFINCS calculation for a tokamak.
+        Compare the Redl <J dot B> to a SFINCS calculation for a
+        model tokamak.
 
         The SFINCS calculation is on Matt Landreman's laptop in
-        /Users/mattland/Box Sync/work21/20211225-01-sfincs_tokamak_bootstrap_for_Redl_benchmark
+        /Users/mattland/Box/work21/20211225-01-sfincs_tokamak_bootstrap_for_Redl_benchmark
         """
         ne = PowerSeriesProfile(5.0e20 * np.array([1, -1]), modes=[0, 8])
         Te = PowerSeriesProfile(8e3 * np.array([1, -1]), modes=[0, 2])
@@ -677,7 +679,7 @@ class TestBootstrap:
         helicity_N = 0
         filename = ".//tests//inputs//circular_model_tokamak_output.h5"
         eq = desc.io.load(filename)[-1]
-        jdotB_sfincs = np.array(
+        J_dot_B_sfincs = np.array(
             [
                 -577720.30718026,
                 -737097.14851563,
@@ -791,19 +793,115 @@ class TestBootstrap:
             Ti=Ti,
             Zeff=1,
         )
+        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
 
-        # Use True in this "if" statement to plot extra info:
+        # Use True in this "if" statement to plot the bootstrap
+        # current profiles:
         if False:
             import matplotlib.pyplot as plt
 
-            plt.plot(rho, compress(grid, data["<J dot B> Redl"]), "+-", label="Redl")
-            plt.plot(rho, jdotB_sfincs, ".-", label="sfincs")
+            plt.plot(rho, J_dot_B_Redl, "+-", label="Redl")
+            plt.plot(rho, J_dot_B_sfincs, ".-", label="sfincs")
             plt.xlabel("rho")
-            plt.title("<J dot B>")
+            plt.title("<J dot B> [T A / m^2]")
             plt.legend(loc=0)
             plt.show()
 
-        # The relative error is a bit larger at s \approx 1, where the
+        # The relative error is a bit larger at the boundary, where the
         # absolute magnitude is quite small, so drop those points.
+        np.testing.assert_allclose(J_dot_B_Redl[:-5], J_dot_B_sfincs[:-5], rtol=0.1)
+
+    @pytest.mark.unit
+    def test_Redl_sfincs_QA(self):
+        """
+        Compare the Redl <J dot B> to a SFINCS calculation for a
+        reactor-scale quasi-axisymmetric configuration.
+
+        This test reproduces figure 1.a of Landreman Buller
+        Drevlak, Physics of Plasmas 29, 082501 (2022)
+        https://doi.org/10.1063/5.0098166
+
+        The SFINCS calculation is on the IPP Cobra machine in
+        /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
+        """
+        ne = PowerSeriesProfile(4.13e20 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        Zeff = 1
+        helicity_N = 0
+        filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
+        eq = desc.io.load(filename)
+        s_surfaces = np.linspace(0.025, 0.975, 39)
+        rho = np.sqrt(s_surfaces)
+        J_dot_B_sfincs = np.array(
+            [
+                -2164875.78234086,
+                -3010997.004258,
+                -3586912.40439179,
+                -4025873.78974165,
+                -4384855.40656673,
+                -4692191.91608418,
+                -4964099.33007648,
+                -5210508.61474677,
+                -5442946.68999908,
+                -5657799.82786579,
+                -5856450.57370037,
+                -6055808.19817868,
+                -6247562.80014873,
+                -6431841.43078959,
+                -6615361.81912527,
+                -6793994.01503932,
+                -6964965.34953497,
+                -7127267.47873969,
+                -7276777.92844458,
+                -7409074.62499181,
+                -7518722.07866914,
+                -7599581.37772525,
+                -7644509.67670812,
+                -7645760.36382036,
+                -7594037.38147436,
+                -7481588.70786642,
+                -7299166.08742784,
+                -7038404.20002745,
+                -6691596.45173419,
+                -6253955.52847633,
+                -5722419.58059673,
+                -5098474.47777983,
+                -4390147.20699043,
+                -3612989.71633149,
+                -2793173.34162084,
+                -1967138.17518374,
+                -1192903.42248978,
+                -539990.088677,
+                -115053.37380415,
+            ]
+        )
+
+        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        data = eq.compute(
+            "<J dot B> Redl",
+            grid=grid,
+            helicity_N=helicity_N,
+            ne=ne,
+            Te=Te,
+            Ti=Ti,
+            Zeff=1,
+        )
         J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
-        np.testing.assert_allclose(J_dot_B_Redl[:-5], jdotB_sfincs[:-5], rtol=0.1)
+
+        # Use True in this "if" statement to plot the bootstrap
+        # current profiles, reproducing figure 1.a of Landreman Buller
+        # Drevlak, Physics of Plasmas 29, 082501 (2022)
+        # https://doi.org/10.1063/5.0098166
+        if False:
+            import matplotlib.pyplot as plt
+
+            plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
+            plt.plot(rho**2, J_dot_B_sfincs, ".-", label="sfincs")
+            plt.legend(loc=0)
+            plt.xlabel(r"$\rho^2 = s$")
+            plt.ylabel("<J dot B> [T A / m^2]")
+            plt.xlim([0, 1])
+            plt.show()
+
+        np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)

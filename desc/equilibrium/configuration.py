@@ -8,10 +8,9 @@ from abc import ABC
 import numpy as np
 from termcolor import colored
 
-import desc.compute as compute_funs
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
-from desc.compute import data_index
+from desc.compute import compute as compute_fun
 from desc.compute.utils import compress, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
@@ -915,7 +914,16 @@ class _Configuration(IOAble, ABC):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
 
-    def compute(self, *names, grid=None, data=None, **kwargs):
+    def compute(
+        self,
+        *names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
         """Compute the quantity given by name on grid.
 
         Parameters
@@ -924,6 +932,16 @@ class _Configuration(IOAble, ABC):
             Names of the quantity to compute.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
 
         Returns
         -------
@@ -931,33 +949,33 @@ class _Configuration(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        for name in names:
-            if name not in data_index:
-                raise ValueError("Unrecognized value '{}'.".format(name))
-        if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
-        bad_kwargs = set(kwargs.keys()).difference(allowed_kwargs)
-        if len(bad_kwargs) > 0:
-            raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
-
-        # TODO: allow computing multiple things with  single call
         # TODO: default to returning just desired qty? options to return_all?
         # TODO: use get_params method? need to break up compute functions first
-        params = {
-            "R_lmn": self.R_lmn,
-            "Z_lmn": self.Z_lmn,
-            "L_lmn": self.L_lmn,
-            "p_l": self.p_l,
-            "i_l": self.i_l,
-            "c_l": self.c_l,
-            "Psi": self.Psi,
-        }
-        profiles = get_profiles(*names, eq=self, grid=grid)
-        transforms = get_transforms(*names, eq=self, grid=grid, **kwargs)
-        for name in names:
-            fun = getattr(compute_funs, data_index[name]["fun"])
-            data = fun(params, transforms, profiles, data, **kwargs)
+        if grid is None:
+            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+        if params is None:
+            params = {
+                "R_lmn": self.R_lmn,
+                "Z_lmn": self.Z_lmn,
+                "L_lmn": self.L_lmn,
+                "p_l": self.p_l,
+                "i_l": self.i_l,
+                "c_l": self.c_l,
+                "Psi": self.Psi,
+            }
+        if profiles is None:
+            profiles = get_profiles(*names, eq=self, grid=grid)
+        if transforms is None:
+            transforms = get_transforms(*names, eq=self, grid=grid, **kwargs)
+
+        data = compute_fun(
+            *names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            **kwargs,
+        )
         return data
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):

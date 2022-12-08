@@ -12,6 +12,55 @@ from desc.grid import ConcentricGrid
 from .data_index import data_index
 
 
+def compute(*names, params, transforms, profiles, data=None, **kwargs):
+    """Compute the quantity given by name on grid.
+
+    Parameters
+    ----------
+    names : str
+        Names of the quantity to compute.
+    grid : Grid, optional
+        Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+    params : dict of ndarray
+        Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+        Defaults to attributes of self.
+    transforms : dict of Transform
+        Transforms for R, Z, lambda, etc. Default is to build from grid
+    profiles : dict of Profile
+        Profile objects for pressure, iota, current, etc. Defaults to attributes
+        of self
+    data : dict of ndarray
+        Data computed so far, generally output from other compute functions
+
+    Returns
+    -------
+    data : dict of ndarray
+        Computed quantity and intermediate variables.
+
+    """
+    for name in names:
+        if name not in data_index:
+            raise ValueError("Unrecognized value '{}'.".format(name))
+    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
+    bad_kwargs = set(kwargs.keys()).difference(allowed_kwargs)
+    if len(bad_kwargs) > 0:
+        raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
+
+    for name in names:
+        assert _has_params(name, params), f"Don't have params to compute {name}"
+        assert _has_profiles(name, profiles), f"Don't have profiles to compute {name}"
+        assert _has_transforms(
+            name, transforms
+        ), f"Don't have transforms to compute {name}"
+
+    import desc.compute
+
+    for name in names:
+        fun = getattr(desc.compute, data_index[name]["fun"])
+        data = fun(params, transforms, profiles, data, **kwargs)
+    return data
+
+
 def get_data_deps(*keys):
     """Get list of data keys needed to compute a given quantity.
 

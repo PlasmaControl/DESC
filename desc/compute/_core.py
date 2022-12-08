@@ -293,6 +293,17 @@ def compute_rotational_transform(params, transforms, profiles, data=None, **kwar
             data["iota"] = (current_term + num_avg) / den_avg
 
         if has_dependencies("iota_r", params, transforms, profiles, data):
+            current_term = (
+                mu_0
+                / (2 * jnp.pi)
+                * profiles["current"].compute(params["c_l"], dr=0)
+                / data["psi_r"]
+            )
+            num = (
+                data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+            ) / data["sqrt(g)"]
+            den = data["g_tt"] / data["sqrt(g)"]
+            den_avg = surface_averages(transforms["grid"], den)
             current_term_r = (
                 mu_0
                 / (2 * jnp.pi)

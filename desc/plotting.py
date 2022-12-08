@@ -869,7 +869,7 @@ def plot_fsa(
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
-    grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
+    grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
     g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
     data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))

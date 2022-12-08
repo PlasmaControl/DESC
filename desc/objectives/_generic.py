@@ -4,7 +4,12 @@ from inspect import signature
 
 import desc.compute as compute_funs
 from desc.basis import DoubleFourierSeries
-from desc.compute import arg_order, compute_boozer_magnetic_field, data_index
+from desc.compute import (
+    arg_order,
+    compute_boozer_magnetic_field,
+    compute_rotational_transform,
+    data_index,
+)
 from desc.compute.utils import compress
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
@@ -149,9 +154,8 @@ class GenericObjective(_Objective):
         return self._shift_scale(f)
 
 
-# TODO: move this class to a different file (not generic)
-class ToroidalCurrent(_Objective):
-    """Toroidal current enclosed by a surface.
+class TargetCurrent(_Objective):
+    """Target toroidal current profile.
 
     Parameters
     ----------
@@ -159,10 +163,10 @@ class ToroidalCurrent(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
+        len(target) must be equal to Objective.dim_f == grid.num_rho
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        len(weight) must be equal to Objective.dim_f == grid.num_rho
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -173,11 +177,11 @@ class ToroidalCurrent(_Objective):
     _scalar = True
     _linear = False
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="toroidal current"):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="target-current"):
 
         self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
+        self._print_value_fmt = "Target-iota profile error: {:10.3e} (A)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -193,7 +197,9 @@ class ToroidalCurrent(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            self.grid = LinearGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
 
         self._dim_f = self.grid.num_rho
 
@@ -247,8 +253,8 @@ class ToroidalCurrent(_Objective):
 
         Returns
         -------
-        I : float
-            Toroidal current (A).
+        current : ndarray
+            Toroidal current (A) through specified surfaces.
 
         """
         data = compute_boozer_magnetic_field(
@@ -264,5 +270,126 @@ class ToroidalCurrent(_Objective):
             self._iota,
             self._current,
         )
-        I = compress(self.grid, data["current"], surface_label="rho")
-        return self._shift_scale(I)
+        current = compress(self.grid, data["current"], surface_label="rho")
+        return self._shift_scale(current)
+
+
+class TargetIota(_Objective):
+    """Targets a rotational transform profile.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f == grid.num_rho
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f == grid.num_rho
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="target-iota"):
+
+        self._grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._callback_fmt = "Target-iota profile error: {:10.3e}"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+            )
+
+        self._dim_f = self.grid.num_rho
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["iota"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["iota"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["iota"]["L_derivs"], build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives(use_jit=use_jit)
+        self._built = True
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+        """Compute rotational transform profile errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        iota : ndarray
+            rotational transform on specified flux surfaces.
+        """
+        data = compute_rotational_transform(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._iota,
+            self._current,
+        )
+        iota = compress(self.grid, data["iota"], surface_label="rho")
+        return self._shift_scale(iota)

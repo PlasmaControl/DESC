@@ -10,8 +10,10 @@ import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.objectives import (
     AspectRatio,
+    Elongation,
     Energy,
     GenericObjective,
     MagneticWell,
@@ -81,6 +83,19 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_elongation(self):
+        """Test calculation of elongation."""
+
+        def test(eq):
+            obj = Elongation(eq=eq)
+            f = obj.compute(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(f, 1.3 / 0.7)
+            f = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(f, 1.3 / 0.7)
+
+        test(get("HELIOTRON"))
 
     @pytest.mark.unit
     def test_energy(self):

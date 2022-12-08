@@ -939,8 +939,9 @@ class _Configuration(IOAble, ABC):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         M_booz = kwargs.pop("M_booz", 2 * self.M)
         N_booz = kwargs.pop("N_booz", 2 * self.N)
-        if len(kwargs) > 0 and not set(kwargs.keys()).issubset(["helicity"]):
-            raise ValueError("Unrecognized argument(s).")
+        # MJL temporarily commented out next 2 lines due to extra arguments for bootstrap current:
+        #if len(kwargs) > 0 and not set(kwargs.keys()).issubset(["helicity"]):
+        #    raise ValueError("Unrecognized argument(s).")
 
         fun = getattr(compute_funs, data_index[name]["fun"])
         sig = signature(fun)

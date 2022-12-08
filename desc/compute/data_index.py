@@ -3075,6 +3075,36 @@ data_index["J_parallel"] = {
         [0, 1, 1],
     ],
 }
+data_index["<J dot B>"] = {
+    "label": "\\langle \\mathbf{J} \\cdot \\mathbf{B} \\rangle",
+    "units": "T A \\cdot m^{-2}",
+    "units_long": "Tesla Amperes / square meter",
+    "description": "Current density parallel to magnetic field, flux surface averaged.",
+    "fun": "compute_contravariant_current_density",
+    "dim": 1,
+    "R_derivs": [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [2, 0, 0],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+    "L_derivs": [
+        [0, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [0, 2, 0],
+        [0, 0, 2],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+    ],
+}
 data_index["div(J_perp)"] = {
     "label": "\\nabla \\cdot \\mathbf{J}_{\\perp}",
     "units": "A \\cdot m^{-3}",
@@ -3634,4 +3664,15 @@ data_index["magnetic well"] = {
         [1, 0, 1],
     ],
     "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 0]],
+}
+# Quantities related to bootstrap current
+data_index["<J dot B> Redl"] = {
+    "label": "\\langle\\mathbf{J}\cdot\\mathbf{B}\\rangle_{Redl}",
+    "units": "T A m^{-2}",
+    "units_long": "Tesla Ampere / meter^2",
+    "description": "Bootstrap current profile, Redl model for quasisymmetry",
+    "fun": "compute_J_dot_B_Redl",
+    "dim": 1,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+    "L_derivs": [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
 }

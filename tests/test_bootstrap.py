@@ -5,9 +5,11 @@ import pytest
 from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
+import desc.io
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile
 from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
+from desc.compute.utils import compress
 
 
 class TestBootstrap:
@@ -170,9 +172,9 @@ class TestBootstrap:
         rho = np.linspace(0, 1, 20)
         rho = rho[1:]  # Avoid divide-by-0 on axis
         s = rho * rho
-        nfp = 4
+        NFP = 4
         helicity_n = 1
-        helicity_N = nfp * helicity_n
+        helicity_N = NFP * helicity_n
         G = 32.0 - s
         iota = 0.95 - 0.7 * s
         R = 6.0 - 0.1 * s
@@ -340,9 +342,8 @@ class TestBootstrap:
             "epsilon": epsilon,
             "f_t": f_t,
             "psi_edge": psi_edge,
-            "nfp": nfp,
         }
-        jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_n)
+        jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
@@ -387,8 +388,8 @@ class TestBootstrap:
             Ti = PowerSeriesProfile([1.0e5 * Ti_over_Te])
             rho = np.linspace(0, 1, 100) ** 2
             rho = rho[1:]  # Avoid divide-by-0 on axis
-            nfp = 1
-            helicity_n = 0
+            NFP = 1
+            helicity_N = 0
             epsilon = rho
             f_t = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
             psi_edge = 68 / (2 * np.pi)
@@ -426,9 +427,8 @@ class TestBootstrap:
                 "epsilon": epsilon,
                 "f_t": f_t,
                 "psi_edge": psi_edge,
-                "nfp": nfp,
             }
-            jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_n)
+            jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
 
             # Change False to True in the next line to plot the data for debugging.
             if False:
@@ -522,8 +522,8 @@ class TestBootstrap:
                 )
                 Ti = PowerSeriesProfile([1.0e5 * Ti_over_Te], modes=[0])
                 rho = np.ones(n_f_t)
-                nfp = 0
-                helicity_n = 0
+                NFP = 0
+                helicity_N = 0
                 G = 32.0 - rho * rho  # Doesn't matter
                 R = 5.0 + 0.1 * rho * rho  # Doesn't matter
                 epsilon = rho * rho  # Doesn't matter
@@ -561,9 +561,8 @@ class TestBootstrap:
                     "epsilon": epsilon,
                     "f_t": f_t,
                     "psi_edge": psi_edge,
-                    "nfp": nfp,
                 }
-                jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_n)
+                jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
 
                 L31s[j_nu_star, :] = jdotB_data["L31"]
                 L32s[j_nu_star, :] = jdotB_data["L32"]
@@ -662,3 +661,149 @@ class TestBootstrap:
                 assert L31s[0, 1] > 0.45
                 np.testing.assert_array_less(L31s[0, 2], 0.66)
                 assert L31s[0, 2] > 0.63
+
+    def test_Redl_sfincs_tokamak_benchmark(self):
+        """
+        Compare the Redl <j dot B> to a SFINCS calculation for a tokamak.
+
+        The SFINCS calculation is on Matt Landreman's laptop in
+        /Users/mattland/Box Sync/work21/20211225-01-sfincs_tokamak_bootstrap_for_Redl_benchmark
+        """
+        ne = PowerSeriesProfile(5.0e20 * np.array([1, -1]), modes=[0, 8])
+        Te = PowerSeriesProfile(8e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        s_surfaces = np.linspace(0.01, 0.99, 99)
+        rho = np.sqrt(s_surfaces)
+        helicity_N = 0
+        filename = ".//tests//inputs//circular_model_tokamak_output.h5"
+        eq = desc.io.load(filename)[-1]
+        jdotB_sfincs = np.array(
+            [
+                -577720.30718026,
+                -737097.14851563,
+                -841877.1731213,
+                -924690.37927967,
+                -996421.14965534,
+                -1060853.54247997,
+                -1120000.15051496,
+                -1175469.30096585,
+                -1228274.42232883,
+                -1279134.94084881,
+                -1328502.74017954,
+                -1376746.08281939,
+                -1424225.7135264,
+                -1471245.54499716,
+                -1518022.59582135,
+                -1564716.93168823,
+                -1611473.13548435,
+                -1658436.14166984,
+                -1705743.3966606,
+                -1753516.75354018,
+                -1801854.51072685,
+                -1850839.64964612,
+                -1900546.86009713,
+                -1951047.40424607,
+                -2002407.94774638,
+                -2054678.30773555,
+                -2107880.19135161,
+                -2162057.48184046,
+                -2217275.94462326,
+                -2273566.0131982,
+                -2330938.65226651,
+                -2389399.44803491,
+                -2448949.45267694,
+                -2509583.82212581,
+                -2571290.69542303,
+                -2634050.8642164,
+                -2697839.22372799,
+                -2762799.43321187,
+                -2828566.29269343,
+                -2895246.32116721,
+                -2962784.4499046,
+                -3031117.70888815,
+                -3100173.19345621,
+                -3169866.34773162,
+                -3240095.93569359,
+                -3310761.89170199,
+                -3381738.85511963,
+                -3452893.53199984,
+                -3524079.68661978,
+                -3595137.36934266,
+                -3665892.0942594,
+                -3736154.01439094,
+                -3805717.10211429,
+                -3874383.57672975,
+                -3941857.83476556,
+                -4007909.78112076,
+                -4072258.58610167,
+                -4134609.67635966,
+                -4194641.53357309,
+                -4252031.55214378,
+                -4306378.23970987,
+                -4357339.70206557,
+                -4404503.4788238,
+                -4447364.62100875,
+                -4485559.83633318,
+                -4518524.39965094,
+                -4545649.39588513,
+                -4566517.96382113,
+                -4580487.82371991,
+                -4586917.13595789,
+                -4585334.66419017,
+                -4574935.10788554,
+                -4555027.85929442,
+                -4524904.81212564,
+                -4483819.87563906,
+                -4429820.99499252,
+                -4364460.04545626,
+                -4285813.80804979,
+                -4193096.44129549,
+                -4085521.92933703,
+                -3962389.92116629,
+                -3822979.23919869,
+                -3666751.38186485,
+                -3493212.37971975,
+                -3302099.71461769,
+                -3093392.43317121,
+                -2867475.54470152,
+                -2625108.03673121,
+                -2367586.06128219,
+                -2096921.32817857,
+                -1815701.10075496,
+                -1527523.11762782,
+                -1237077.39816553,
+                -950609.3080458,
+                -677002.74349353,
+                -429060.85924996,
+                -224317.60933134,
+                -82733.32462396,
+                -22233.12804732,
+            ]
+        )
+
+        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        data = eq.compute(
+            "<J dot B> Redl",
+            grid=grid,
+            helicity_N=helicity_N,
+            ne=ne,
+            Te=Te,
+            Ti=Ti,
+            Zeff=1,
+        )
+
+        # Use True in this "if" statement to plot extra info:
+        if False:
+            import matplotlib.pyplot as plt
+
+            plt.plot(rho, compress(grid, data["<J dot B> Redl"]), "+-", label="Redl")
+            plt.plot(rho, jdotB_sfincs, ".-", label="sfincs")
+            plt.xlabel("rho")
+            plt.title("<J dot B>")
+            plt.legend(loc=0)
+            plt.show()
+
+        # The relative error is a bit larger at s \approx 1, where the
+        # absolute magnitude is quite small, so drop those points.
+        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
+        np.testing.assert_allclose(J_dot_B_Redl[:-5], jdotB_sfincs[:-5], rtol=0.1)

@@ -6,6 +6,11 @@ from scipy.constants import elementary_charge
 
 from ..backend import jnp, fori_loop
 from ..profiles import Profile, PowerSeriesProfile
+from ._field import (
+    compute_boozer_magnetic_field,
+    compute_jacobian,
+    compute_magnetic_field_magnitude,
+)
 from .utils import (
     compress,
     expand,
@@ -121,6 +126,7 @@ def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
         "Bmax": Bmax,
         "epsilon": epsilon,
         "f_t": f_t,
+        "rho": grid.nodes[grid.unique_rho_idx, 0],
     }
     return f_t_data
 
@@ -131,7 +137,7 @@ def j_dot_B_Redl(
     Te,
     Ti,
     Zeff=None,
-    helicity_n=None,
+    helicity_N=None,
     plot=False,
 ):
     r"""
@@ -177,7 +183,7 @@ def j_dot_B_Redl(
     Zeff: A :obj:`~Profile` object with the profile of the average
         impurity charge :math:`Z_{eff}`. Or, a single number can be provided if this profile is
         constant. Or, if ``None``, Zeff = 1 will be used.
-    helicity_n: 0 for quasi-axisymmetry, or +/- 1 for quasi-helical symmetry.
+    helicity_N: 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
         This quantity is used to apply the quasisymmetry isomorphism to map the collisionality
         and bootstrap current from the tokamak expressions to quasi-helical symmetry.
     plot: Whether to make a plot of many of the quantities computed.
@@ -194,9 +200,7 @@ def j_dot_B_Redl(
     epsilon = geom_data["epsilon"]
     psi_edge = geom_data["psi_edge"]
     f_t = geom_data["f_t"]
-    nfp = geom_data["nfp"]
 
-    helicity_N = nfp * helicity_n
     if Zeff is None:
         Zeff = PowerSeriesProfile(1.0, modes=[0])
     if not isinstance(Zeff, Profile):
@@ -454,3 +458,93 @@ def j_dot_B_Redl(
         plt.show()
 
     return jdotB_data
+
+
+def compute_J_dot_B_Redl(
+    R_lmn,
+    Z_lmn,
+    L_lmn,
+    p_l,
+    i_l,
+    c_l,
+    Psi,
+    R_transform,
+    Z_transform,
+    L_transform,
+    pressure,
+    iota,
+    current,
+    data=None,
+    **kwargs,
+):
+    """
+    Compute the geometric quantities needed for the Redl bootstrap
+    formula using the global Bmax and Bmin on each surface.
+
+    The effective trapped particle fraction :math:`f_t` will also be
+    computed using the full nonaxisymmetric field strength on each
+    flux surface.
+
+    The advantage of this approach over :func:`Redl_geom_Boozer` is that no
+    transformation to Boozer coordinates is involved in this
+    method. However, the approach here may over-estimate ``epsilon``.
+    """
+    grid = R_transform.grid
+    data = compute_magnetic_field_magnitude(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
+        data=data,
+    )
+    data = compute_jacobian(
+        R_lmn,
+        Z_lmn,
+        R_transform,
+        Z_transform,
+        data=data,
+    )
+    data = compute_boozer_magnetic_field(
+        R_lmn,
+        Z_lmn,
+        L_lmn,
+        i_l,
+        c_l,
+        Psi,
+        R_transform,
+        Z_transform,
+        L_transform,
+        iota,
+        current,
+        data=data,
+    )
+    # Note that geom_data contains info only as a function of rho, not
+    # theta or zeta, i.e. on the compressed grid. In contrast, data
+    # contains quantities on a 3D grid even for quantities that are
+    # flux functions.
+    geom_data = trapped_fraction(grid, data["|B|"], data["sqrt(g)"])
+    geom_data["G"] = compress(grid, data["G"])
+    geom_data["I"] = compress(grid, data["I"])
+    geom_data["iota"] = compress(grid, data["iota"])
+    geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
+        "<1/B>"
+    ]
+    geom_data["psi_edge"] = Psi / (2 * jnp.pi)
+    j_dot_B_data = j_dot_B_Redl(
+        geom_data,
+        kwargs["ne"],
+        kwargs["Te"],
+        kwargs["Ti"],
+        kwargs["Zeff"],
+        kwargs["helicity_N"],
+        plot=False,
+    )
+    data["<J dot B> Redl"] = expand(grid, j_dot_B_data["jdotB"])
+    return data

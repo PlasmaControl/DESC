@@ -1193,10 +1193,15 @@ def compute_contravariant_current_density(
             + 2 * data["J^rho"] * data["J^zeta"] * data["g_rz"]
             + 2 * data["J^theta"] * data["J^zeta"] * data["g_tz"]
         )
-        data["J_parallel"] = (
-            data["J^rho"] * data["B_rho"]
+        J_dot_B = (data["J^rho"] * data["B_rho"]
             + data["J^theta"] * data["B_theta"]
             + data["J^zeta"] * data["B_zeta"]
-        ) / data["|B|"]
+        )
+        data["J_parallel"] = J_dot_B / data["|B|"]
+        data["<J dot B>"] = surface_averages(
+            R_transform.grid,
+            J_dot_B,
+            sqrt_g=data["sqrt(g)"],
+        )
 
     return data

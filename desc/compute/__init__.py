@@ -1,5 +1,6 @@
 """Functions for computing field and plasma quantities from an equilibrium."""
 
+from ._bootstrap import compute_J_dot_B_Redl
 from ._core import (
     compute_cartesian_coords,
     compute_contravariant_basis,

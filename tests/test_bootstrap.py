@@ -905,3 +905,99 @@ class TestBootstrap:
             plt.show()
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
+
+    @pytest.mark.unit
+    def test_Redl_sfincs_QH(self):
+        """
+        Compare the Redl <J dot B> to a SFINCS calculation for a
+        reactor-scale quasi-helically symmetric configuration.
+
+        This test reproduces figure 1.b of Landreman Buller
+        Drevlak, Physics of Plasmas 29, 082501 (2022)
+        https://doi.org/10.1063/5.0098166
+
+        The SFINCS calculation is on the IPP Cobra machine in
+        /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi\
+60_Nx7_manySurfaces
+        """
+        ne = PowerSeriesProfile(4.13e20 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        Zeff = 1
+        helicity_N = -4
+        filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
+        eq = desc.io.load(filename)
+        s_surfaces = np.linspace(0.025, 0.975, 39)
+        rho = np.sqrt(s_surfaces)
+        J_dot_B_sfincs = np.array(
+            [
+                -1086092.9561775,
+                -1327299.73501589,
+                -1490400.04894085,
+                -1626634.32037339,
+                -1736643.64671843,
+                -1836285.33939607,
+                -1935027.3099312,
+                -2024949.13178129,
+                -2112581.50178861,
+                -2200196.92359437,
+                -2289400.72956248,
+                -2381072.32897262,
+                -2476829.87345286,
+                -2575019.97938908,
+                -2677288.45525839,
+                -2783750.09013764,
+                -2894174.68898196,
+                -3007944.74771214,
+                -3123697.37793226,
+                -3240571.57445779,
+                -3356384.98579004,
+                -3468756.64908024,
+                -3574785.02500657,
+                -3671007.37469685,
+                -3753155.07811322,
+                -3816354.48636373,
+                -3856198.2242986,
+                -3866041.76391937,
+                -3839795.40512069,
+                -3770065.26594065,
+                -3649660.76253605,
+                -3471383.501417,
+                -3228174.23182819,
+                -2914278.54799143,
+                -2525391.54652021,
+                -2058913.26485519,
+                -1516843.60879267,
+                -912123.395174,
+                -315980.89711036,
+            ]
+        )
+
+        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        data = eq.compute(
+            "<J dot B> Redl",
+            grid=grid,
+            helicity_N=helicity_N,
+            ne=ne,
+            Te=Te,
+            Ti=Ti,
+            Zeff=1,
+        )
+        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
+
+        # Use True in this "if" statement to plot the bootstrap
+        # current profiles, reproducing figure 1.b of Landreman Buller
+        # Drevlak, Physics of Plasmas 29, 082501 (2022)
+        # https://doi.org/10.1063/5.0098166
+        if False:
+            import matplotlib.pyplot as plt
+
+            plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
+            plt.plot(rho**2, J_dot_B_sfincs, ".-", label="sfincs")
+            plt.legend(loc=0)
+            plt.xlabel(r"$\rho^2 = s$")
+            plt.ylabel("<J dot B> [T A / m^2]")
+            plt.xlim([0, 1])
+            plt.show()
+
+        np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)

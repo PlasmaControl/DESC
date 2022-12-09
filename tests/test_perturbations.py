@@ -97,7 +97,6 @@ def test_perturbation_orders(SOLOVEV):
 
 
 @pytest.mark.unit
-@pytest.mark.xfail
 def test_optimal_perturb():
     """Test that a single step of optimal_perturb doesn't mess things up."""
     # as of v0.6.1, the recover operation from optimal_perturb would give
@@ -140,8 +139,8 @@ def test_optimal_perturb():
         objective,
         dRb=R_modes,
         dZb=Z_modes,
-        order=1,
-        tr_ratio=[0.05, 0.1],
+        order=2,
+        tr_ratio=[0.1, 0.1],
         verbose=1,
         copy=True,
     )[0]

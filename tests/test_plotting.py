@@ -328,7 +328,7 @@ def test_plot_boundaries():
     eq1 = get("SOLOVEV")
     eq2 = get("DSHAPE")
     eq3 = get("W7-X")
-    fig, ax = plot_boundaries((eq1, eq2, eq3), zeta=4)
+    fig, ax = plot_boundaries((eq1, eq2, eq3))
     return fig
 
 

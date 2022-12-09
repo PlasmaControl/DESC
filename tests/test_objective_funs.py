@@ -91,9 +91,9 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Elongation(eq=eq)
             f = obj.compute(eq.R_lmn, eq.Z_lmn)
-            np.testing.assert_allclose(f, 1.3 / 0.7)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=2e-5)
             f = obj.compute(*obj.xs(eq))
-            np.testing.assert_allclose(f, 1.3 / 0.7)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=2e-5)
 
         test(get("HELIOTRON"))
 

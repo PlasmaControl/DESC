@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 from scipy.signal import convolve2d
+from scipy.io import netcdf_file
 
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -467,3 +468,26 @@ def test_compute_grad_p_volume_avg():
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
+
+
+@pytest.mark.unit
+def test_J_dot_B():
+    """Compare <J dot B> to vmec."""
+    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
+    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+
+    fid = netcdf_file(wout_file, mmap=False)
+    ns = fid.variables["ns"][()]
+    J_dot_B_vmec = fid.variables["jdotb"][()]
+    fid.close()
+
+    eq = EquilibriaFamily.load(desc_file)[-1]
+
+    s = np.linspace(0, 1, ns)
+    rho = np.sqrt(s)
+    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+    data = eq.compute("<J dot B>", grid=grid)
+    J_dot_B_desc = compress(grid, data["<J dot B>"])
+
+    # Drop first point since desc gives NaN:
+    np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)

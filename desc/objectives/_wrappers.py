@@ -9,7 +9,6 @@ from ._equilibrium import CurrentDensity
 from .objective_funs import ObjectiveFunction
 from .utils import (
     align_jacobian,
-    compute_jac_scale,
     factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -257,6 +256,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
         Fc = Fx @ dxdc
         Gc = Gx @ dxdc
+
+        # FIXME (@f0uriest): need to import here to avoid circular dependencies
+        from desc.optimize.utils import compute_jac_scale
 
         # some scaling to improve conditioning
         wf, _ = compute_jac_scale(Fx_reduced)

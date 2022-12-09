@@ -1454,12 +1454,12 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
 
     Examples
     --------
-    .. image:: ../../_static/images/plotting/plot_boundary.png
+    .. image:: ../../_static/images/plotting/plot_boundaries.png
 
     .. code-block:: python
 
-        from desc.plotting import plot_boundary
-        fig, ax = plot_boundary(eq)
+        from desc.plotting import plot_boundaries
+        fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
     figsize = kwargs.pop("figsize", None)
@@ -1475,10 +1475,9 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
     ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
 
     if zeta is None:
-        zeta = 1 if eqs[0].N == 0 else 4
-    zeta = zeta + 1  # include zeta = 2*pi
-    grid_kwargs = {"NFP": eqs[-1].NFP, "theta": 100, "zeta": zeta}
-    grid = _get_grid(**grid_kwargs)
+        zeta = 4
+    if isinstance(zeta, int):
+        zeta = zeta + 1  # include zeta = 2*pi
 
     neq = len(eqs)
 
@@ -1488,7 +1487,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
     if lw is None:
         lw = 1
-    if isinstance(lw, int):
+    if np.isscalar(lw):
         lw = [lw for i in range(neq)]
     if ls is None:
         ls = "-"
@@ -1498,6 +1497,13 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
 
     for i in range(neq):
+        grid_kwargs = {
+            "NFP": eqs[i].NFP,
+            "theta": 100,
+            "zeta": zeta if eqs[i].N > 0 else 2,
+        }
+        grid = _get_grid(**grid_kwargs)
+
         coords = eqs[i].compute("R", grid)
         R = coords["R"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"

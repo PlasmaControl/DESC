@@ -3,6 +3,7 @@
 from inspect import signature
 
 import desc.compute as compute_funs
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import arg_order, compute_boozer_magnetic_field, data_index
 from desc.compute.utils import compress
@@ -10,6 +11,7 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -28,6 +30,14 @@ class GenericObjective(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -37,15 +47,32 @@ class GenericObjective(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(Unknown)"
+    _print_value_fmt = "Residual: {:10.3e} "
 
-    def __init__(self, f, eq=None, target=0, weight=1, grid=None, name="generic"):
+    def __init__(
+        self,
+        f,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="generic",
+    ):
 
         self.f = f
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = (
-            "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
         )
+        self._units = "(" + data_index[self.f]["units"] + ")"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -145,7 +172,7 @@ class GenericObjective(_Objective):
 
         """
         data = self.fun(**kwargs, **self.inputs)
-        f = data[self.f]
+        f = data[self.f] * self.grid.weights
         return self._shift_scale(f)
 
 
@@ -163,6 +190,12 @@ class ToroidalCurrent(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -172,12 +205,29 @@ class ToroidalCurrent(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(A)"
+    _print_value_fmt = "Toroidal current: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="toroidal current"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="toroidal current",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -225,6 +275,10 @@ class ToroidalCurrent(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
@@ -265,4 +319,5 @@ class ToroidalCurrent(_Objective):
             self._current,
         )
         I = compress(self.grid, data["current"], surface_label="rho")
-        return self._shift_scale(I)
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return self._shift_scale(I * w)

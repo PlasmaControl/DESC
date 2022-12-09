@@ -9,6 +9,7 @@ from ._equilibrium import CurrentDensity
 from .objective_funs import ObjectiveFunction
 from .utils import (
     align_jacobian,
+    compute_jac_scale,
     factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -249,17 +250,26 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Gx = self._objective.jac(xg)
         Fx = align_jacobian(Fx, self._eq_objective, self._objective)
         Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+
+        # projections onto optimization space
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
-
         Fc = Fx @ dxdc
-        Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
-
         Gc = Gx @ dxdc
+
+        # some scaling to improve conditioning
+        wf, _ = compute_jac_scale(Fx_reduced)
+        wg, _ = compute_jac_scale(Gx_reduced)
+        wx = wf + wg
+        Fxh = Fx_reduced * wx
+        Gxh = Gx_reduced * wx
+
+        Fxh_inv = jnp.linalg.pinv(Fxh, rcond=None)
+
         # TODO: make this more efficient for finite differences etc. Can probably
         # reduce the number of operations and tangents
-        LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
+        LHS = Gxh @ (Fxh_inv @ Fc) - Gc
         return -LHS
 
     def hess(self, x):

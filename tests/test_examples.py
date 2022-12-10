@@ -473,8 +473,10 @@ def test_simsopt_QH_comparison():
     qs_weight = np.sqrt(len(grid.weights) / (8 * (np.pi**4)))
     objective = ObjectiveFunction(
         (
-            AspectRatio(target=aspect_target, weight=aspect_weight),
-            QuasisymmetryTwoTerm(helicity=(1, nfp), grid=grid, weight=qs_weight),
+            AspectRatio(target=aspect_target, weight=aspect_weight, normalize=False),
+            QuasisymmetryTwoTerm(
+                helicity=(1, nfp), grid=grid, weight=qs_weight, normalize=False
+            ),
         )
     )
     eq2, result = eq.optimize(

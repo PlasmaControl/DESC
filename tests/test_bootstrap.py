@@ -1073,13 +1073,37 @@ class TestBootstrapObjectives:
         Confirm that the BootstrapRedlConsistency objective function is
         approximately independent of grid resolution.
         """
-        ne = PowerSeriesProfile(5.0e20 * np.array([1, -0.9]), modes=[0, 8])
-        Te = PowerSeriesProfile(8e3 * np.array([1, -0.9]), modes=[0, 2])
-        Ti = PowerSeriesProfile(9e3 * np.array([1, -0.8]), modes=[0, 2])
+        ne = PowerSeriesProfile(2.0e19 * np.array([1, -0.85]), modes=[0, 4])
+        Te = PowerSeriesProfile(1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
+        Ti = PowerSeriesProfile(1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
         Zeff = 1.4
-        helicity_N = -4
+        helicity_N = 0
         filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
         eq = desc.io.load(filename)[-1]
+
+        # Set to True to plot the profiles of <J dot B>
+        if False:
+            grid = LinearGrid(L=eq.L, M=eq.M, N=0, axis=False)
+            data = eq.compute("<J dot B>", grid=grid)
+            data = eq.compute(
+                "<J dot B> Redl",
+                data=data,
+                grid=grid,
+                ne=ne,
+                Te=Te,
+                Ti=Ti,
+                Zeff=Zeff,
+                helicity_N=helicity_N,
+            )
+            data = eq.compute("rho", data=data, grid=grid)
+            import matplotlib.pyplot as plt
+
+            plt.plot(data["rho"], data["<J dot B>"], label="MHD")
+            plt.plot(data["rho"], data["<J dot B> Redl"], label="Redl")
+            plt.xlabel("rho")
+            plt.title("<J dot B>")
+            plt.legend(loc=0)
+            plt.show()
 
         def test(grid_type, kwargs, L, M, N):
             grid = grid_type(
@@ -1110,8 +1134,8 @@ class TestBootstrapObjectives:
         kwargs = [{"axis": False}, {}]
 
         # Loop over grid resolutions:
-        Ls = [6, 12, 6, 6]
-        Ms = [6, 6, 12, 6]
+        Ls = [10, 20, 10, 10]
+        Ms = [10, 10, 20, 10]
         Ns = [0, 0, 0, 2]
 
         for grid_type, kwargs in zip(grid_types, kwargs):
@@ -1119,4 +1143,4 @@ class TestBootstrapObjectives:
                 results.append(test(grid_type, kwargs, L, M, N))
 
         results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=3e-3)
+        np.testing.assert_allclose(results, np.mean(results), rtol=0.02)

@@ -219,7 +219,7 @@ def j_dot_B_Redl(
     d_Te_d_s = Te(rho, dr=1) / (2 * rho)
     d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
 
-    # Profiles may go to 0 at s=1, so exclude the last 2 grid points:
+    # Profiles may go to 0 at rho=1, so exclude the last few grid points:
     # These if statements are incompatible with jit:
     """
     if jnp.any(ne_rho[:-2] < 1e17):

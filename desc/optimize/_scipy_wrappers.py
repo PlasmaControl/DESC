@@ -19,18 +19,20 @@ from .utils import (
 def _optimize_scipy_minimize(
     fun, grad, hess, x0, method, x_scale, verbose, stoptol, options=None
 ):
-    """Wrapper for scipy.optimize.least_squares.
+    """Wrapper for scipy.optimize.minimize.
 
     Parameters
     ----------
     fun : callable
         Function to minimize.
-    jac : callable
-        Jacobian of fun.
+    grad : callable
+        Gradient of fun.
+    hess : callable
+        Hessian of fun.
     x0 : ndarray
         Starting point.
     method : str
-        Name of the method to use. Any of the options in scipy.optimize.least_squares.
+        Name of the method to use. Any of the options in scipy.optimize.minimize.
     x_scale : array_like
         Characteristic scale of each variable. Setting x_scale is equivalent to
         reformulating the problem in scaled variables xs = x / x_scale. An alternative
@@ -193,7 +195,7 @@ def _optimize_scipy_minimize(
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - x)))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
@@ -368,7 +370,7 @@ def _optimize_scipy_least_squares(
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["cost"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - x)))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))

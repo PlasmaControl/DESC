@@ -389,7 +389,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - x)))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))

@@ -194,7 +194,7 @@ class Optimizer(IOAble):
             * 1-2 : display a termination report.
             * 3 : display progress during iterations
         maxiter : int, optional
-            Maximum number of iterations. Defaults to len(x0).
+            Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
@@ -271,7 +271,12 @@ class Optimizer(IOAble):
         x0_reduced = project(objective.x(eq))
 
         stoptol = _get_default_tols(
-            self.method, ftol, xtol, gtol, maxiter, options, x0_reduced.size
+            self.method,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            options,
         )
 
         if verbose > 0:
@@ -516,7 +521,6 @@ def _get_default_tols(
     gtol=None,
     maxiter=None,
     options=None,
-    xsize=1,
 ):
     """Parse and set defaults for stopping tolerances."""
     if options is None:
@@ -543,7 +547,7 @@ def _get_default_tols(
         ),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-4))
-    stoptol.setdefault("maxiter", options.pop("maxiter", xsize))
+    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
     stoptol["max_nfev"] = options.pop("max_nfev", np.inf)
     stoptol["max_ngev"] = options.pop("max_ngev", np.inf)

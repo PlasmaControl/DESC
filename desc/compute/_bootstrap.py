@@ -220,13 +220,15 @@ def j_dot_B_Redl(
     d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
 
     # Profiles may go to 0 at s=1, so exclude the last 2 grid points:
+    # These if statements are incompatible with jit:
+    """
     if jnp.any(ne_rho[:-2] < 1e17):
         warnings.warn("ne is surprisingly low. It should have units 1/meters^3")
     if jnp.any(Te_rho[:-2] < 50):
         warnings.warn("Te is surprisingly low. It should have units of eV")
     if jnp.any(Ti_rho[:-2] < 50):
         warnings.warn("Ti is surprisingly low. It should have units of eV")
-
+    """
     # Eq (18d)-(18e) in Sauter.
     # Check that we do not need to convert units of n or T!
     ln_Lambda_e = 31.3 - jnp.log(jnp.sqrt(ne_rho) / Te_rho)
@@ -250,6 +252,8 @@ def j_dot_B_Redl(
         * ln_Lambda_ii
         / (Ti_rho * Ti_rho * (epsilon**1.5))
     )
+    # These if statements are incompatible with jit:
+    """
     if jnp.any(nu_e[:-2] < 1e-6):
         warnings.warn(
             "nu_*e is surprisingly low. Check that the density and temperature are correct."
@@ -266,7 +270,7 @@ def j_dot_B_Redl(
         warnings.warn(
             "nu_*i is surprisingly large. Check that the density and temperature are correct."
         )
-
+    """
     # Redl eq (11):
     X31 = f_t / (
         1
@@ -464,14 +468,12 @@ def compute_J_dot_B_Redl(
     R_lmn,
     Z_lmn,
     L_lmn,
-    p_l,
     i_l,
     c_l,
     Psi,
     R_transform,
     Z_transform,
     L_transform,
-    pressure,
     iota,
     current,
     data=None,

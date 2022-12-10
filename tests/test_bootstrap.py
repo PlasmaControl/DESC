@@ -10,10 +10,11 @@ from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import PowerSeriesProfile
 from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
 from desc.compute.utils import compress
+from desc.objectives import BootstrapRedlConsistency, ObjectiveFunction
 
 
-class TestBootstrap:
-    """Tests for bootstrap current functions"""
+class TestBootstrapCompute:
+    """Tests for bootstrap current compute functions"""
 
     @pytest.mark.unit
     def test_trapped_fraction(self):
@@ -1001,3 +1002,121 @@ class TestBootstrap:
             plt.show()
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
+
+
+class TestBootstrapObjectives:
+    """Tests for bootstrap current objective functions"""
+
+    @pytest.mark.unit
+    def test_BootstrapRedlConsistency_12(self):
+        """
+        The BootstrapRedlConsistency objective function should be
+        1/2 if the equilibrium is a vacuum field.
+        """
+        # n and T profiles do not go to 0 at rho=0 to avoid divide-by-0 there:
+        ne = PowerSeriesProfile(5.0e20 * np.array([1, -0.9]), modes=[0, 8])
+        Te = PowerSeriesProfile(8e3 * np.array([1, -0.9]), modes=[0, 2])
+        Ti = PowerSeriesProfile(9e3 * np.array([1, -0.9]), modes=[0, 2])
+        Zeff = PowerSeriesProfile(np.array([1.2, 0.2]), modes=[0, 2])
+        helicity_N = -4
+        filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
+        eq = desc.io.load(filename)
+
+        def test(grid_type, kwargs, L_factor, M_factor, N_factor, rho_exponent):
+            grid = grid_type(
+                L=eq.L * L_factor,
+                M=eq.M * M_factor,
+                N=eq.N * N_factor,
+                NFP=eq.NFP,
+                **kwargs,
+            )
+            obj = ObjectiveFunction(
+                BootstrapRedlConsistency(
+                    grid=grid,
+                    helicity_N=helicity_N,
+                    ne=ne,
+                    Te=Te,
+                    Ti=Ti,
+                    Zeff=Zeff,
+                    rho_exponent=rho_exponent,
+                ),
+                eq,
+            )
+            scalar_objective = obj.compute_scalar(obj.x(eq))
+            return scalar_objective
+
+        results = []
+
+        # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
+        grid_types = [LinearGrid, QuadratureGrid]
+        kwargs = [{"axis": False}, {}]
+
+        # Loop over grid resolutions:
+        L_factors = [1, 2, 1, 1, 1]
+        M_factors = [1, 1, 2, 1, 1]
+        N_factors = [1, 1, 1, 2, 1]
+        rho_exponents = [0, 1, 1, 1, 2]
+
+        for grid_type, kwargs in zip(grid_types, kwargs):
+            for L_factor, M_factor, N_factor, rho_exponent in zip(
+                L_factors, M_factors, N_factors, rho_exponents
+            ):
+                results.append(
+                    test(grid_type, kwargs, L_factor, M_factor, N_factor, rho_exponent)
+                )
+
+        np.testing.assert_allclose(np.array(results), 0.5, rtol=2e-4)
+
+    @pytest.mark.unit
+    def test_BootstrapRedlConsistency_resolution(self):
+        """
+        Confirm that the BootstrapRedlConsistency objective function is
+        approximately independent of grid resolution.
+        """
+        ne = PowerSeriesProfile(5.0e20 * np.array([1, -0.9]), modes=[0, 8])
+        Te = PowerSeriesProfile(8e3 * np.array([1, -0.9]), modes=[0, 2])
+        Ti = PowerSeriesProfile(9e3 * np.array([1, -0.8]), modes=[0, 2])
+        Zeff = 1.4
+        helicity_N = -4
+        filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+        eq = desc.io.load(filename)[-1]
+
+        def test(grid_type, kwargs, L, M, N):
+            grid = grid_type(
+                L=L,
+                M=M,
+                N=N,
+                NFP=eq.NFP,
+                **kwargs,
+            )
+            obj = ObjectiveFunction(
+                BootstrapRedlConsistency(
+                    grid=grid,
+                    helicity_N=helicity_N,
+                    ne=ne,
+                    Te=Te,
+                    Ti=Ti,
+                    Zeff=Zeff,
+                ),
+                eq,
+            )
+            scalar_objective = obj.compute_scalar(obj.x(eq))
+            return scalar_objective
+
+        results = []
+
+        # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
+        grid_types = [LinearGrid, QuadratureGrid]
+        kwargs = [{"axis": False}, {}]
+
+        # Loop over grid resolutions:
+        Ls = [6, 12, 6, 6]
+        Ms = [6, 6, 12, 6]
+        Ns = [0, 0, 0, 2]
+
+        for grid_type, kwargs in zip(grid_types, kwargs):
+            for L, M, N in zip(Ls, Ms, Ns):
+                results.append(test(grid_type, kwargs, L, M, N))
+
+        results = np.array(results)
+        np.testing.assert_allclose(results, np.mean(results), rtol=3e-3)

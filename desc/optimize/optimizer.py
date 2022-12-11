@@ -546,7 +546,7 @@ def _get_default_tols(
             "ftol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-2
         ),
     )
-    stoptol.setdefault("gtol", options.pop("gtol", 1e-4))
+    stoptol.setdefault("gtol", options.pop("gtol", 1e-6))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
     stoptol["max_nfev"] = options.pop("max_nfev", np.inf)

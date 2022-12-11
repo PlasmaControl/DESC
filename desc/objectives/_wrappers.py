@@ -267,7 +267,11 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fxh = Fx_reduced * wx
         Gxh = Gx_reduced * wx
 
-        Fxh_inv = jnp.linalg.pinv(Fxh, rcond=None)
+        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
 
         # TODO: make this more efficient for finite differences etc. Can probably
         # reduce the number of operations and tangents

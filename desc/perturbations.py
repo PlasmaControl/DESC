@@ -622,6 +622,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if cutoff is None:
             cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
         uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
         sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
         Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
 

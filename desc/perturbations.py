@@ -614,10 +614,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Gc = Gx @ dxdc
 
         # some scaling to improve conditioning and rescale trust region
-        _, wfi = compute_jac_scale(Fx_reduced)
-        _, wgi = compute_jac_scale(Gx_reduced)
-        wxi = np.sqrt(wfi**2 + wgi**2)
-        wx = 1 / wxi
+        wf, _ = compute_jac_scale(Fx_reduced)
+        wg, _ = compute_jac_scale(Gx_reduced)
+        wx = wf + wg
         Fxh = Fx_reduced * wx
         Gxh = Gx_reduced * wx
         if cutoff is None:

@@ -261,10 +261,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         from desc.optimize.utils import compute_jac_scale
 
         # some scaling to improve conditioning
-        _, wfi = compute_jac_scale(Fx_reduced)
-        _, wgi = compute_jac_scale(Gx_reduced)
-        wxi = np.sqrt(wfi**2 + wgi**2)
-        wx = 1 / wxi
+        wf, _ = compute_jac_scale(Fx_reduced)
+        wg, _ = compute_jac_scale(Gx_reduced)
+        wx = wf + wg
         Fxh = Fx_reduced * wx
         Gxh = Gx_reduced * wx
 

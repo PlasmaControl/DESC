@@ -8,7 +8,7 @@ from termcolor import colored
 from desc.backend import put, use_jax
 from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
-from desc.objectives.utils import factorize_linear_constraints
+from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import evaluate_quadratic_form_jac
 from desc.utils import Timer
@@ -395,7 +395,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
-    cutoff=1e-6,
+    cutoff=None,
     verbose=1,
     copy=True,
 ):
@@ -425,6 +425,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         element for the first step and so on.
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
+        Default is np.finfo(A.dtype).eps*max(A.shape) where A is the Jacobian matrix.
     verbose : int
         Level of output.
     copy : bool
@@ -592,13 +593,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing df")
         timer.start("df computation")
         Fx = objective_f.jac(xf)
-        Fx = {arg: Fx[:, objective_f.x_idx[arg]] for arg in objective_f.args}
-        for arg in objective_f.args:
-            if arg not in Fx.keys():
-                Fx[arg] = np.zeros((objective_f.dim_f, objective_f.dimensions[arg]))
-        Fx = np.hstack([Fx[arg] for arg in arg_order if arg in Fx])
+        Fx = align_jacobian(Fx, objective_f, objective_g)
         Fx_reduced = Fx[:, unfixed_idx] @ Z
         Fc = Fx @ dxdc
+        if cutoff is None:
+            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
         Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
         timer.stop("df computation")
         if verbose > 1:
@@ -609,11 +608,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing dg")
         timer.start("dg computation")
         Gx = objective_g.jac(xg)
-        Gx = {arg: Gx[:, objective_g.x_idx[arg]] for arg in objective_g.args}
-        for arg in objective_f.args:
-            if arg not in Gx.keys():
-                Gx[arg] = np.zeros((objective_g.dim_f, objective_g.dimensions[arg]))
-        Gx = np.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        Gx = align_jacobian(Gx, objective_g, objective_f)
         Gx_reduced = Gx[:, unfixed_idx] @ Z
         Gc = Gx @ dxdc
         timer.stop("dg computation")

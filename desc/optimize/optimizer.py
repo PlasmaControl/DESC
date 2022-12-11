@@ -153,7 +153,7 @@ class Optimizer(IOAble):
         if ftol is None:
             ftol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-2
         if gtol is None:
-            gtol = 1e-4
+            gtol = 1e-6
         return ftol, xtol, gtol
 
     # TODO: add copy argument and return the equilibrium?

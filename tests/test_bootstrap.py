@@ -1043,6 +1043,7 @@ class TestBootstrapObjectives:
                 eq,
             )
             scalar_objective = obj.compute_scalar(obj.x(eq))
+            print("Should be approximately 0.5:", scalar_objective)
             return scalar_objective
 
         results = []

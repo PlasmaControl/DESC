@@ -9,6 +9,7 @@ from desc.compute import (
     compute_contravariant_current_density,
     data_index,
 )
+from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
@@ -126,7 +127,7 @@ class BootstrapRedlConsistency(_Objective):
                 rho=np.linspace(1 / 5, 1, 5),
             )
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = self.grid.num_rho
 
         timer = Timer()
         if verbose > 0:
@@ -227,6 +228,17 @@ class BootstrapRedlConsistency(_Objective):
 
         fourpi2 = 4 * jnp.pi * jnp.pi
 
+        # Consider moving the following calculation of rho_weights to
+        # grid.py:Grid._count_nodes()?
+
+        # Get the number of (theta, zeta) grid points for each rho
+        # grid point. The result is a 1D array of size num_rho.
+        num_surf_points, _ = jnp.histogram(
+            self.grid.inverse_rho_idx, bins=self.grid.num_rho
+        )
+        # Get the weights for integrating in rho without also integrating in (theta, zeta):
+        rho_weights = compress(self.grid, self.grid.weights) * num_surf_points / fourpi2
+
         denominator = (
             jnp.sum(
                 (data["<J dot B>"] + data["<J dot B> Redl"]) ** 2
@@ -236,8 +248,10 @@ class BootstrapRedlConsistency(_Objective):
             / fourpi2
         )
 
-        residuals = (data["<J dot B>"] - data["<J dot B> Redl"]) * jnp.sqrt(
-            (data["rho"] ** self.rho_exponent) * self.grid.weights / (fourpi2 * denominator)
-        )
+        residuals = compress(
+            self.grid,
+            (data["<J dot B>"] - data["<J dot B> Redl"])
+            * jnp.sqrt(data["rho"] ** self.rho_exponent),
+        ) * jnp.sqrt(rho_weights / denominator)
 
         return self._shift_scale(residuals)

@@ -198,7 +198,12 @@ class TargetCurrent(_Objective):
         """
         if self.grid is None:
             self.grid = LinearGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
             )
 
         self._dim_f = self.grid.num_rho
@@ -299,7 +304,7 @@ class TargetIota(_Objective):
 
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="target-iota"):
 
-        self._grid = grid
+        self.grid = grid
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._callback_fmt = "Target-iota profile error: {:10.3e}"
 
@@ -317,7 +322,12 @@ class TargetIota(_Objective):
         """
         if self.grid is None:
             self.grid = LinearGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
             )
 
         self._dim_f = self.grid.num_rho
@@ -350,10 +360,7 @@ class TargetIota(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute rotational transform profile errors.

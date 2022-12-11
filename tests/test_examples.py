@@ -218,8 +218,8 @@ def run_qh_step(n, eq):
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid, normalize=False),
-            AspectRatio(target=8, weight=1e1, normalize=False),
+            QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(target=8, weight=1e2),
         ),
         verbose=0,
     )
@@ -266,9 +266,14 @@ def test_qh_optimization1():
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq1a = run_qh_step(0, eq0)
-    rho_err, theta_err = area_difference_desc(eq1, eq1a)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    rho_err, theta_err = area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
+    assert rho_err.mean() < 0.1
+
+    grid = LinearGrid(M=eq1a.M_grid, N=eq1a.N_grid, NFP=eq1a.NFP, sym=False, rho=1.0)
+    data = eq1a.compute("|B|_mn", grid, M_booz=eq1a.M, N_booz=eq1a.N)
+    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
+    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+    np.testing.assert_array_less(B_asym, 1e-1)
 
 
 @pytest.mark.regression
@@ -278,9 +283,14 @@ def test_qh_optimization2():
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq2a = run_qh_step(1, eq1)
-    rho_err, theta_err = area_difference_desc(eq2, eq2a)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    rho_err, theta_err = area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
+    assert rho_err.mean() < 0.1
+
+    grid = LinearGrid(M=eq2a.M_grid, N=eq2a.N_grid, NFP=eq2a.NFP, sym=False, rho=1.0)
+    data = eq2a.compute("|B|_mn", grid, M_booz=eq2a.M, N_booz=eq2a.N)
+    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
+    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+    np.testing.assert_array_less(B_asym, 1e-2)
 
 
 @pytest.mark.regression
@@ -291,9 +301,8 @@ def test_qh_optimization3():
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq3 = load(".//tests//inputs//precise_QH_step3.h5")
     eq3a = run_qh_step(2, eq2)
-    rho_err, theta_err = area_difference_desc(eq3, eq3a)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
+    assert rho_err.mean() < 0.1
 
     grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
     data = eq3a.compute("|B|_mn", grid, M_booz=eq3a.M, N_booz=eq3a.N)
@@ -483,7 +492,7 @@ def test_simsopt_QH_comparison():
     )
     aspect = eq2.compute("R0/a")["R0/a"]
     np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)
-    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 1e-2)
+    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq2)), 3e-2)
 
 
 class TestGetExample:

@@ -170,6 +170,10 @@ def _optimize_scipy_minimize(
             options=options,
         )
         result["allx"] = allx
+        result["nfev"] = len(func_allx)
+        result["ngev"] = len(grad_allx)
+        result["nhev"] = len(hess_allx)
+        result["nit"] = len(allx)
     except StopIteration:
         x = grad_allx[-1]
         f = f_where_x(x, func_allx, func_allf)
@@ -328,7 +332,7 @@ def _optimize_scipy_least_squares(
     EPS = 2 * np.finfo(x0.dtype).eps
     print_header_nonlinear()
     try:
-        _ = scipy.optimize.least_squares(
+        result = scipy.optimize.least_squares(
             fun_wrapped,
             x0=x0,
             args=(),
@@ -342,7 +346,10 @@ def _optimize_scipy_least_squares(
             verbose=0,
             **options,
         )
-
+        result["allx"] = jac_allx
+        result["nfev"] = len(fun_allx)
+        result["njev"] = len(jac_allx)
+        result["nit"] = len(jac_allx)
     except StopIteration:
         x = jac_allx[-1]
         f = f_where_x(x, fun_allx, fun_allf)

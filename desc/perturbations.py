@@ -281,7 +281,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx1_reduced = scale @ dx1_h
         dx1 = recover(dx1_reduced) - xp
@@ -308,7 +307,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx2_reduced = scale @ dx2_h
         dx2 = recover(dx2_reduced) - xp
@@ -335,7 +333,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx3_reduced = scale @ dx3_h
 
@@ -631,9 +628,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         RHS_1g = g - GxFx @ f
 
         # scaling for c
-        dcdx_f = np.linalg.lstsq(Fc, Fx_reduced, rcond=None)[
-            0
-        ]  # approx dc/dx at const f
+        # approx dc/dx at const f
+        dcdx_f = np.linalg.lstsq(Fc, Fx_reduced, rcond=None)[0]
         wc, _ = compute_jac_scale(dcdx_f.T)
         LHSh = LHS * wc
         # restrict to optimization subspace
@@ -659,7 +655,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
 
         dc1h = dc1h_opt @ subspace.T
@@ -675,7 +670,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx1_reduced = dx1h_reduced * wx
     # 2nd order
@@ -716,7 +710,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
 
         dc2h = dc2h_opt @ subspace.T
@@ -732,7 +725,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx2_reduced = dx2h_reduced * wx
     if order > 2:

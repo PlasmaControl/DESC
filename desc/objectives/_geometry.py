@@ -1,11 +1,6 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.compute import (
-    compute_covariant_metric_coefficients,
-    compute_geometry,
-    compute_jacobian,
-    data_index,
-)
+from desc.compute import compute_geometry, data_index
 from desc.grid import QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer

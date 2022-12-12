@@ -1,6 +1,6 @@
 name: Notebook tests
 
-on: 
+on:
   push:
     branches:
       - master
@@ -41,4 +41,3 @@ jobs:
           lscpu
           export PYTHONPATH=$(pwd)
           pytest --nbmake "./docs/notebooks" --nbmake-timeout=600 --ignore=./docs/notebooks/zernike_eval.ipynb
-

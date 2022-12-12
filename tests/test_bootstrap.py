@@ -6,11 +6,14 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
+from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
+from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile
 from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
 from desc.compute.utils import compress
-from desc.objectives import BootstrapRedlConsistency, ObjectiveFunction
+from desc.objectives import *
 
 
 class TestBootstrapCompute:
@@ -1145,3 +1148,104 @@ class TestBootstrapObjectives:
 
         results = np.array(results)
         np.testing.assert_allclose(results, np.mean(results), rtol=0.02)
+
+    def test_bootstrap_consistency(self):
+        """Try optimizing for bootstrap consistency, at fixed boundary shape."""
+
+        ne = PowerSeriesProfile(4.0e20 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        Zeff = 1
+        helicity_N = 0
+        pressure = elementary_charge * (ne * Te + ne * Ti)
+        print("pressure:", pressure)
+        print("pressure params before conversion:", pressure.params)
+        pressure2 = pressure.to_powerseries(order=12)
+        print("pressure2:", pressure2)
+        print("pressure2 params after conversion:", pressure2.params)
+        iota = PowerSeriesProfile([1.1, 0, 0, 0, 0], modes=[0, 2, 4, 6, 8])
+        B0 = 5.0  # Mean |B|
+        LM_resolution = 8
+
+        # Set initial condition:
+        Rmajor = 6.0
+        aminor = 2.0
+        NFP = 1
+        surface = FourierRZToroidalSurface(
+            R_lmn=np.array([Rmajor, aminor]),
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=np.array([aminor]),
+            modes_Z=[[-1, 0]],
+            NFP=NFP,
+        )
+
+        eq = Equilibrium(
+            surface=surface,
+            pressure=pressure2,
+            # pressure=pressure.to_powerseries(),
+            # current=current,
+            iota=iota,
+            Psi=B0 * np.pi * (aminor**2),
+            NFP=NFP,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+
+        eq.solve(
+            verbose=3,
+            ftol=1e-8,
+            # constraints=get_fixed_boundary_constraints(iota=False),
+            # constraints=get_fixed_boundary_constraints(profiles=False),
+            constraints=get_fixed_boundary_constraints(),
+            optimizer=Optimizer("lsq-exact"),
+            objective=ObjectiveFunction(objectives=ForceBalance()),
+        )
+
+        eq.save("test_bootstrap_consistency_initial.h5")
+        # eq = desc.io.load("test_bootstrap_consistency_initial.h5")
+
+        # Done establishing the initial condition. Now set up the optimization.
+
+        constraints = (
+            ForceBalance(),
+            FixBoundaryR(),
+            FixBoundaryZ(),
+            FixPressure(),
+            # FixCurrent(),
+            FixPsi(),
+        )
+
+        # grid for bootstrap consistency objective:
+        grid = QuadratureGrid(
+            L=eq.L,
+            M=eq.M,
+            N=eq.N,
+            NFP=eq.NFP,
+        )
+        objective = ObjectiveFunction(
+            BootstrapRedlConsistency(
+                grid=grid,
+                helicity_N=helicity_N,
+                ne=ne,
+                Te=Te,
+                Ti=Ti,
+                Zeff=Zeff,
+            )
+        )
+        eq, result = eq.optimize(
+            verbose=3,
+            objective=objective,
+            constraints=constraints,
+            optimizer=Optimizer("scipy-trf"),
+            ftol=1e-6,
+            maxiter=200,
+            # options={"max_nfev": 200},
+            options={"solve_options": {"verbose": 2}, "initial_trust_ratio": 0.1},
+        )
+
+        eq.save("test_bootstrap_consistency_final.h5")

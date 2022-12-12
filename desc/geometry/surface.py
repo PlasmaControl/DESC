@@ -233,10 +233,8 @@ class FourierRZToroidalSurface(Surface):
             self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                (
-                    f"R_lmn should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self.R_basis.num_modes} modes."
-                )
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     @property
@@ -250,10 +248,8 @@ class FourierRZToroidalSurface(Surface):
             self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                (
-                    f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self.R_basis.num_modes} modes."
-                )
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):
@@ -482,7 +478,7 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        f = open(path, "r")
+        f = open(path)
         if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
@@ -531,7 +527,7 @@ class FourierRZToroidalSurface(Surface):
         assert mirror_ratio <= 2
         a = np.sqrt(elongation) / aspect_ratio  # major axis
         b = 1 / (aspect_ratio * np.sqrt(elongation))  # minor axis
-        epsilon = (2 - np.sqrt(4 - mirror_ratio ** 2)) / mirror_ratio
+        epsilon = (2 - np.sqrt(4 - mirror_ratio**2)) / mirror_ratio
 
         R_lmn = np.array(
             [
@@ -777,10 +773,8 @@ class ZernikeRZToroidalSection(Surface):
             self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                (
-                    f"R_lmn should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self.R_basis.num_modes} modes."
-                )
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     @property
@@ -794,10 +788,8 @@ class ZernikeRZToroidalSection(Surface):
             self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                (
-                    f"Z_lmn should have the same size as the basis, got {len(new)} for "
-                    + f"basis with {self.R_basis.num_modes} modes."
-                )
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     def get_coeffs(self, l, m=0):

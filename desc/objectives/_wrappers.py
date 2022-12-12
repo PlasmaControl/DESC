@@ -8,6 +8,7 @@ from desc.compute import arg_order
 from ._equilibrium import CurrentDensity
 from .objective_funs import ObjectiveFunction
 from .utils import (
+    align_jacobian,
     factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -233,17 +234,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
         Gx = self._objective.jac(xg)
-        Fx = {
-            arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
-        }
-        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
-        for arg in self._eq_objective.args:
-            if arg not in Fx.keys():
-                Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-            if arg not in Gx.keys():
-                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
-        Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
-        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
+        Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
@@ -251,9 +244,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
         Gc = Gx @ dxdc
-
-        GxFx = Gx_reduced @ Fx_reduced_inv
-        LHS = GxFx @ Fc - Gc
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
         return -LHS
 
     def hess(self, x):

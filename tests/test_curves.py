@@ -70,7 +70,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
-        np.testing.assert_allclose(r, np.sqrt(1 ** 2 + 9 ** 2))
+        np.testing.assert_allclose(r, np.sqrt(1**2 + 9**2))
         np.testing.assert_allclose(p, np.arctan2(-9, 1))
         np.testing.assert_allclose(z, 1)
 
@@ -198,7 +198,7 @@ class TestXYZCurve:
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
-        np.testing.assert_allclose(r, np.sqrt(1 ** 2 + 11 ** 2))
+        np.testing.assert_allclose(r, np.sqrt(1**2 + 11**2))
         np.testing.assert_allclose(p, np.arctan2(-11, 1))
         np.testing.assert_allclose(z, 1)
 

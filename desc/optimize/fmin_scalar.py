@@ -263,7 +263,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
                 g0 = g
                 g1 = grad(x + ga_fd_step * step_h * scale, *args)
                 ngev += 1
-                dg = (g1 - g0) / ga_fd_step ** 2
+                dg = (g1 - g0) / ga_fd_step**2
                 ga_step_h = (
                     -scale_inv * jnp.linalg.solve(H, dg) + 1 / ga_fd_step * step_h
                 )

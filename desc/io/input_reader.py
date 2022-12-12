@@ -167,9 +167,9 @@ class InputReader:
             "curr_ratio": np.atleast_1d(1.0),
             "bdry_ratio": np.atleast_1d(1.0),
             "pert_order": np.atleast_1d(1),
-            "ftol": np.atleast_1d(1e-2),
-            "xtol": np.atleast_1d(1e-6),
-            "gtol": np.atleast_1d(1e-6),
+            "ftol": np.atleast_1d(None),
+            "xtol": np.atleast_1d(None),
+            "gtol": np.atleast_1d(None),
             "nfev": np.atleast_1d(None),
             "objective": "force",
             "optimizer": "lsq-exact",
@@ -197,7 +197,7 @@ class InputReader:
 
         # open files, unless they are already open files
         if not isinstance(fname, io.IOBase):
-            file = open(fname, "r")
+            file = open(fname)
         else:
             file = fname
         file.seek(0)
@@ -525,7 +525,7 @@ class InputReader:
 
             # catch lines that don't match a valid command
             if not flag and command not in ["", " "]:
-                raise IOError(
+                raise OSError(
                     colored(
                         "The following line is not a valid input:\n" + command, "red"
                     )
@@ -533,11 +533,11 @@ class InputReader:
 
         # error handling
         if np.any(inputs["M"] == 0):
-            raise IOError(colored("M_pol is not assigned.", "red"))
+            raise OSError(colored("M_pol is not assigned.", "red"))
         if np.sum(inputs["surface"]) == 0:
-            raise IOError(colored("Fixed-boundary surface is not assigned.", "red"))
+            raise OSError(colored("Fixed-boundary surface is not assigned.", "red"))
         if curr_flag and iota_flag:
-            raise IOError(colored("Cannot specify both iota and current.", "red"))
+            raise OSError(colored("Cannot specify both iota and current.", "red"))
 
         # remove unused profile
         if iota_flag:
@@ -789,7 +789,7 @@ class InputReader:
 
         """
         if not isinstance(vmec_fname, io.IOBase):
-            vmec_file = open(vmec_fname, "r")
+            vmec_file = open(vmec_fname)
         else:
             vmec_file = vmec_fname
 
@@ -811,10 +811,10 @@ class InputReader:
             "curr_ratio": 1.0,
             "bdry_ratio": 1.0,
             "pert_order": 1,
-            "ftol": 1e-2,
-            "xtol": 1e-6,
-            "gtol": 1e-6,
-            "nfev": 50,
+            "ftol": None,
+            "xtol": None,
+            "gtol": None,
+            "nfev": None,
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -1297,7 +1297,7 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if len(numbers) > 0:
-                    raise IOError(
+                    raise OSError(
                         colored("Cannot handle multi-line VMEC inputs!", "red")
                     )
 
@@ -1311,9 +1311,7 @@ class InputReader:
         # delete surface modes below threshold magnitude
         inputs["surface"] = np.delete(
             inputs["surface"],
-            np.where((np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1)))[
-                0
-            ],
+            np.where(np.all(np.abs(inputs["surface"][:, -2:]) < threshold, axis=1))[0],
             axis=0,
         )
         # add radial mode numbers to surface array

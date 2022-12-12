@@ -5,7 +5,7 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.objectives import FixCurrent, FixIota, FixLambdaGauge
+from desc.objectives import FixBoundaryZ, FixCurrent, FixIota, FixLambdaGauge
 from desc.profiles import PowerSeriesProfile
 
 
@@ -81,6 +81,20 @@ def test_bc_on_interior_surfaces():
 
     np.testing.assert_allclose(surf.R_lmn, surf5.R_lmn, atol=1e-12)
     np.testing.assert_allclose(surf.Z_lmn, surf5.Z_lmn, atol=1e-12)
+
+
+@pytest.mark.unit
+def test_constrain_bdry_with_only_one_mode():
+    """Test Fixing boundary with a surface with only one mode in its basis."""
+    eq = Equilibrium()
+    FixZ = FixBoundaryZ(fixed_boundary=True)
+    try:
+        FixZ.build(eq)
+    except Exception:
+        pytest.fail(
+            "Error encountered when attempting to constrain surface with"
+            + " only one mode in its basis"
+        )
 
 
 @pytest.mark.unit

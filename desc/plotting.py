@@ -869,7 +869,7 @@ def plot_fsa(
     lw = kwargs.pop("lw", 1)
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
-    grid = LinearGrid(M=M, N=N, NFP=1, rho=rho)
+    grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
     g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
     data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
@@ -1979,7 +1979,7 @@ def plot_qs_error(
         if fB:
             data = eq.compute("|B|_mn", grid, data)
             modes = data["B modes"]
-            idx = np.where((modes[1, :] * helicity[1] != modes[2, :] * helicity[0]))[0]
+            idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
                 np.sum(data["|B|_mn"] ** 2)
             )
@@ -1989,7 +1989,7 @@ def plot_qs_error(
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                / B0 ** 3
+                / B0**3
             )
             f_C = np.append(f_C, f_c)
         if fT:
@@ -1997,8 +1997,8 @@ def plot_qs_error(
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                * R0 ** 2
-                / B0 ** 4
+                * R0**2
+                / B0**4
             )
             f_T = np.append(f_T, f_t)
 
@@ -2458,7 +2458,7 @@ def plot_logo(savepath=None, **kwargs):
     fig_width = kwargs.get("fig_width", 3)
     fig_height = fig_width / 2
     contour_lw_ratio = kwargs.get("contour_lw_ratio", 0.3)
-    lw = fig_width ** 0.5
+    lw = fig_width**0.5
 
     transparent = False
     if BGcolor == "dark":
@@ -2651,10 +2651,8 @@ def plot_field_lines_sfl(
     """
     if rho == 0:
         raise NotImplementedError(
-            (
-                "Currently does not support field line tracing of the magnetic axis, "
-                + "please input 0 < rho <= 1"
-            )
+            "Currently does not support field line tracing of the magnetic axis, "
+            + "please input 0 < rho <= 1"
         )
 
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))
@@ -2704,10 +2702,8 @@ def plot_field_lines_sfl(
     # only need to do this after finding the grid corresponding to
     # desired rho, vartheta, phi
     print(
-        (
-            "Calculating field line (R,phi,Z) coordinates corresponding to "
-            + "(rho,theta,zeta) coordinates"
-        )
+        "Calculating field line (R,phi,Z) coordinates corresponding to "
+        + "(rho,theta,zeta) coordinates"
     )
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:

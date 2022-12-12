@@ -25,8 +25,8 @@ from desc.optimize import Optimizer, fmintr, lsqtr, sgd
 def vector_fun(x, p):
     """Complicated-ish vector valued function for testing least squares."""
     a0 = x * p[0]
-    a1 = jnp.exp(-(x ** 2) * p[1])
-    a2 = jnp.cos(jnp.sin(x * p[2] - x ** 2 * p[3]))
+    a1 = jnp.exp(-(x**2) * p[1])
+    a2 = jnp.cos(jnp.sin(x * p[2] - x**2 * p[3]))
     a3 = jnp.sum(
         jnp.array([(x + 2) ** -(i * 2) * pi ** (i + 1) for i, pi in enumerate(p[3:])]),
         axis=0,
@@ -42,8 +42,8 @@ B1 = 8
 C1 = -1
 SCALAR_FUN_SOLN = np.array(
     [
-        (-B0 + np.sqrt(B0 ** 2 - 4 * A0 * C0)) / (2 * A0),
-        (-B1 + np.sqrt(B1 ** 2 - 4 * A1 * C1)) / (2 * A1),
+        (-B0 + np.sqrt(B0**2 - 4 * A0 * C0)) / (2 * A0),
+        (-B1 + np.sqrt(B1**2 - 4 * A1 * C1)) / (2 * A1),
     ]
 )
 
@@ -246,7 +246,7 @@ def test_no_iterations():
 @pytest.mark.unit
 @pytest.mark.slow
 def test_overstepping():
-    """Test that equilibrium is correctly NOT updated when final function value is worse.
+    """Test that equilibrium is NOT updated when final function value is worse.
 
     Previously, the optimizer would reach a point where no decrease was possible but
     due to noisy gradients it would keep trying until dx < xtol. However, the final
@@ -259,6 +259,7 @@ def test_overstepping():
 
         name = "Dummy"
         _print_value_fmt = "Dummy: {:.3e}"
+        _units = "(Foo)"
 
         def build(self, eq, *args, **kwargs):
 
@@ -342,3 +343,30 @@ def test_overstepping():
     assert len(history["alltr"]) > 1
     # but all steps increase cost so expect original x at the end
     np.testing.assert_allclose(x0, x1, rtol=1e-14, atol=1e-14)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_maxiter_1_and_0_solve():
+    """Test that solves with maxiter 1 and 0 terminate correctly."""
+    # correctly meaning they terminate, instead of looping infinitely
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+    )
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+    eq = desc.examples.get("SOLOVEV")
+    for opt in ["lsq-exact", "dogleg-bfgs"]:
+        eq, result = eq.solve(
+            maxiter=1, constraints=constraints, objective=obj, optimizer=opt
+        )
+        assert result["nfev"] <= 2
+    for opt in ["lsq-exact", "dogleg-bfgs"]:
+        eq, result = eq.solve(
+            maxiter=0, constraints=constraints, objective=obj, optimizer=opt
+        )
+        assert result["nfev"] <= 1

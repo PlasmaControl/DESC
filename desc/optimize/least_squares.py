@@ -159,9 +159,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     # but the geometric mean seems to work well
     init_tr = {
         "scipy": np.linalg.norm(x * scale_inv),
-        "conngould": np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2),
+        "conngould": np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2),
         "mix": np.sqrt(
-            np.sum(g_h ** 2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
+            np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
@@ -188,6 +188,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     message = None
     step_norm = np.inf
     actual_reduction = np.inf
+    reduction_ratio = 0
 
     if verbose > 1:
         print_header_nonlinear()
@@ -220,6 +221,26 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             B_h = jnp.dot(J_h.T, J_h)
 
         actual_reduction = -1
+
+        success, message = check_termination(
+            actual_reduction,
+            cost,
+            step_norm,
+            x_norm,
+            g_norm,
+            reduction_ratio=reduction_ratio,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            iteration=iteration,
+            maxiter=maxiter,
+            nfev=nfev,
+            max_nfev=max_nfev,
+            ngev=0,
+            max_ngev=np.inf,
+            nhev=njev,
+            max_nhev=max_njev,
+        )
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.

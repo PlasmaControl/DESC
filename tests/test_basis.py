@@ -43,7 +43,7 @@ class TestBasis:
         p = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         x = np.linspace(0, 1, 11)
 
-        correct_vals = np.array([x ** 2, x, np.ones_like(x), x ** 2 + x + 1])
+        correct_vals = np.array([x**2, x, np.ones_like(x), x**2 + x + 1])
         values = polyval_vec(p, x)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
@@ -117,7 +117,7 @@ class TestBasis:
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
-        correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
+        correct_vals = np.array([np.ones_like(r), r, r**2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
         values = powers(r, l, dr=0)
@@ -135,23 +135,23 @@ class TestBasis:
 
         # correct value functions
         def Z3_1(x):
-            return 3 * x ** 3 - 2 * x
+            return 3 * x**3 - 2 * x
 
         def Z4_2(x):
-            return 4 * x ** 4 - 3 * x ** 2
+            return 4 * x**4 - 3 * x**2
 
         def Z6_2(x):
-            return 15 * x ** 6 - 20 * x ** 4 + 6 * x ** 2
+            return 15 * x**6 - 20 * x**4 + 6 * x**2
 
         # correct derivative functions
         def dZ3_1(x):
-            return 9 * x ** 2 - 2
+            return 9 * x**2 - 2
 
         def dZ4_2(x):
-            return 16 * x ** 3 - 6 * x
+            return 16 * x**3 - 6 * x
 
         def dZ6_2(x):
-            return 90 * x ** 5 - 80 * x ** 3 + 12 * x
+            return 90 * x**5 - 80 * x**3 + 12 * x
 
         correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
         correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
@@ -187,7 +187,7 @@ class TestBasis:
         grid = LinearGrid(rho=11)
         r = grid.nodes[:, 0]  # rho coordinates
 
-        correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
+        correct_vals = np.array([np.ones_like(r), r, r**2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
         basis = PowerSeries(L=2, sym=False)

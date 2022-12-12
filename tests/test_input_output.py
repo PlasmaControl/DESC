@@ -90,7 +90,7 @@ class TestInputReader:
         assert ir.args.plot == 0, "plot is not default 0"
         assert ir.args.quiet is False, "quiet is not default False"
         assert ir.args.verbose == 0, "verbose is not default 0"
-        assert ir.args.logging == 0, "logging is not default 0"
+        assert ir.args.logging == 2, "logging is not default 2"
         assert ir.args.numpy is False, "numpy is not default False"
         assert (
             os.environ["DESC_BACKEND"] == "jax"

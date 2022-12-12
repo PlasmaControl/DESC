@@ -23,7 +23,7 @@ from desc.objectives import (
     WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer
+from desc.utils import Timer, set_console_logging
 
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
@@ -171,6 +171,7 @@ class Optimizer(IOAble):
         gtol=None,
         x_scale="auto",
         maxiter=None,
+        verbose=0,
         options={},
     ):
         """Optimize an objective function.
@@ -208,6 +209,9 @@ class Optimizer(IOAble):
             inverse norms of the columns of the jacobian or hessian matrix.
         maxiter : int, optional
             Maximum number of iterations. Defaults to size(x)*100.
+        verbose : int
+            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+            with DEBUG level timing and iteration data.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
@@ -223,6 +227,15 @@ class Optimizer(IOAble):
 
         """
         # TODO: document options
+
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+
+
         timer = Timer()
         ftol, xtol, gtol = self._get_default_tols(ftol, xtol, gtol)
 
@@ -401,21 +414,18 @@ class Optimizer(IOAble):
 
             print_header_nonlinear()
             try:
-                #Sends stdout output of scipy method to logger
-                scipy_stringIO = StringIO()
-                with redirect_stdout(scipy_stringIO):
-                    result = scipy.optimize.minimize(
-                        compute_scalar_wrapped,
-                        x0=x0_reduced,
-                        args=(),
-                        method=self.method[len("scipy-") :],
-                        jac=grad_wrapped,
-                        hess=hess_wrapped,
-                        tol=gtol,
-                        callback=callback,
-                        options={"maxiter": maxiter, "disp": 2, **options},
-                    )
-                logging.debug(str(scipy_stringIO.getvalue()))
+                result = scipy.optimize.minimize(
+                    compute_scalar_wrapped,
+                    x0=x0_reduced,
+                    args=(),
+                    method=self.method[len("scipy-") :],
+                    jac=grad_wrapped,
+                    hess=hess_wrapped,
+                    tol=gtol,
+                    callback=callback,
+                    verbose=0,
+                    options={"maxiter": maxiter, **options},
+                )
                 result["allx"] = allx
             except StopIteration:
                 result = {
@@ -441,24 +451,19 @@ class Optimizer(IOAble):
                 allx.append(x_reduced)
                 return jac_wrapped(x_reduced)
 
-            #Sends stdout output of scipy method to logger
-            lsq_stringIO = StringIO()
-            with redirect_stdout(lsq_stringIO):
-                result = scipy.optimize.least_squares(
-                    compute_wrapped,
-                    x0=x0_reduced,
-                    args=(),
-                    jac=jac,
-                    method=self.method[len("scipy-") :],
-                    x_scale=x_scale,
-                    ftol=ftol,
-                    xtol=xtol,
-                    gtol=gtol,
-                    max_nfev=maxiter,
-                    verbose=2,
+            result = scipy.optimize.least_squares(
+                compute_wrapped,
+                x0=x0_reduced,
+                args=(),
+                jac=jac,
+                method=self.method[len("scipy-") :],
+                x_scale=x_scale,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                max_nfev=maxiter,
+                verbose=0,
                 )
-            logging.debug(str(lsq_stringIO.getvalue()))
-
             result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:

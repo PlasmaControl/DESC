@@ -12,7 +12,7 @@ from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import evaluate_quadratic_form_jac
-from desc.utils import Timer
+from desc.utils import Timer, set_console_logging
 
 __all__ = ["perturb", "optimal_perturb"]
 
@@ -33,6 +33,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     order=2,
     tr_ratio=0.1,
     weight="auto",
+    verbose=0,
     copy=True,
 ):
     """Perturb an Equilibrium with respect to input parameters.
@@ -59,6 +60,9 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     weight : ndarray, "auto", or None, optional
         1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
         matrices. Default is to weight by (mode number)**2. None applies no weighting.
+    verbose : int
+            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+            with DEBUG level timing and iteration data.
     copy : bool
         Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 
@@ -68,6 +72,14 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Perturbed equilibrium.
 
     """
+    
+    if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+    if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+    if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+   
     if not use_jax:
         warnings.warn(
             colored(
@@ -115,7 +127,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         deltas["Rb_lmn"] = dRb
     if dZb is not None and np.any(dZb):
         deltas["Zb_lmn"] = dZb
-
+         
     logging.info("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
@@ -255,7 +267,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
         RHS3 += objective.jvp((dx2, tangents), x)
         timer.stop("d^3f computation")
-        imer.disp("d^3f computation")
+        timer.disp("d^3f computation")
 
         dx3_h, hit, alpha = trust_region_step_exact_svd(
             RHS3,
@@ -325,6 +337,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     order=2,
     tr_ratio=[0.1, 0.25],
     cutoff=1e-6,
+    verbose=0,
     copy=True,
 ):
     """Perturb an Equilibrium with respect to input parameters to optimize an objective.
@@ -353,6 +366,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         element for the first step and so on.
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
+    verbose : int
+        Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+        with DEBUG level timing and iteration data.
     copy : bool
         Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 
@@ -362,6 +378,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         optimized equilibrium
 
     """
+    if verbose == 0:
+        set_console_logging(console_log_level="CRITICAL")
+    if verbose == 1:
+        set_console_logging(console_log_level="INFO")
+    if verbose == 2:
+        set_console_logging(console_log_level="DEBUG")
+
     if not use_jax:
         warnings.warn(
             colored(
@@ -425,6 +448,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         deltas["Zb_lmn"] = dZb
 
     if not len(deltas):
+        logging.error("At least one input must be a free variable for optimization.")
         raise ValueError("At least one input must be a free variable for optimization.")
 
     logging.info("Perturbing {}".format(", ".join(deltas.keys())))
@@ -446,11 +470,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dim_c, dim_opt = subspace.shape
 
     if dim_c != c.size:
+        logging.error("Number of parameters: {}".format(dim_opt))
+        logging.error("Number of objectives: {}".format(objective_g.dim_f))
+        logging.error("Invalid dimension: opt_subspace must have {} rows.".format(c.size))
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-    logging.error("Number of parameters: {}".format(dim_opt))
-    logging.error("Number of objectives: {}".format(objective_g.dim_f))
+
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
@@ -547,7 +573,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         # restrict to optimization subspace
         LHS_opt = LHS @ subspace
 
-        logging.ingo("Factoring LHS")
+        logging.info("Factoring LHS")
         timer.start("LHS factorization")
         ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
         timer.stop("LHS factorization")

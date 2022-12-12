@@ -89,7 +89,7 @@ class BootstrapRedlConsistency(_Objective):
     _scalar = False
     _linear = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Bootstrap current self-consistency: {:10.3e}"
+    _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
 
     def __init__(
         self,

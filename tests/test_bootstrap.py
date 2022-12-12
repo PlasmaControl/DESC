@@ -10,7 +10,7 @@ from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.optimize import Optimizer
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
 from desc.compute.utils import compress
 from desc.objectives import *
@@ -1149,23 +1149,28 @@ class TestBootstrapObjectives:
         results = np.array(results)
         np.testing.assert_allclose(results, np.mean(results), rtol=0.02)
 
+    @pytest.mark.unit
+    @pytest.mark.slow
     def test_bootstrap_consistency(self):
-        """Try optimizing for bootstrap consistency, at fixed boundary shape."""
+        """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape."""
 
-        ne = PowerSeriesProfile(4.0e20 * np.array([1, -1]), modes=[0, 10])
-        Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
+        ne0 = 4.0e20
+        T0 = 12.0e3
+        ne = PowerSeriesProfile(ne0 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(T0 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         Zeff = 1
         helicity_N = 0
-        pressure = elementary_charge * (ne * Te + ne * Ti)
-        print("pressure:", pressure)
-        print("pressure params before conversion:", pressure.params)
-        pressure2 = pressure.to_powerseries(order=12)
-        print("pressure2:", pressure2)
-        print("pressure2 params after conversion:", pressure2.params)
-        iota = PowerSeriesProfile([1.1, 0, 0, 0, 0], modes=[0, 2, 4, 6, 8])
+        pressure = PowerSeriesProfile(
+            2 * ne0 * T0 * elementary_charge * np.array([1, -1, 0, 0, 0, -1, 1]),
+            modes=[0, 2, 4, 6, 8, 10, 12],
+        )
         B0 = 5.0  # Mean |B|
         LM_resolution = 8
+
+        initial_iota = 0.61
+        num_iota_points = 21
+        iota = SplineProfile(np.full(num_iota_points, initial_iota))
 
         # Set initial condition:
         Rmajor = 6.0
@@ -1181,9 +1186,7 @@ class TestBootstrapObjectives:
 
         eq = Equilibrium(
             surface=surface,
-            pressure=pressure2,
-            # pressure=pressure.to_powerseries(),
-            # current=current,
+            pressure=pressure,
             iota=iota,
             Psi=B0 * np.pi * (aminor**2),
             NFP=NFP,
@@ -1199,8 +1202,6 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            # constraints=get_fixed_boundary_constraints(iota=False),
-            # constraints=get_fixed_boundary_constraints(profiles=False),
             constraints=get_fixed_boundary_constraints(),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance()),
@@ -1216,15 +1217,14 @@ class TestBootstrapObjectives:
             FixBoundaryR(),
             FixBoundaryZ(),
             FixPressure(),
-            # FixCurrent(),
             FixPsi(),
         )
 
         # grid for bootstrap consistency objective:
-        grid = QuadratureGrid(
-            L=eq.L,
-            M=eq.M,
-            N=eq.N,
+        grid = LinearGrid(
+            rho=np.linspace(1e-4, 1 - 1e-4, (num_iota_points - 1) * 2 + 1),
+            M=eq.M * 2,
+            N=eq.N * 2,
             NFP=eq.NFP,
         )
         objective = ObjectiveFunction(
@@ -1243,9 +1243,29 @@ class TestBootstrapObjectives:
             constraints=constraints,
             optimizer=Optimizer("scipy-trf"),
             ftol=1e-6,
-            maxiter=200,
-            # options={"max_nfev": 200},
-            options={"solve_options": {"verbose": 2}, "initial_trust_ratio": 0.1},
         )
 
         eq.save("test_bootstrap_consistency_final.h5")
+
+        scalar_objective = objective.compute_scalar(objective.x(eq))
+        assert scalar_objective < 3e-5
+        data = eq.compute("<J dot B>", grid=grid)
+        data = eq.compute(
+            "<J dot B> Redl",
+            grid=grid,
+            ne=ne,
+            Te=Te,
+            Ti=Ti,
+            Zeff=Zeff,
+            helicity_N=helicity_N,
+            data=data,
+        )
+        # Innermost point has larger error, probably since iota -> 0 there, so drop it:
+        J_dot_B_MHD = compress(grid, data["<J dot B>"])[1:]
+        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])[1:]
+
+        assert np.max(J_dot_B_MHD) < 4e5
+        assert np.max(J_dot_B_MHD) > 0
+        assert np.min(J_dot_B_MHD) < -5.1e6
+        assert np.min(J_dot_B_MHD) > -5.4e6
+        np.testing.assert_allclose(J_dot_B_MHD, J_dot_B_Redl, atol=5e5)

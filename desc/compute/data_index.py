@@ -1387,6 +1387,15 @@ data_index["R0/a"] = {
     "dim": 0,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
+data_index["a/b"] = {
+    "label": "a / b",
+    "units": "~",
+    "units_long": "None",
+    "description": "Elongation",
+    "fun": "compute_geometry",
+    "dim": 0,
+    "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
+}
 data_index["V(r)"] = {
     "label": "V(\\rho)",
     "units": "m^{3}",

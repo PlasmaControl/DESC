@@ -5,7 +5,14 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import data_index
-from .utils import check_derivs, cross, dot, surface_averages, surface_integrals
+from .utils import (
+    check_derivs,
+    compress,
+    cross,
+    dot,
+    surface_averages,
+    surface_integrals,
+)
 
 
 def compute_flux_coords(
@@ -828,6 +835,9 @@ def compute_geometry(
 
     """
     grid = R_transform.grid
+    data = compute_covariant_metric_coefficients(
+        R_lmn, Z_lmn, R_transform, Z_transform, data=data
+    )
     data = compute_jacobian(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
 
     if check_derivs("V(r)", R_transform, Z_transform):
@@ -838,18 +848,43 @@ def compute_geometry(
             )
         )
     if check_derivs("V_r(r)", R_transform, Z_transform):
+        P = compress(  # perimeter
+            grid,
+            surface_integrals(
+                grid, jnp.sqrt(data["g_tt"]), surface_label="zeta", max_surface=True
+            ),
+            surface_label="zeta",
+        )
+        A = compress(  # area
+            grid,
+            surface_integrals(
+                grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
+            ),
+            surface_label="zeta",
+        )
+        # derived from Ramanujan approximation for the perimeter of an ellipse
+        a = (  # semi-major radius
+            jnp.sqrt(3)
+            * (
+                jnp.sqrt(8 * jnp.pi * A + P**2)
+                + jnp.sqrt(
+                    2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
+                    - 40 * jnp.pi * A
+                    + 4 * P**2
+                )
+            )
+            + 3 * P
+        ) / (12 * jnp.pi)
+        b = A / (jnp.pi * a)  # semi-minor radius
         # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
         data["V_r(r)"] = surface_integrals(grid, jnp.abs(data["sqrt(g)"]))
         data["S(r)"] = surface_integrals(grid, data["|e_theta x e_zeta|"])
         data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * grid.weights)
-        data["A"] = jnp.mean(
-            surface_integrals(
-                grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
-            )
-        )
+        data["A"] = jnp.mean(A)
         data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
         data["a"] = jnp.sqrt(data["A"] / jnp.pi)
         data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
+        data["a/b"] = jnp.max(a / b)
     if check_derivs("V_rr(r)", R_transform, Z_transform):
         data["V_rr(r)"] = surface_integrals(
             grid, data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])

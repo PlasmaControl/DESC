@@ -1,14 +1,12 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.backend import jnp
 from desc.compute import (
     compute_covariant_metric_coefficients,
     compute_geometry,
     compute_jacobian,
     data_index,
 )
-from desc.compute.utils import compress, surface_integrals
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Timer
 
@@ -197,20 +195,9 @@ class Elongation(_Objective):
 
         """
         if self.grid is None:
-            self.surf_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-            self.vol_grid = QuadratureGrid(
+            self.grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
-        elif isinstance(self.grid, LinearGrid):
-            self.surf_grid = self.grid
-            self.vol_grid = QuadratureGrid(
-                L=eq.L_grid, M=self.grid.M, N=self.grid.N, NFP=eq.NFP
-            )
-        elif isinstance(self.grid, QuadratureGrid):
-            self.vol_grid = self.grid
-            self.surf_grid = LinearGrid(M=self.grid.M, N=self.grid.N, NFP=eq.NFP)
-        else:
-            raise ValueError("Grid of type {} is not allowed.".format(type(self.grid)))
 
         self._dim_f = 1
 
@@ -219,17 +206,11 @@ class Elongation(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform_surf = Transform(
-            self.surf_grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
-        self._Z_transform_surf = Transform(
-            self.surf_grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._R_transform_vol = Transform(
-            self.vol_grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform_vol = Transform(
-            self.vol_grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
         )
 
         timer.stop("Precomputing transforms")
@@ -254,47 +235,8 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        surf_data = compute_covariant_metric_coefficients(
-            R_lmn, Z_lmn, self._R_transform_surf, self._Z_transform_surf
-        )
-        vol_data = compute_jacobian(
-            R_lmn, Z_lmn, self._R_transform_vol, self._Z_transform_vol
-        )
-
-        P = compress(  # perimeter
-            self.surf_grid,
-            surface_integrals(
-                self.surf_grid, jnp.sqrt(surf_data["g_tt"]), surface_label="zeta"
-            ),
-            surface_label="zeta",
-        )
-        A = compress(  # area
-            self.vol_grid,
-            surface_integrals(
-                self.vol_grid,
-                jnp.abs(vol_data["sqrt(g)"] / vol_data["R"]),
-                surface_label="zeta",
-            ),
-            surface_label="zeta",
-        )
-
-        # derived from Ramanujan approximation for the perimeter of an ellipse
-        a = (
-            jnp.sqrt(3)
-            * (
-                jnp.sqrt(8 * jnp.pi * A + P**2)
-                + jnp.sqrt(
-                    2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
-                    - 40 * jnp.pi * A
-                    + 4 * P**2
-                )
-            )
-            + 3 * P
-        ) / (12 * jnp.pi)
-        b = A / (jnp.pi * a)
-        elongation = jnp.max(a / b)
-
-        return self._shift_scale(elongation)
+        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        return self._shift_scale(data["a/b"])
 
 
 class Volume(_Objective):

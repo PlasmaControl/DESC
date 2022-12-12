@@ -266,3 +266,65 @@ class ToroidalCurrent(_Objective):
         )
         I = compress(self.grid, data["current"], surface_label="rho")
         return self._shift_scale(I)
+
+
+class MirrorRatio(_Objective):
+    """Magnetic mirror ratio = (B_max - B_min) / (B_max + B_min).
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=None, weight=1, name="mirror ratio"):
+
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "Mirror ratio: {:10.3e} (dimensionless)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = 1
+
+        if None in self.target:
+            self.target = (eq.B_mag[1] - eq.B_mag[0]) / (eq.B_mag[0] + eq.B_mag[1])
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, B_mag, **kwargs):
+        """Compute mirror ratio.
+
+        Parameters
+        ----------
+        B_mag : ndarray
+            Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
+
+        Returns
+        -------
+        MR : float
+            Mirror ratio, dimensionless.
+
+        """
+        MR = (B_mag[1] - B_mag[0]) / (B_mag[0] + B_mag[1])
+        return self._shift_scale(MR)

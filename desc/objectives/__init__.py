@@ -8,7 +8,7 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._generic import GenericObjective, ToroidalCurrent
-from ._geometry import AspectRatio, Volume
+from ._geometry import AspectRatio, Elongation, Volume
 from ._qs import (
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,

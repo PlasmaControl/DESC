@@ -2,7 +2,6 @@
 
 import copy
 import numbers
-import os
 import warnings
 from abc import ABC
 from inspect import signature
@@ -11,9 +10,9 @@ import numpy as np
 from termcolor import colored
 
 import desc.compute as compute_funs
-from desc.backend import jit, jnp, put, while_loop
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-from desc.compute import arg_order, compute_jacobian, data_index
+from desc.compute import arg_order, data_index
 from desc.compute.utils import compress
 from desc.geometry import (
     FourierRZCurve,
@@ -21,11 +20,14 @@ from desc.geometry import (
     Surface,
     ZernikeRZToroidalSection,
 )
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
-from desc.io import IOAble, load
+from desc.grid import LinearGrid, QuadratureGrid
+from desc.io import IOAble
 from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Index, copy_coeffs
+from desc.utils import copy_coeffs
+
+from .coords import compute_flux_coords, compute_theta_coords, is_nested, to_sfl
+from .initial_guess import set_initial_guess
 
 
 class _Configuration(IOAble, ABC):
@@ -411,11 +413,13 @@ class _Configuration(IOAble, ABC):
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
 
-    def set_initial_guess(self, *args):  # noqa: C901 - FIXME: simplify this
+    def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
 
         Parameters
         ----------
+        eq : Equilibrium
+            Equilibrium to initialize
         args :
             either:
               - No arguments, in which case eq.surface will be scaled for the guess.
@@ -466,238 +470,7 @@ class _Configuration(IOAble, ABC):
         >>> equil.set_initial_guess(nodes, R, Z, lambda)
 
         """
-        nargs = len(args)
-        if nargs > 4:
-            raise ValueError(
-                "set_initial_guess should be called with 4 or fewer arguments."
-            )
-        if nargs == 0 or nargs == 1 and args[0] is None:
-            if hasattr(self, "_surface"):
-                # use whatever surface is already assigned
-                if hasattr(self, "_axis"):
-                    axisR = np.array(
-                        [self._axis.R_basis.modes[:, -1], self._axis.R_n]
-                    ).T
-                    axisZ = np.array(
-                        [self._axis.Z_basis.modes[:, -1], self._axis.Z_n]
-                    ).T
-                else:
-                    axisR = None
-                    axisZ = None
-                coord = self.surface.rho if hasattr(self.surface, "rho") else None
-                self.R_lmn = self._initial_guess_surface(
-                    self.R_basis,
-                    self.Rb_lmn,
-                    self.surface.R_basis,
-                    axisR,
-                    "lcfs",
-                    coord,
-                )
-                self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis,
-                    self.Zb_lmn,
-                    self.surface.Z_basis,
-                    axisZ,
-                    "lcfs",
-                    coord,
-                )
-            else:
-                raise ValueError(
-                    "set_initial_guess called with no arguments, "
-                    + "but no surface is assigned."
-                )
-        else:  # nargs > 0
-            if isinstance(args[0], Surface):
-                surface = args[0]
-                if nargs > 1:
-                    if isinstance(args[1], FourierRZCurve):
-                        axis = args[1]
-                        axisR = np.array([axis.R_basis.modes[:, -1], axis.R_n]).T
-                        axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
-                    else:
-                        raise TypeError(
-                            "Don't know how to initialize from object type {}".format(
-                                type(args[1])
-                            )
-                        )
-                else:
-                    axisR = None
-                    axisZ = None
-                coord = surface.rho if hasattr(surface, "rho") else None
-                self.R_lmn = self._initial_guess_surface(
-                    self.R_basis,
-                    surface.R_lmn,
-                    surface.R_basis,
-                    axisR,
-                    coord=coord,
-                )
-                self.Z_lmn = self._initial_guess_surface(
-                    self.Z_basis,
-                    surface.Z_lmn,
-                    surface.Z_basis,
-                    axisZ,
-                    coord=coord,
-                )
-            elif isinstance(args[0], _Configuration):
-                eq = args[0]
-                if nargs > 1:
-                    raise ValueError(
-                        "set_initial_guess got unknown additional argument {}.".format(
-                            args[1]
-                        )
-                    )
-                self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
-                self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
-                self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
-            elif isinstance(args[0], (str, os.PathLike)):
-                # from file
-                path = args[0]
-                file_format = None
-                if nargs > 1:
-                    if isinstance(args[1], str):
-                        file_format = args[1]
-                    else:
-                        raise ValueError(
-                            "set_initial_guess got unknown additional argument "
-                            + "{}.".format(args[1])
-                        )
-                try:  # is it desc?
-                    eq = load(path, file_format)
-                except:  # noqa: E722
-                    try:  # maybe its vmec
-                        from desc.vmec import VMECIO
-
-                        eq = VMECIO.load(path)
-                    except:  # noqa: E722
-                        raise ValueError(
-                            "Could not load equilibrium from path {}, ".format(path)
-                            + "please make sure it is a valid DESC or VMEC equilibrium."
-                        )
-                if not isinstance(eq, _Configuration):
-                    if hasattr(eq, "equilibria"):  # it's a family!
-                        eq = eq[-1]
-                    else:
-                        raise TypeError(
-                            "Cannot initialize equilibrium from loaded object of type "
-                            + "{}".format(type(eq))
-                        )
-                self.R_lmn = copy_coeffs(eq.R_lmn, eq.R_basis.modes, self.R_basis.modes)
-                self.Z_lmn = copy_coeffs(eq.Z_lmn, eq.Z_basis.modes, self.Z_basis.modes)
-                self.L_lmn = copy_coeffs(eq.L_lmn, eq.L_basis.modes, self.L_basis.modes)
-
-            elif nargs > 2:  # assume we got nodes and ndarray of points
-                grid = args[0]
-                R = args[1]
-                self.R_lmn = self._initial_guess_points(grid, R, self.R_basis)
-                Z = args[2]
-                self.Z_lmn = self._initial_guess_points(grid, Z, self.Z_basis)
-                if nargs > 3:
-                    lmbda = args[3]
-                    self.L_lmn = self._initial_guess_points(grid, lmbda, self.L_basis)
-                else:
-                    self.L_lmn = jnp.zeros(self.L_basis.num_modes)
-
-            else:
-                raise ValueError(
-                    "Can't initialize equilibrium from args {}.".format(args)
-                )
-
-    def _initial_guess_surface(
-        self, x_basis, b_lmn, b_basis, axis=None, mode=None, coord=None
-    ):
-        """Create an initial guess from boundary coefficients and a magnetic axis guess.
-
-        Parameters
-        ----------
-        x_basis : FourierZernikeBais
-            basis of the flux surfaces (for R, Z, or Lambda).
-        b_lmn : ndarray, shape(b_basis.num_modes,)
-            vector of boundary coefficients associated with b_basis.
-        b_basis : Basis
-            basis of the boundary surface (for Rb or Zb)
-        axis : ndarray, shape(num_modes,2)
-            coefficients of the magnetic axis. axis[i, :] = [n, x0].
-            Only used for 'lcfs' boundary mode. Defaults to m=0 modes of boundary
-        mode : str
-            One of 'lcfs', 'poincare'.
-            Whether the boundary condition is specified by the last closed flux surface
-            (rho=1) or the Poincare section (zeta=0).
-        coord : float or None
-            Surface label (ie, rho, zeta, etc.) for supplied surface.
-
-        Returns
-        -------
-        x_lmn : ndarray
-            vector of flux surface coefficients associated with x_basis.
-
-        """
-        x_lmn = np.zeros((x_basis.num_modes,))
-        if mode is None:
-            # auto-detect based on mode numbers
-            if np.all(b_basis.modes[:, 0] == 0):
-                mode = "lcfs"
-            elif np.all(b_basis.modes[:, 2] == 0):
-                mode = "poincare"
-            else:
-                raise ValueError("Surface should have either l=0 or n=0")
-        if mode == "lcfs":
-            if coord is None:
-                coord = 1.0
-            if axis is None:
-                axidx = np.where(b_basis.modes[:, 1] == 0)[0]
-                axis = np.array([b_basis.modes[axidx, 2], b_lmn[axidx]]).T
-            for k, (l, m, n) in enumerate(b_basis.modes):
-                scale = zernike_radial(coord, abs(m), m)
-                # index of basis mode with lowest radial power (l = |m|)
-                idx0 = np.where((x_basis.modes == [np.abs(m), m, n]).all(axis=1))[0]
-                if m == 0:  # magnetic axis only affects m=0 modes
-                    # index of basis mode with second lowest radial power (l = |m| + 2)
-                    idx2 = np.where(
-                        (x_basis.modes == [np.abs(m) + 2, m, n]).all(axis=1)
-                    )[0]
-                    ax = np.where(axis[:, 0] == n)[0]
-                    if ax.size:
-                        a_n = axis[ax[0], 1]  # use provided axis guess
-                    else:
-                        a_n = b_lmn[k]  # use boundary centroid as axis
-                    x_lmn[idx0] = (b_lmn[k] + a_n) / 2 / scale
-                    x_lmn[idx2] = (b_lmn[k] - a_n) / 2 / scale
-                else:
-                    x_lmn[idx0] = b_lmn[k] / scale
-
-        elif mode == "poincare":
-            for k, (l, m, n) in enumerate(b_basis.modes):
-                idx = np.where((x_basis.modes == [l, m, n]).all(axis=1))[0]
-                x_lmn[idx] = b_lmn[k]
-
-        else:
-            raise ValueError("Boundary mode should be either 'lcfs' or 'poincare'.")
-
-        return x_lmn
-
-    def _initial_guess_points(self, nodes, x, x_basis):
-        """Create an initial guess based on locations of flux surfaces in real space.
-
-        Parameters
-        ----------
-        nodes : Grid or ndarray, shape(k,3)
-            Locations in flux coordinates where real space coordinates are given.
-        x : ndarray, shape(k,)
-            R, Z or lambda values at specified nodes.
-        x_basis : Basis
-            Spectral basis for x (R, Z or lambda)
-
-        Returns
-        -------
-        x_lmn : ndarray
-            Vector of flux surface coefficients associated with x_basis.
-
-        """
-        if not isinstance(nodes, Grid):
-            nodes = Grid(nodes, sort=False)
-        transform = Transform(nodes, x_basis, build=False, build_pinv=True)
-        x_lmn = transform.fit(x)
-        return x_lmn
+        set_initial_guess(self, *args)
 
     def copy(self, deepcopy=True):
         """Return a (deep)copy of this equilibrium."""
@@ -1299,7 +1072,7 @@ class _Configuration(IOAble, ABC):
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
             coordinate.
         L_lmn : ndarray
-            spectral coefficients for lambda. Defaults to self.L_lmn
+            spectral coefficients for lambda. Defaults to eq.L_lmn
         tol : float
             Stopping tolerance.
         maxiter : int > 0
@@ -1312,52 +1085,7 @@ class _Configuration(IOAble, ABC):
             a given coordinate nan will be returned for those values
 
         """
-        if L_lmn is None:
-            L_lmn = self.L_lmn
-        rho, theta_star, zeta = flux_coords.T
-        if maxiter <= 0:
-            raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-        if jnp.any(rho < 0):
-            raise ValueError("rho values must be positive")
-
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
-        # angle in PEST-like flux coordinates
-
-        nodes = flux_coords.copy()
-        A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
-
-        # theta* = theta + lambda
-        lmbda = jnp.dot(A0, L_lmn)
-        k = 0
-
-        def cond_fun(nodes_k_lmbda):
-            nodes, k, lmbda = nodes_k_lmbda
-            theta_star_k = nodes[:, 1] + lmbda
-            err = theta_star - theta_star_k
-            return jnp.any(jnp.abs(err) > tol) & (k < maxiter)
-
-        # Newton method for root finding
-        def body_fun(nodes_k_lmbda):
-            nodes, k, lmbda = nodes_k_lmbda
-            A1 = self.L_basis.evaluate(nodes, (0, 1, 0))
-            lmbda_t = jnp.dot(A1, L_lmn)
-            f = theta_star - nodes[:, 1] - lmbda
-            df = -1 - lmbda_t
-            nodes = put(nodes, Index[:, 1], nodes[:, 1] - f / df)
-            A0 = self.L_basis.evaluate(nodes, (0, 0, 0))
-            lmbda = jnp.dot(A0, L_lmn)
-            k += 1
-            return (nodes, k, lmbda)
-
-        nodes, k, lmbda = jit(while_loop, static_argnums=(0, 1))(
-            cond_fun, body_fun, (nodes, k, lmbda)
-        )
-        theta_star_k = nodes[:, 1] + lmbda
-        err = theta_star - theta_star_k
-        noconverge = jnp.abs(err) > tol
-        nodes = jnp.where(noconverge[:, np.newaxis], jnp.nan, nodes)
-
-        return nodes
+        return compute_theta_coords(self, flux_coords, L_lmn, tol, maxiter)
 
     def compute_flux_coords(
         self, real_coords, R_lmn=None, Z_lmn=None, tol=1e-6, maxiter=20, rhomin=1e-6
@@ -1370,7 +1098,7 @@ class _Configuration(IOAble, ABC):
             2D array of real space coordinates [R,phi,Z]. Each row is a different
             coordinate.
         R_lmn, Z_lmn : ndarray
-            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
+            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
         tol : float
             Stopping tolerance. Iterations stop when sqrt((R-Ri)**2 + (Z-Zi)**2) < tol
         maxiter : int > 0
@@ -1386,77 +1114,9 @@ class _Configuration(IOAble, ABC):
             nan will be returned for those values
 
         """
-        if maxiter <= 0:
-            raise ValueError(f"maxiter must be a positive integer, got{maxiter}")
-        if R_lmn is None:
-            R_lmn = self.R_lmn
-        if Z_lmn is None:
-            Z_lmn = self.Z_lmn
-
-        R, phi, Z = real_coords.T
-        R = jnp.abs(R)
-
-        # nearest neighbor search on coarse grid for initial guess
-        nodes = ConcentricGrid(L=20, M=10, N=0).nodes
-        AR = self.R_basis.evaluate(nodes)
-        AZ = self.Z_basis.evaluate(nodes)
-        Rg = jnp.dot(AR, R_lmn)
-        Zg = jnp.dot(AZ, Z_lmn)
-        distance = (R[:, np.newaxis] - Rg) ** 2 + (Z[:, np.newaxis] - Zg) ** 2
-        idx = jnp.argmin(distance, axis=1)
-
-        rhok = nodes[idx, 0]
-        thetak = nodes[idx, 1]
-        Rk = Rg[idx]
-        Zk = Zg[idx]
-        k = 0
-
-        def cond_fun(k_rhok_thetak_Rk_Zk):
-            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-            return jnp.any(((R - Rk) ** 2 + (Z - Zk) ** 2) > tol ** 2) & (k < maxiter)
-
-        def body_fun(k_rhok_thetak_Rk_Zk):
-            k, rhok, thetak, Rk, Zk = k_rhok_thetak_Rk_Zk
-            nodes = jnp.array([rhok, thetak, phi]).T
-            ARr = self.R_basis.evaluate(nodes, (1, 0, 0))
-            Rr = jnp.dot(ARr, R_lmn)
-            AZr = self.Z_basis.evaluate(nodes, (1, 0, 0))
-            Zr = jnp.dot(AZr, Z_lmn)
-            ARt = self.R_basis.evaluate(nodes, (0, 1, 0))
-            Rt = jnp.dot(ARt, R_lmn)
-            AZt = self.Z_basis.evaluate(nodes, (0, 1, 0))
-            Zt = jnp.dot(AZt, Z_lmn)
-
-            tau = Rt * Zr - Rr * Zt
-            eR = R - Rk
-            eZ = Z - Zk
-            thetak += (Zr * eR - Rr * eZ) / tau
-            rhok += (Rt * eZ - Zt * eR) / tau
-            # negative rho -> rotate theta instead
-            thetak = jnp.where(
-                rhok < 0, (thetak + np.pi) % (2 * np.pi), thetak % (2 * np.pi)
-            )
-            rhok = jnp.abs(rhok)
-            rhok = jnp.clip(rhok, rhomin, 1)
-            nodes = jnp.array([rhok, thetak, phi]).T
-
-            AR = self.R_basis.evaluate(nodes, (0, 0, 0))
-            Rk = jnp.dot(AR, R_lmn)
-            AZ = self.Z_basis.evaluate(nodes, (0, 0, 0))
-            Zk = jnp.dot(AZ, Z_lmn)
-            k += 1
-            return (k, rhok, thetak, Rk, Zk)
-
-        k, rhok, thetak, Rk, Zk = while_loop(
-            cond_fun, body_fun, (k, rhok, thetak, Rk, Zk)
+        return compute_flux_coords(
+            self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
-
-        noconverge = (R - Rk) ** 2 + (Z - Zk) ** 2 > tol ** 2
-        rho = jnp.where(noconverge, jnp.nan, rhok)
-        theta = jnp.where(noconverge, jnp.nan, thetak)
-        phi = jnp.where(noconverge, jnp.nan, phi)
-
-        return jnp.vstack([rho, theta, phi]).T
 
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
@@ -1475,7 +1135,7 @@ class _Configuration(IOAble, ABC):
             Grid on which to evaluate the coordinate jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
-            spectral coefficients for R and Z. Defaults to self.R_lmn, self.Z_lmn
+            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1485,47 +1145,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        if R_lmn is None:
-            R_lmn = self.R_lmn
-        if Z_lmn is None:
-            Z_lmn = self.Z_lmn
-        if grid is None:
-            grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-
-        R_transform = Transform(
-            grid, self.R_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
-        )
-        Z_transform = Transform(
-            grid, self.Z_basis, derivs=data_index["sqrt(g)"]["R_derivs"]
-        )
-        data = compute_jacobian(
-            R_lmn,
-            Z_lmn,
-            R_transform,
-            Z_transform,
-        )
-
-        nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
-        if not nested:
-            if msg == "auto":
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early. "
-                        + "Automatic continuation method failed, consider specifying "
-                        + "continuation steps manually",
-                        "yellow",
-                    )
-                )
-            elif msg == "manual":
-                warnings.warn(
-                    colored(
-                        "WARNING: Flux surfaces are no longer nested, exiting early."
-                        + "Consider taking smaller perturbation/resolution steps "
-                        + "or reducing trust radius",
-                        "yellow",
-                    )
-                )
-        return nested
+        return is_nested(self, grid, R_lmn, Z_lmn, msg)
 
     def to_sfl(
         self,
@@ -1550,11 +1170,11 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         L : int, optional
-            radial resolution to use for SFL equilibrium. Default = 1.5*self.L
+            radial resolution to use for SFL equilibrium. Default = 1.5*eq.L
         M : int, optional
-            poloidal resolution to use for SFL equilibrium. Default = 1.5*self.M
+            poloidal resolution to use for SFL equilibrium. Default = 1.5*eq.M
         N : int, optional
-            toroidal resolution to use for SFL equilibrium. Default = 1.5*self.N
+            toroidal resolution to use for SFL equilibrium. Default = 1.5*eq.N
         L_grid : int, optional
             radial spatial resolution to use for fit to new basis. Default = 2*L
         M_grid : int, optional
@@ -1572,71 +1192,4 @@ class _Configuration(IOAble, ABC):
             Equilibrium transformed to a straight field line coordinate representation.
 
         """
-        L = L or int(1.5 * self.L)
-        M = M or int(1.5 * self.M)
-        N = N or int(1.5 * self.N)
-        L_grid = L_grid or int(2 * L)
-        M_grid = M_grid or int(2 * M)
-        N_grid = N_grid or int(2 * N)
-
-        grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
-        bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
-
-        toroidal_coords = self.compute("R", grid)
-        theta = grid.nodes[:, 1]
-        vartheta = theta + self.compute("lambda", grid)["lambda"]
-        sfl_grid = grid
-        sfl_grid.nodes[:, 1] = vartheta
-
-        bdry_coords = self.compute("R", bdry_grid)
-        bdry_theta = bdry_grid.nodes[:, 1]
-        bdry_vartheta = bdry_theta + self.compute("lambda", bdry_grid)["lambda"]
-        bdry_sfl_grid = bdry_grid
-        bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
-
-        if copy:
-            eq_sfl = self.copy()
-        else:
-            eq_sfl = self
-        eq_sfl.change_resolution(L, M, N)
-
-        R_sfl_transform = Transform(
-            sfl_grid, eq_sfl.R_basis, build=False, build_pinv=True, rcond=rcond
-        )
-        R_lmn_sfl = R_sfl_transform.fit(toroidal_coords["R"])
-        del R_sfl_transform  # these can take up a lot of memory so delete when done.
-
-        Z_sfl_transform = Transform(
-            sfl_grid, eq_sfl.Z_basis, build=False, build_pinv=True, rcond=rcond
-        )
-        Z_lmn_sfl = Z_sfl_transform.fit(toroidal_coords["Z"])
-        del Z_sfl_transform
-        L_lmn_sfl = np.zeros_like(eq_sfl.L_lmn)
-
-        R_sfl_bdry_transform = Transform(
-            bdry_sfl_grid,
-            eq_sfl.surface.R_basis,
-            build=False,
-            build_pinv=True,
-            rcond=rcond,
-        )
-        Rb_lmn_sfl = R_sfl_bdry_transform.fit(bdry_coords["R"])
-        del R_sfl_bdry_transform
-
-        Z_sfl_bdry_transform = Transform(
-            bdry_sfl_grid,
-            eq_sfl.surface.Z_basis,
-            build=False,
-            build_pinv=True,
-            rcond=rcond,
-        )
-        Zb_lmn_sfl = Z_sfl_bdry_transform.fit(bdry_coords["Z"])
-        del Z_sfl_bdry_transform
-
-        eq_sfl.Rb_lmn = Rb_lmn_sfl
-        eq_sfl.Zb_lmn = Zb_lmn_sfl
-        eq_sfl.R_lmn = R_lmn_sfl
-        eq_sfl.Z_lmn = Z_lmn_sfl
-        eq_sfl.L_lmn = L_lmn_sfl
-
-        return eq_sfl
+        return to_sfl(self, L, M, N, L_grid, M_grid, N_grid, rcond, copy)

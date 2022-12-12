@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import put
+from desc.backend import jnp
 from desc.basis import DoubleFourierSeries
 from desc.compute import (
     compute_boozer_coordinates,
@@ -13,6 +13,8 @@ from desc.compute import (
 from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import Timer
+
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -29,6 +31,12 @@ class QuasisymmetryBoozer(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -44,12 +52,16 @@ class QuasisymmetryBoozer(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T)"
+    _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         helicity=(1, 0),
         M_booz=None,
@@ -61,14 +73,20 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
         self._print_value_fmt = (
             "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
             )
             + "{:10.3e} "
-            + units
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -157,6 +175,10 @@ class QuasisymmetryBoozer(_Objective):
 
         self._dim_f = np.sum(self._idx)
 
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"]
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
@@ -239,6 +261,12 @@ class QuasisymmetryTwoTerm(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -250,12 +278,16 @@ class QuasisymmetryTwoTerm(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T^3)"
+    _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
@@ -263,12 +295,20 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self.grid = grid
         self.helicity = helicity
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T^3)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
         self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
+            "Quasi-symmetry ({},{}) two-term error: ".format(
+                self.helicity[0], self.helicity[1]
+            )
             + "{:10.3e} "
-            + units
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -316,6 +356,10 @@ class QuasisymmetryTwoTerm(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -397,6 +441,12 @@ class QuasisymmetryTripleProduct(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -406,20 +456,29 @@ class QuasisymmetryTripleProduct(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T^4/m^2)"
+    _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="QS triple product",
     ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T^4/m^2)"
-        self._print_value_fmt = "Quasi-symmetry error: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -466,6 +525,12 @@ class QuasisymmetryTripleProduct(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = (
+                scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
+            )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

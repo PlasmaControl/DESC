@@ -22,7 +22,7 @@ from desc.objectives import (
     WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer
+from desc.utils import Timer, set_console_logging
 
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
@@ -157,6 +157,7 @@ class Optimizer(IOAble):
         gtol=None,
         x_scale="auto",
         maxiter=None,
+        verbose=0,
         options={},
     ):
         """Optimize an objective function.
@@ -213,6 +214,15 @@ class Optimizer(IOAble):
 
         """
         # TODO: document options
+
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+
+
         timer = Timer()
         # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
         disp = verbose - 1 if verbose > 1 else verbose

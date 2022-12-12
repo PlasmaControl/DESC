@@ -393,6 +393,7 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
+        verbose=0,
         copy=False,
     ):
         """Solve to find the equilibrium configuration.
@@ -420,6 +421,9 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
+        verbose : int
+            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+            with DEBUG level timing and iteration data.
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -468,6 +472,13 @@ class Equilibrium(_Configuration, IOAble):
                 + "on master branch."
             )
 
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+
         result = optimizer.optimize(
             eq,
             objective,
@@ -476,6 +487,7 @@ class Equilibrium(_Configuration, IOAble):
             xtol=xtol,
             gtol=gtol,
             x_scale=x_scale,
+            verbose=verbose,
             maxiter=maxiter,
             options=options,
         )
@@ -505,6 +517,7 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
+        verbose=0,
         copy=False,
     ):
         """Optimize an equilibrium for an objective.
@@ -532,6 +545,9 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
+        verbose : int
+            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+            with DEBUG level timing and iteration data.
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -559,6 +575,13 @@ class Equilibrium(_Configuration, IOAble):
         else:
             eq = self
 
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+
         result = optimizer.optimize(
             eq,
             objective,
@@ -568,6 +591,7 @@ class Equilibrium(_Configuration, IOAble):
             gtol=gtol,
             x_scale=x_scale,
             maxiter=maxiter,
+            verbose=verbose,
             options=options,
         )
 
@@ -592,6 +616,7 @@ class Equilibrium(_Configuration, IOAble):
         ftol=1e-6,
         xtol=1e-6,
         maxiter=50,
+        verbose=0,
         copy=False,
         solve_options={},
         perturb_options={},
@@ -610,6 +635,9 @@ class Equilibrium(_Configuration, IOAble):
             Stopping tolerance on optimization step size.
         maxiter : int
             Maximum number of optimization steps.
+        verbose : int
+            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+            with DEBUG level timing and iteration data.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
         solve_options : dict
@@ -633,6 +661,12 @@ class Equilibrium(_Configuration, IOAble):
         if constraint is None:
             constraint = get_equilibrium_objective()
 
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
         timer = Timer()
         timer.start("Total time")
 
@@ -753,6 +787,7 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
+        verbose=0,
         copy=False,
     ):
         """Perturb an equilibrium.
@@ -774,6 +809,9 @@ class Equilibrium(_Configuration, IOAble):
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
             element for the first step and so on.
+        verbose : int
+            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+            with DEBUG level timing and iteration data.
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
 
@@ -794,6 +832,13 @@ class Equilibrium(_Configuration, IOAble):
             if not constraint.built:
                 constraint.build(self)
 
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+
         eq = perturb(
             self,
             objective,
@@ -809,6 +854,7 @@ class Equilibrium(_Configuration, IOAble):
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
+            verbose=verbose,
             copy=copy,
         )
         eq.solved = False

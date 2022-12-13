@@ -331,7 +331,7 @@ class TargetCurrent(_Objective):
         )
         I = compress(self.grid, data["current"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(I * w)
+        return self._shift_scale(I) * w
 
 
 class TargetIota(_Objective):
@@ -479,4 +479,4 @@ class TargetIota(_Objective):
         )
         iota = compress(self.grid, data["iota"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(iota * w)
+        return self._shift_scale(iota) * w

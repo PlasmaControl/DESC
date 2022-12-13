@@ -306,9 +306,52 @@ class FourierRZToroidalSurface(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        rz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
+        E = jnp.sum(rt * rt, axis=-1)
+        F = jnp.sum(rt * rz, axis=-1)
+        G = jnp.sum(rz * rz, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        rtz = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1, dz=1)
+        rzz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rtt * n, axis=-1)
+        M = jnp.sum(rtz * n, axis=-1)
+        N = jnp.sum(rzz * n, axis=-1)
+        return L, M, N
+
+    def compute_curvature(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute gaussian and mean curvature.
+
+        Parameters
+        ----------
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
+        grid : Grid or array-like
+            toroidal coordinates to compute at. Defaults to self.grid
+            If an integer, assumes that many linearly spaced points in (0,2pi)
+
+        Returns
+        -------
+        K, H, k1, k2 : ndarray, shape(k,)
+            Gaussian, mean and 2 principle curvatures at points specified in grid.
+        """
+        E, F, G = self._compute_first_fundamental_form(R_lmn, Z_lmn, grid)
+        L, M, N = self._compute_second_fundamental_form(R_lmn, Z_lmn, grid)
+        a = E * G - F**2
+        b = F * M - L * G - E * N
+        c = L * N - M**2
+        k1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        k2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        K = k1 * k2
+        H = (k1 + k2) / 2
+        return K, H, k1, k2
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0, basis="rpz"
@@ -825,9 +868,52 @@ class ZernikeRZToroidalSection(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1)
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        E = jnp.sum(rr * rr, axis=-1)
+        F = jnp.sum(rr * rt, axis=-1)
+        G = jnp.sum(rt * rt, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rrr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=2)
+        rrt = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1, dt=1)
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rrr * n, axis=-1)
+        M = jnp.sum(rrt * n, axis=-1)
+        N = jnp.sum(rtt * n, axis=-1)
+        return L, M, N
+
+    def compute_curvature(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute gaussian and mean curvature.
+
+        Parameters
+        ----------
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
+        grid : Grid or array-like
+            toroidal coordinates to compute at. Defaults to self.grid
+            If an integer, assumes that many linearly spaced points in (0,2pi)
+
+        Returns
+        -------
+        K, H, k1, k2 : ndarray, shape(k,)
+            Gaussian, mean and 2 principle curvatures at points specified in grid.
+        """
+        E, F, G = self._compute_first_fundamental_form(R_lmn, Z_lmn, grid)
+        L, M, N = self._compute_second_fundamental_form(R_lmn, Z_lmn, grid)
+        a = E * G - F**2
+        b = F * M - L * G - E * N
+        c = L * N - M**2
+        k1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        k2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        K = k1 * k2
+        H = (k1 + k2) / 2
+        return K, H, k1, k2
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0, basis="rpz"

@@ -304,22 +304,32 @@ class ScaledProfile(Profile):
 
     @property
     def params(self):
-        """ndarray: Parameters for computation."""
-        return (self._scale, self._profile.params)
+        """ndarray: Parameters for computation [scale, profile.params]."""
+        return jnp.concatenate([jnp.atleast_1d(self._scale), self._profile.params])
 
     @params.setter
     def params(self, x):
-        if isinstance(x, (tuple, list)) and len(x) == 2:
+        self._scale, self._profile.params = self._parse_params(x)
+
+    def _parse_params(self, x):
+        if x is None:
+            scale = self._scale
+            params = self._profile.params
+        elif isinstance(x, (tuple, list)) and len(x) == 2:
             params = x[1]
             scale = x[0]
         elif np.isscalar(x):
             scale = x
             params = self._profile.params
-        else:
+        elif len(x) == len(self._profile.params):
             scale = self._scale
             params = x
-        self._scale = scale
-        self._profile.params = params
+        elif len(x) == len(self.params):
+            scale = x[0]
+            params = x[1:]
+        else:
+            raise ValueError("Got wrong number of parameters for ScaledProfile")
+        return scale, params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -340,8 +350,9 @@ class ScaledProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
+        scale, params = self._parse_params(params)
         f = self._profile.compute(params, grid, dr, dt, dz)
-        return self._scale * f
+        return scale * f
 
     def __repr__(self):
         """Get the string form of the object."""
@@ -391,17 +402,30 @@ class SumProfile(Profile):
 
     @property
     def params(self):
-        """ndarray: Parameters for computation."""
-        return tuple(profile.params for profile in self._profiles)
+        """ndarray: Concatenated array of parameters for computation."""
+        return jnp.concatenate([profile.params for profile in self._profiles])
 
     @params.setter
     def params(self, x):
-        if isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
-            for i, profile in enumerate(self._profiles):
-                profile.params = x[i] if x[i] is not None else profile.params
-        else:
+        x = self._parse_params(x)
+        for i, profile in enumerate(self._profiles):
+            profile.params = x[i]
+
+    def _parse_params(self, x):
+        if x is None:
+            params = [profile.params for profile in self._profiles]
+        elif isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
+            params = x
+        elif len(x) == len(self.params):
+            params = []
+            i = 0
             for profile in self._profiles:
-                profile.params = x
+                k = len(profile.params)
+                params += [x[i : i + k]]
+                i += k
+        else:
+            raise ValueError("Got wrong number of parameters for SumProfile")
+        return params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -422,13 +446,10 @@ class SumProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
-        if params is None:
-            params = [None] * len(self._profiles)
-        if isinstance(params, dict):
-            params = [params]
+        params = self._parse_params(params)
         f = 0
         for i, profile in enumerate(self._profiles):
-            f += profile.compute(params[i % len(params)], grid, dr, dt, dz)
+            f += profile.compute(params[i], grid, dr, dt, dz)
         return f
 
     def __repr__(self):
@@ -480,17 +501,30 @@ class ProductProfile(Profile):
 
     @property
     def params(self):
-        """ndarray: Parameters for computation."""
-        return tuple(profile.params for profile in self._profiles)
+        """ndarray: Concatenated array of parameters for computation."""
+        return jnp.concatenate([profile.params for profile in self._profiles])
 
     @params.setter
     def params(self, x):
-        if isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
-            for i, profile in enumerate(self._profiles):
-                profile.params = x[i] if x[i] is not None else profile.params
-        else:
+        x = self._parse_params(x)
+        for i, profile in enumerate(self._profiles):
+            profile.params = x[i]
+
+    def _parse_params(self, x):
+        if x is None:
+            params = [profile.params for profile in self._profiles]
+        elif isinstance(x, (list, tuple)) and len(x) == len(self._profiles):
+            params = x
+        elif len(x) == len(self.params):
+            params = []
+            i = 0
             for profile in self._profiles:
-                profile.params = x
+                k = len(profile.params)
+                params += [x[i : i + k]]
+                i += k
+        else:
+            raise ValueError("Got wrong number of parameters for ProductProfile")
+        return params
 
     def compute(self, params=None, grid=None, dr=0, dt=0, dz=0):
         """Compute values of profile at specified nodes.
@@ -511,13 +545,10 @@ class ProductProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
-        if params is None:
-            params = [None] * len(self._profiles)
-        if isinstance(params, dict):
-            params = [params]
+        params = self._parse_params(params)
         f = 1
         for i, profile in enumerate(self._profiles):
-            f *= profile.compute(params[i % len(params)], grid, dr, dt, dz)
+            f *= profile.compute(params[i], grid, dr, dt, dz)
         return f
 
     def __repr__(self):

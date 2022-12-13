@@ -135,19 +135,23 @@ class TestProfiles:
             modes=np.array([0, 1, 2, 4]), params=np.array([1, 0, -2, 1]), sym="auto"
         )
         sp = pp.to_spline()
-        zp = pp.to_fourierzernike()
+        zp = -pp.to_fourierzernike()
 
-        f = pp + sp - (-zp)
+        f = pp + sp - zp
         x = np.linspace(0, 1, 50)
         f.grid = 50
         np.testing.assert_allclose(f(), 3 * (pp(x)), atol=1e-3)
 
         params = f.params
+        assert params.size == len(sp.params) + len(pp.params) + len(zp.params) + 1
+        params = f._parse_params(params)
         assert all(params[0] == pp.params)
         assert all(params[1] == sp.params)
-        assert all(params[2][1][1] == zp.params)
+        # offset by 1 because of two - signs
+        assert all(params[2][1:] == zp.params)
+        assert params[2][0] == -1
 
-        f.params = (None, 2 * sp.params, None)
+        f.params = (pp.params, 2 * sp.params, zp.params)
         f.grid = x
         np.testing.assert_allclose(f(), 4 * (pp(x)), atol=1e-3)
 
@@ -166,11 +170,13 @@ class TestProfiles:
         np.testing.assert_allclose(f(), pp(x) ** 3, atol=1e-3)
 
         params = f.params
+        assert params.size == len(sp.params) + len(pp.params) + len(zp.params)
+        params = f._parse_params(params)
         assert all(params[0] == pp.params)
         assert all(params[1] == sp.params)
         assert all(params[2] == zp.params)
 
-        f.params = (None, 2 * sp.params, None)
+        f.params = (pp.params, 2 * sp.params, zp.params)
         f.grid = x
         np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
 
@@ -188,7 +194,7 @@ class TestProfiles:
 
         params = f.params
         assert params[0] == 3
-        assert all(params[1] == pp.params)
+        assert all(params[1:] == pp.params)
 
         f.params = 2
         f.grid = x
@@ -198,8 +204,9 @@ class TestProfiles:
         f.grid = x
 
         params = f.params
+        assert params.size == len(pp.params) + 1
         assert params[0] == 2
-        np.testing.assert_allclose(params[1], [4, -8, 4])
+        np.testing.assert_allclose(params[1:], [4, -8, 4])
         np.testing.assert_allclose(pp.params, [1, -2, 1])
         np.testing.assert_allclose(f(), 8 * (pp(x)), atol=1e-3)
 

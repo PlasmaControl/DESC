@@ -168,10 +168,9 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
-@pytest.mark.solve
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
         ForceBalance(),
@@ -189,10 +188,29 @@ def test_1d_optimization(SOLOVEV):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
-def test_1d_optimization_old(SOLOVEV):
+def test_1d_optimization_bounds():
+    """Tests 1D optimization for target aspect ratio within bounds."""
+    eq = desc.examples.get("SOLOVEV")
+    objective = ObjectiveFunction(AspectRatio(target=(2.4, 2.6)))
+    constraints = (
+        ForceBalance(),
+        FixBoundaryR(),
+        FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :]),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+    )
+    options = {"perturb_options": {"order": 1}}
+    with pytest.warns(UserWarning):
+        eq.optimize(objective, constraints, options=options)
+
+    np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+
+
+@pytest.mark.regression
+def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     eq._optimize(
         objective,

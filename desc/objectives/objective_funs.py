@@ -566,15 +566,12 @@ class _Objective(IOAble, ABC):
             # set correctly
             self._target = np.zeros(1)
             self._weight = np.ones(1)
-        if np.unique(self.target).size == 1:
-            self._target = np.repeat(self.target[0], self.dim_f)
-        if np.unique(self.weight).size == 1:
-            self._weight = np.repeat(self.weight[0], self.dim_f)
 
-        if self.target.size != self.dim_f:
-            raise ValueError("len(target) != dim_f")
-        if self.weight.size != self.dim_f:
-            raise ValueError("len(weight) != dim_f")
+        if not isinstance(self.target, tuple):
+            if self.target.size != self.dim_f:
+                raise ValueError("len(target) != dim_f")
+            if self.weight.size != self.dim_f:
+                raise ValueError("len(weight) != dim_f")
 
         return None
 
@@ -630,7 +627,18 @@ class _Objective(IOAble, ABC):
         target = (
             self.target / self.normalization if self._normalize_target else self.target
         )
-        return (jnp.atleast_1d(x) / self.normalization - target) * self.weight
+        if isinstance(target, tuple) and len(target) == 2:
+            return (
+                jnp.where(
+                    (jnp.atleast_1d(x) / self.normalization >= min(target))
+                    and (jnp.atleast_1d(x) / self.normalization <= max(target)),
+                    0,
+                    jnp.atleast_1d(x) / self.normalization - target,
+                )
+                * self.weight
+            )
+        else:
+            return (jnp.atleast_1d(x) / self.normalization - target) * self.weight
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""

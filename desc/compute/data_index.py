@@ -1387,8 +1387,8 @@ data_index["R0/a"] = {
     "dim": 0,
     "R_derivs": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]],
 }
-data_index["a/b"] = {
-    "label": "a / b",
+data_index["a_major/a_minor"] = {
+    "label": "a_{major} / a_{minor}",
     "units": "~",
     "units_long": "None",
     "description": "Elongation",

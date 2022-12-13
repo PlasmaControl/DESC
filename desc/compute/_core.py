@@ -855,7 +855,7 @@ def compute_geometry(
             ),
             surface_label="zeta",
         )
-        A = compress(  # area
+        A = compress(  # surface area
             grid,
             surface_integrals(
                 grid, jnp.abs(data["sqrt(g)"] / data["R"]), surface_label="zeta"
@@ -884,7 +884,7 @@ def compute_geometry(
         data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
         data["a"] = jnp.sqrt(data["A"] / jnp.pi)
         data["R0/a"] = data["V"] / (2 * jnp.sqrt(jnp.pi * data["A"] ** 3))
-        data["a/b"] = jnp.max(a / b)
+        data["a_major/a_minor"] = jnp.max(a / b)
     if check_derivs("V_rr(r)", R_transform, Z_transform):
         data["V_rr(r)"] = surface_integrals(
             grid, data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])

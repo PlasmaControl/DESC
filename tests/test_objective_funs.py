@@ -44,7 +44,10 @@ class TestObjectiveFunction:
                 "c_l": eq.c_l,
                 "Psi": eq.Psi,
             }
-            np.testing.assert_allclose(obj.compute(**kwargs), eq.compute(f)[f])
+            np.testing.assert_allclose(
+                obj.compute(**kwargs),
+                eq.compute(f, grid=obj.grid)[f] * obj.grid.weights,
+            )
 
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))
@@ -55,10 +58,16 @@ class TestObjectiveFunction:
         """Test calculation of plasma volume."""
 
         def test(eq):
-            obj = Volume(target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq)
+            obj = Volume(
+                target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
+            )
             V = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 10)
+            V = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(V, 10)
             V_compute_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(V_compute_scalar, 10)
+            V_compute_scalar = obj.compute_scalar(*obj.xs(eq))
             np.testing.assert_allclose(V_compute_scalar, 10)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -72,6 +81,8 @@ class TestObjectiveFunction:
             obj = AspectRatio(target=5, weight=2, eq=eq)
             AR = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(AR, 10)
+            AR = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(AR, 10)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -81,10 +92,8 @@ class TestObjectiveFunction:
         """Test calculation of MHD energy."""
 
         def test(eq):
-            obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq)
-            W = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq, normalize=False)
+            W = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(W, 10)
 
         test(Equilibrium(node_pattern="quad", iota=PowerSeriesProfile(0)))
@@ -95,7 +104,7 @@ class TestObjectiveFunction:
         """Test calculation of toroidal current."""
 
         def test(eq):
-            obj = ToroidalCurrent(target=1, weight=2, eq=eq)
+            obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
             np.testing.assert_allclose(I, -2)
 
@@ -109,10 +118,10 @@ class TestObjectiveFunction:
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
             fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
-            np.testing.assert_allclose(fb, 0)
+            np.testing.assert_allclose(fb, 0, atol=1e-12)
 
-        test(Equilibrium(iota=PowerSeriesProfile(0)))
-        test(Equilibrium(current=PowerSeriesProfile(0)))
+        test(Equilibrium(L=2, M=2, N=1, iota=PowerSeriesProfile(0)))
+        test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
     def test_qs_twoterm(self):

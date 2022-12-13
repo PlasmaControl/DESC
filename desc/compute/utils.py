@@ -18,7 +18,7 @@ def compute(*names, params, transforms, profiles, data=None, **kwargs):
     Parameters
     ----------
     names : str
-        Names of the quantity to compute.
+        Names of the quantity(s) to compute.
     grid : Grid, optional
         Grid of coordinates to evaluate at. Defaults to the quadrature grid.
     params : dict of ndarray

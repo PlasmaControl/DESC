@@ -1048,7 +1048,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -1357,7 +1357,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot boundary got unexpected keyword argument: {kwargs.keys()}"
 
     if zeta is None:
         zeta = 1 if eq.N == 0 else 4
@@ -1472,7 +1472,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
 
     if zeta is None:
         zeta = 4
@@ -1865,7 +1865,7 @@ def plot_boozer_modes(
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
 
     for i in range(modes.shape[0]):
         M = modes[i, 1]
@@ -2188,7 +2188,7 @@ def plot_qs_error(
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
     fig.set_tight_layout(True)
     return fig, ax

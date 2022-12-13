@@ -2,9 +2,15 @@
 
 import numpy as np
 import pytest
+from scipy.constants import elementary_charge
 
 from desc.equilibrium import Equilibrium
 from desc.io import InputReader
+from desc.objectives import (
+    ForceBalance,
+    ObjectiveFunction,
+    get_fixed_boundary_constraints,
+)
 from desc.profiles import (
     FourierZernikeProfile,
     MTanhProfile,
@@ -266,3 +272,34 @@ class TestProfiles:
         np.testing.assert_allclose(sp(x), 0)
         np.testing.assert_allclose(mp(x), 0)
         np.testing.assert_allclose(zp(x), 0)
+
+    def test_solve_with_combined(self):
+        """Make sure combined profiles work correctly for solving equilibrium.
+
+        Test for gh issue #347
+        """
+        ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        pressure = elementary_charge * (ne * Te + ne * Ti)
+        print("pressure params:", pressure.params)
+
+        LM_resolution = 6
+        eq = Equilibrium(
+            pressure=pressure,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq.solve(
+            constraints=get_fixed_boundary_constraints(),
+            objective=ObjectiveFunction(objectives=ForceBalance()),
+            maxiter=2,
+        )

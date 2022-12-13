@@ -50,13 +50,28 @@ class _Configuration(IOAble, ABC):
     N : int (optional)
         Toroidal resolution. Default surface.N or 0
     pressure : Profile or ndarray shape(k,2) (optional)
-        Pressure profile or array of mode numbers and spectral coefficients.
+        Pressure (Pa) profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
     iota : Profile or ndarray shape(k,2) (optional)
-        Rotational transform profile or array of mode numbers and spectral coefficients
+        Rotational transform profile or array of mode numbers and spectral coefficients.
+        Cannot specify both iota and current.
     current : Profile or ndarray shape(k,2) (optional)
-        Toroidal current profile or array of mode numbers and spectral coefficients
+        Toroidal current (A) profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero toroidal current
+    electron_temperature : Profile or ndarray shape(k,2) (optional)
+        Electron temperature (eV) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding density.
+        Cannot specify both kinetic profiles and pressure.
+    electron_density : Profile or ndarray shape(k,2) (optional)
+        Electron density (m^-3) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding temperature.
+        Cannot specify both kinetic profiles and pressure.
+    ion_temperature : Profile or ndarray shape(k,2) (optional)
+        Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
+        Default is to assume electrons and ions have the same temperature.
+    atomic_number : Profile or ndarray shape(k,2) (optional)
+        Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
+        coefficients. Default is 1
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -92,6 +107,10 @@ class _Configuration(IOAble, ABC):
         "_pressure",
         "_iota",
         "_current",
+        "_electron_temperature",
+        "_electron_density",
+        "_ion_temperature",
+        "_atomic_number",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -106,6 +125,10 @@ class _Configuration(IOAble, ABC):
         pressure=None,
         iota=None,
         current=None,
+        electron_temperature=None,
+        electron_density=None,
+        ion_temperature=None,
+        atomic_number=None,
         surface=None,
         axis=None,
         sym=None,
@@ -312,51 +335,71 @@ class _Configuration(IOAble, ABC):
         self._pressure = None
         self._iota = None
         self._current = None
+        self._electron_temperature = None
+        self._electron_density = None
+        self.ion_temperature = None
+        self._atomic_number = None
 
-        # pressure
-        if isinstance(pressure, Profile):
-            self._pressure = pressure
-        elif isinstance(pressure, (np.ndarray, jnp.ndarray)):
-            self._pressure = PowerSeriesProfile(
-                modes=pressure[:, 0], params=pressure[:, 1], name="pressure"
-            )
-        elif pressure is None:
-            self._pressure = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="pressure"
-            )
-        else:
-            raise TypeError("Got unknown pressure profile {}".format(pressure))
-
-        # default profile
-        if iota is None and current is None:
-            self._current = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="current"
-            )
-        elif iota is not None and current is not None:
+        if current is not None and iota is not None:
             raise ValueError("Cannot specify both iota and current profiles.")
-
-        # iota
-        if isinstance(iota, Profile):
-            self.iota = iota
-        elif isinstance(iota, (np.ndarray, jnp.ndarray)):
-            self._iota = PowerSeriesProfile(
-                modes=iota[:, 0], params=iota[:, 1], name="iota"
+        if current is None and iota is None:
+            current = 0
+        use_kinetic = any(
+            [electron_temperature is not None, electron_density is not None]
+        )
+        if pressure is not None and use_kinetic:
+            raise ValueError("Cannot specify both pressure and kinetic profiles.")
+        if use_kinetic and (electron_temperature is None or electron_density is None):
+            raise ValueError(
+                "Must give at least electron temperature and density to use "
+                + "kinetic profiles."
             )
-        elif iota is not None:
-            raise TypeError("Got unknown iota profile {}".format(iota))
+        if use_kinetic and atomic_number is None:
+            atomic_number = 1
+        if use_kinetic and ion_temperature is None:
+            ion_temperature = electron_temperature
+        if not use_kinetic and pressure is None:
+            pressure = 0
 
-        # current
-        if isinstance(current, Profile):
-            self.current = current
-        elif isinstance(current, (np.ndarray, jnp.ndarray)):
-            self._current = PowerSeriesProfile(
-                modes=current[:, 0], params=current[:, 1], name="current"
-            )
-        elif current is not None:
-            raise TypeError("Got unknown current profile {}".format(current))
+        def parse_profile(prof, name="", **kwargs):
+            if isinstance(prof, Profile):
+                return prof
+            if np.isscalar(prof) or (
+                isinstance(prof, (np.ndarray, jnp.ndarray)) and prof.ndim == 1
+            ):
+                return PowerSeriesProfile(params=prof, name=name, **kwargs)
+            if (
+                isinstance(prof, (np.ndarray, jnp.ndarray))
+                and prof.ndim == 2
+                and prof.shape[1] == 2
+            ):
+                return PowerSeriesProfile(
+                    modes=prof[:, 0], params=prof[:, 1], name=name, **kwargs
+                )
+            if prof is None:
+                return None
+            raise TypeError(f"Got unknown {name} profile {prof}")
+
+        self._electron_temperature = parse_profile(
+            electron_temperature, "electron temperature"
+        )
+        self._electron_density = parse_profile(electron_density, "electron density")
+        self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        self._atomic_number = parse_profile(atomic_number, "atomic number")
+        self._pressure = parse_profile(pressure, "pressure")
+        self._iota = parse_profile(iota, "iota")
+        self._current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
-        for profile in ["pressure", "iota", "current"]:
+        for profile in [
+            "pressure",
+            "iota",
+            "current",
+            "electron_temperature",
+            "electron_density",
+            "ion_temperature",
+            "atomic_number",
+        ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
@@ -512,12 +555,18 @@ class _Configuration(IOAble, ABC):
         self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
 
-        if L_change and hasattr(self.pressure, "change_resolution"):
-            self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
-        if L_change and hasattr(self.iota, "change_resolution"):
-            self.iota.change_resolution(L=max(L, self.iota.basis.L))
-        if L_change and hasattr(self.current, "change_resolution"):
-            self.current.change_resolution(L=max(L, self.current.basis.L))
+        for profile in [
+            "pressure",
+            "iota",
+            "current",
+            "electron_temperature",
+            "electron_density",
+            "ion_temperature",
+            "atomic_number",
+        ]:
+            p = getattr(self, profile)
+            if hasattr(p, "change_resolution") and L_change:
+                p.change_resolution(max(p.basis.L, self.L))
 
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
 
@@ -825,7 +874,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def pressure(self):
-        """Profile: Pressure profile."""
+        """Profile: Pressure (Pa) profile."""
         return self._pressure
 
     @pressure.setter
@@ -845,6 +894,132 @@ class _Configuration(IOAble, ABC):
     @p_l.setter
     def p_l(self, p_l):
         self.pressure.params = p_l
+
+    @property
+    def electron_temperature(self):
+        """Profile: Electron temperature (eV) profile."""
+        return self._electron_temperature
+
+    @electron_temperature.setter
+    def electron_temperature(self, new):
+        if isinstance(new, Profile) or (new is None):
+            self._electron_temperature = new
+        else:
+            raise TypeError(
+                "electron_temperature profile should be of type Profile "
+                + f"or a subclass, got {new} "
+            )
+
+    @property
+    def Te_l(self):
+        """ndarray: Coefficients of electron temperature profile."""
+        return (
+            np.empty(0)
+            if self.electron_temperature is None
+            else self.electron_temperature.params
+        )
+
+    @Te_l.setter
+    def Te_l(self, Te_l):
+        if self.electron_temperature is None:
+            raise ValueError(
+                "Attempt to set electron temperature on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.electron_temperature.params = Te_l
+
+    @property
+    def electron_density(self):
+        """Profile: Electron density (m^-3) profile."""
+        return self._electron_density
+
+    @electron_density.setter
+    def electron_density(self, new):
+        if isinstance(new, Profile) or (new is None):
+            self._electron_density = new
+        else:
+            raise TypeError(
+                "electron_density profile should be of type Profile "
+                + f"or a subclass, got {new} "
+            )
+
+    @property
+    def ne_l(self):
+        """ndarray: Coefficients of electron density profile."""
+        return (
+            np.empty(0)
+            if self.electron_density is None
+            else self.electron_density.params
+        )
+
+    @ne_l.setter
+    def ne_l(self, ne_l):
+        if self.electron_density is None:
+            raise ValueError(
+                "Attempt to set electron density on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.electron_density.params = ne_l
+
+    @property
+    def ion_temperature(self):
+        """Profile: ion temperature (eV) profile."""
+        return self._ion_temperature
+
+    @ion_temperature.setter
+    def ion_temperature(self, new):
+        if isinstance(new, Profile) or (new is None):
+            self._ion_temperature = new
+        else:
+            raise TypeError(
+                "ion_temperature profile should be of type Profile "
+                + f"or a subclass, got {new} "
+            )
+
+    @property
+    def Ti_l(self):
+        """ndarray: Coefficients of ion temperature profile."""
+        return (
+            np.empty(0) if self.ion_temperature is None else self.ion_temperature.params
+        )
+
+    @Ti_l.setter
+    def Ti_l(self, Ti_l):
+        if self.ion_temperature is None:
+            raise ValueError(
+                "Attempt to set ion temperature on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.ion_temperature.params = Ti_l
+
+    @property
+    def atomic_number(self):
+        """Profile: Effective atomic number (Z_eff) profile."""
+        return self._ion_temperature
+
+    @atomic_number.setter
+    def atomic_number(self, new):
+        if isinstance(new, Profile) or (new is None):
+            self._atomic_number = new
+        else:
+            raise TypeError(
+                "atomic_number profile should be of type Profile "
+                + f"or a subclass, got {new} "
+            )
+
+    @property
+    def Zeff_l(self):
+        """ndarray: Coefficients of effective atomic number profile."""
+        return np.empty(0) if self.atomic_number is None else self.atomic_number.params
+
+    @Zeff_l.setter
+    def Zeff_l(self, Zeff_l):
+        if self.atomic_number is None:
+            raise ValueError(
+                "Attempt to set atomic number on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.atomic_number.params = Zeff_l
 
     @property
     def iota(self):

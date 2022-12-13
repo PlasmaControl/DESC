@@ -481,7 +481,10 @@ class _Objective(IOAble, ABC):
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
-        self._target = np.atleast_1d(target)
+        if isinstance(target, tuple):
+            self._target = tuple(np.atleast_1d(tar) for tar in target)
+        else:
+            self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)
         self._normalize = normalize
         self._normalize_target = normalize_target
@@ -568,9 +571,9 @@ class _Objective(IOAble, ABC):
             self._weight = np.ones(1)
 
         if not isinstance(self.target, tuple):
-            if self.target.size != self.dim_f:
+            if self.target.size > 1 and self.target.size != self.dim_f:
                 raise ValueError("len(target) != dim_f")
-            if self.weight.size != self.dim_f:
+            if self.weight.size > 1 and self.weight.size != self.dim_f:
                 raise ValueError("len(weight) != dim_f")
 
         return None
@@ -654,6 +657,7 @@ class _Objective(IOAble, ABC):
     @property
     def target(self):
         """float: Target value(s) of the objective."""
+        # TODO: update documentation
         return self._target
 
     @target.setter

@@ -601,6 +601,8 @@ class QuasiIsodynamic(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T)"
+    _print_value_fmt = "Quasi-isodynamic error: {:10.3e} "
 
     def __init__(
         self,
@@ -621,8 +623,6 @@ class QuasiIsodynamic(_Objective):
         self.M_zeta = M_zeta
         self.N_zeta = N_zeta
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T)"
-        self._print_value_fmt = "Quasi-isodynamic error: {:10.3e} " + units
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -641,6 +641,7 @@ class QuasiIsodynamic(_Objective):
             self.M_booz = 2 * eq.M
         if self.N_booz is None:
             self.N_booz = 2 * eq.N
+        # TODO: add defaults for M_zeta & N_zeta
         if self.grid is None:
             self.grid = LinearGrid(
                 M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False

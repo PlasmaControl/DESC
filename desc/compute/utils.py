@@ -1,8 +1,7 @@
 """Functions for flux surface averages and vector algebra operations."""
 
-import warnings
-
 import numpy as np
+import warnings
 from termcolor import colored
 
 from desc.backend import jnp
@@ -239,7 +238,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
 
     if max_surface:
         max_rho = grid.nodes[grid.unique_rho_idx[-1], 0]
-        idx = jnp.where(grid.nodes[:, 0] == max_rho)[0]
+        idx = np.nonzero(grid.nodes[:, 0] == max_rho)[0]
         q = q[idx]
         nodes = nodes[idx]
         unique_idx = (unique_idx * nodes.size / grid.num_nodes).astype(int)

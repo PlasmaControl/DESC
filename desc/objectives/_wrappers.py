@@ -270,8 +270,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
         Gx = self._objective.jac(xg)
-        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
-        Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+        Fx = align_jacobian(Fx, self._eq_objective, self._full_args)
+        Gx = align_jacobian(Gx, self._objective, self._full_args)
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z

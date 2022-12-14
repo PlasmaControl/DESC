@@ -347,8 +347,10 @@ class FourierRZToroidalSurface(Surface):
         a = E * G - F**2
         b = F * M - L * G - E * N
         c = L * N - M**2
-        k1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        k2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        k1 = jnp.maximum(r1, r2)
+        k2 = jnp.minimum(r1, r2)
         K = k1 * k2
         H = (k1 + k2) / 2
         return K, H, k1, k2
@@ -909,8 +911,10 @@ class ZernikeRZToroidalSection(Surface):
         a = E * G - F**2
         b = F * M - L * G - E * N
         c = L * N - M**2
-        k1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        k2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        k1 = jnp.maximum(r1, r2)
+        k2 = jnp.minimum(r1, r2)
         K = k1 * k2
         H = (k1 + k2) / 2
         return K, H, k1, k2

@@ -694,6 +694,12 @@ class FixAnisotropy(_FixProfile):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -716,6 +722,8 @@ class FixAnisotropy(_FixProfile):
         eq=None,
         target=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         profile=None,
         indices=True,
         name="fixed-anisotropy",
@@ -725,6 +733,8 @@ class FixAnisotropy(_FixProfile):
             eq=eq,
             target=target,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             profile=profile,
             indices=indices,
             name=name,
@@ -746,6 +756,9 @@ class FixAnisotropy(_FixProfile):
 
         """
         profile = eq.anisotropy
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["p"]
         super().build(eq, profile, use_jit, verbose)
 
     def compute(self, d_lmn, **kwargs):

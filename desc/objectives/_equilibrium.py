@@ -224,7 +224,12 @@ class ForceBalanceAnisotropic(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
-    grid : Grid, ndarray, optional
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.    grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -233,15 +238,29 @@ class ForceBalanceAnisotropic(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Total force: {:10.3e} "
 
     def __init__(
-        self, eq=None, target=0, weight=1, grid=None, name="force-anisotropic"
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="force-anisotropic",
     ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Total force: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -315,10 +334,12 @@ class ForceBalanceAnisotropic(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, d_lmn, i_l, c_l, Psi, **kwargs):
         """Compute MHD force balance errors.

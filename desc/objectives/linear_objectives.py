@@ -1203,7 +1203,7 @@ class FixQiShift(_Objective):
             Total QI magnetic well shift error.
 
         """
-        return self._shift_scale(shift_mn)
+        return self._shift_scale(shift_mn[self._idx])
 
     @property
     def target_arg(self):

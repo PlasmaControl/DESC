@@ -1504,7 +1504,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         }
         grid = _get_grid(**grid_kwargs)
 
-        coords = eqs[i].compute("R", grid)
+        coords = eqs[i].compute("R", "Z", grid=grid)
         R = coords["R"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )

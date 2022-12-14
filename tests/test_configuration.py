@@ -419,6 +419,21 @@ class TestInitialGuess:
 
         assert eq.is_nested()
 
+    @pytest.mark.unit
+    def test_guess_from_coordinate_mapping_no_sym(self):
+        """Test that we can initialize strongly shaped equilibria correctly.
+
+        (without axisymmetry or stellarator symmetry)
+        """
+        Rb = np.array([10, 1, 0.8, -0.2, 0.3, 0.02])
+        R_modes = np.array([[0, 0], [1, 0], [2, 0], [3, 1], [2, 1], [2, 2]])
+        Zb = np.array([0.01, 0.2, -1.5, 0.2])
+        Z_modes = np.array([[-3, -2], [2, -1], [-1, 0], [1, 1]])
+        surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes)
+        eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
+
+        assert eq.is_nested()
+
 
 class TestGetSurfaces:
     """Tests for get_surface method."""

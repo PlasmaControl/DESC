@@ -1170,7 +1170,7 @@ class FourierZernikeProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            derivs=3,
             build=True,
         )
         return transform

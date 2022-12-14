@@ -508,7 +508,8 @@ class _FixProfile(_Objective, ABC):
             indices = self._idx
             idx = self._idx
         else:  # specified indices
-            self._idx = np.atleast_1d(self._indices)
+            indices = self._indices
+            self._idx = np.atleast_1d(indices)
             idx = self._idx
 
         self._dim_f = self._idx.size

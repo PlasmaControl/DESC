@@ -40,7 +40,7 @@ arg_order = (
     "i_l",
     "c_l",
     "Psi",
+    "d_lmn",
     "Rb_lmn",
     "Zb_lmn",
-    "d_lmn",
 )

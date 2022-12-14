@@ -13,6 +13,7 @@ from desc.objectives import (
     FixCurrent,
     FixIota,
     ForceBalance,
+    ForceBalanceAnisotropic,
     HelicalForceBalance,
     ObjectiveFunction,
     RadialForceBalance,
@@ -264,6 +265,7 @@ class Optimizer(IOAble):
                     constraint,
                     (
                         ForceBalance,
+                        ForceBalanceAnisotropic,
                         RadialForceBalance,
                         HelicalForceBalance,
                         CurrentDensity,

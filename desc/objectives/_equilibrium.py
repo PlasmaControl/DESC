@@ -256,7 +256,7 @@ class ForceBalanceAnisotropic(_Objective):
                     NFP=eq.NFP,
                 )
 
-        self._dim_f = 2 * self.grid.num_nodes
+        self._dim_f = 3 * self.grid.num_nodes
 
         timer = Timer()
         if verbose > 0:
@@ -266,7 +266,7 @@ class ForceBalanceAnisotropic(_Objective):
         self._pressure = eq.pressure.copy()
         self._pressure.grid = self.grid
         self._anisotropy = eq.anisotropy.copy()
-        self._anisotrop.grid = self.grid
+        self._anisotropy.grid = self.grid
         if eq.iota is not None:
             self._iota = eq.iota.copy()
             self._iota.grid = self.grid

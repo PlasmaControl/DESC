@@ -14,6 +14,7 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    FixAnisotropy,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -48,7 +49,7 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
         FixPsi(),
     )
     if profiles:
-        constraints += (FixPressure(),)
+        constraints += (FixPressure(), FixAnisotropy())
 
         if iota:
             constraints += (FixIota(),)

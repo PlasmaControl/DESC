@@ -252,7 +252,7 @@ def compute_force_error_anisotropic(
         + data["d_z"] * data["e^zeta"].T
     ).T
     data["JxB"] = cross(data["J"], data["B"])
-    data["B.grad(d)"] = dot(data["B"], data["grad(d"])
+    data["B.grad(d)"] = dot(data["B"], data["grad(d)"])
     data["grad(p)"] = (
         data["p_r"] * data["e^rho"].T
         + data["p_t"] * data["e^theta"].T

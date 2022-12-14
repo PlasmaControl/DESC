@@ -1075,8 +1075,9 @@ class FixQiShape(_Objective):
     _linear = True
     _fixed = True
 
-    def __init__(self, eq=None, target=None, weight=1, name="fixed QI shape"):
+    def __init__(self, eq=None, target=None, weight=1, indices=True, name="fixed QI shape"):
 
+        self._indices = indices
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed QI shape error: {:10.3e}"
 
@@ -1093,10 +1094,28 @@ class FixQiShape(_Objective):
             Level of output.
 
         """
-        self._dim_f = eq.shape_i.size
+        # find indices to fix
+        if self._indices is False or self._indices is None:  # no indices to fix
+            self._idx = np.array([], dtype=int)
+            indices = np.array([[]], dtype=int)
+            idx = self._idx
+        elif self._indices is True:  # all indices of Profile.params
+            self._idx = np.arange(np.size(eq.shape_i))
+            indices = self._idx
+            idx = self._idx
+        else:  # specified indices
+            self._idx = np.atleast_1d(self._indices)
+            idx = self._idx
 
-        if None in self.target:
-            self.target = eq.shape_i
+        self._dim_f = self._idx.size
+        # use given targets and weights if specified
+        if self.target.size == indices.shape[0]:
+            self.target = self._target[idx]
+        if self.weight.size == indices.shape[0]:
+            self.weight = self._weight[idx]
+        # use profile parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = eq.shape_i[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1115,7 +1134,7 @@ class FixQiShape(_Objective):
             Total QI magnetic well shape error.
 
         """
-        return self._shift_scale(shape_i)
+        return self._shift_scale(shape_i[self._idx])
 
     @property
     def target_arg(self):
@@ -1143,8 +1162,9 @@ class FixQiShift(_Objective):
     _linear = True
     _fixed = True
 
-    def __init__(self, eq=None, target=None, weight=1, name="fixed QI shift"):
+    def __init__(self, eq=None, target=None, weight=1, indices=True, name="fixed QI shift"):
 
+        self._indices = indices
         super().__init__(eq=eq, target=target, weight=weight, name=name)
         self._print_value_fmt = "Fixed QI shift error: {:10.3e}"
 
@@ -1161,10 +1181,28 @@ class FixQiShift(_Objective):
             Level of output.
 
         """
-        self._dim_f = eq.shift_mn.size
+        # find indices to fix
+        if self._indices is False or self._indices is None:  # no indices to fix
+            self._idx = np.array([], dtype=int)
+            indices = np.array([[]], dtype=int)
+            idx = self._idx
+        elif self._indices is True:  # all indices of Profile.params
+            self._idx = np.arange(np.size(eq.shift_mn))
+            indices = self._idx
+            idx = self._idx
+        else:  # specified indices
+            self._idx = np.atleast_1d(self._indices)
+            idx = self._idx
 
-        if None in self.target:
-            self.target = eq.shift_mn
+        self._dim_f = self._idx.size
+        # use given targets and weights if specified
+        if self.target.size == indices.shape[0]:
+            self.target = self._target[idx]
+        if self.weight.size == indices.shape[0]:
+            self.weight = self._weight[idx]
+        # use profile parameters as target if needed
+        if None in self.target or self.target.size != self.dim_f:
+            self.target = eq.shift_mn[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

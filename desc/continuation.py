@@ -207,7 +207,7 @@ def solve_continuation_automatic(  # noqa: C901
             eqi.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
-                **deltas,
+                deltas=deltas,
                 order=pert_order,
                 verbose=verbose,
                 copy=False,
@@ -380,7 +380,7 @@ def solve_continuation(  # noqa: C901
             eqp.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
-                **deltas,
+                deltas=deltas,
                 order=pert_order[ii],
                 verbose=verbose,
                 copy=False,

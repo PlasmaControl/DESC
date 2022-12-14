@@ -30,11 +30,12 @@ def test_perturbation_orders(SOLOVEV):
     tr_ratio = [0.01, 0.25, 0.25]
     dp = np.zeros_like(eq.p_l)
     dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+    deltas = {"p_l": dp}
     eq0 = perturb(
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=0,
         verbose=2,
@@ -44,7 +45,7 @@ def test_perturbation_orders(SOLOVEV):
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=1,
         verbose=2,
@@ -54,7 +55,7 @@ def test_perturbation_orders(SOLOVEV):
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=2,
         verbose=2,
@@ -64,7 +65,7 @@ def test_perturbation_orders(SOLOVEV):
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=3,
         verbose=2,

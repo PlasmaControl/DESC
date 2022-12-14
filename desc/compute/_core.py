@@ -652,3 +652,37 @@ def compute_geometry(params, transforms, profiles, data=None, **kwargs):
         )
 
     return data
+
+
+def compute_curvature(params, transforms, profiles, data=None, **kwargs):
+    """Compute principle and gaussian curvatures."""
+    data = compute_covariant_basis(
+        params,
+        transforms,
+        profiles,
+        data=None,
+        **kwargs,
+    )
+    data = compute_contravariant_basis(
+        params,
+        transforms,
+        profiles,
+        data=None,
+        **kwargs,
+    )
+    n = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"])).T
+    E = dot(data["e_theta"], data["e_theta"])
+    F = dot(data["e_theta"], data["e_zeta"])
+    G = dot(data["e_zeta"], data["e_zeta"])
+    L = dot(data["e_theta_t"], n)
+    M = dot(data["e_theta_z"], n)
+    N = dot(data["e_zeta_z"], n)
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["k1"] = jnp.maximum(r1, r2)
+    data["k2"] = jnp.minimum(r1, r2)
+    data["K"] = data["k1"] * data["k2"]
+    data["H"] = (data["k1"] + data["k2"]) / 2

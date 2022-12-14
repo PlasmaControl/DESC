@@ -2187,6 +2187,64 @@ data_index["S(r)"] = {
     },
 }
 
+# curvature
+data_index["k1"] = {
+    "label": "k_1",
+    "units": "m^{-1}",
+    "units_long": "inverse meters",
+    "description": "First principal curvature of flux surfaces",
+    "fun": "compute_curvature",
+    "dim": 1,
+    "dependencies": {
+        "params": [],
+        "transforms": {},
+        "profiles": [],
+        "data": ["e^rho", "e_theta", "e_zeta", "e_theta_t", "e_theta_z", "e_zeta_z"],
+    },
+}
+data_index["k2"] = {
+    "label": "k_2",
+    "units": "m^{-1}",
+    "units_long": "inverse meters",
+    "description": "Second principal curvature of flux surfaces",
+    "fun": "compute_curvature",
+    "dim": 1,
+    "dependencies": {
+        "params": [],
+        "transforms": {},
+        "profiles": [],
+        "data": ["e^rho", "e_theta", "e_zeta", "e_theta_t", "e_theta_z", "e_zeta_z"],
+    },
+}
+data_index["K"] = {
+    "label": "K",
+    "units": "m^{-2}",
+    "units_long": "inverse square meters",
+    "description": "Gaussian curvature of flux surfaces",
+    "fun": "compute_curvature",
+    "dim": 1,
+    "dependencies": {
+        "params": [],
+        "transforms": {},
+        "profiles": [],
+        "data": ["k1", "k2"],
+    },
+}
+data_index["H"] = {
+    "label": "H",
+    "units": "m^{-1}",
+    "units_long": "inverse meters",
+    "description": "Mean curvature of flux surfaces",
+    "fun": "compute_curvature",
+    "dim": 1,
+    "dependencies": {
+        "params": [],
+        "transforms": {},
+        "profiles": [],
+        "data": ["k1", "k2"],
+    },
+}
+
 # contravariant magnetic field
 data_index["B0"] = {
     "label": "\\psi' / \\sqrt{g}",

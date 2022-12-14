@@ -29,6 +29,7 @@ from ._core import (
     compute_contravariant_metric_coefficients,
     compute_covariant_basis,
     compute_covariant_metric_coefficients,
+    compute_curvature,
     compute_flux_coords,
     compute_geometry,
     compute_jacobian,

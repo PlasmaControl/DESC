@@ -16,9 +16,9 @@ def solve_continuation_automatic(  # noqa: C901
     objective="force",
     optimizer="lsq-exact",
     pert_order=2,
-    ftol=1e-2,
-    xtol=1e-4,
-    gtol=1e-6,
+    ftol=None,
+    xtol=None,
+    gtol=None,
     nfev=100,
     verbose=1,
     checkpoint_path=None,
@@ -42,7 +42,8 @@ def solve_continuation_automatic(  # noqa: C901
     pert_order : int
         order of perturbations to use.
     ftol, xtol, gtol : float
-        stopping tolerances for subproblem at each step.
+        stopping tolerances for subproblem at each step. `None` will use defaults
+        for given optimizer.
     nfev : int
         maximum number of function evaluations in each equilibrium subproblem.
     verbose : integer
@@ -128,7 +129,8 @@ def solve_continuation_automatic(  # noqa: C901
         spectral_indexing,
     )
 
-    optimizer = Optimizer(optimizer) if isinstance(optimizer, str) else optimizer
+    if not isinstance(optimizer, Optimizer):
+        optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and eq.iota is not None
     )
@@ -192,10 +194,6 @@ def solve_continuation_automatic(  # noqa: C901
                 pert_order,
                 objective_i,
                 optimizer,
-                ftol,
-                gtol,
-                xtol,
-                nfev,
             )
 
         if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
@@ -267,9 +265,9 @@ def solve_continuation(  # noqa: C901
     objective="force",
     optimizer="lsq-exact",
     pert_order=2,
-    ftol=1e-2,
-    xtol=1e-4,
-    gtol=1e-6,
+    ftol=None,
+    xtol=None,
+    gtol=None,
     nfev=100,
     verbose=1,
     checkpoint_path=None,
@@ -293,7 +291,8 @@ def solve_continuation(  # noqa: C901
         order of perturbations to use. If array-like, should be same length as eqfam
         to specify different values for each step.
     ftol, xtol, gtol : float or array-like of float
-        stopping tolerances for subproblem at each step.
+        stopping tolerances for subproblem at each step. `None` will use defaults
+        for given optimizer.
     nfev : int or array-like of int
         maximum number of function evaluations in each equilibrium subproblem.
     verbose : integer
@@ -319,7 +318,8 @@ def solve_continuation(  # noqa: C901
     if isinstance(eqfam, (list, tuple)):
         eqfam = EquilibriaFamily(*eqfam)
 
-    optimizer = Optimizer(optimizer) if isinstance(optimizer, str) else optimizer
+    if not isinstance(optimizer, Optimizer):
+        optimizer = Optimizer(optimizer)
     objective_i = get_equilibrium_objective(objective)
     constraints_i = get_fixed_boundary_constraints(
         iota=objective != "vacuum" and eqfam[0].iota is not None
@@ -342,10 +342,6 @@ def solve_continuation(  # noqa: C901
                 pert_order[ii],
                 objective_i,
                 optimizer,
-                ftol[ii],
-                gtol[ii],
-                xtol[ii],
-                nfev[ii],
             )
             deltas = {}
 
@@ -466,10 +462,6 @@ def _print_iteration_summary(
     pert_order,
     objective,
     optimizer,
-    ftol,
-    gtol,
-    xtol,
-    nfev,
     **kwargs,
 ):
     print("================")
@@ -491,8 +483,4 @@ def _print_iteration_summary(
             optimizer if isinstance(optimizer, str) else optimizer.method
         )
     )
-    print("Function tolerance = {}".format(ftol))
-    print("Gradient tolerance = {}".format(gtol))
-    print("State vector tolerance = {}".format(xtol))
-    print("Max function evaluations = {}".format(nfev))
     print("================")

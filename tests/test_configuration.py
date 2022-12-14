@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.equilibrium.initial_guess import _initial_guess_surface
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -253,9 +254,9 @@ class TestInitialGuess:
         with pytest.raises(ValueError):
             eq.surface = eq.get_surface_at(rho=1)
             eq.change_resolution(2, 2, 2)
-            eq._initial_guess_surface(eq.R_basis, eq.R_lmn, eq.R_basis)
+            _ = _initial_guess_surface(eq.R_basis, eq.R_lmn, eq.R_basis)
         with pytest.raises(ValueError):
-            eq._initial_guess_surface(
+            _ = _initial_guess_surface(
                 eq.R_basis, eq.surface.R_lmn, eq.surface.R_basis, mode="foo"
             )
 

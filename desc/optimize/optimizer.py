@@ -154,7 +154,7 @@ class Optimizer(IOAble):
         if ftol is None:
             ftol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-2
         if gtol is None:
-            gtol = 1e-4
+            gtol = 1e-6
         return ftol, xtol, gtol
 
     # TODO: add copy argument and return the equilibrium?
@@ -470,8 +470,12 @@ class Optimizer(IOAble):
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            x_scale = "hess" if x_scale == "auto" else x_scale
-
+            if isinstance(x_scale, str):
+                if x_scale == "auto":
+                    if "bfgs" not in self.method:
+                        x_scale = "hess"
+                    else:
+                        x_scale = 1
             result = fmintr(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
@@ -496,7 +500,7 @@ class Optimizer(IOAble):
                 x0=x0_reduced,
                 grad=grad_wrapped,
                 args=(),
-                method=method,
+                method=self.method,
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,

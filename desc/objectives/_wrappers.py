@@ -89,7 +89,29 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._scalar = False
 
         # set_state_vector
-        self._args = ["p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn"]
+
+        # this is everything taken by either objective
+        self._full_args = self._eq_objective.args + self._objective.args
+        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        # remove constraints that aren't necessary
+        self._constraints = tuple(
+            [con for con in self._constraints if con.args[0] in self._eq_objective.args]
+        )
+
+        # arguments being optimized are all args, but with internal degrees of freedom
+        # replaced by boundary terms
+        self._args = self._full_args.copy()
+        if "L_lmn" in self._args:
+            self._args.remove("L_lmn")
+        if "R_lmn" in self._args:
+            self._args.remove("R_lmn")
+            if "Rb_lmn" not in self._args:
+                self._args.append("Rb_lmn")
+        if "Z_lmn" in self._args:
+            self._args.remove("Z_lmn")
+            if "Zb_lmn" not in self._args:
+                self._args.append("Zb_lmn")
+        # and remove pressure if we're solving a vacuum equilibrium
         if isinstance(self._eq_objective.objectives[0], CurrentDensity):
             self._args.remove("p_l")
         self._dimensions = self._objective.dimensions
@@ -98,9 +120,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         for arg in self.args:
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
-
-        self._full_args = np.concatenate((self.args, self._eq_objective.args))
-        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        self._dim_x_full = 0
+        self._x_idx_full = {}
+        for arg in self._full_args:
+            self._x_idx_full[arg] = np.arange(
+                self._dim_x_full, self._dim_x_full + self.dimensions[arg]
+            )
+            self._dim_x_full += self.dimensions[arg]
 
         (
             xp,
@@ -111,7 +137,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
+        ) = factorize_linear_constraints(self._constraints, self._full_args)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -131,14 +157,11 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         else:
             x_dict = self.unpack_state(x)
             x_dict_old = self.unpack_state(self._x_old)
-            deltas = {
-                "d" + str(key).split("_")[0]: x_dict[key] - x_dict_old[key]
-                for key in x_dict
-            }
+            deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
             self._eq = self._eq.perturb(
                 objective=self._eq_objective,
                 constraints=self._constraints,
-                **deltas,
+                deltas=deltas,
                 **self._perturb_options
             )
             self._eq.solve(

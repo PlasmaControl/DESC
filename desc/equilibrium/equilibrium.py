@@ -757,17 +757,9 @@ class Equilibrium(_Configuration, IOAble):
 
     def perturb(
         self,
+        deltas,
         objective=None,
         constraints=None,
-        dR=None,
-        dZ=None,
-        dL=None,
-        dRb=None,
-        dZb=None,
-        dp=None,
-        di=None,
-        dc=None,
-        dPsi=None,
         order=2,
         tr_ratio=0.1,
         verbose=1,
@@ -781,10 +773,10 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to satisfy. Default = force balance.
         constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
-        dR, dZ, dL, dRb, dZb, dp, di, dc, dPsi : ndarray or float
-            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, toroidal current, and total toroidal magnetic flux.
-            Setting to None or zero ignores that term in the expansion.
+        deltas : dict of ndarray
+            Deltas for perturbations. Keys should names of Equilibrium attributes
+            ("p_l",  "Rb_lmn", "L_lmn" etc.) and values of arrays of desired change in
+            the attribute.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
         tr_ratio : float or array of float
@@ -818,15 +810,7 @@ class Equilibrium(_Configuration, IOAble):
             self,
             objective,
             constraints,
-            dR=dR,
-            dZ=dZ,
-            dL=dL,
-            dRb=dRb,
-            dZb=dZb,
-            dp=dp,
-            di=di,
-            dc=dc,
-            dPsi=dPsi,
+            deltas,
             order=order,
             tr_ratio=tr_ratio,
             verbose=verbose,

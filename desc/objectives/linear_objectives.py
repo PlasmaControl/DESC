@@ -1097,22 +1097,13 @@ class FixQiShape(_Objective):
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
-            indices = np.array([[]], dtype=int)
-            idx = self._idx
         elif self._indices is True:  # all indices of Profile.params
             self._idx = np.arange(np.size(eq.shape_i))
-            indices = self._idx
-            idx = self._idx
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
-            idx = self._idx
 
         self._dim_f = self._idx.size
-        # use given targets and weights if specified
-        if self.target.size == indices.shape[0]:
-            self.target = self._target[idx]
-        if self.weight.size == indices.shape[0]:
-            self.weight = self._weight[idx]
+
         # use profile parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.shape_i[self._idx]
@@ -1184,22 +1175,13 @@ class FixQiShift(_Objective):
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
-            indices = np.array([[]], dtype=int)
-            idx = self._idx
         elif self._indices is True:  # all indices of Profile.params
             self._idx = np.arange(np.size(eq.shift_mn))
-            indices = self._idx
-            idx = self._idx
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
-            idx = self._idx
 
         self._dim_f = self._idx.size
-        # use given targets and weights if specified
-        if self.target.size == indices.shape[0]:
-            self.target = self._target[idx]
-        if self.weight.size == indices.shape[0]:
-            self.weight = self._weight[idx]
+
         # use profile parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.shift_mn[self._idx]

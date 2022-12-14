@@ -7,7 +7,7 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import GenericObjective, ToroidalCurrent
+from ._generic import GenericObjective, MirrorRatio, ToroidalCurrent
 from ._geometry import AspectRatio, Elongation, Volume
 from ._qs import (
     QuasisymmetryBoozer,

@@ -363,7 +363,7 @@ class TargetIota(_Objective):
 
     _scalar = False
     _linear = False
-    _units = "(n/a)"
+    _units = "(dimensionless)"
     _print_value_fmt = "Target iota: {:10.3e} "
 
     def __init__(

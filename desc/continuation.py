@@ -169,7 +169,7 @@ def solve_continuation_automatic(  # noqa: C901
             deltas = get_deltas(
                 {"pressure": eqfam[mres_steps - 1].pressure}, {"pressure": pressure}
             )
-            deltas["dp"] *= pres_step
+            deltas["p_l"] *= pres_step
             pres_ratio += pres_step
 
         elif ii >= mres_steps + pres_steps:
@@ -177,10 +177,10 @@ def solve_continuation_automatic(  # noqa: C901
             eqi.change_resolution(L, M, N, L_grid, M_grid, N_grid)
             surf_axisym.change_resolution(L, M, N)
             deltas = get_deltas({"surface": surf_axisym}, {"surface": surface})
-            if "dRb" in deltas:
-                deltas["dRb"] *= bdry_step
-            if "dZb" in deltas:
-                deltas["dZb"] *= bdry_step
+            if "Rb_lmn" in deltas:
+                deltas["Rb_lmn"] *= bdry_step
+            if "Zb_lmn" in deltas:
+                deltas["Zb_lmn"] *= bdry_step
             bdry_ratio += bdry_step
 
         if verbose:

@@ -3,16 +3,17 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from .utils import check_derivs
+
 from ._core import (
-    compute_pressure,
     compute_contravariant_metric_coefficients,
     compute_geometry,
+    compute_pressure,
 )
 from ._field import (
     compute_contravariant_current_density,
     compute_magnetic_field_magnitude,
 )
+from .utils import check_derivs
 
 
 def compute_force_error(

@@ -1,16 +1,22 @@
-from desc.backend import jnp
-from desc.utils import Timer
-from desc.grid import QuadratureGrid, ConcentricGrid
-from desc.transform import Transform
-from desc.compute import (
-    data_index,
-    compute_force_error,
-    compute_energy,
-    compute_contravariant_current_density,
-)
-from .objective_funs import _Objective
+"""Objectives for solving equilibrium problems."""
+
 import warnings
+
 from termcolor import colored
+
+from desc.backend import jnp
+from desc.compute import (
+    compute_contravariant_current_density,
+    compute_energy,
+    compute_force_error,
+    data_index,
+)
+from desc.grid import ConcentricGrid, QuadratureGrid
+from desc.transform import Transform
+from desc.utils import Timer
+
+from .normalization import compute_scaling_factors
+from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):
@@ -33,6 +39,12 @@ class ForceBalance(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -42,13 +54,29 @@ class ForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Total force: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="force",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Total force: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -120,10 +148,12 @@ class ForceBalance(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute MHD force balance errors.
@@ -192,6 +222,12 @@ class RadialForceBalance(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -201,13 +237,29 @@ class RadialForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Radial force: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="radial force"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="radial force",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Radial force: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -279,10 +331,12 @@ class RadialForceBalance(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute radial MHD force balance errors.
@@ -348,6 +402,12 @@ class HelicalForceBalance(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -357,13 +417,29 @@ class HelicalForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Helical force: {:10.3e}, "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="helical force"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="helical force",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Helical force: {:10.3e}, " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -435,10 +511,12 @@ class HelicalForceBalance(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute helical MHD force balance errors.
@@ -502,8 +580,15 @@ class Energy(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at. This will default to a QuadratureGrid
+        Collocation grid containing the nodes to evaluate at.
+        This will default to a QuadratureGrid
     gamma : float, optional
         Adiabatic (compressional) index. Default = 0.
     name : str
@@ -514,13 +599,31 @@ class Energy(_Objective):
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
     _linear = False
+    _units = "(J)"
+    _print_value_fmt = "Total MHD energy: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, gamma=0, name="energy"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        gamma=0,
+        name="energy",
+    ):
 
         self.grid = grid
         self.gamma = gamma
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -601,10 +704,11 @@ class Energy(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["W"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute MHD energy.
@@ -675,6 +779,12 @@ class CurrentDensity(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -684,20 +794,29 @@ class CurrentDensity(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(A*m)"
+    _print_value_fmt = "Total current density: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="current density",
     ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(A/m^2)"
-        self._print_value_fmt = "Total current density: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -713,15 +832,29 @@ class CurrentDensity(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L_grid,
-                M=eq.M_grid,
-                N=eq.N_grid,
-                NFP=eq.NFP,
-                sym=eq.sym,
-                axis=False,
-                node_pattern="jacobi",
-            )
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
 
         self._dim_f = 3 * self.grid.num_nodes
 
@@ -753,10 +886,12 @@ class CurrentDensity(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current density.

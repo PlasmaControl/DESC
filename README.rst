@@ -5,18 +5,21 @@
 ##############################
 Stellarator Equilibrium Solver
 ##############################
-|License| |DOI| |Docs| |Tests| |Codecov|
-|Issues| |Pypi|
+|License| |DOI| |Issues| |Pypi|
+
+|Docs| |UnitTests| |RegressionTests| |Codecov|
 
 DESC computes 3D MHD equilibria by solving the force balance equations.
 It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.
 
-The theoretical approach and numerical methods used by DESC are presented in this paper_ [1]_
+The theoretical approach and numerical methods used by DESC are presented in these papers [1]_ [2]_ [3]_ [4]_
 and documented at Theory_.
 Please cite our work if you use DESC!
 
-.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*.
-.. _paper: https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
+.. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://aip.scitation.org/doi/full/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf>`__]
+.. [2] Panici, D. et al (2022). The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations. [`arxiv <https://arxiv.org/abs/2203.17173>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/panici2022/panici2022equilibria.pdf>`__]
+.. [3] Conlin, R. et al. (2022). The DESC Stellarator Code Suite Part II: Perturbation and continuation methods. [`arxiv <https://arxiv.org/abs/2203.15927>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/conlin2022/conlin2022perturbations.pdf>`__]
+.. [4] Dudt, D. et al. (2022). The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization. [`arxiv <https://arxiv.org/abs/2204.00078>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/c669f5f28bf32042c76597c254d85c92f62f078a/publications/dudt2022/dudt2022optimization.pdf>`__]
 .. _Theory: https://desc-docs.readthedocs.io/en/latest/theory_general.html
 
 Quick Start
@@ -58,7 +61,7 @@ Repository Contents
 
 Contribute
 ==========
- 
+
 - `Contributing guidelines <https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst>`_
 - `Issue Tracker <https://github.com/PlasmaControl/DESC/issues>`_
 - `Source Code <https://github.com/PlasmaControl/DESC/>`_
@@ -69,19 +72,23 @@ Contribute
     :alt: License
 
 .. |DOI| image:: https://zenodo.org/badge/DOI/10.5281/zenodo.4876504.svg
-   :target: https://doi.org/10.5281/zenodo.4876504 
+   :target: https://doi.org/10.5281/zenodo.4876504
    :alt: DOI
-   
+
 .. |Docs| image:: https://img.shields.io/readthedocs/desc-docs?logo=Read-the-Docs
     :target: https://desc-docs.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation
 
-.. |Tests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml/badge.svg
-    :target: https://github.com/PlasmaControl/DESC/actions/workflows/pytest.yml
-    :alt: Tests
+.. |UnitTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/unittest.yml
+    :alt: UnitTests
 
-.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg
-    :target: https://codecov.io/gh/PlasmaControl/DESC
+.. |RegressionTests| image:: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml/badge.svg
+    :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
+    :alt: RegressionTests
+
+.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z 
+    :target: https://codecov.io/github/PlasmaControl/DESC
     :alt: Coverage
 
 .. |Issues| image:: https://img.shields.io/github/issues/PlasmaControl/DESC

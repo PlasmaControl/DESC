@@ -1,15 +1,23 @@
+"""Tests for Equilibrium class."""
+
 import os
+import pickle
+
 import numpy as np
-from netCDF4 import Dataset
 import pytest
+from netCDF4 import Dataset
+
+from desc.__main__ import main
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import Grid, LinearGrid
+from desc.io import InputReader
 
 from .utils import area_difference, compute_coords
-from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import Grid
-from desc.__main__ import main
 
 
-def test_compute_geometry(DSHAPE, DSHAPE_current):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_geometry(DSHAPE_current):
     """Test computation of plasma geometric values."""
 
     def test(stellarator):
@@ -34,15 +42,15 @@ def test_compute_geometry(DSHAPE, DSHAPE_current):
         assert abs(a_vmec - a_desc) < 5e-3
         assert abs(ar_vmec - ar_desc) < 5e-3
 
-    test(DSHAPE)
     test(DSHAPE_current)
 
 
 @pytest.mark.slow
-def test_compute_theta_coords(SOLOVEV):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_theta_coords(DSHAPE_current):
     """Test root finding for theta(theta*,lambda(theta))."""
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -64,10 +72,11 @@ def test_compute_theta_coords(SOLOVEV):
 
 
 @pytest.mark.slow
-def test_compute_flux_coords(SOLOVEV):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_flux_coords(DSHAPE_current):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
@@ -88,20 +97,24 @@ def test_compute_flux_coords(SOLOVEV):
 
 
 @pytest.mark.slow
-def test_to_sfl(SOLOVEV):
-
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+@pytest.mark.unit
+@pytest.mark.solve
+def test_to_sfl(DSHAPE_current):
+    """Test converting an equilibrium to straight field line coordinates."""
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     Rr1, Zr1, Rv1, Zv1 = compute_coords(eq)
     Rr2, Zr2, Rv2, Zv2 = compute_coords(eq.to_sfl())
     rho_err, theta_err = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
 
-    np.testing.assert_allclose(rho_err, 0, atol=2.5e-5)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-7)
+    np.testing.assert_allclose(rho_err, 0, atol=2.5e-4)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
 @pytest.mark.slow
+@pytest.mark.regression
 def test_continuation_resolution(tmpdir_factory):
+    """Test that stepping resolution in continuation method works correctly."""
     input_path = ".//tests//inputs//res_test"
     output_dir = tmpdir_factory.mktemp("result")
     desc_h5_path = output_dir.join("res_test_out.h5")
@@ -115,8 +128,10 @@ def test_continuation_resolution(tmpdir_factory):
         main(args)
 
 
-def test_grid_resolution_warning(SOLOVEV):
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+@pytest.mark.unit
+def test_grid_resolution_warning():
+    """Test that a warning is thrown if grid resolution is too low."""
+    eq = Equilibrium(L=2, M=2, N=2)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
     with pytest.warns(Warning):
@@ -131,33 +146,60 @@ def test_grid_resolution_warning(SOLOVEV):
         eqL.solve(ftol=1e-2, maxiter=2)
 
 
-def test_eq_change_grid_resolution(SOLOVEV):
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+@pytest.mark.unit
+def test_eq_change_grid_resolution():
+    """Test changing equilibrium grid resolution."""
+    eq = Equilibrium(L=2, M=2, N=2)
     eq.change_resolution(L_grid=10, M_grid=10, N_grid=10)
     assert eq.L_grid == 10
     assert eq.M_grid == 10
     assert eq.N_grid == 10
 
 
+@pytest.mark.unit
 def test_resolution():
+    """Test changing equilibrium spectral resolution."""
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
     eq2 = Equilibrium()
 
-    assert eq1.resolution() != eq2.resolution()
-    eq2.change_resolution(**eq1.resolution())
-    assert eq1.resolution() == eq2.resolution()
+    assert eq1.resolution != eq2.resolution
+    eq2.change_resolution(**eq1.resolution)
+    assert eq1.resolution == eq2.resolution
 
     eq1.L = 2
     eq1.M = 3
     eq1.N = 4
-    eq1.NFP = 5
+    with pytest.warns(UserWarning):
+        eq1.NFP = 5
     assert eq1.R_basis.L == 2
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
     assert eq1.R_basis.NFP == 5
 
 
+@pytest.mark.unit
+def test_equilibrium_from_near_axis():
+    """Test loading a solution from pyQSC/pyQIC."""
+    qsc_path = "./tests/inputs/qsc_r2section5.5.pkl"
+    file = open(qsc_path, "rb")
+    na = pickle.load(file)
+    file.close()
+
+    r = 1e-2
+    eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+    data = eq.compute("|B|", grid)
+
+    assert eq.is_nested()
+    assert eq.NFP == na.nfp
+    np.testing.assert_allclose(eq.Ra_n[eq.N : eq.N + 2], na.rc, atol=1e-10)
+    np.testing.assert_allclose(eq.Za_n[eq.N : eq.N - 2 : -1], na.zs, atol=1e-10)
+    np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
+
+
+@pytest.mark.unit
 def test_poincare_solve_not_implemented():
+    """Test that solving with fixed poincare section doesn't work yet."""
     inputs = {
         "L": 4,
         "M": 2,
@@ -177,3 +219,15 @@ def test_poincare_solve_not_implemented():
     )
     with pytest.raises(NotImplementedError):
         eq.solve()
+
+
+@pytest.mark.unit
+def test_equilibriafamily_constructor():
+    """Test that correct errors are thrown when making EquilibriaFamily."""
+    eq = Equilibrium()
+    ir = InputReader(["./tests/inputs/DSHAPE"])
+    eqf = EquilibriaFamily(eq, *ir.inputs)
+    assert len(eqf) == 4
+
+    with pytest.raises(TypeError):
+        _ = EquilibriaFamily(4, 5, 6)

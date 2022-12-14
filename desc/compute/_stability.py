@@ -3,18 +3,14 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from .utils import (
-    check_derivs,
-    dot,
-    surface_averages,
-    surface_integrals,
-)
-from ._core import compute_pressure, compute_toroidal_flux_gradient, compute_geometry
+
+from ._core import compute_geometry, compute_pressure, compute_toroidal_flux_gradient
 from ._field import (
-    compute_magnetic_field_magnitude,
     compute_boozer_magnetic_field,
     compute_contravariant_current_density,
+    compute_magnetic_field_magnitude,
 )
+from .utils import check_derivs, dot, surface_averages, surface_integrals
 
 
 def compute_mercier_stability(
@@ -164,7 +160,7 @@ def compute_mercier_stability(
         data["D_geodesic"] = (
             surface_integrals(grid, dS * J_dot_B / grad_psi_3) ** 2
             - surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
-            * surface_integrals(grid, dS * J_dot_B ** 2 / (data["|B|^2"] * grad_psi_3))
+            * surface_integrals(grid, dS * J_dot_B**2 / (data["|B|^2"] * grad_psi_3))
         ) / (2 * jnp.pi) ** 6
 
     if check_derivs("D_Mercier", R_transform, Z_transform, L_transform):
@@ -274,8 +270,5 @@ def compute_magnetic_well(
         data["magnetic well"] = (
             data["V(r)"] * (dp_drho + dB2_avg_drho) / (data["V_r(r)"] * B2_avg)
         )
-
-        # equivalent method (besides scaling factor) that avoids computing the volume
-        # data["magnetic well"] = data["rho"] * (dp_drho + dB2_avg_drho) / B2_avg
 
     return data

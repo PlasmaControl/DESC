@@ -1,14 +1,18 @@
+"""Wrappers for doing STELLOPT/SIMSOPT like optimization."""
+
 import numpy as np
 
 from desc.backend import jnp
 from desc.compute import arg_order
+
+from ._equilibrium import CurrentDensity
+from .objective_funs import ObjectiveFunction
 from .utils import (
+    align_jacobian,
+    factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
-    factorize_linear_constraints,
 )
-from .objective_funs import ObjectiveFunction
-from ._equilibrium import CurrentDensity
 
 
 class WrappedEquilibriumObjective(ObjectiveFunction):
@@ -22,8 +26,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Equilibrium objective to enforce.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
-    use_jit : bool, optional
-        Whether to just-in-time compile the objectives and derivatives.
     verbose : int, optional
         Level of output.
 
@@ -34,7 +36,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
-        use_jit=True,
         verbose=1,
         perturb_options={},
         solve_options={},
@@ -44,15 +45,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._eq_objective = eq_objective
         self._perturb_options = perturb_options
         self._solve_options = solve_options
-        self._use_jit = use_jit
         self._built = False
+        # need compiled=True to avoid calling objective.compile which calls
+        # compute with all zeros, leading to error in perturb/resolve
         self._compiled = True
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
+            self.build(eq, verbose=verbose)
 
     # TODO: add timing and verbose statements
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -61,6 +63,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+            Note: unused by this class, should pass to sub-objectives directly.
         verbose : int, optional
             Level of output.
 
@@ -69,14 +72,14 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
-            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity),
-            iota=eq.iota is not None,
+            iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+            and self._eq.iota is not None
         )
 
-        self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
-        self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+        self._objective.build(self._eq, verbose=verbose)
+        self._eq_objective.build(self._eq, verbose=verbose)
         for constraint in self._constraints:
-            constraint.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+            constraint.build(self._eq, verbose=verbose)
         self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f
@@ -108,17 +111,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(
-            self._constraints, extra_args=self._eq_objective.args
-        )
+        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
+        self._allx = [self._x_old]
         self.history = {}
         for arg in self._full_args:
-            self.history[arg] = [np.atleast_1d(getattr(self._eq, arg))]
+            self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
 
@@ -145,8 +147,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 **self._solve_options
             )
             self._x_old = x
+            self._allx.append(x)
+
             for arg in self._full_args:
-                self.history[arg].append(getattr(self._eq, arg))
+                self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
 
     def compute(self, x):
         """Compute the objective function.
@@ -167,13 +171,35 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         return self._objective.compute(x_obj)
 
     def grad(self, x):
+        """Compute gradient of the sum of squares of residuals.
 
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        g : ndarray
+            gradient vector.
+        """
         f = jnp.atleast_1d(self.compute(x))
         J = self.jac(x)
         return f.T @ J
 
     def jac(self, x):
+        """Compute Jacobian of the vector objective function.
 
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
         self._update_equilibrium(x)
 
         # dx/dc
@@ -204,17 +230,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
         Gx = self._objective.jac(xg)
-        Fx = {
-            arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
-        }
-        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
-        for arg in self._eq_objective.args:
-            if arg not in Fx.keys():
-                Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-            if arg not in Gx.keys():
-                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
-        Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
-        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
+        Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
@@ -222,12 +240,26 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
         Gc = Gx @ dxdc
-
-        GxFx = Gx_reduced @ Fx_reduced_inv
-        LHS = GxFx @ Fc - Gc
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
         return -LHS
 
     def hess(self, x):
+        """Compute Hessian of the sum of squares of residuals.
 
+        Uses the "small residual approximation" where the Hessian is replaced by
+        the square of the Jacobian: H = J.T @ J
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        H : ndarray
+            Hessian matrix.
+        """
         J = self.jac(x)
         return J.T @ J

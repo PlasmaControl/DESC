@@ -1,24 +1,26 @@
-import unittest
-import pytest
+"""Tests for reading/writing/converting VMEC data."""
+
 import numpy as np
+import pytest
 from netCDF4 import Dataset
 
-from desc.grid import LinearGrid
 from desc.basis import FourierZernikeBasis
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
+    fourier_to_zernike,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
-    fourier_to_zernike,
-    zernike_to_fourier,
     vmec_boundary_subspace,
+    zernike_to_fourier,
 )
 
 
-class TestVMECIO(unittest.TestCase):
-    """Tests VMECIO class"""
+class TestVMECIO:
+    """Tests VMECIO class."""
 
+    @pytest.mark.unit
     def test_ptolemy_identity_fwd(self):
         """Tests forward implementation of Ptolemy's identity."""
         a0 = 3
@@ -31,8 +33,10 @@ class TestVMECIO(unittest.TestCase):
         s = np.array([0, a0, a1, a3, 0])
         c = np.array([a0, 0, a2, 0, a3])
 
-        # a0*sin(-z) + a1*sin(t+z) + a3*sin(t) = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
-        # a0 + a2*cos(t+z) + a3*cos(t-z) = a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)
+        # a0*sin(-z) + a1*sin(t+z) + a3*sin(t)                          # noqa: E800
+        #    = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
+        # a0 + a2*cos(t+z) + a3*cos(t-z)                                # noqa: E800
+        #    = a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)
 
         m_1_correct = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
         n_1_correct = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
@@ -44,6 +48,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
         np.testing.assert_allclose(x, x_correct, atol=1e-8)
 
+    @pytest.mark.unit
     def test_ptolemy_identity_rev(self):
         """Tests reverse implementation of Ptolemy's identity."""
         a0 = 3
@@ -55,8 +60,10 @@ class TestVMECIO(unittest.TestCase):
         n_1 = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
         x = np.array([[a3 - a2, a3, a1, -a0, a0, 0, a1, 0, a2 + a3]])
 
-        # -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t) = a0*sin(-z) + a1*sin(t+z) + a3*sin(t)
-        # a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z) = a0 + a2*cos(t+z) + a3*cos(t-z)
+        # -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)   # noqa: E800
+        #   = a0*sin(-z) + a1*sin(t+z) + a3*sin(t)
+        # a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)             # noqa: E800
+        #    = a0 + a2*cos(t+z) + a3*cos(t-z)
 
         m_0_correct = np.array([0, 0, 1, 1, 1])
         n_0_correct = np.array([0, 1, -1, 0, 1])
@@ -70,6 +77,7 @@ class TestVMECIO(unittest.TestCase):
         np.testing.assert_allclose(s, s_correct, atol=1e-8)
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
 
+    @pytest.mark.unit
     def test_fourier_to_zernike(self):
         """Test conversion from radial-Fourier series to Fourier-Zernike polynomials."""
         M = 1
@@ -101,6 +109,7 @@ class TestVMECIO(unittest.TestCase):
 
         np.testing.assert_allclose(x_lmn, x_lmn_correct, atol=1e-8)
 
+    @pytest.mark.unit
     def test_zernike_to_fourier(self):
         """Test conversion from Fourier-Zernike polynomials to radial-Fourier series."""
         M = 1
@@ -141,13 +150,17 @@ class TestVMECIO(unittest.TestCase):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_load_then_save(TmpDir):
     """Tests if loading and then saving gives the original result."""
-
     input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
-    eq = VMECIO.load(input_path)
+    eq = VMECIO.load(input_path, profile="current")
+    assert eq.iota is None
+    np.testing.assert_allclose(eq.current.params, 0)
+    eq = VMECIO.load(input_path, profile="iota")
+    assert eq.current is None
     VMECIO.save(eq, output_path)
 
     file1 = Dataset(input_path, mode="r")
@@ -168,27 +181,19 @@ def test_load_then_save(TmpDir):
     file2.close()
 
 
+@pytest.mark.unit
 def test_vmec_save_asym(TmpDir):
     """Tests that saving a non-symmetric equilibrium runs without errors."""
-
     output_path = str(TmpDir.join("output.nc"))
     eq = Equilibrium(L=2, M=2, N=2, NFP=3, pressure=np.array([[2, 0]]), sym=False)
     VMECIO.save(eq, output_path)
 
 
+@pytest.mark.unit
 @pytest.mark.slow
-def test_vmec_save(DSHAPE, TmpDir):
+def test_vmec_save_1(VMEC_save):
     """Tests that saving in NetCDF format agrees with VMEC."""
-
-    vmec = Dataset(str(DSHAPE["vmec_nc_path"]), mode="r")
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
-    eq._solved = True
-    VMECIO.save(
-        eq, str(DSHAPE["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
-    )
-    desc = Dataset(str(DSHAPE["desc_nc_path"]), mode="r")
-
+    vmec, desc = VMEC_save
     # parameters
     assert vmec.variables["version_"][:] == desc.variables["version_"][:]
     assert vmec.variables["mgrid_mode"][:] == desc.variables["mgrid_mode"][:]
@@ -248,14 +253,16 @@ def test_vmec_save(DSHAPE, TmpDir):
         )
     )
     np.testing.assert_allclose(
-        vmec.variables["am"][:], desc.variables["am"][:], atol=1e-1
+        vmec.variables["am"][:], desc.variables["am"][:], atol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-4
+        vmec.variables["ai"][:], desc.variables["ai"][:], atol=1e-8
     )
-    np.testing.assert_allclose(vmec.variables["ac"][:], desc.variables["ac"][:])
     np.testing.assert_allclose(
-        vmec.variables["presf"][:], desc.variables["presf"][:], rtol=5e-2, atol=5e-2
+        vmec.variables["ac"][:], desc.variables["ac"][:], atol=1e-8
+    )
+    np.testing.assert_allclose(
+        vmec.variables["presf"][:], desc.variables["presf"][:], atol=2e-2
     )
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
@@ -265,7 +272,7 @@ def test_vmec_save(DSHAPE, TmpDir):
     np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
     np.testing.assert_allclose(vmec.variables["phips"][:], desc.variables["phips"][:])
     np.testing.assert_allclose(
-        vmec.variables["chi"][:], desc.variables["chi"][:], rtol=1e-3, atol=1e-5
+        vmec.variables["chi"][:], desc.variables["chi"][:], atol=2e-5
     )
     np.testing.assert_allclose(vmec.variables["chipf"][:], desc.variables["chipf"][:])
     np.testing.assert_allclose(
@@ -288,10 +295,42 @@ def test_vmec_save(DSHAPE, TmpDir):
     np.testing.assert_allclose(
         vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
     )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["buco"][20:100]),
+        np.abs(desc.variables["buco"][20:100]),
+        rtol=3e-2,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["bvco"][20:100]),
+        np.abs(desc.variables["bvco"][20:100]),
+        rtol=3e-2,
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DCurr"][20:100], desc.variables["DCurr"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DWell"][20:100], desc.variables["DWell"][20:100], rtol=1e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DGeod"][20:100], desc.variables["DGeod"][20:100], atol=1e-9
+    )
+    np.testing.assert_allclose(
+        vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
+    )
 
-    # straight field-line grid to compare quantities
-    grid = LinearGrid(L=15, M=2, N=2, NFP=eq.NFP)
-    vartheta_vmec = VMECIO.compute_theta_coords(
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_vmec_save_2(VMEC_save):
+    """Tests that saving in NetCDF format agrees with VMEC."""
+    vmec, desc = VMEC_save
+
+    # straight field-line grid to compare quantities in full volume
+    grid = LinearGrid(L=15, M=6, N=0, NFP=desc.variables["nfp"][:])
+    theta_vmec = VMECIO.compute_theta_coords(
         vmec.variables["lmns"][:],
         vmec.variables["xm"][:],
         vmec.variables["xn"][:],
@@ -299,7 +338,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         grid.nodes[:, 1],
         grid.nodes[:, 2],
     )
-    vartheta_desc = VMECIO.compute_theta_coords(
+    theta_desc = VMECIO.compute_theta_coords(
         desc.variables["lmns"][:],
         desc.variables["xm"][:],
         desc.variables["xn"][:],
@@ -314,7 +353,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         vmec.variables["zmns"][:],
         vmec.variables["xm"][:],
         vmec.variables["xn"][:],
-        theta=vartheta_vmec,
+        theta=theta_vmec,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=True,
@@ -324,15 +363,13 @@ def test_vmec_save(DSHAPE, TmpDir):
         desc.variables["zmns"][:],
         desc.variables["xm"][:],
         desc.variables["xn"][:],
-        theta=vartheta_desc,
+        theta=theta_desc,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=True,
     )
-    np.testing.assert_allclose(R_vmec, R_desc, rtol=2e-3)
-    np.testing.assert_allclose(Z_vmec, Z_desc, rtol=2e-3)
-
-    # TODO: not testing Jacobian because VMEC & DESC coordinate systems are different
+    np.testing.assert_allclose(R_vmec, R_desc, rtol=1e-3)
+    np.testing.assert_allclose(Z_vmec, Z_desc, rtol=1e-3)
 
     # |B|
     b_vmec = VMECIO.vmec_interpolate(
@@ -340,7 +377,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         np.zeros_like(vmec.variables["bmnc"][:]),
         vmec.variables["xm_nyq"][:],
         vmec.variables["xn_nyq"][:],
-        theta=vartheta_vmec,
+        theta=theta_vmec,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=False,
@@ -350,36 +387,12 @@ def test_vmec_save(DSHAPE, TmpDir):
         np.zeros_like(desc.variables["bmnc"][:]),
         desc.variables["xm_nyq"][:],
         desc.variables["xn_nyq"][:],
-        theta=vartheta_desc,
+        theta=theta_desc,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=False,
     )
     np.testing.assert_allclose(b_vmec, b_desc, rtol=1e-3)
-
-    # B^theta
-    bsupu_vmec = VMECIO.vmec_interpolate(
-        vmec.variables["bsupumnc"][:],
-        np.zeros_like(vmec.variables["bsupumnc"][:]),
-        vmec.variables["xm_nyq"][:],
-        vmec.variables["xn_nyq"][:],
-        theta=vartheta_vmec,
-        phi=grid.nodes[:, 2],
-        s=grid.nodes[:, 0],
-        sym=False,
-    )
-    bsupu_desc = VMECIO.vmec_interpolate(
-        desc.variables["bsupumnc"][:],
-        np.zeros_like(desc.variables["bsupumnc"][:]),
-        desc.variables["xm_nyq"][:],
-        desc.variables["xn_nyq"][:],
-        theta=vartheta_desc,
-        phi=grid.nodes[:, 2],
-        s=grid.nodes[:, 0],
-        sym=False,
-    )
-    # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
-    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=5e-2, atol=2e-2)
 
     # B^zeta
     bsupv_vmec = VMECIO.vmec_interpolate(
@@ -387,7 +400,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         np.zeros_like(vmec.variables["bsupvmnc"][:]),
         vmec.variables["xm_nyq"][:],
         vmec.variables["xn_nyq"][:],
-        theta=vartheta_vmec,
+        theta=theta_vmec,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=False,
@@ -397,38 +410,12 @@ def test_vmec_save(DSHAPE, TmpDir):
         np.zeros_like(desc.variables["bsupvmnc"][:]),
         desc.variables["xm_nyq"][:],
         desc.variables["xn_nyq"][:],
-        theta=vartheta_desc,
+        theta=theta_desc,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsupv_vmec, bsupv_desc, rtol=1e-3, atol=1e-3)
-
-    # TODO: not testing B_psi because VMEC radial derivatives are inaccurate
-
-    # B_theta
-    bsubu_vmec = VMECIO.vmec_interpolate(
-        vmec.variables["bsubumnc"][:],
-        np.zeros_like(vmec.variables["bsubumnc"][:]),
-        vmec.variables["xm_nyq"][:],
-        vmec.variables["xn_nyq"][:],
-        theta=vartheta_vmec,
-        phi=grid.nodes[:, 2],
-        s=grid.nodes[:, 0],
-        sym=False,
-    )
-    bsubu_desc = VMECIO.vmec_interpolate(
-        desc.variables["bsubumnc"][:],
-        np.zeros_like(desc.variables["bsubumnc"][:]),
-        desc.variables["xm_nyq"][:],
-        desc.variables["xn_nyq"][:],
-        theta=vartheta_desc,
-        phi=grid.nodes[:, 2],
-        s=grid.nodes[:, 0],
-        sym=False,
-    )
-    # FIXME: this is a bad test because VMEC and DESC use different poloidal angles
-    np.testing.assert_allclose(bsubu_vmec, bsubu_desc, rtol=5e-2, atol=6e-3)
+    np.testing.assert_allclose(bsupv_vmec, bsupv_desc, rtol=1e-3)
 
     # B_zeta
     bsubv_vmec = VMECIO.vmec_interpolate(
@@ -436,7 +423,7 @@ def test_vmec_save(DSHAPE, TmpDir):
         np.zeros_like(vmec.variables["bsubvmnc"][:]),
         vmec.variables["xm_nyq"][:],
         vmec.variables["xn_nyq"][:],
-        theta=vartheta_vmec,
+        theta=theta_vmec,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=False,
@@ -446,31 +433,142 @@ def test_vmec_save(DSHAPE, TmpDir):
         np.zeros_like(desc.variables["bsubvmnc"][:]),
         desc.variables["xm_nyq"][:],
         desc.variables["xn_nyq"][:],
-        theta=vartheta_desc,
+        theta=theta_desc,
         phi=grid.nodes[:, 2],
         s=grid.nodes[:, 0],
         sym=False,
     )
     np.testing.assert_allclose(bsubv_vmec, bsubv_desc, rtol=1e-3)
 
-    # TODO: not testing J^theta & J^zeta because VMEC radial derivatives are inaccurate
+    # straight field-line grid to compare quantities on boundary
+    grid = LinearGrid(M=6, N=0, NFP=desc.variables["nfp"][:], rho=np.array([1.0]))
+    theta_vmec = VMECIO.compute_theta_coords(
+        vmec.variables["lmns"][:],
+        vmec.variables["xm"][:],
+        vmec.variables["xn"][:],
+        grid.nodes[:, 0],
+        grid.nodes[:, 1],
+        grid.nodes[:, 2],
+    )
+    theta_desc = VMECIO.compute_theta_coords(
+        desc.variables["lmns"][:],
+        desc.variables["xm"][:],
+        desc.variables["xn"][:],
+        grid.nodes[:, 0],
+        grid.nodes[:, 1],
+        grid.nodes[:, 2],
+    )
 
-    vmec.close()
-    desc.close()
+    # lambda
+    L_vmec = VMECIO.vmec_interpolate(
+        np.zeros_like(vmec.variables["lmns"][:]),
+        vmec.variables["lmns"][:],
+        vmec.variables["xm"][:],
+        vmec.variables["xn"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    L_desc = VMECIO.vmec_interpolate(
+        np.zeros_like(desc.variables["lmns"][:]),
+        desc.variables["lmns"][:],
+        desc.variables["xm"][:],
+        desc.variables["xn"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(L_vmec, L_desc, rtol=1e-2)
+
+    # Jacobian
+    g_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["gmnc"][:],
+        np.zeros_like(vmec.variables["gmnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    g_desc = VMECIO.vmec_interpolate(
+        desc.variables["gmnc"][:],
+        np.zeros_like(desc.variables["gmnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(g_vmec, g_desc, rtol=1e-2)
+
+    # B^theta
+    bsupu_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["bsupumnc"][:],
+        np.zeros_like(vmec.variables["bsupumnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    bsupu_desc = VMECIO.vmec_interpolate(
+        desc.variables["bsupumnc"][:],
+        np.zeros_like(desc.variables["bsupumnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(bsupu_vmec, bsupu_desc, rtol=1e-2)
+
+    # B_theta
+    bsubu_vmec = VMECIO.vmec_interpolate(
+        vmec.variables["bsubumnc"][:],
+        np.zeros_like(vmec.variables["bsubumnc"][:]),
+        vmec.variables["xm_nyq"][:],
+        vmec.variables["xn_nyq"][:],
+        theta=theta_vmec,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    bsubu_desc = VMECIO.vmec_interpolate(
+        desc.variables["bsubumnc"][:],
+        np.zeros_like(desc.variables["bsubumnc"][:]),
+        desc.variables["xm_nyq"][:],
+        desc.variables["xn_nyq"][:],
+        theta=theta_desc,
+        phi=grid.nodes[:, 2],
+        s=grid.nodes[:, 0],
+        sym=False,
+    )
+    np.testing.assert_allclose(bsubu_vmec, bsubu_desc, rtol=1e-2)
+
+    # FIXME: not testing B_psi
+    # FIXME: not testing J^theta * sqrt(g)
+    # FIXME: not testing J^zeta * sqrt(g)
 
 
+@pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(tolerance=1)
 def test_plot_vmec_comparison(SOLOVEV):
     """Test that DESC and VMEC flux surface plots match."""
-
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     fig, ax = VMECIO.plot_vmec_comparison(eq, str(SOLOVEV["vmec_nc_path"]))
     return fig
 
 
+@pytest.mark.unit
 def test_vmec_boundary_subspace(DummyStellarator):
     """Test VMEC boundary subspace is enforced properly."""
-
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )

@@ -3,8 +3,9 @@
 from scipy.constants import mu_0
 
 from desc.backend import jnp
+
 from .data_index import data_index
-from .utils import check_derivs, dot, cross, surface_averages, surface_integrals
+from .utils import check_derivs, cross, dot, surface_averages, surface_integrals
 
 
 def compute_flux_coords(
@@ -59,7 +60,7 @@ def compute_toroidal_flux(
     """
     data = compute_flux_coords(grid, data=data)
 
-    # psi = Psi / 2*pi
+    # psi = Psi / 2*pi  # noqa: E800
     data["psi"] = Psi * data["rho"] ** 2 / (2 * jnp.pi)
     data["psi_r"] = 2 * Psi * data["rho"] / (2 * jnp.pi)
     data["psi_rr"] = 2 * Psi * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
@@ -367,7 +368,7 @@ def compute_rotational_transform(
     return data
 
 
-def compute_covariant_basis(
+def compute_covariant_basis(  # noqa: C901
     R_lmn,
     Z_lmn,
     R_transform,

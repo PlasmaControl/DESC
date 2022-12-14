@@ -1,9 +1,13 @@
-import numpy as np
+"""Functions for flux surface averages and vector algebra operations."""
+
 import warnings
+
+import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
 from desc.grid import ConcentricGrid
+
 from .data_index import data_index
 
 
@@ -276,7 +280,7 @@ def surface_averages(
     if denominator is None:
         if sqrt_g.size == 1:
             denominator = (
-                4 * jnp.pi ** 2 if surface_label == "rho" else 2 * jnp.pi
+                4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi
             ) * sqrt_g
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)

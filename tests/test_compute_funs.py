@@ -1,9 +1,11 @@
+"""Tests for compute functions."""
+
 import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
 from desc.compute.utils import compress
-from desc.equilibrium import Equilibrium, EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 
 # convolve kernel is reverse of FD coeffs
@@ -14,9 +16,9 @@ FD_COEF_2_4 = np.array([-1 / 12, 4 / 3, -5 / 2, 4 / 3, -1 / 12])[::-1]
 
 
 # TODO: add more tests for compute_geometry
+@pytest.mark.unit
 def test_total_volume(DummyStellarator):
     """Test that the volume enclosed by the LCFS is equal to the total volume."""
-
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -27,8 +29,9 @@ def test_total_volume(DummyStellarator):
     np.testing.assert_allclose(lcfs_volume, total_volume)
 
 
+@pytest.mark.unit
 def test_enclosed_volumes():
-    """Test that the volume enclosed by flux surfaces matches known analytic formulas."""
+    """Test that the volume enclosed by flux surfaces matches analytic formulas."""
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
@@ -38,26 +41,30 @@ def test_enclosed_volumes():
         compress(grid, data["V(r)"]),
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi ** 2 * rho,
+        4 * data["R0"] * np.pi**2 * rho,
         compress(grid, data["V_r(r)"]),
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi ** 2,
+        4 * data["R0"] * np.pi**2,
         compress(grid, data["V_rr(r)"]),
     )
 
 
+@pytest.mark.unit
 def test_surface_areas():
     """Test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute("S(r)", grid=grid)
-    S = 4 * data["R0"] * np.pi ** 2 * rho
+    S = 4 * data["R0"] * np.pi**2 * rho
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
+# TODO: remove or combine with above
+@pytest.mark.unit
 def test_surface_areas_2():
+    """Alternate test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()
 
     grid_r = LinearGrid(rho=1, theta=10, zeta=10)
@@ -78,23 +85,22 @@ def test_surface_areas_2():
         data_z["|e_rho x e_theta|"] * grid_z.spacing[:, 0] * grid_z.spacing[:, 1]
     )
 
-    np.testing.assert_allclose(Ar, 4 * 10 * np.pi ** 2)
-    np.testing.assert_allclose(At, np.pi * (11 ** 2 - 10 ** 2))
+    np.testing.assert_allclose(Ar, 4 * 10 * np.pi**2)
+    np.testing.assert_allclose(At, np.pi * (11**2 - 10**2))
     np.testing.assert_allclose(Az, np.pi)
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_magnetic_field_derivatives(DummyStellarator):
-    """Test that the partial derivatives of B and |B| match with numerical derivatives
-    for a dummy stellarator example."""
-
+    """Test that the derivatives of B and |B| are close to numerical derivatives."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
 
     # partial derivatives wrt rho
     num_rho = 75
-    grid = LinearGrid(rho=num_rho)
+    grid = LinearGrid(rho=num_rho, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute("J", grid)
 
@@ -143,13 +149,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
     data = eq.compute("|B|_tt", grid, data=data)
 
     B_sup_theta_t = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dtheta
-    B_sup_theta_tt = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dtheta ** 2
+    B_sup_theta_tt = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dtheta**2
     B_sup_zeta_t = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dtheta
-    B_sup_zeta_tt = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dtheta ** 2
+    B_sup_zeta_tt = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dtheta**2
     B_sub_rho_t = np.convolve(data["B_rho"], FD_COEF_1_4, "same") / dtheta
     B_sub_zeta_t = np.convolve(data["B_zeta"], FD_COEF_1_4, "same") / dtheta
     B_t = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dtheta
-    B_tt = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dtheta ** 2
+    B_tt = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dtheta**2
 
     np.testing.assert_allclose(
         data["B^theta_t"][2:-2],
@@ -208,13 +214,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
     data = eq.compute("|B|_zz", grid, data=data)
 
     B_sup_theta_z = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dzeta
-    B_sup_theta_zz = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dzeta ** 2
+    B_sup_theta_zz = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dzeta**2
     B_sup_zeta_z = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / dzeta
-    B_sup_zeta_zz = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dzeta ** 2
+    B_sup_zeta_zz = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / dzeta**2
     B_sub_rho_z = np.convolve(data["B_rho"], FD_COEF_1_4, "same") / dzeta
     B_sub_theta_z = np.convolve(data["B_theta"], FD_COEF_1_4, "same") / dzeta
     B_z = np.convolve(data["|B|"], FD_COEF_1_4, "same") / dzeta
-    B_zz = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dzeta ** 2
+    B_zz = np.convolve(data["|B|"], FD_COEF_2_4, "same") / dzeta**2
 
     np.testing.assert_allclose(
         data["B^theta_z"][2:-2],
@@ -277,33 +283,24 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_theta))
     B = data["|B|"].reshape((num_zeta, num_theta))
 
-    B_sup_theta_tz = (
-        convolve2d(
-            B_sup_theta,
-            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-            mode="same",
-            boundary="wrap",
-        )
-        / (dtheta * dzeta)
-    )
-    B_sup_zeta_tz = (
-        convolve2d(
-            B_sup_zeta,
-            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-            mode="same",
-            boundary="wrap",
-        )
-        / (dtheta * dzeta)
-    )
-    B_tz = (
-        convolve2d(
-            B,
-            FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
-            mode="same",
-            boundary="wrap",
-        )
-        / (dtheta * dzeta)
-    )
+    B_sup_theta_tz = convolve2d(
+        B_sup_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_sup_zeta_tz = convolve2d(
+        B_sup_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_tz = convolve2d(
+        B,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
 
     np.testing.assert_allclose(
         data["B^theta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
@@ -326,10 +323,9 @@ def test_magnetic_field_derivatives(DummyStellarator):
 
 
 @pytest.mark.slow
+@pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
-    """Test that the components of grad(|B|^2)) match with numerical gradients
-    for a dummy stellarator example."""
-
+    """Test that the components of grad(|B|^2)) match with numerical gradients."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -377,10 +373,11 @@ def test_magnetic_pressure_gradient(DummyStellarator):
     )
 
 
-def test_currents(DSHAPE):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_currents(DSHAPE_current):
     """Test that different methods for computing I and G agree."""
-
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     grid_full = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
@@ -396,10 +393,9 @@ def test_currents(DSHAPE):
 
 
 @pytest.mark.slow
-def test_quasisymmetry(DummyStellarator):
-    """Test that the components of grad(B*grad(|B|)) match with numerical gradients
-    for a dummy stellarator example."""
-
+@pytest.mark.unit
+def test_BdotgradB(DummyStellarator):
+    """Test that the components of grad(B*grad(|B|)) match with numerical gradients."""
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
@@ -432,10 +428,11 @@ def test_quasisymmetry(DummyStellarator):
 
 
 # TODO: add test with stellarator example
-def test_boozer_transform(DSHAPE):
+@pytest.mark.unit
+@pytest.mark.solve
+def test_boozer_transform(DSHAPE_current):
     """Test that Boozer coordinate transform agrees with BOOZ_XFORM."""
-
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
+    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     data = eq.compute("|B|_mn", grid, M_booz=eq.M, N_booz=eq.N)
     booz_xform = np.array(
@@ -464,7 +461,9 @@ def test_boozer_transform(DSHAPE):
     )
 
 
+@pytest.mark.unit
 def test_compute_grad_p_volume_avg():
+    """Test calculation of volume averaged pressure gradient."""
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)

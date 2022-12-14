@@ -1,17 +1,17 @@
+"""Tests for linear constraints and objectives."""
+
 import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.objectives import (
-    FixLambdaGauge,
-    FixCurrent,
-    FixIota,
-)
+from desc.objectives import FixBoundaryZ, FixCurrent, FixIota, FixLambdaGauge
 from desc.profiles import PowerSeriesProfile
 
 
+@pytest.mark.unit
 def test_LambdaGauge_axis_sym(DummyStellarator):
+    """Test that lambda at axis is fixed correctly for symmetric equilibrium."""
     # symmetric cases only have the axis constraint
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
@@ -26,7 +26,9 @@ def test_LambdaGauge_axis_sym(DummyStellarator):
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
 
+@pytest.mark.unit
 def test_LambdaGauge_asym():
+    """Test that lambda gauge is fixed correctly for asymmetric equilibrium."""
     # just testing the gauge condition
     inputs = {
         "sym": False,
@@ -68,7 +70,9 @@ def test_LambdaGauge_asym():
     )
 
 
+@pytest.mark.unit
 def test_bc_on_interior_surfaces():
+    """Test applying boundary conditions on internal surface."""
     surf = FourierRZToroidalSurface(rho=0.5)
     iota = PowerSeriesProfile([1, 0, 0.5])
     eq = Equilibrium(L=4, M=4, N=0, surface=surf, iota=iota)
@@ -79,7 +83,23 @@ def test_bc_on_interior_surfaces():
     np.testing.assert_allclose(surf.Z_lmn, surf5.Z_lmn, atol=1e-12)
 
 
+@pytest.mark.unit
+def test_constrain_bdry_with_only_one_mode():
+    """Test Fixing boundary with a surface with only one mode in its basis."""
+    eq = Equilibrium()
+    FixZ = FixBoundaryZ(fixed_boundary=True)
+    try:
+        FixZ.build(eq)
+    except Exception:
+        pytest.fail(
+            "Error encountered when attempting to constrain surface with"
+            + " only one mode in its basis"
+        )
+
+
+@pytest.mark.unit
 def test_constrain_asserts():
+    """Test error checking for incompatible constraints."""
     # nonexistent toroidal current can't be constrained
     eq = Equilibrium(iota=PowerSeriesProfile(0, 0))
     with pytest.raises(RuntimeError):

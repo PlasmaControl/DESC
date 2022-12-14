@@ -1,27 +1,39 @@
-import scipy.optimize
+"""Class for wrapping a number of common optimization methods."""
+
 import warnings
+
+import numpy as np
+import scipy.optimize
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.utils import Timer
 from desc.io import IOAble
 from desc.objectives import (
-    ObjectiveFunction,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
     CurrentDensity,
-    WrappedEquilibriumObjective,
-    FixIota,
     FixCurrent,
+    FixIota,
+    ForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+    RadialForceBalance,
+    WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.optimize import fmintr, lsqtr
-from .utils import check_termination, print_header_nonlinear, print_iteration_nonlinear
+from desc.utils import Timer
+
+from .fmin_scalar import fmintr
+from .least_squares import lsqtr
+from .stochastic import sgd
+from .utils import (
+    check_termination,
+    find_matching_inds,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
 class Optimizer(IOAble):
-    """A helper class to wrap several optimization routines
+    """A helper class to wrap several optimization routines.
 
     Offers all the ``scipy.optimize.least_squares`` routines  and several of the most
     useful ``scipy.optimize.minimize`` routines.
@@ -35,7 +47,8 @@ class Optimizer(IOAble):
 
         * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-trust-exact'``,
           ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
-        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``, ``'scipy-dogbox'``
+        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``,
+          ``'scipy-dogbox'``
         * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
           ``'subspace-bfgs'``
         * desc least squares routines: ``'lsq-exact'``
@@ -56,6 +69,7 @@ class Optimizer(IOAble):
         "scipy-trust-krylov",
     ]
     _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
+    _desc_stochastic_methods = ["sgd"]
     _desc_least_squares_methods = ["lsq-exact"]
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
@@ -67,6 +81,7 @@ class Optimizer(IOAble):
         + _scipy_scalar_methods
         + _scipy_constrained_scalar_methods
         + _desc_constrained_scalar_methods
+        + _desc_stochastic_methods
     )
     _least_squares_methods = (
         _scipy_least_squares_methods
@@ -85,6 +100,7 @@ class Optimizer(IOAble):
         + _desc_scalar_methods
         + _desc_constrained_scalar_methods
         + _desc_constrained_least_squares_methods
+        + _desc_stochastic_methods
     )
     _constrained_methods = (
         _desc_constrained_scalar_methods
@@ -97,6 +113,7 @@ class Optimizer(IOAble):
         + _scipy_scalar_methods
         + _desc_scalar_methods
         + _desc_least_squares_methods
+        + _desc_stochastic_methods
     )
 
     def __init__(self, method):
@@ -104,7 +121,7 @@ class Optimizer(IOAble):
         self.method = method
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -114,7 +131,7 @@ class Optimizer(IOAble):
 
     @property
     def method(self):
-        """str : name of the optimization method"""
+        """str: Name of the optimization method."""
         return self._method
 
     @method.setter
@@ -130,15 +147,24 @@ class Optimizer(IOAble):
             )
         self._method = method
 
+    def _get_default_tols(self, ftol, xtol, gtol):
+        if xtol is None:
+            xtol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-4
+        if ftol is None:
+            ftol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-2
+        if gtol is None:
+            gtol = 1e-6
+        return ftol, xtol, gtol
+
     # TODO: add copy argument and return the equilibrium?
-    def optimize(
+    def optimize(  # noqa: C901 - FIXME: simplify this
         self,
         eq,
         objective,
         constraints=(),
-        ftol=1e-6,
-        xtol=1e-6,
-        gtol=1e-6,
+        ftol=None,
+        xtol=None,
+        gtol=None,
         x_scale="auto",
         verbose=1,
         maxiter=None,
@@ -156,19 +182,17 @@ class Optimizer(IOAble):
             List of objectives to be used as constraints during optimization.
         ftol : float or None, optional
             Tolerance for termination by the change of the cost function.
-            Default is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+            The optimization process is stopped when ``dF < ftol * F``,
             and there was an adequate agreement between a local quadratic model and the
             true model in the last step.
             If None, the termination by this condition is disabled.
         xtol : float or None, optional
             Tolerance for termination by the change of the independent variables.
-            Default is 1e-8.
             Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
             If None, the termination by this condition is disabled.
         gtol : float or None, optional
             Absolute tolerance for termination by the norm of the gradient.
-            Default is 1e-8. Optimizer terminates when ``norm(g) < gtol``, where
-            # FIXME: missing documentation!
+            Optimizer terminates when ``norm(g) < gtol``, where
             If None, the termination by this condition is disabled.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
@@ -186,8 +210,8 @@ class Optimizer(IOAble):
         maxiter : int, optional
             Maximum number of iterations. Defaults to size(x)*100.
         options : dict, optional
-            Dictionary of optional keyword arguments to override default solver settings.
-            See the code for more details.
+            Dictionary of optional keyword arguments to override default solver
+            settings. See the code for more details.
 
         Returns
         -------
@@ -200,12 +224,15 @@ class Optimizer(IOAble):
 
         """
         # TODO: document options
+        timer = Timer()
         # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
         disp = verbose - 1 if verbose > 1 else verbose
+        ftol, xtol, gtol = self._get_default_tols(ftol, xtol, gtol)
 
-        timer = Timer()
-
-        if self.method in Optimizer._desc_methods:
+        if (
+            self.method in Optimizer._desc_methods
+            and self.method not in Optimizer._desc_stochastic_methods
+        ):
             if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
                 options.setdefault("initial_trust_radius", 0.5)
                 options.setdefault("max_trust_radius", 1.0)
@@ -222,7 +249,8 @@ class Optimizer(IOAble):
             isinstance(lc, FixIota) for lc in linear_constraints
         ):
             raise ValueError(
-                "Toroidal current and rotational transform can't be constrained simultaneously"
+                "Toroidal current and rotational transform cannot be "
+                + "constrained simultaneously."
             )
 
         # wrap nonlinear constraints if necessary
@@ -440,8 +468,12 @@ class Optimizer(IOAble):
             method = (
                 self.method if "bfgs" not in self.method else self.method.split("-")[0]
             )
-            x_scale = "hess" if x_scale == "auto" else x_scale
-
+            if isinstance(x_scale, str):
+                if x_scale == "auto":
+                    if "bfgs" not in self.method:
+                        x_scale = "hess"
+                    else:
+                        x_scale = 1
             result = fmintr(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
@@ -450,6 +482,23 @@ class Optimizer(IOAble):
                 args=(),
                 method=method,
                 x_scale=x_scale,
+                ftol=ftol,
+                xtol=xtol,
+                gtol=gtol,
+                verbose=disp,
+                maxiter=maxiter,
+                callback=None,
+                options=options,
+            )
+
+        elif self.method in Optimizer._desc_stochastic_methods:
+
+            result = sgd(
+                compute_scalar_wrapped,
+                x0=x0_reduced,
+                grad=grad_wrapped,
+                args=(),
+                method=self.method,
                 ftol=ftol,
                 xtol=xtol,
                 gtol=gtol,
@@ -477,6 +526,16 @@ class Optimizer(IOAble):
             )
 
         if wrapped:
+            # history from objective includes steps the optimizer didn't accept
+            # need to find where the optimizer actually stepped and only take those
+            wrapped_allx = objective._allx
+            projected_wrapped_allx = []
+            for i, x in enumerate(wrapped_allx):
+                projected_wrapped_allx.append(project(x))
+            optim_allx = result["allx"]
+            match_inds = find_matching_inds(optim_allx, projected_wrapped_allx)
+            for key, val in objective.history.items():
+                objective.history[key] = np.asarray(val)[match_inds]
             result["history"] = objective.history
         else:
             result["history"] = {}

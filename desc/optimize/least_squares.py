@@ -1,23 +1,27 @@
+"""Function for solving nonlinear least squares problems."""
+
 import numpy as np
+from scipy.optimize import OptimizeResult
 from termcolor import colored
+
 from desc.backend import jnp
-from .utils import (
-    check_termination,
-    print_header_nonlinear,
-    print_iteration_nonlinear,
-    status_messages,
-    compute_jac_scale,
-    evaluate_quadratic,
-)
+
 from .tr_subproblems import (
-    trust_region_step_exact_svd,
     trust_region_step_exact_cho,
+    trust_region_step_exact_svd,
     update_tr_radius,
 )
-from scipy.optimize import OptimizeResult
+from .utils import (
+    STATUS_MESSAGES,
+    check_termination,
+    compute_jac_scale,
+    evaluate_quadratic_form_jac,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
-def lsqtr(
+def lsqtr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
@@ -32,7 +36,7 @@ def lsqtr(
     callback=None,
     options={},
 ):
-    """Solve a least squares problem using a (quasi)-Newton trust region method
+    """Solve a least squares problem using a (quasi)-Newton trust region method.
 
     Parameters
     ----------
@@ -120,7 +124,6 @@ def lsqtr(
     n = x0.size
     x = x0.copy()
     f = fun(x, *args)
-    m = f.size
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
     J = jac(x, *args)
@@ -146,8 +149,26 @@ def lsqtr(
         x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
-    # initial trust region radius
-    trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
+    g_h = g * scale
+    J_h = J * scale
+
+    # initial trust region radius is based on the geometric mean of 2 possible rules:
+    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # second is the norm of the scaled x, as used in scipy
+    # in practice for our problems the C&G one is too small, while scipy is too big,
+    # but the geometric mean seems to work well
+    init_tr = {
+        "scipy": np.linalg.norm(x * scale_inv),
+        "conngould": np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2),
+        "mix": np.sqrt(
+            np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
+        ),
+    }
+    trust_radius = options.pop("initial_trust_radius", "scipy")
+    tr_ratio = options.pop("initial_trust_ratio", 1.0)
+    trust_radius = init_tr.get(trust_radius, trust_radius)
+    trust_radius *= tr_ratio
+
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
     min_trust_radius = options.pop("min_trust_radius", 0)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
@@ -167,7 +188,7 @@ def lsqtr(
     message = None
     step_norm = np.inf
     actual_reduction = np.inf
-    ratio = 0  # ratio between actual reduction and predicted reduction
+    reduction_ratio = 0
 
     if verbose > 1:
         print_header_nonlinear()
@@ -184,7 +205,7 @@ def lsqtr(
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
         if g_norm < gtol:
             success = True
-            message = status_messages["gtol"]
+            message = STATUS_MESSAGES["gtol"]
         if verbose > 1:
             print_iteration_nonlinear(
                 iteration, nfev, cost, actual_reduction, step_norm, g_norm
@@ -200,6 +221,26 @@ def lsqtr(
             B_h = jnp.dot(J_h.T, J_h)
 
         actual_reduction = -1
+
+        success, message = check_termination(
+            actual_reduction,
+            cost,
+            step_norm,
+            x_norm,
+            g_norm,
+            reduction_ratio=reduction_ratio,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            iteration=iteration,
+            maxiter=maxiter,
+            nfev=nfev,
+            max_nfev=max_nfev,
+            ngev=0,
+            max_ngev=np.inf,
+            nhev=njev,
+            max_nhev=max_njev,
+        )
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
@@ -236,7 +277,7 @@ def lsqtr(
                 step_h += ga_step_h
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = -evaluate_quadratic(J_h, g_h, step_h)
+            predicted_reduction = -evaluate_quadratic_form_jac(J_h, g_h, step_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
@@ -251,7 +292,7 @@ def lsqtr(
 
             # update the trust radius according to the actual/predicted ratio
             tr_old = trust_radius
-            trust_radius, ratio = update_tr_radius(
+            trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
                 predicted_reduction,
@@ -274,7 +315,7 @@ def lsqtr(
                 step_norm,
                 x_norm,
                 g_norm,
-                ratio,
+                reduction_ratio,
                 ftol,
                 xtol,
                 gtol,
@@ -292,11 +333,9 @@ def lsqtr(
 
         # if reduction was enough, accept the step
         if actual_reduction > 0:
-            x_old = x
             x = x_new
             if return_all:
                 allx.append(x)
-            f_old = f
             f = f_new
             cost = cost_new
             J = jac(x, *args)
@@ -311,7 +350,7 @@ def lsqtr(
                 stop = callback(np.copy(x), *args)
                 if stop:
                     success = False
-                    message = status_messages["callback"]
+                    message = STATUS_MESSAGES["callback"]
                     break
 
         else:

@@ -119,7 +119,7 @@ class ObjectiveFunction(IOAble):
             self._jac = Derivative(self.compute, mode="fwd")
             obj_names = [obj.__class__.__name__ for obj in self.objectives]
             self.looped = any(["BoundaryError" in s for s in obj_names])
-            if looped:
+            if self.looped:
                 self._jac = Derivative(
                     self.compute,
                     mode="looped",

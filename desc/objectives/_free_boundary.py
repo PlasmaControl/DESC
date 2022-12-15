@@ -14,6 +14,8 @@ from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
 from desc.transform import Transform
 
+from .normalization import compute_scaling_factors
+
 
 def compute_I(
     R_lmn,
@@ -114,6 +116,8 @@ def bsq_plasma(
 class BoundaryErrorNESTOR(_Objective):
     _scalar = False
     _linear = False
+    _print_value_fmt = "Boundary Pressure Imbalance: {:10.3e} "
+    _units = "Pa"
 
     def __init__(
         self,
@@ -125,6 +129,8 @@ class BoundaryErrorNESTOR(_Objective):
         nf=None,
         ntheta=None,
         nzeta=None,
+        normalize=True,
+        normalize_target=True,
         name="NESTOR Boundary",
     ):
 
@@ -133,8 +139,14 @@ class BoundaryErrorNESTOR(_Objective):
         self.ntheta = ntheta
         self.nzeta = nzeta
         self.ext_field = ext_field
-        self._print_value_fmt = "Boundary Pressure Imbalance: {:10.3e} " + "Pa"
-        super().__init__(eq, target, weight, name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
 
@@ -179,10 +191,12 @@ class BoundaryErrorNESTOR(_Objective):
             self.Bc_profile.grid = Bgrid
             self.Ic_profile.grid = Igrid
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi):
 

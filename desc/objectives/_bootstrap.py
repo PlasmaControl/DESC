@@ -245,17 +245,7 @@ class BootstrapRedlConsistency(_Objective):
         data = compute_flux_coords(grid=self.grid, data=data)
 
         fourpi2 = 4 * jnp.pi * jnp.pi
-
-        # Consider moving the following calculation of rho_weights to
-        # grid.py:Grid._count_nodes()?
-
-        # Get the number of (theta, zeta) grid points for each rho
-        # grid point. The result is a 1D array of size num_rho.
-        num_surf_points, _ = jnp.histogram(
-            self.grid.inverse_rho_idx, bins=self.grid.num_rho
-        )
-        # Get the weights for integrating in rho without also integrating in (theta, zeta):
-        rho_weights = compress(self.grid, self.grid.weights) * num_surf_points / fourpi2
+        rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
         denominator = (
             jnp.sum(

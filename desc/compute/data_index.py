@@ -3667,7 +3667,7 @@ data_index["magnetic well"] = {
 }
 # Quantities related to bootstrap current
 data_index["<J dot B> Redl"] = {
-    "label": "\\langle\\mathbf{J}\cdot\\mathbf{B}\\rangle_{Redl}",
+    "label": "\\langle\\mathbf{J}\\cdot\\mathbf{B}\\rangle_{Redl}",
     "units": "T A m^{-2}",
     "units_long": "Tesla Ampere / meter^2",
     "description": "Bootstrap current profile, Redl model for quasisymmetry",

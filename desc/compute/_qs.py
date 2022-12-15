@@ -311,6 +311,7 @@ def compute_quasiisodynamic_field(
         shift_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
     )
     shift_mn = jnp.concatenate((shift_m0, shift_mn))
+    # XXX: is zeta_transform using theta_B?
     zeta = zeta_bar + zeta_transform.transform(shift_mn)
     zeta = (2 * zeta + jnp.pi) / zeta_transform.basis.NFP
     data["zeta_QI"] = zeta
@@ -408,7 +409,7 @@ def compute_quasiisodynamic_error(
     )
 
     nodes = jnp.array(
-        [B_transform.grid.nodes[:, 0], B_transform.grid.nodes[:, 1], data["zeta_QI"]]
+        [B_transform.grid.nodes[:, 0], data["theta_B"], data["zeta_QI"]]
     ).T
     B = jnp.matmul(B_transform.basis.evaluate(nodes), data["|B|_mn"])
     B_qi = data["|B|_QI"]

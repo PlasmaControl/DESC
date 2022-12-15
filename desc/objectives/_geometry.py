@@ -174,7 +174,6 @@ class Elongation(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "Elongation: {:10.3e} (dimensionless)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

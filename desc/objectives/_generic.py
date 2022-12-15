@@ -341,11 +341,12 @@ class MirrorRatio(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Mirror ratio: {:10.3e} "
 
     def __init__(self, eq=None, target=None, weight=1, name="mirror ratio"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Mirror ratio: {:10.3e} (dimensionless)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

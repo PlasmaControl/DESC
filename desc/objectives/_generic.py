@@ -181,7 +181,7 @@ class GenericObjective(_Objective):
         return self._shift_scale(f)
 
 
-class TargetCurrent(_Objective):
+class ToroidalCurrent(_Objective):
     """Target toroidal current profile.
 
     Parameters
@@ -210,7 +210,7 @@ class TargetCurrent(_Objective):
     _scalar = True
     _linear = False
     _units = "(A)"
-    _print_value_fmt = "Target current: {:10.3e} "
+    _print_value_fmt = "Toroidal current: {:10.3e} "
 
     def __init__(
         self,
@@ -334,7 +334,7 @@ class TargetCurrent(_Objective):
         return self._shift_scale(I) * w
 
 
-class TargetIota(_Objective):
+class RotationalTransform(_Objective):
     """Targets a rotational transform profile.
 
     Parameters
@@ -364,7 +364,7 @@ class TargetIota(_Objective):
     _scalar = False
     _linear = False
     _units = "(dimensionless)"
-    _print_value_fmt = "Target iota: {:10.3e} "
+    _print_value_fmt = "Rotational transform: {:10.3e} "
 
     def __init__(
         self,
@@ -374,7 +374,7 @@ class TargetIota(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="target-iota",
+        name="rotational transform",
     ):
 
         self.grid = grid

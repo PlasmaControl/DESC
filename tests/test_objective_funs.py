@@ -20,8 +20,8 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
-    TargetCurrent,
-    TargetIota,
+    RotationalTransform,
+    ToroidalCurrent,
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
@@ -105,7 +105,7 @@ class TestObjectiveFunction:
         """Test calculation of iota profile."""
 
         def test(eq):
-            obj = TargetIota(target=1, weight=2, eq=eq)
+            obj = RotationalTransform(target=1, weight=2, eq=eq)
             iota = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
             np.testing.assert_allclose(iota, -2 / 3)
 
@@ -117,7 +117,7 @@ class TestObjectiveFunction:
         """Test calculation of toroidal current."""
 
         def test(eq):
-            obj = TargetCurrent(target=1, weight=2, eq=eq, normalize=False)
+            obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
             np.testing.assert_allclose(I, -2 / 3)
 

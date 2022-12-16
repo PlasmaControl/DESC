@@ -276,7 +276,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
-        data = compute_eq.compute(name, grid)[name]
+        data = compute_eq.compute(name, grid=grid)[name]
 
     if data_index[name]["dim"] > 1:
         if component is None:
@@ -696,7 +696,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.pop("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        coords = eq.compute("X", grid)
+        coords = eq.compute("X", "Y", "Z", grid=grid)
     X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -1020,7 +1020,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     )
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute("R", grid)
+    coords = eq.compute("R", "Z", grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1221,7 +1221,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
-    r_coords = eq.compute("R", r_grid)
+    r_coords = eq.compute("R", "Z", grid=r_grid)
     Rr = r_coords["R"].reshape(
         (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
     )
@@ -1230,7 +1230,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     )
     if plot_theta:
         # vartheta contours
-        v_coords = eq.compute("R", v_grid)
+        v_coords = eq.compute("R", "Z", grid=v_grid)
         Rv = v_coords["R"].reshape(
             (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
         )
@@ -1380,7 +1380,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
     if isinstance(ls, str):
         ls = [ls for i in range(grid.num_zeta - 1)]
 
-    coords = eq.compute("R", grid)
+    coords = eq.compute("R", "Z", grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1504,7 +1504,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         }
         grid = _get_grid(**grid_kwargs)
 
-        coords = eqs[i].compute("R", grid)
+        coords = eqs[i].compute("R", "Z", grid=grid)
         R = coords["R"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )
@@ -1847,7 +1847,7 @@ def plot_boozer_modes(
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        data = eq.compute("|B|_mn", grid)
+        data = eq.compute("|B|_mn", "B modes", grid=grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
@@ -1959,7 +1959,7 @@ def plot_boozer_surface(
         grid_plot = _get_grid(**grid_kwargs)
     title_font_size = kwargs.pop("title_font_size", None)
 
-    data = eq.compute("|B|_mn", grid_compute)
+    data = eq.compute("|B|_mn", grid=grid_compute)
     B_transform = Transform(
         grid_plot,
         DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
@@ -2088,8 +2088,7 @@ def plot_qs_error(
     markers = kwargs.pop("markers", ["o", "o", "o"])
     labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_B$"])
 
-    data = eq.compute("R0")
-    data = eq.compute("|B|", data=data)
+    data = eq.compute("R0", "|B|")
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
@@ -2100,7 +2099,7 @@ def plot_qs_error(
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
-            data = eq.compute("|B|_mn", grid, data)
+            data = eq.compute("|B|_mn", grid=grid, data=data)
             modes = data["B modes"]
             idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
@@ -2108,7 +2107,7 @@ def plot_qs_error(
             )
             f_B = np.append(f_B, f_b)
         if fC:
-            data = eq.compute("f_C", grid, data, helicity=helicity)
+            data = eq.compute("f_C", grid=grid, data=data, helicity=helicity)
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -2116,7 +2115,7 @@ def plot_qs_error(
             )
             f_C = np.append(f_C, f_c)
         if fT:
-            data = eq.compute("f_T", grid, data)
+            data = eq.compute("f_T", grid=grid, data=data)
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -2794,7 +2793,7 @@ def plot_field_lines_sfl(
     grid_single_rho = Grid(
         nodes=np.array([[rho, 0, 0]])
     )  # grid to get the iota value at the specified rho surface
-    iota = eq.compute("iota", grid_single_rho)["iota"][0]
+    iota = eq.compute("iota", grid=grid_single_rho)["iota"][0]
 
     varthetas = []
     phi = np.linspace(phi0, phi_end, N_pts)
@@ -2831,7 +2830,7 @@ def plot_field_lines_sfl(
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
         grid = Grid(nodes=coords)
-        toroidal_coords = eq.compute("R", grid)
+        toroidal_coords = eq.compute("R", "Z", grid=grid)
         field_line_coords["Rs"].append(toroidal_coords["R"])
         field_line_coords["Zs"].append(toroidal_coords["Z"])
         field_line_coords["phis"].append(phi)
@@ -2972,13 +2971,13 @@ def plot_field_lines_real_space(
     phi0 = kwargs.get("phi0", 0)
 
     # calculate toroidal coordinates
-    toroidal_coords = eq.compute("phi", grid)
+    toroidal_coords = eq.compute("phi", grid=grid)
     Rs = toroidal_coords["R"]
     Zs = toroidal_coords["Z"]
     phis = toroidal_coords["phi"]
 
     # calculate cylindrical B
-    magnetic_field = eq.compute("B", grid)
+    magnetic_field = eq.compute("B", grid=grid)
     BR = magnetic_field["B_R"]
     BZ = magnetic_field["B_Z"]
     Bphi = magnetic_field["B_phi"]

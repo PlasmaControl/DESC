@@ -294,7 +294,7 @@ def isalmostequal(x, axis=-1, tol=1e-12):
     if axis is None:
         x = x.flatten()
         axis = 0
-    return np.all(x.std(axis=axis) * x.shape[axis] < tol)
+    return np.all(x.std(axis=axis, dtype=np.float128) * x.shape[axis] < tol)
 
 
 def islinspaced(x, axis=-1, tol=1e-12):
@@ -320,7 +320,7 @@ def islinspaced(x, axis=-1, tol=1e-12):
     if axis is None:
         x = x.flatten()
         axis = 0
-    return np.all(np.diff(x, axis=axis).std() < tol)
+    return np.all(np.diff(x, axis=axis).std(dtype=np.float64) < tol)
 
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):

@@ -1,6 +1,30 @@
 Changelog
 =========
 
+
+v0.6.4
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.3...v0.6.4)
+
+Major Changes
+- All objectives now have a `normalize` argument that when true will nondimensionalize
+the physics value and scale to be approximately ~O(1) in magnitude. This should make it
+easier to tune weights when doing multiobjective optimization.
+- New objective `RotationalTransform` for targeting a particular iota profile in real 
+space.
+- New function `plot_boundaries` to plot comparisons between boundary shapes.
+
+Minor Changes
+- Maximum JAX version is now `0.4.1` (latest version as of release date). Minimum
+version is still `0.2.11` but this will likely change in the future.
+
+Bug fixes
+- Fix indexing bug in biot-savart for coils that caused the output to have the wrong shape
+- Fix a bug occasionally preventing the optimizer from restarting correctly after 
+trying a bad step
+
+
 v0.6.3
 ------
 

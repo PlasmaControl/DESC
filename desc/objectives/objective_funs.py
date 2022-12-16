@@ -635,9 +635,9 @@ class _Objective(IOAble, ABC):
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
         target = (
-            self.target * self.normalization if self._normalize_target else self.target
+            self.target / self.normalization if self._normalize_target else self.target
         )
-        return x / self.weight * self.normalization + target
+        return (x / self.weight + target) * self.normalization
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""

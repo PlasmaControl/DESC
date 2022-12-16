@@ -1,8 +1,7 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.compute import compute_geometry, data_index
+from desc.compute import compute_geometry, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -80,18 +79,15 @@ class Volume(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["V"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -119,7 +115,15 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_geometry(
+            params,
+            self._transforms,
+            self._profiles,
+        )
         return self._shift_scale(data["V"])
 
 
@@ -196,18 +200,14 @@ class AspectRatio(_Objective):
             )
 
         self._dim_f = 1
-
+        self._data_keys = ["R0/a"]
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -231,5 +231,13 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_geometry(
+            params,
+            self._transforms,
+            self._profiles,
+        )
         return self._shift_scale(data["R0/a"])

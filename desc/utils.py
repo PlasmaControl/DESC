@@ -320,7 +320,7 @@ def islinspaced(x, axis=-1, tol=1e-12):
     if axis is None:
         x = x.flatten()
         axis = 0
-    return np.all(np.diff(x, axis=axis).std(dtype=np.float64) < tol)
+    return np.all(np.diff(x, axis=axis).std(dtype=np.float128) < tol)
 
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):

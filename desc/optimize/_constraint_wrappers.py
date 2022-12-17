@@ -4,10 +4,8 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import arg_order
-
-from ._equilibrium import CurrentDensity
-from .objective_funs import ObjectiveFunction
-from .utils import (
+from desc.objectives import CurrentDensity, ObjectiveFunction
+from desc.objectives.utils import (
     align_jacobian,
     factorize_linear_constraints,
     get_equilibrium_objective,

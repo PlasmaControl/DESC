@@ -15,11 +15,11 @@ from desc.objectives import (
     HelicalForceBalance,
     ObjectiveFunction,
     RadialForceBalance,
-    WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
+from ._constraint_wrappers import WrappedEquilibriumObjective
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr

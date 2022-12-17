@@ -11,7 +11,6 @@ from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
 from ._geometry import AspectRatio, Volume
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
-from ._wrappers import WrappedEquilibriumObjective
 from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,

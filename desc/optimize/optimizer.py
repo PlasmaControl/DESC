@@ -183,8 +183,8 @@ class Optimizer(IOAble):
             inverse norms of the columns of the jacobian or hessian matrix.
         verbose : integer, optional
             * 0  : work silently.
-            * 1-2 : display a termination report.
-            * 3 : display progress during iterations
+            * 1 : display a termination report.
+            * 2 : display progress during iterations
         maxiter : int, optional
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
@@ -203,8 +203,6 @@ class Optimizer(IOAble):
         """
         # TODO: document options
         timer = Timer()
-        # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
-        disp = verbose - 1 if verbose > 1 else verbose
 
         if (
             self.method in Optimizer._desc_methods
@@ -339,7 +337,7 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=disp,
+                verbose=verbose,
                 callback=None,
                 options=options,
             )
@@ -356,7 +354,7 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=disp,
+                verbose=verbose,
                 callback=None,
                 options=options,
             )
@@ -373,7 +371,7 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=disp,
+                verbose=verbose,
                 callback=None,
                 options=options,
             )

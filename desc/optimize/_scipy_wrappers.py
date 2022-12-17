@@ -16,7 +16,7 @@ from .utils import (
 )
 
 
-def _optimize_scipy_minimize(
+def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     fun, grad, hess, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
@@ -42,8 +42,8 @@ def _optimize_scipy_minimize(
         on the cost function.
     verbose : int
         * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -129,7 +129,7 @@ def _optimize_scipy_minimize(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
+        if verbose > 1:
             print_iteration_nonlinear(
                 len(allx), len(func_allx), f1, df, dx_norm, g_norm
             )
@@ -157,7 +157,8 @@ def _optimize_scipy_minimize(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 1:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
@@ -208,7 +209,7 @@ def _optimize_scipy_minimize(
     return result
 
 
-def _optimize_scipy_least_squares(
+def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     fun, jac, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
@@ -233,8 +234,8 @@ def _optimize_scipy_least_squares(
         the inverse norms of the columns of the Jacobian matrix.
     verbose : int
         * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -302,7 +303,7 @@ def _optimize_scipy_least_squares(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
+        if verbose > 1:
             print_iteration_nonlinear(
                 len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
             )
@@ -330,7 +331,8 @@ def _optimize_scipy_least_squares(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 1:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.least_squares(
             fun_wrapped,

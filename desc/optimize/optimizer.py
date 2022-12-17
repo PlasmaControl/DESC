@@ -7,19 +7,11 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.io import IOAble
-from desc.objectives import (
-    CurrentDensity,
-    FixCurrent,
-    FixIota,
-    ForceBalance,
-    HelicalForceBalance,
-    ObjectiveFunction,
-    RadialForceBalance,
-)
+from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
-from ._constraint_wrappers import WrappedEquilibriumObjective
+from ._constraint_wrappers import ProximalProjection
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
@@ -486,28 +478,14 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
 
 
 def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, options):
-    """Use WrappedEquilibriumObjective to hanle nonlinear equilibrium constraints."""
-    for constraint in nonlinear_constraints:
-        if not isinstance(
-            constraint,
-            (
-                ForceBalance,
-                RadialForceBalance,
-                HelicalForceBalance,
-                CurrentDensity,
-            ),
-        ):
-            raise ValueError(
-                "optimizer method {} ".format(method)
-                + "cannot handle general nonlinear constraint {}.".format(constraint)
-            )
+    """Use ProximalProjection to handle nonlinear equilibrium constraints."""
+    if isinstance(nonlinear_constraints, (list, tuple)):
+        nonlinear_constraints = ObjectiveFunction(nonlinear_constraints)
     perturb_options = options.pop("perturb_options", {})
-    perturb_options.setdefault("verbose", 0)
     solve_options = options.pop("solve_options", {})
-    solve_options.setdefault("verbose", 0)
-    objective = WrappedEquilibriumObjective(
+    objective = ProximalProjection(
         objective,
-        eq_objective=ObjectiveFunction(nonlinear_constraints),
+        constraint=nonlinear_constraints,
         perturb_options=perturb_options,
         solve_options=solve_options,
     )

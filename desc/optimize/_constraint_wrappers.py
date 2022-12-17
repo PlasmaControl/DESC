@@ -4,7 +4,13 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import arg_order
-from desc.objectives import CurrentDensity, ObjectiveFunction
+from desc.objectives import (
+    CurrentDensity,
+    ForceBalance,
+    HelicalForceBalance,
+    ObjectiveFunction,
+    RadialForceBalance,
+)
 from desc.objectives.utils import (
     align_jacobian,
     factorize_linear_constraints,
@@ -13,37 +19,68 @@ from desc.objectives.utils import (
 )
 
 
-class WrappedEquilibriumObjective(ObjectiveFunction):
-    """Evaluate an objective subject to equilibrium constraint.
+class ProximalProjection(ObjectiveFunction):
+    """Optimize an objective subject to equilibrium constraint.
+
+    At each iteration, after a step is taken to reduce the objective, the equilibrium
+    is perturbed and re-solved to bring it back into force balance. This is analagous
+    to a proximal method where each iterate is projected back onto the feasible set.
 
     Parameters
     ----------
     objective : ObjectiveFunction
         Objective function to optimize.
-    eq_objective : ObjectiveFunction
-        Equilibrium objective to enforce.
+    constraint : ObjectiveFunction
+        Equilibrium constraint to enforce. Default=force balance
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
     verbose : int, optional
         Level of output.
+    perturb_options, solve_options : dict
+        dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
+        during the projection step.
 
     """
 
     def __init__(
         self,
         objective,
-        eq_objective=None,
+        constraint=None,
         eq=None,
         verbose=1,
         perturb_options={},
         solve_options={},
     ):
-
+        assert isinstance(objective, ObjectiveFunction), (
+            "objective should be instance of ObjectiveFunction." ""
+        )
+        if constraint is None:
+            constraint = get_equilibrium_objective()
+        if not isinstance(constraint, ObjectiveFunction):
+            constraint = ObjectiveFunction(constraint)
+        for con in constraint.objectives:
+            if not isinstance(
+                con,
+                (
+                    ForceBalance,
+                    RadialForceBalance,
+                    HelicalForceBalance,
+                    CurrentDensity,
+                ),
+            ):
+                raise ValueError(
+                    "ProximalProjection method "
+                    + "cannot handle general nonlinear constraint {}.".format(con)
+                )
         self._objective = objective
-        self._eq_objective = eq_objective
+        self._constraint = constraint
+        perturb_options.setdefault("verbose", 0)
+        solve_options.setdefault("verbose", 0)
         self._perturb_options = perturb_options
         self._solve_options = solve_options
         self._built = False
+        # don't want to compile this, just use the compiled objective and constraint
+        self._use_jit = False
         # need compiled=True to avoid calling objective.compile which calls
         # compute with all zeros, leading to error in perturb/resolve
         self._compiled = True
@@ -67,16 +104,14 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         """
         self._eq = eq.copy()
-        if self._eq_objective is None:
-            self._eq_objective = get_equilibrium_objective()
-        self._constraints = get_fixed_boundary_constraints(
-            iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+        self._linear_constraints = get_fixed_boundary_constraints(
+            iota=not isinstance(self._constraint.objectives[0], CurrentDensity)
             and self._eq.iota is not None
         )
 
         self._objective.build(self._eq, verbose=verbose)
-        self._eq_objective.build(self._eq, verbose=verbose)
-        for constraint in self._constraints:
+        self._constraint.build(self._eq, verbose=verbose)
+        for constraint in self._linear_constraints:
             constraint.build(self._eq, verbose=verbose)
         self._objectives = self._objective.objectives
 
@@ -88,7 +123,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         # set_state_vector
         self._args = ["p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn"]
-        if isinstance(self._eq_objective.objectives[0], CurrentDensity):
+        if isinstance(self._constraint.objectives[0], CurrentDensity):
             self._args.remove("p_l")
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
@@ -97,7 +132,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
 
-        self._full_args = np.concatenate((self.args, self._eq_objective.args))
+        self._full_args = np.concatenate((self.args, self._constraint.args))
         self._full_args = [arg for arg in arg_order if arg in self._full_args]
 
         (
@@ -109,7 +144,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
+        ) = factorize_linear_constraints(
+            self._linear_constraints, self._constraint.args
+        )
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -147,19 +184,19 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 for key in x_dict
             }
             self._eq = self._eq.perturb(
-                objective=self._eq_objective,
-                constraints=self._constraints,
+                objective=self._constraint,
+                constraints=self._linear_constraints,
                 **deltas,
                 **self._perturb_options
             )
             self._eq.solve(
-                objective=self._eq_objective,
-                constraints=self._constraints,
+                objective=self._constraint,
+                constraints=self._linear_constraints,
                 **self._solve_options
             )
 
         xopt = self._objective.x(self._eq)
-        xeq = self._eq_objective.x(self._eq)
+        xeq = self._constraint.x(self._eq)
         if store:
             self._x_old = x
             self._allx.append(x)
@@ -224,29 +261,29 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # dx/dc
         x_idx = np.concatenate(
             [
-                self._eq_objective.x_idx[arg]
+                self._constraint.x_idx[arg]
                 for arg in ["p_l", "i_l", "c_l", "Psi"]
-                if arg in self._eq_objective.args
+                if arg in self._constraint.args
             ]
         )
         x_idx.sort(kind="mergesort")
-        dxdc = np.eye(self._eq_objective.dim_x)[:, x_idx]
+        dxdc = np.eye(self._constraint.dim_x)[:, x_idx]
         dxdRb = (
-            np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["R_lmn"]]
+            np.eye(self._constraint.dim_x)[:, self._constraint.x_idx["R_lmn"]]
             @ self._Ainv["R_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdRb))
         dxdZb = (
-            np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["Z_lmn"]]
+            np.eye(self._constraint.dim_x)[:, self._constraint.x_idx["Z_lmn"]]
             @ self._Ainv["Z_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdZb))
 
         # Jacobian matrices wrt combined state vectors
-        Fx = self._eq_objective.jac(xf)
+        Fx = self._constraint.jac(xf)
         Gx = self._objective.jac(xg)
-        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
-        Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+        Fx = align_jacobian(Fx, self._constraint, self._objective)
+        Gx = align_jacobian(Gx, self._objective, self._constraint)
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z

@@ -99,7 +99,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(constraints, objective_args, dimensions=None):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -113,6 +113,8 @@ def factorize_linear_constraints(constraints, objective_args):
         linear objectives/constraints to factorize for projection method.
     objective_args : list of str
         names of all arguments used by the desired objective.
+    dimensions : dict, optional
+        Dictionary mapping arg names to arg sizes
 
     Returns
     -------
@@ -138,7 +140,8 @@ def factorize_linear_constraints(constraints, objective_args):
     args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
     args = [arg for arg in arg_order if arg in args]
-    dimensions = constraints[0].dimensions
+    if dimensions is None:
+        dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
     for arg in objective_args:

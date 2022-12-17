@@ -39,9 +39,11 @@ class ObjectiveFunction(IOAble):
         self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
     ):
 
-        if not isinstance(objectives, tuple):
+        if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
-
+        assert all(
+            isinstance(obj, _Objective) for obj in objectives
+        ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
         assert deriv_mode in {"batched", "blocked"}
 

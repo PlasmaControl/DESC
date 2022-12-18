@@ -111,9 +111,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._args.remove("Z_lmn")
             if "Zb_lmn" not in self._args:
                 self._args.append("Zb_lmn")
-        # and remove pressure if we're solving a vacuum equilibrium
-        if isinstance(self._eq_objective.objectives[0], CurrentDensity):
-            self._args.remove("p_l")
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}

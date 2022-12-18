@@ -58,6 +58,7 @@ def get_deltas(things1, things2):
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
                     t1.change_resolution(t2.basis.L)
                 if not np.allclose(t2.params, t1.params):
+                    # FIXME: @f0uriest generalize this to more profiles
                     deltas[key[0] + "_l"] = t2.params - t1.params
 
     if "Psi" in things1:

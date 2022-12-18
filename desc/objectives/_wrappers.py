@@ -91,7 +91,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # set_state_vector
 
         # this is everything taken by either objective
-        self._full_args = self._eq_objective.args + self._objective.args
+        self._full_args = (
+            self._eq_objective.args + self._objective.args + ["Rb_lmn", "Zb_lmn"]
+        )
         self._full_args = [arg for arg in arg_order if arg in self._full_args]
         # remove constraints that aren't necessary
         self._constraints = tuple(

@@ -57,7 +57,7 @@ def test_compute_theta_coords(DSHAPE_current):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("lambda", Grid(nodes, sort=False))
+    coords = eq.compute("lambda", grid=Grid(nodes, sort=False))
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
@@ -83,7 +83,7 @@ def test_compute_flux_coords(DSHAPE_current):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("R", Grid(nodes, sort=False))
+    coords = eq.compute("R", "Z", grid=Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
     flux_coords = eq.compute_flux_coords(real_coords)
@@ -188,7 +188,7 @@ def test_equilibrium_from_near_axis():
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    data = eq.compute("|B|", grid)
+    data = eq.compute("|B|", grid=grid)
 
     assert eq.is_nested()
     assert eq.NFP == na.nfp

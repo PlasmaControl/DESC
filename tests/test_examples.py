@@ -9,10 +9,12 @@ import pytest
 
 import desc.examples
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.io import load
 from desc.objectives import (
     AspectRatio,
+    CurrentDensity,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -24,6 +26,7 @@ from desc.objectives import (
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
+    get_fixed_boundary_constraints,
 )
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
@@ -259,6 +262,7 @@ def run_qh_step(n, eq):
 
 @pytest.mark.regression
 @pytest.mark.solve
+@pytest.mark.xfail
 def test_qh_optimization1():
     """Tests precise QH optimization, step 1."""
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
@@ -271,6 +275,7 @@ def test_qh_optimization1():
 
 @pytest.mark.regression
 @pytest.mark.solve
+@pytest.mark.xfail
 def test_qh_optimization2():
     """Tests precise QH optimization, step 2."""
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
@@ -284,6 +289,7 @@ def test_qh_optimization2():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)
+@pytest.mark.xfail
 def test_qh_optimization3():
     """Tests precise QH optimization, step 3."""
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
@@ -294,7 +300,7 @@ def test_qh_optimization3():
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
     grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
-    data = eq3a.compute("|B|_mn", grid, M_booz=eq3a.M, N_booz=eq3a.N)
+    data = eq3a.compute("|B|_mn", grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
     np.testing.assert_array_less(B_asym, 2e-3)
@@ -370,6 +376,118 @@ def test_ESTELL_results(tmpdir_factory):
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
     np.testing.assert_allclose(rho_err[:, 3:], 0, atol=4e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+def test_simsopt_QH_comparison():
+    """Test case that previously stalled before getting to the solution.
+
+    From Matt's comparison with SIMSOPT.
+    """
+    nfp = 4
+    aspect_target = 8.0
+    # Initial (m=0, n=nfp) mode of the axis:
+    Delta = 0.2
+    LMN_resolution = 6
+    # Set shape of the initial condition.
+    # R_lmn and Z_lmn are the amplitudes. modes_R and modes_Z are the (m,n) pairs.
+    surface = FourierRZToroidalSurface(
+        R_lmn=[1.0, 1.0 / aspect_target, Delta],
+        modes_R=[[0, 0], [1, 0], [0, 1]],
+        Z_lmn=[0, 1.0 / aspect_target, Delta],
+        modes_Z=[[0, 0], [-1, 0], [0, -1]],
+        NFP=nfp,
+    )
+    # Set up a vacuum field:
+    pressure = PowerSeriesProfile(params=[0], modes=[0])
+    ndofs_current = 3
+    current = PowerSeriesProfile(
+        params=np.zeros(ndofs_current),
+        modes=2 * np.arange(ndofs_current),
+    )
+    eq = Equilibrium(
+        surface=surface,
+        pressure=pressure,
+        current=current,
+        Psi=np.pi / (aspect_target**2),  # So |B| is ~ 1 T.
+        NFP=nfp,
+        L=LMN_resolution,
+        M=LMN_resolution,
+        N=LMN_resolution,
+        L_grid=2 * LMN_resolution,
+        M_grid=2 * LMN_resolution,
+        N_grid=2 * LMN_resolution,
+        sym=True,
+    )
+    # Fix the major radius, and all modes with |m| or |n| > 1:
+    R_modes_to_fix = []
+    for j in range(eq.surface.R_basis.modes.shape[0]):
+        m = eq.surface.R_basis.modes[j, 1]
+        n = eq.surface.R_basis.modes[j, 2]
+        if (m * n < 0) or (m == 0 and n == 0) or (abs(m) > 1) or (abs(n) > 1):
+            R_modes_to_fix.append([0, m, n])
+        else:
+            print(f"Freeing R mode: m={m}, n={n}")
+    R_modes_to_fix = np.array(R_modes_to_fix)
+    Z_modes_to_fix = []
+    for j in range(eq.surface.Z_basis.modes.shape[0]):
+        m = eq.surface.Z_basis.modes[j, 1]
+        n = eq.surface.Z_basis.modes[j, 2]
+        if (m * n > 0) or (m == 0 and n == 0) or (abs(m) > 1) or (abs(n) > 1):
+            Z_modes_to_fix.append([0, m, n])
+        else:
+            print(f"Freeing Z mode: m={m}, n={n}")
+    Z_modes_to_fix = np.array(Z_modes_to_fix)
+    eq.solve(
+        verbose=3,
+        ftol=1e-8,
+        constraints=get_fixed_boundary_constraints(profiles=False),
+        optimizer=Optimizer("lsq-exact"),
+        objective=ObjectiveFunction(objectives=CurrentDensity()),
+    )
+    ##################################
+    # Done creating initial condition.
+    # Now define optimization problem.
+    ##################################
+    constraints = (
+        CurrentDensity(),
+        FixBoundaryR(modes=R_modes_to_fix),
+        FixBoundaryZ(modes=Z_modes_to_fix),
+        FixPressure(),
+        FixCurrent(),
+        FixPsi(),
+    )
+    # Objective function, for both desc and simsopt:
+    # f = (aspect - 8)^2 + (2pi)^{-2} \int dtheta \int d\zeta [f_C(rho=1)]^2
+    # grid for quasisymmetry objective:
+    grid = LinearGrid(
+        M=eq.M,
+        N=eq.N,
+        rho=[1.0],
+        NFP=nfp,
+    )
+    # Cancel factor of 1/2 in desc objective which is not present in simsopt:
+    aspect_weight = np.sqrt(2)
+    # Also scale QS weight so objective is approximately independent of grid resolution:
+    qs_weight = np.sqrt(len(grid.weights) / (8 * (np.pi**4)))
+    objective = ObjectiveFunction(
+        (
+            AspectRatio(target=aspect_target, weight=aspect_weight, normalize=False),
+            QuasisymmetryTwoTerm(
+                helicity=(1, nfp), grid=grid, weight=qs_weight, normalize=False
+            ),
+        )
+    )
+    eq2, result = eq.optimize(
+        verbose=3,
+        objective=objective,
+        constraints=constraints,
+        optimizer=Optimizer("lsq-exact"),
+    )
+    aspect = eq2.compute("R0/a")["R0/a"]
+    np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)
+    np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 1e-2)
 
 
 class TestGetExample:

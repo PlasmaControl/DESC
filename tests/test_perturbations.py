@@ -98,60 +98,79 @@ def test_perturbation_orders(SOLOVEV):
 
 
 @pytest.mark.unit
-@pytest.mark.xfail
 def test_optimal_perturb():
     """Test that a single step of optimal_perturb doesn't mess things up."""
-    # as of v0.6.1, the recover operation from optimal_perturb would give
-    # R_lmn etc that are inconsistent with Rb_lmn due to recovering x with the wrong
-    # particular solution. Here we do a simple test to ensure the interior and boundary
-    # agree
-    eq1 = desc.examples.get("DSHAPE")
-    eq1.change_resolution(N=1, N_grid=5)
+    eq0 = desc.examples.get("DSHAPE")
+    eq0.change_resolution(N=1, N_grid=5)
     objective = ObjectiveFunction(
-        ToroidalCurrent(grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1)
+        ToroidalCurrent(grid=QuadratureGrid(eq0.L, eq0.M, eq0.N), target=0, weight=1)
     )
     constraint = ObjectiveFunction(ForceBalance(target=0))
 
-    objective.build(eq1)
-    constraint.build(eq1)
+    objective.build(eq0)
+    constraint.build(eq0)
 
-    R_modes = np.zeros(eq1.surface.R_lmn.size).astype(bool)
-    Z_modes = np.zeros(eq1.surface.Z_lmn.size).astype(bool)
-
-    Rmask = np.logical_and(
-        abs(eq1.surface.R_basis.modes[:, 1]) < 3,
+    idxR = np.nonzero(
         np.logical_and(
-            abs(eq1.surface.R_basis.modes[:, 1]) > 0,
-            abs(eq1.surface.R_basis.modes[:, 2]) > 0,
-        ),
-    )
-    Zmask = np.logical_and(
-        abs(eq1.surface.Z_basis.modes[:, 1]) < 3,
+            (np.abs(eq0.surface.R_basis.modes[:, 1:]) <= 2).all(axis=1),
+            (np.abs(eq0.surface.R_basis.modes[:, 1:]) > 0).all(axis=1),
+        )
+    )[0]
+    idxZ = np.nonzero(
         np.logical_and(
-            abs(eq1.surface.Z_basis.modes[:, 1]) > 0,
-            abs(eq1.surface.Z_basis.modes[:, 2]) > 0,
-        ),
-    )
-    R_modes[Rmask] = True
-    Z_modes[Zmask] = True
+            (np.abs(eq0.surface.Z_basis.modes[:, 1:]) <= 2).all(axis=1),
+            (np.abs(eq0.surface.Z_basis.modes[:, 1:]) > 0).all(axis=1),
+        )
+    )[0]
+    Rb_lmn = np.zeros(eq0.surface.R_lmn.size).astype(bool)
+    Zb_lmn = np.zeros(eq0.surface.Z_lmn.size).astype(bool)
+    Rb_lmn[idxR] = True
+    Zb_lmn[idxZ] = True
 
-    eq2 = optimal_perturb(
-        eq1,
+    tr_ratio = [3e-2, 1e-1]
+
+    # 1st order perturbation
+    eq1 = optimal_perturb(
+        eq0,
         constraint,
         objective,
-        dRb=R_modes,
-        dZb=Z_modes,
+        dRb=Rb_lmn,
+        dZb=Zb_lmn,
         order=1,
-        tr_ratio=[0.03, 0.1],
+        tr_ratio=tr_ratio,
         verbose=1,
         copy=True,
     )[0]
 
-    assert eq2.is_nested()
-    # recompute surface from R_lmn etc.
-    surf1 = eq1.get_surface_at(1)
-    # this is the surface from perturbed coefficients
-    surf2 = eq1.surface
+    # check that objective function was actually reduced
+    assert objective.compute_scalar(objective.x(eq1)) < objective.compute_scalar(
+        objective.x(eq0)
+    )
+    # check that new equilibrium still has nested surfaces
+    assert eq1.is_nested()
 
+    # 2nd order perturbation
+    eq2 = optimal_perturb(
+        eq0,
+        constraint,
+        objective,
+        dRb=Rb_lmn,
+        dZb=Zb_lmn,
+        order=2,
+        tr_ratio=tr_ratio,
+        verbose=1,
+        copy=True,
+    )[0]
+
+    # check that higher order reduces objective function by more
+    assert objective.compute_scalar(objective.x(eq2)) < objective.compute_scalar(
+        objective.x(eq1)
+    )
+    # check that new equilibrium still has nested surfaces
+    assert eq2.is_nested()
+
+    # check that R_lmn & Z_lmn coefficients are consistent with the boundary surface
+    surf1 = eq2.get_surface_at(1)  # surface from R_lmn & Z_lmn
+    surf2 = eq2.surface  # surface from perturbed Rb_lmn & Zb_lmn
     np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-12, rtol=1e-12)

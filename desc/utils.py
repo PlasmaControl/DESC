@@ -271,7 +271,7 @@ def issorted(x, axis=None, tol=1e-12):
     return np.all(np.diff(x, axis=axis) >= -tol)
 
 
-def isalmostequal(x, axis=-1, tol=1e-12):
+def isalmostequal(x, axis=-1, rtol=1e-5, atol=1e-8):
     """Check if all values of an array are equal, to within a given tolerance.
 
     Parameters
@@ -291,13 +291,34 @@ def isalmostequal(x, axis=-1, tol=1e-12):
 
     """
     x = np.asarray(x)
-    if axis is None:
+    if x.ndim == 0:
+        return True
+    if axis is None or x.ndim == 1:
         x = x.flatten()
-        axis = 0
-    return np.all(x.std(axis=axis, dtype=np.float128) * x.shape[axis] < tol)
+        return np.allclose(x[0], x, atol=atol, rtol=rtol)
+
+    # some fancy indexing, basically this is to be able to use np.allclose
+    # and broadcast the desired array we want matching along the specified axis,
+    inds = [0] * x.ndim
+    # want slice for all except axis
+    for i, dim in enumerate(x.shape):
+        inds[i] = slice(0, dim)
+    inds[axis] = 0
+    inds = tuple(inds)
+    # array we want to be the same along the specified axis
+    arr_match = x[inds]
+
+    # this just puts a np.newaxis where the specified axis is
+    # so that we can tell np.allclose we want this array
+    # broadcast to match the size of our original array
+    inds_broadcast = list(inds)
+    inds_broadcast[axis] = np.newaxis
+    inds_broadcast = tuple(inds_broadcast)
+
+    return np.allclose(x, arr_match[inds_broadcast], atol=atol, rtol=rtol)
 
 
-def islinspaced(x, axis=-1, tol=1e-12):
+def islinspaced(x, axis=-1, rtol=1e-5, atol=1e-12):
     """Check if all values of an array are linearly spaced, to within a given tolerance.
 
     Parameters
@@ -317,10 +338,14 @@ def islinspaced(x, axis=-1, tol=1e-12):
 
     """
     x = np.asarray(x)
-    if axis is None:
+    if x.ndim == 0:
+        return True
+    if axis is None or x.ndim == 1:
         x = x.flatten()
-        axis = 0
-    return np.all(np.diff(x, axis=axis).std(dtype=np.float128) < tol)
+        xdiff = np.diff(x)
+        return np.allclose(xdiff[0], xdiff, atol=atol, rtol=rtol)
+
+    return np.all(np.diff(x, axis=axis).std(dtype=np.float128) < atol)
 
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):

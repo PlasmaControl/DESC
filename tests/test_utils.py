@@ -9,7 +9,7 @@ from desc.utils import isalmostequal, islinspaced
 
 @pytest.mark.unit
 def test_isalmostequal():
-    """Test that isalmostequal function works on large arrays."""
+    """Test that isalmostequal function works on constants, 1D and larger arrays."""
     grid_small = LinearGrid(rho=1, M=1, N=10)
     _, zeta_cts = np.unique(grid_small.nodes[:, 2], return_counts=True)
     assert isalmostequal(
@@ -21,6 +21,11 @@ def test_isalmostequal():
     assert isalmostequal(
         grid_large.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
     )
+
+    # 1D arrays
+    assert isalmostequal(np.zeros(5))
+    # 0D arrays will return True
+    assert isalmostequal(np.array(0))
 
 
 @pytest.mark.unit

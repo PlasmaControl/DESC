@@ -271,7 +271,7 @@ def issorted(x, axis=None, tol=1e-12):
     return np.all(np.diff(x, axis=axis) >= -tol)
 
 
-def isalmostequal(x, axis=-1, rtol=1e-5, atol=1e-8):
+def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
     """Check if all values of an array are equal, to within a given tolerance.
 
     Parameters
@@ -318,7 +318,7 @@ def isalmostequal(x, axis=-1, rtol=1e-5, atol=1e-8):
     return np.allclose(x, arr_match[inds_broadcast], atol=atol, rtol=rtol)
 
 
-def islinspaced(x, axis=-1, rtol=1e-5, atol=1e-12):
+def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
     """Check if all values of an array are linearly spaced, to within a given tolerance.
 
     Parameters

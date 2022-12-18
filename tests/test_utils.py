@@ -22,6 +22,13 @@ def test_isalmostequal():
         grid_large.nodes[:, :2].T.reshape((2, zeta_cts, -1), order="F")
     )
 
+    # along axis other than -1
+    arr = np.array([[1, 2], [3, 4]])
+    newarr = np.dstack([arr] * 2)
+    newarr[:, 0, :] = newarr[:, 1, :]
+    assert isalmostequal(newarr, axis=1)
+    assert not isalmostequal(newarr, axis=0)
+
     # 1D arrays
     assert isalmostequal(np.zeros(5))
     # 0D arrays will return True

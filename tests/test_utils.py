@@ -11,15 +11,15 @@ from desc.utils import isalmostequal, islinspaced
 def test_isalmostequal():
     """Test that isalmostequal function works on constants, 1D and larger arrays."""
     grid_small = LinearGrid(rho=1, M=1, N=10)
-    _, zeta_cts = np.unique(grid_small.nodes[:, 2], return_counts=True)
+    zeta_cts = grid_small.num_zeta
     assert isalmostequal(
-        grid_small.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
+        grid_small.nodes[:, :2].T.reshape((2, zeta_cts, -1), order="F")
     )
 
     grid_large = LinearGrid(rho=1, M=1, N=100)
-    _, zeta_cts = np.unique(grid_large.nodes[:, 2], return_counts=True)
+    zeta_cts = grid_large.num_zeta
     assert isalmostequal(
-        grid_large.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
+        grid_large.nodes[:, :2].T.reshape((2, zeta_cts, -1), order="F")
     )
 
     # 1D arrays

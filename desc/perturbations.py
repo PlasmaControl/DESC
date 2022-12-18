@@ -641,6 +641,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             threshold=1e-6,
         )
 
+        print(dc1_opt)
+
     # 2nd order
     if order > 1:
 
@@ -696,6 +698,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             max_iter=10,
             threshold=1e-6,
         )
+
+        print(dc2_opt)
 
     if order > 2:
         raise ValueError(

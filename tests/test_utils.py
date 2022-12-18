@@ -32,9 +32,17 @@ def test_isalmostequal():
 def test_islinspaced():
     """Test that islinspaced function works on large arrays."""
     grid_small = LinearGrid(rho=1, M=1, N=10)
-    zeta_vals = np.unique(grid_small.nodes[:, 2])
+    zeta_vals = grid_small.nodes[grid_small.unique_zeta_idx, 2]
     assert islinspaced(zeta_vals)
 
     grid_large = LinearGrid(rho=1, M=1, N=100)
-    zeta_vals = np.unique(grid_large.nodes[:, 2])
+    zeta_vals = grid_large.nodes[grid_large.unique_zeta_idx, 2]
     assert islinspaced(zeta_vals)
+
+    # on a 2D array
+    zz = np.tile(zeta_vals, (2, 1))
+    zz[1, :] *= 2
+    assert islinspaced(zz)
+
+    # 0D arrays will return True
+    assert isalmostequal(np.array(0))

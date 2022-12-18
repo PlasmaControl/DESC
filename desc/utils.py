@@ -345,7 +345,7 @@ def islinspaced(x, axis=-1, rtol=1e-5, atol=1e-12):
         xdiff = np.diff(x)
         return np.allclose(xdiff[0], xdiff, atol=atol, rtol=rtol)
 
-    return np.all(np.diff(x, axis=axis).std(dtype=np.float128) < atol)
+    return isalmostequal(np.diff(x, axis=axis), rtol=rtol, atol=atol, axis=axis)
 
 
 def copy_coeffs(c_old, modes_old, modes_new, c_new=None):

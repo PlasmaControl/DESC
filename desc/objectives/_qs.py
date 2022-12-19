@@ -2,16 +2,17 @@
 
 import numpy as np
 
-from desc.basis import DoubleFourierSeries
+from desc.backend import jnp
 from desc.compute import (
     compute_boozer_coordinates,
     compute_quasisymmetry_error,
-    data_index,
+    get_profiles,
+    get_transforms,
 )
 from desc.grid import LinearGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -28,6 +29,12 @@ class QuasisymmetryBoozer(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -43,12 +50,16 @@ class QuasisymmetryBoozer(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T)"
+    _print_value_fmt = "Quasi-symmetry Boozer error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         helicity=(1, 0),
         M_booz=None,
@@ -60,14 +71,20 @@ class QuasisymmetryBoozer(_Objective):
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
         self._print_value_fmt = (
             "Quasi-symmetry ({},{}) Boozer error: ".format(
                 self.helicity[0], self.helicity[1]
             )
             + "{:10.3e} "
-            + units
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -91,46 +108,20 @@ class QuasisymmetryBoozer(_Objective):
             self.grid = LinearGrid(
                 M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
             )
+        self._data_keys = ["|B|_mn"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["|B|_mn"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["|B|_mn"]["L_derivs"], build=True
-        )
-        self._B_transform = Transform(
-            self.grid,
-            DoubleFourierSeries(
-                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.R_basis.sym
-            ),
-            derivs=data_index["|B|_mn"]["R_derivs"],
-            build=True,
-            build_pinv=True,
-        )
-        self._w_transform = Transform(
-            self.grid,
-            DoubleFourierSeries(
-                M=self.M_booz, N=self.N_booz, NFP=eq.NFP, sym=eq.Z_basis.sym
-            ),
-            derivs=data_index["|B|_mn"]["L_derivs"],
-            build=True,
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(
+            *self._data_keys,
+            eq=eq,
+            grid=self.grid,
+            M_booz=self.M_booz,
+            N_booz=self.N_booz
         )
 
         timer.stop("Precomputing transforms")
@@ -140,21 +131,25 @@ class QuasisymmetryBoozer(_Objective):
         M = self.helicity[0]
         N = self.helicity[1] / eq.NFP
         self._idx_00 = np.where(
-            (self._B_transform.basis.modes == [0, 0, 0]).all(axis=1)
+            (self._transforms["B"].basis.modes == [0, 0, 0]).all(axis=1)
         )[0]
         if N == 0:
-            self._idx_MN = np.where(self._B_transform.basis.modes[:, 2] == 0)[0]
+            self._idx_MN = np.where(self._transforms["B"].basis.modes[:, 2] == 0)[0]
         else:
             self._idx_MN = np.where(
-                self._B_transform.basis.modes[:, 1]
-                / self._B_transform.basis.modes[:, 2]
+                self._transforms["B"].basis.modes[:, 1]
+                / self._transforms["B"].basis.modes[:, 2]
                 == M / N
             )[0]
-        self._idx = np.ones((self._B_transform.basis.num_modes,), bool)
+        self._idx = np.ones((self._transforms["B"].basis.num_modes,), bool)
         self._idx[self._idx_00] = False
         self._idx[self._idx_MN] = False
 
         self._dim_f = np.sum(self._idx)
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -182,20 +177,18 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_boozer_coordinates(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._B_transform,
-            self._w_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         b_mn = data["|B|_mn"]
         b_mn = b_mn[self._idx]
@@ -239,6 +232,12 @@ class QuasisymmetryTwoTerm(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -250,12 +249,16 @@ class QuasisymmetryTwoTerm(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T^3)"
+    _print_value_fmt = "Quasi-symmetry two-term error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         helicity=(1, 0),
         name="QS two-term",
@@ -263,12 +266,20 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self.grid = grid
         self.helicity = helicity
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T^3)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
         self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) error: ".format(self.helicity[0], self.helicity[1])
+            "Quasi-symmetry ({},{}) two-term error: ".format(
+                self.helicity[0], self.helicity[1]
+            )
             + "{:10.3e} "
-            + units
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -288,34 +299,23 @@ class QuasisymmetryTwoTerm(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["f_C"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["f_C"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["f_C"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["f_C"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -343,19 +343,19 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
-            self._helicity,
+            params,
+            self._transforms,
+            self._profiles,
+            helicity=self._helicity,
         )
         f = data["f_C"] * self.grid.weights
 
@@ -398,6 +398,12 @@ class QuasisymmetryTripleProduct(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -407,20 +413,29 @@ class QuasisymmetryTripleProduct(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(T^4/m^2)"
+    _print_value_fmt = "Quasi-symmetry error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="QS triple product",
     ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(T^4/m^2)"
-        self._print_value_fmt = "Quasi-symmetry error: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -439,34 +454,25 @@ class QuasisymmetryTripleProduct(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["f_T"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["f_T"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["f_T"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["f_T"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = (
+                scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
+            )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -494,18 +500,18 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_quasisymmetry_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         f = data["f_T"] * self.grid.weights
 

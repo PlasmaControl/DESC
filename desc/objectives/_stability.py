@@ -168,6 +168,7 @@ class MercierStability(_Objective):
         x = self._unshift_unscale(self.compute(*args, **kwargs))
         print("Maximum" + self._print_value_fmt.format(jnp.max(x)) + self._units)
         print("Minimum" + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average" + self._print_value_fmt.format(jnp.mean(x)) + self._units)
 
         if self._normalize:
             print(
@@ -178,6 +179,11 @@ class MercierStability(_Objective):
             print(
                 "Minimum"
                 + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average"
+                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
                 + "(normalized)"
             )
 
@@ -330,3 +336,4 @@ class MagneticWell(_Objective):
         x = self._unshift_unscale(self.compute(*args, **kwargs))
         print("Maximum" + self._print_value_fmt.format(jnp.max(x)) + self._units)
         print("Minimum" + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average" + self._print_value_fmt.format(jnp.mean(x)) + self._units)

@@ -1,654 +1,1175 @@
-"""Core compute functions, for profiles, geometry, and basis vectors/jacobians."""
-
-from scipy.constants import mu_0
+"""Core compute functions, for polar, flux, and cartesian coordinates."""
 
 from desc.backend import jnp
 
-from .data_index import data_index
-from .utils import cross, dot, has_dependencies, surface_averages, surface_integrals
+from .data_index import register_compute_fun
 
 
-def compute_flux_coords(params, transforms, profiles, data=None, **kwargs):
-    """Compute flux coordinates (rho,theta,zeta)."""
-    if data is None:
-        data = {}
-
-    data["rho"] = transforms["grid"].nodes[:, 0]
-    data["theta"] = transforms["grid"].nodes[:, 1]
-    data["zeta"] = transforms["grid"].nodes[:, 2]
-
-    return data
-
-
-def compute_toroidal_flux(params, transforms, profiles, data=None, **kwargs):
-    """Compute toroidal magnetic flux profile."""
-    data = compute_flux_coords(params, transforms, profiles, data=data, **kwargs)
-
-    # psi = params["Psi"] / 2*pi  # noqa: E800
-    if has_dependencies("psi", params, transforms, profiles, data):
-        data["psi"] = params["Psi"] * data["rho"] ** 2 / (2 * jnp.pi)
-    if has_dependencies("psi_r", params, transforms, profiles, data):
-        data["psi_r"] = 2 * params["Psi"] * data["rho"] / (2 * jnp.pi)
-    if has_dependencies("psi_rr", params, transforms, profiles, data):
-        data["psi_rr"] = 2 * params["Psi"] * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
-
-    return data
-
-
-def compute_toroidal_flux_gradient(
-    params,
-    transforms,
-    profiles,
-    data=None,
-    **kwargs,
-):
-    """Compute grad(psi)."""
-    data = compute_toroidal_flux(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_contravariant_metric_coefficients(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if has_dependencies("grad(psi)", params, transforms, profiles, data):
-        data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
-    if has_dependencies("|grad(psi)|^2", params, transforms, profiles, data):
-        data["|grad(psi)|^2"] = data["psi_r"] ** 2 * data["g^rr"]
-    if has_dependencies("|grad(psi)|", params, transforms, profiles, data):
-        data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
-
-    return data
-
-
-def compute_toroidal_coords(params, transforms, profiles, data=None, **kwargs):
-    """Compute toroidal coordinates (R,phi,Z)."""
-    if data is None:
-        data = {}
-
-    derivs = [
-        "",
-        "_r",
-        "_t",
-        "_z",
-        "_rr",
-        "_tt",
-        "_zz",
-        "_rt",
-        "_rz",
-        "_tz",
-        "_rrr",
-        "_ttt",
-        "_zzz",
-        "_rrt",
-        "_rtt",
-        "_rrz",
-        "_rzz",
-        "_ttz",
-        "_tzz",
-        "_rtz",
-    ]
-
-    for d in derivs:
-        keyR = "R" + d
-        keyZ = "Z" + d
-        if has_dependencies(keyR, params, transforms, profiles, data):
-            data[keyR] = transforms["R"].transform(
-                params["R_lmn"], *data_index[keyR]["dependencies"]["transforms"]["R"][0]
-            )
-        if has_dependencies(keyZ, params, transforms, profiles, data):
-            data[keyZ] = transforms["Z"].transform(
-                params["Z_lmn"], *data_index[keyZ]["dependencies"]["transforms"]["Z"][0]
-            )
-
-    return data
-
-
-def compute_cartesian_coords(params, transforms, profiles, data=None, **kwargs):
-    """Compute Cartesian coordinates (X,Y,Z)."""
-    data = compute_flux_coords(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_toroidal_coords(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if has_dependencies("phi", params, transforms, profiles, data):
-        data["phi"] = data["zeta"]
-    if has_dependencies("X", params, transforms, profiles, data):
-        data["X"] = data["R"] * jnp.cos(data["phi"])
-    if has_dependencies("Y", params, transforms, profiles, data):
-        data["Y"] = data["R"] * jnp.sin(data["phi"])
-
-    return data
-
-
-def compute_lambda(params, transforms, profiles, data=None, **kwargs):
-    """Compute lambda such that theta* = theta + lambda is a sfl coordinate."""
-    if data is None:
-        data = {}
-
-    keys = [
-        "lambda",
-        "lambda_r",
-        "lambda_t",
-        "lambda_z",
-        "lambda_rr",
-        "lambda_tt",
-        "lambda_zz",
-        "lambda_rt",
-        "lambda_rz",
-        "lambda_tz",
-        "lambda_rrr",
-        "lambda_ttt",
-        "lambda_zzz",
-        "lambda_rrt",
-        "lambda_rtt",
-        "lambda_rrz",
-        "lambda_rzz",
-        "lambda_ttz",
-        "lambda_tzz",
-        "lambda_rtz",
-    ]
-
-    for key in keys:
-        if has_dependencies(key, params, transforms, profiles, data):
-            data[key] = transforms["L"].transform(
-                params["L_lmn"], *data_index[key]["dependencies"]["transforms"]["L"][0]
-            )
-
-    return data
-
-
-def compute_pressure(params, transforms, profiles, data=None, **kwargs):
-    """Compute pressure profile."""
-    if data is None:
-        data = {}
-
-    if has_dependencies("p", params, transforms, profiles, data):
-        data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
-    if has_dependencies("p_r", params, transforms, profiles, data):
-        data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
-
-    return data
-
-
-def compute_pressure_gradient(params, transforms, profiles, data=None, **kwargs):
-    """Compute pressure gradient and volume average."""
-    data = compute_pressure(
-        params,
-        transforms,
-        profiles,
-        data,
-    )
-    data = compute_contravariant_metric_coefficients(
-        params,
-        transforms,
-        profiles,
-        data,
-    )
-    data = compute_geometry(
-        params,
-        transforms,
-        profiles,
-        data,
-    )
-    if has_dependencies("grad(p)", params, transforms, profiles, data):
-        data["grad(p)"] = (data["p_r"] * data["e^rho"].T).T
-    if has_dependencies("|grad(p)|", params, transforms, profiles, data):
-        data["|grad(p)|"] = jnp.sqrt(data["p_r"] ** 2) * data["|grad(rho)|"]
-    if has_dependencies("<|grad(p)|>_vol", params, transforms, profiles, data):
-        data["<|grad(p)|>_vol"] = (
-            jnp.sum(
-                data["|grad(p)|"]
-                * jnp.abs(data["sqrt(g)"])
-                * transforms["grid"].weights
-            )
-            / data["V"]
-        )
-    return data
-
-
-def compute_rotational_transform(params, transforms, profiles, data=None, **kwargs):
-    """
-    Compute rotational transform profile from the iota or the toroidal current profile.
-
-    Notes
-    -----
-        The rotational transform is computed from the toroidal current profile using
-        equation 11 in S.P. Hishman & J.T. Hogan (1986)
-        doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
-        with an additional term to account for finite net toroidal currents. Note that
-        the flux surface average integrals in their formula should not be weighted by a
-        coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
-        these averages will not be canceled out.
-
-    """
-    if data is None:
-        data = {}
-
-    if profiles["iota"] is not None:
-        data["iota"] = profiles["iota"].compute(params["i_l"], dr=0)
-        data["iota_r"] = profiles["iota"].compute(params["i_l"], dr=1)
-
-    elif profiles["current"] is not None:
-        data = compute_toroidal_flux(
-            params,
-            transforms,
-            profiles,
-            data=data,
-            **kwargs,
-        )
-        data = compute_lambda(
-            params,
-            transforms,
-            profiles,
-            data=data,
-            **kwargs,
-        )
-        data = compute_jacobian(
-            params,
-            transforms,
-            profiles,
-            data=data,
-            **kwargs,
-        )
-        data = compute_covariant_metric_coefficients(
-            params,
-            transforms,
-            profiles,
-            data=data,
-            **kwargs,
-        )
-
-        if has_dependencies("iota", params, transforms, profiles, data):
-            # current_term = 2*pi * I / params["Psi"]_r = mu_0 / 2*pi * current / psi_r
-            current_term = (
-                mu_0
-                / (2 * jnp.pi)
-                * profiles["current"].compute(params["c_l"], dr=0)
-                / data["psi_r"]
-            )
-            num = (
-                data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-            ) / data["sqrt(g)"]
-            den = data["g_tt"] / data["sqrt(g)"]
-            num_avg = surface_averages(transforms["grid"], num)
-            den_avg = surface_averages(transforms["grid"], den)
-            data["iota"] = (current_term + num_avg) / den_avg
-
-        if has_dependencies("iota_r", params, transforms, profiles, data):
-            current_term = (
-                mu_0
-                / (2 * jnp.pi)
-                * profiles["current"].compute(params["c_l"], dr=0)
-                / data["psi_r"]
-            )
-            num = (
-                data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-            ) / data["sqrt(g)"]
-            den = data["g_tt"] / data["sqrt(g)"]
-            den_avg = surface_averages(transforms["grid"], den)
-            current_term_r = (
-                mu_0
-                / (2 * jnp.pi)
-                * profiles["current"].compute(params["c_l"], dr=1)
-                / data["psi_r"]
-                - current_term * data["psi_rr"] / data["psi_r"]
-            )
-            num_r = (
-                data["lambda_rz"] * data["g_tt"]
-                + data["lambda_z"] * data["g_tt_r"]
-                - data["lambda_rt"] * data["g_tz"]
-                - (1 + data["lambda_t"]) * data["g_tz_r"]
-            ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
-            den_r = (
-                data["g_tt_r"] / data["sqrt(g)"]
-                - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
-            )
-            num_avg_r = surface_averages(transforms["grid"], num_r)
-            den_avg_r = surface_averages(transforms["grid"], den_r)
-            data["iota_r"] = (
-                current_term_r + num_avg_r - data["iota"] * den_avg_r
-            ) / den_avg
-
-    return data
-
-
-def compute_covariant_basis(  # noqa: C901
-    params,
-    transforms,
-    profiles,
-    data=None,
-    **kwargs,
-):
-    """Compute covariant basis vectors."""
-    data = compute_toroidal_coords(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
+@register_compute_fun(
+    name="0",
+    label="0",
+    units="~",
+    units_long="None",
+    description="Zeros",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    data=[],
+)
+def _0(params, transforms, profiles, data, **kwargs):
     data["0"] = jnp.zeros(transforms["grid"].num_nodes)
-
-    # 0th order derivatives
-    if has_dependencies("e_rho", params, transforms, profiles, data):
-        data["e_rho"] = jnp.array([data["R_r"], data["0"], data["Z_r"]]).T
-    if has_dependencies("e_theta", params, transforms, profiles, data):
-        data["e_theta"] = jnp.array([data["R_t"], data["0"], data["Z_t"]]).T
-    if has_dependencies("e_zeta", params, transforms, profiles, data):
-        data["e_zeta"] = jnp.array([data["R_z"], data["R"], data["Z_z"]]).T
-
-    # 1st order derivatives
-    if has_dependencies("e_rho_r", params, transforms, profiles, data):
-        data["e_rho_r"] = jnp.array([data["R_rr"], data["0"], data["Z_rr"]]).T
-    if has_dependencies("e_rho_t", params, transforms, profiles, data):
-        data["e_rho_t"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]]).T
-    if has_dependencies("e_rho_z", params, transforms, profiles, data):
-        data["e_rho_z"] = jnp.array([data["R_rz"], data["0"], data["Z_rz"]]).T
-    if has_dependencies("e_theta_r", params, transforms, profiles, data):
-        data["e_theta_r"] = jnp.array([data["R_rt"], data["0"], data["Z_rt"]]).T
-    if has_dependencies("e_theta_t", params, transforms, profiles, data):
-        data["e_theta_t"] = jnp.array([data["R_tt"], data["0"], data["Z_tt"]]).T
-    if has_dependencies("e_theta_z", params, transforms, profiles, data):
-        data["e_theta_z"] = jnp.array([data["R_tz"], data["0"], data["Z_tz"]]).T
-    if has_dependencies("e_zeta_r", params, transforms, profiles, data):
-        data["e_zeta_r"] = jnp.array([data["R_rz"], data["R_r"], data["Z_rz"]]).T
-    if has_dependencies("e_zeta_t", params, transforms, profiles, data):
-        data["e_zeta_t"] = jnp.array([data["R_tz"], data["R_t"], data["Z_tz"]]).T
-    if has_dependencies("e_zeta_z", params, transforms, profiles, data):
-        data["e_zeta_z"] = jnp.array([data["R_zz"], data["R_z"], data["Z_zz"]]).T
-
-    # 2nd order derivatives
-    if has_dependencies("e_rho_rr", params, transforms, profiles, data):
-        data["e_rho_rr"] = jnp.array([data["R_rrr"], data["0"], data["Z_rrr"]]).T
-    if has_dependencies("e_rho_tt", params, transforms, profiles, data):
-        data["e_rho_tt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]]).T
-    if has_dependencies("e_rho_zz", params, transforms, profiles, data):
-        data["e_rho_zz"] = jnp.array([data["R_rzz"], data["0"], data["Z_rzz"]]).T
-    if has_dependencies("e_rho_rt", params, transforms, profiles, data):
-        data["e_rho_rt"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
-    if has_dependencies("e_rho_rz", params, transforms, profiles, data):
-        data["e_rho_rz"] = jnp.array([data["R_rrz"], data["0"], data["Z_rrz"]]).T
-    if has_dependencies("e_rho_tz", params, transforms, profiles, data):
-        data["e_rho_tz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
-
-    if has_dependencies("e_theta_rr", params, transforms, profiles, data):
-        data["e_theta_rr"] = jnp.array([data["R_rrt"], data["0"], data["Z_rrt"]]).T
-    if has_dependencies("e_theta_tt", params, transforms, profiles, data):
-        data["e_theta_tt"] = jnp.array([data["R_ttt"], data["0"], data["Z_ttt"]]).T
-    if has_dependencies("e_theta_zz", params, transforms, profiles, data):
-        data["e_theta_zz"] = jnp.array([data["R_tzz"], data["0"], data["Z_tzz"]]).T
-    if has_dependencies("e_theta_rt", params, transforms, profiles, data):
-        data["e_theta_rt"] = jnp.array([data["R_rtt"], data["0"], data["Z_rtt"]]).T
-    if has_dependencies("e_theta_rz", params, transforms, profiles, data):
-        data["e_theta_rz"] = jnp.array([data["R_rtz"], data["0"], data["Z_rtz"]]).T
-    if has_dependencies("e_theta_tz", params, transforms, profiles, data):
-        data["e_theta_tz"] = jnp.array([data["R_ttz"], data["0"], data["Z_ttz"]]).T
-
-    if has_dependencies("e_zeta_rr", params, transforms, profiles, data):
-        data["e_zeta_rr"] = jnp.array([data["R_rrz"], data["R_rr"], data["Z_rrz"]]).T
-    if has_dependencies("e_zeta_tt", params, transforms, profiles, data):
-        data["e_zeta_tt"] = jnp.array([data["R_ttz"], data["R_tt"], data["Z_ttz"]]).T
-    if has_dependencies("e_zeta_zz", params, transforms, profiles, data):
-        data["e_zeta_zz"] = jnp.array([data["R_zzz"], data["R_zz"], data["Z_zzz"]]).T
-    if has_dependencies("e_zeta_rt", params, transforms, profiles, data):
-        data["e_zeta_rt"] = jnp.array([data["R_rtz"], data["R_rt"], data["Z_rtz"]]).T
-    if has_dependencies("e_zeta_rz", params, transforms, profiles, data):
-        data["e_zeta_rz"] = jnp.array([data["R_rzz"], data["R_rz"], data["Z_rzz"]]).T
-    if has_dependencies("e_zeta_tz", params, transforms, profiles, data):
-        data["e_zeta_tz"] = jnp.array([data["R_tzz"], data["R_tz"], data["Z_tzz"]]).T
-
     return data
 
 
-def compute_contravariant_basis(params, transforms, profiles, data=None, **kwargs):
-    """Compute contravariant basis vectors."""
-    if data is None or "sqrt(g)" not in data:
-        data = compute_jacobian(
-            params,
-            transforms,
-            profiles,
-            data=data,
-            **kwargs,
-        )
-
-    if has_dependencies("e^rho", params, transforms, profiles, data):
-        data["e^rho"] = (cross(data["e_theta"], data["e_zeta"]).T / data["sqrt(g)"]).T
-    if has_dependencies("e^theta", params, transforms, profiles, data):
-        data["e^theta"] = (cross(data["e_zeta"], data["e_rho"]).T / data["sqrt(g)"]).T
-    if has_dependencies("e^zeta", params, transforms, profiles, data):
-        data["e^zeta"] = jnp.array([data["0"], 1 / data["R"], data["0"]]).T
-
+@register_compute_fun(
+    name="rho",
+    label="\\rho",
+    units="~",
+    units_long="None",
+    description="Radial coordinate, proportional to the square root "
+    + "of the toroidal flux",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    data=[],
+)
+def _rho(params, transforms, profiles, data, **kwargs):
+    data["rho"] = transforms["grid"].nodes[:, 0]
     return data
 
 
-def compute_jacobian(params, transforms, profiles, data=None, **kwargs):
-    """Compute coordinate system Jacobian."""
-    data = compute_covariant_basis(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if has_dependencies("sqrt(g)", params, transforms, profiles, data):
-        data["sqrt(g)"] = dot(data["e_rho"], cross(data["e_theta"], data["e_zeta"]))
-    if has_dependencies("|e_theta x e_zeta|", params, transforms, profiles, data):
-        data["|e_theta x e_zeta|"] = jnp.linalg.norm(
-            cross(data["e_theta"], data["e_zeta"]), axis=1
-        )
-    if has_dependencies("|e_zeta x e_rho|", params, transforms, profiles, data):
-        data["|e_zeta x e_rho|"] = jnp.linalg.norm(
-            cross(data["e_zeta"], data["e_rho"]), axis=1
-        )
-    if has_dependencies("|e_rho x e_theta|", params, transforms, profiles, data):
-        data["|e_rho x e_theta|"] = jnp.linalg.norm(
-            cross(data["e_rho"], data["e_theta"]), axis=1
-        )
-
-    # 1st order derivatives
-    if has_dependencies("sqrt(g)_r", params, transforms, profiles, data):
-        data["sqrt(g)_r"] = (
-            dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_r"]))
-        )
-    if has_dependencies("sqrt(g)_t", params, transforms, profiles, data):
-        data["sqrt(g)_t"] = (
-            dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_t"]))
-        )
-    if has_dependencies("sqrt(g)_z", params, transforms, profiles, data):
-        data["sqrt(g)_z"] = (
-            dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_z"]))
-        )
-
-    # 2nd order derivatives
-    if has_dependencies("sqrt(g)_rr", params, transforms, profiles, data):
-        data["sqrt(g)_rr"] = (
-            dot(data["e_rho_rr"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_rr"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rr"]))
-            + 2 * dot(data["e_rho_r"], cross(data["e_theta_r"], data["e_zeta"]))
-            + 2 * dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_r"]))
-            + 2 * dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_r"]))
-        )
-    if has_dependencies("sqrt(g)_tt", params, transforms, profiles, data):
-        data["sqrt(g)_tt"] = (
-            dot(data["e_rho_tt"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_tt"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tt"]))
-            + 2 * dot(data["e_rho_t"], cross(data["e_theta_t"], data["e_zeta"]))
-            + 2 * dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_t"]))
-            + 2 * dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_t"]))
-        )
-    if has_dependencies("sqrt(g)_zz", params, transforms, profiles, data):
-        data["sqrt(g)_zz"] = (
-            dot(data["e_rho_zz"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_zz"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_zz"]))
-            + 2 * dot(data["e_rho_z"], cross(data["e_theta_z"], data["e_zeta"]))
-            + 2 * dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_z"]))
-            + 2 * dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_z"]))
-        )
-    if has_dependencies("sqrt(g)_tz", params, transforms, profiles, data):
-        data["sqrt(g)_tz"] = (
-            dot(data["e_rho_tz"], cross(data["e_theta"], data["e_zeta"]))
-            + dot(data["e_rho_z"], cross(data["e_theta_t"], data["e_zeta"]))
-            + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_t"]))
-            + dot(data["e_rho_t"], cross(data["e_theta_z"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_tz"], data["e_zeta"]))
-            + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_t"]))
-            + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_z"]))
-            + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_z"]))
-            + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tz"]))
-        )
-
+@register_compute_fun(
+    name="theta",
+    label="\\theta",
+    units="rad",
+    units_long="radians",
+    description="Poloidal angular coordinate (geometric, not magnetic)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    data=[],
+)
+def _theta(params, transforms, profiles, data, **kwargs):
+    data["theta"] = transforms["grid"].nodes[:, 1]
     return data
 
 
-def compute_covariant_metric_coefficients(
-    params,
-    transforms,
-    profiles,
-    data=None,
-    **kwargs,
-):
-    """Compute metric coefficients."""
-    data = compute_covariant_basis(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if has_dependencies("g_rr", params, transforms, profiles, data):
-        data["g_rr"] = dot(data["e_rho"], data["e_rho"])
-    if has_dependencies("g_tt", params, transforms, profiles, data):
-        data["g_tt"] = dot(data["e_theta"], data["e_theta"])
-    if has_dependencies("g_zz", params, transforms, profiles, data):
-        data["g_zz"] = dot(data["e_zeta"], data["e_zeta"])
-    if has_dependencies("g_rt", params, transforms, profiles, data):
-        data["g_rt"] = dot(data["e_rho"], data["e_theta"])
-    if has_dependencies("g_rz", params, transforms, profiles, data):
-        data["g_rz"] = dot(data["e_rho"], data["e_zeta"])
-    if has_dependencies("g_tz", params, transforms, profiles, data):
-        data["g_tz"] = dot(data["e_theta"], data["e_zeta"])
-
-    # todo: add other derivatives
-    if has_dependencies("g_tt_r", params, transforms, profiles, data):
-        data["g_tt_r"] = 2 * dot(data["e_theta"], data["e_theta_r"])
-    if has_dependencies("g_tz_r", params, transforms, profiles, data):
-        data["g_tz_r"] = dot(data["e_theta_r"], data["e_zeta"]) + dot(
-            data["e_theta"], data["e_zeta_r"]
-        )
-
+@register_compute_fun(
+    name="zeta",
+    label="\\zeta",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angular coordinate, equal to the geometric toroidal angle",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    data=[],
+)
+def _zeta(params, transforms, profiles, data, **kwargs):
+    data["zeta"] = transforms["grid"].nodes[:, 2]
     return data
 
 
-def compute_contravariant_metric_coefficients(
-    params,
-    transforms,
-    profiles,
-    data=None,
-    **kwargs,
-):
-    """Compute reciprocal metric coefficients."""
-    data = compute_contravariant_basis(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if has_dependencies("g^rr", params, transforms, profiles, data):
-        data["g^rr"] = dot(data["e^rho"], data["e^rho"])
-    if has_dependencies("g^tt", params, transforms, profiles, data):
-        data["g^tt"] = dot(data["e^theta"], data["e^theta"])
-    if has_dependencies("g^zz", params, transforms, profiles, data):
-        data["g^zz"] = dot(data["e^zeta"], data["e^zeta"])
-    if has_dependencies("g^rt", params, transforms, profiles, data):
-        data["g^rt"] = dot(data["e^rho"], data["e^theta"])
-    if has_dependencies("g^rz", params, transforms, profiles, data):
-        data["g^rz"] = dot(data["e^rho"], data["e^zeta"])
-    if has_dependencies("g^tz", params, transforms, profiles, data):
-        data["g^tz"] = dot(data["e^theta"], data["e^zeta"])
-
-    if has_dependencies("|grad(rho)|", params, transforms, profiles, data):
-        data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
-    if has_dependencies("|grad(theta)|", params, transforms, profiles, data):
-        data["|grad(theta)|"] = jnp.sqrt(data["g^tt"])
-    if has_dependencies("|grad(zeta)|", params, transforms, profiles, data):
-        data["|grad(zeta)|"] = jnp.sqrt(data["g^zz"])
-
+@register_compute_fun(
+    name="R",
+    label="R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R(params, transforms, profiles, data, **kwargs):
+    data["R"] = transforms["R"].transform(params["R_lmn"], 0, 0, 0)
     return data
 
 
-def compute_geometry(params, transforms, profiles, data=None, **kwargs):
-    """Compute geometric quantities such as plasma volume, aspect ratio, etc."""
-    data = compute_jacobian(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
+@register_compute_fun(
+    name="R_r",
+    label="\\partial_{\\rho} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first radial derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[1, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_r(params, transforms, profiles, data, **kwargs):
+    data["R_r"] = transforms["R"].transform(params["R_lmn"], 1, 0, 0)
+    return data
 
-    if has_dependencies("V(r)", params, transforms, profiles, data):
-        # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
-        data["V(r)"] = jnp.abs(
-            surface_integrals(
-                transforms["grid"],
-                cross(data["e_theta"], data["e_zeta"])[:, 2] * data["Z"],
-            )
-        )
-    if has_dependencies("V_r(r)", params, transforms, profiles, data):
-        # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
-        data["V_r(r)"] = surface_integrals(transforms["grid"], jnp.abs(data["sqrt(g)"]))
-    if has_dependencies("S(r)", params, transforms, profiles, data):
-        data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
-    if has_dependencies("V", params, transforms, profiles, data):
-        data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
-    if has_dependencies("A", params, transforms, profiles, data):
-        data["A"] = jnp.mean(
-            surface_integrals(
-                transforms["grid"],
-                jnp.abs(data["sqrt(g)"] / data["R"]),
-                surface_label="zeta",
-            )
-        )
-    if has_dependencies("R0", params, transforms, profiles, data):
-        data["R0"] = data["V"] / (2 * jnp.pi * data["A"])
-    if has_dependencies("a", params, transforms, profiles, data):
-        data["a"] = jnp.sqrt(data["A"] / jnp.pi)
-    if has_dependencies("R0/a", params, transforms, profiles, data):
-        data["R0/a"] = data["R0"] / data["a"]
-    if has_dependencies("V_rr(r)", params, transforms, profiles, data):
-        data["V_rr(r)"] = surface_integrals(
-            transforms["grid"], data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
-        )
 
+@register_compute_fun(
+    name="R_t",
+    label="\\partial_{\\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first poloidal derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_t(params, transforms, profiles, data, **kwargs):
+    data["R_t"] = transforms["R"].transform(params["R_lmn"], 0, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_z",
+    label="\\partial_{\\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, first toroidal derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _R_z(params, transforms, profiles, data, **kwargs):
+    data["R_z"] = transforms["R"].transform(params["R_lmn"], 0, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="R_rr",
+    label="\\partial_{\\rho \\rho} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second radial derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[2, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_rr(params, transforms, profiles, data, **kwargs):
+    data["R_rr"] = transforms["R"].transform(params["R_lmn"], 2, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_tt",
+    label="\\partial_{\\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second poloidal derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 2, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_tt(params, transforms, profiles, data, **kwargs):
+    data["R_tt"] = transforms["R"].transform(params["R_lmn"], 0, 2, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_zz",
+    label="\\partial_{\\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second toroidal derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 0, 2]]},
+    profiles=[],
+    data=[],
+)
+def _R_zz(params, transforms, profiles, data, **kwargs):
+    data["R_zz"] = transforms["R"].transform(params["R_lmn"], 0, 0, 2)
+    return data
+
+
+@register_compute_fun(
+    name="R_rt",
+    label="\\partial_{\\rho \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second derivative wrt radius "
+    + "and poloidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[1, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_rt(params, transforms, profiles, data, **kwargs):
+    data["R_rt"] = transforms["R"].transform(params["R_lmn"], 1, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_rz",
+    label="\\partial_{\\rho \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second derivative wrt radius "
+    + "and toroidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[1, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _R_rz(params, transforms, profiles, data, **kwargs):
+    data["R_rz"] = transforms["R"].transform(params["R_lmn"], 1, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="R_tz",
+    label="\\partial_{\\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, second derivative wrt poloidal "
+    + "and toroidal angles",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 1, 1]]},
+    profiles=[],
+    data=[],
+)
+def _R_tz(params, transforms, profiles, data, **kwargs):
+    data["R_tz"] = transforms["R"].transform(params["R_lmn"], 0, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="R_rrr",
+    label="\\partial_{\rho \\rho \\rho} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third radial derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[3, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_rrr(params, transforms, profiles, data, **kwargs):
+    data["R_rrr"] = transforms["R"].transform(params["R_lmn"], 3, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_ttt",
+    label="\\partial_{\\theta \\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third poloidal derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 3, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_ttt(params, transforms, profiles, data, **kwargs):
+    data["R_ttt"] = transforms["R"].transform(params["R_lmn"], 0, 3, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_zzz",
+    label="\\partial_{\\zeta \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third toroidal derivative",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 0, 3]]},
+    profiles=[],
+    data=[],
+)
+def _R_zzz(params, transforms, profiles, data, **kwargs):
+    data["R_zzz"] = transforms["R"].transform(params["R_lmn"], 0, 0, 3)
+    return data
+
+
+@register_compute_fun(
+    name="R_rrt",
+    label="\\partial_{\\rho \\rho \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative, wrt radius twice "
+    + "and poloidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[2, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_rrt(params, transforms, profiles, data, **kwargs):
+    data["R_rrt"] = transforms["R"].transform(params["R_lmn"], 2, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_rtt",
+    label="\\partial_{\\rho \\theta \\theta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt radius and "
+    + "poloidal angle twice",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[1, 2, 0]]},
+    profiles=[],
+    data=[],
+)
+def _R_rtt(params, transforms, profiles, data, **kwargs):
+    data["R_rtt"] = transforms["R"].transform(params["R_lmn"], 1, 2, 0)
+    return data
+
+
+@register_compute_fun(
+    name="R_rrz",
+    label="\\partial_{\\rho \\rho \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative, wrt radius twice "
+    + "and toroidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[2, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _R_rrz(params, transforms, profiles, data, **kwargs):
+    data["R_rrz"] = transforms["R"].transform(params["R_lmn"], 2, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="R_rzz",
+    label="\\partial_{\\rho \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt radius and "
+    + "toroidal angle twice",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[1, 0, 2]]},
+    profiles=[],
+    data=[],
+)
+def _R_rzz(params, transforms, profiles, data, **kwargs):
+    data["R_rzz"] = transforms["R"].transform(params["R_lmn"], 1, 0, 2)
+    return data
+
+
+@register_compute_fun(
+    name="R_ttz",
+    label="\\partial_{\\theta \\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt poloidal angle "
+    + "twice and toroidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 2, 1]]},
+    profiles=[],
+    data=[],
+)
+def _R_ttz(params, transforms, profiles, data, **kwargs):
+    data["R_ttz"] = transforms["R"].transform(params["R_lmn"], 0, 2, 1)
+    return data
+
+
+@register_compute_fun(
+    name="R_tzz",
+    label="\\partial_{\\theta \\zeta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt poloidal angle "
+    + "and toroidal angle twice",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[0, 1, 2]]},
+    profiles=[],
+    data=[],
+)
+def _R_tzz(params, transforms, profiles, data, **kwargs):
+    data["R_tzz"] = transforms["R"].transform(params["R_lmn"], 0, 1, 2)
+    return data
+
+
+@register_compute_fun(
+    name="R_rtz",
+    label="\\partial_{\\rho \\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, third derivative wrt radius, poloidal "
+    + "angle, and toroidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[1, 1, 1]]},
+    profiles=[],
+    data=[],
+)
+def _R_rtz(params, transforms, profiles, data, **kwargs):
+    data["R_rtz"] = transforms["R"].transform(params["R_lmn"], 1, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z",
+    label="Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z(params, transforms, profiles, data, **kwargs):
+    data["Z"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_r",
+    label="\\partial_{\\rho} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, first radial derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[1, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_r(params, transforms, profiles, data, **kwargs):
+    data["Z_r"] = transforms["Z"].transform(params["Z_lmn"], 1, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_t",
+    label="\\partial_{\\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, first poloidal derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_t(params, transforms, profiles, data, **kwargs):
+    data["Z_t"] = transforms["Z"].transform(params["Z_lmn"], 0, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_z",
+    label="\\partial_{\\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, first toroidal derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _Z_z(params, transforms, profiles, data, **kwargs):
+    data["Z_z"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rr",
+    label="\\partial_{\\rho \\rho} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, second radial derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[2, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rr(params, transforms, profiles, data, **kwargs):
+    data["Z_rr"] = transforms["Z"].transform(params["Z_lmn"], 2, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_tt",
+    label="\\partial_{\\theta \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, second poloidal derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 2, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_tt(params, transforms, profiles, data, **kwargs):
+    data["Z_tt"] = transforms["Z"].transform(params["Z_lmn"], 0, 2, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_zz",
+    label="\\partial_{\\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, second toroidal derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 0, 2]]},
+    profiles=[],
+    data=[],
+)
+def _Z_zz(params, transforms, profiles, data, **kwargs):
+    data["Z_zz"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 2)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rt",
+    label="\\partial_{\\rho \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, second derivative wrt radius "
+    + "and poloidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[1, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rt(params, transforms, profiles, data, **kwargs):
+    data["Z_rt"] = transforms["Z"].transform(params["Z_lmn"], 1, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rz",
+    label="\\partial_{\\rho \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, second derivative wrt radius "
+    + "and toroidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[1, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rz(params, transforms, profiles, data, **kwargs):
+    data["Z_rz"] = transforms["Z"].transform(params["Z_lmn"], 1, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_tz",
+    label="\\partial_{\\theta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, second derivative wrt poloidal "
+    + "and toroidal angles",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 1, 1]]},
+    profiles=[],
+    data=[],
+)
+def _Z_tz(params, transforms, profiles, data, **kwargs):
+    data["Z_tz"] = transforms["Z"].transform(params["Z_lmn"], 0, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rrr",
+    label="\\partial_{\rho \\rho \\rho} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third radial derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[3, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rrr(params, transforms, profiles, data, **kwargs):
+    data["Z_rrr"] = transforms["Z"].transform(params["Z_lmn"], 3, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_ttt",
+    label="\\partial_{\\theta \\theta \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third poloidal derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 3, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_ttt(params, transforms, profiles, data, **kwargs):
+    data["Z_ttt"] = transforms["Z"].transform(params["Z_lmn"], 0, 3, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_zzz",
+    label="\\partial_{\\zeta \\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third toroidal derivative",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 0, 3]]},
+    profiles=[],
+    data=[],
+)
+def _Z_zzz(params, transforms, profiles, data, **kwargs):
+    data["Z_zzz"] = transforms["Z"].transform(params["Z_lmn"], 0, 0, 3)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rrt",
+    label="\\partial_{\\rho \\rho \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative, wrt radius "
+    + "twice and poloidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[2, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rrt(params, transforms, profiles, data, **kwargs):
+    data["Z_rrt"] = transforms["Z"].transform(params["Z_lmn"], 2, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rtt",
+    label="\\partial_{\\rho \\theta \\theta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative wrt radius "
+    + "and poloidal angle twice",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[1, 2, 0]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rtt(params, transforms, profiles, data, **kwargs):
+    data["Z_rtt"] = transforms["Z"].transform(params["Z_lmn"], 1, 2, 0)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rrz",
+    label="\\partial_{\\rho \\rho \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative, wrt radius "
+    + "twice and toroidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[2, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rrz(params, transforms, profiles, data, **kwargs):
+    data["Z_rrz"] = transforms["Z"].transform(params["Z_lmn"], 2, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rzz",
+    label="\\partial_{\\rho \\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative wrt radius "
+    + "and toroidal angle twice",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[1, 0, 2]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rzz(params, transforms, profiles, data, **kwargs):
+    data["Z_rzz"] = transforms["Z"].transform(params["Z_lmn"], 1, 0, 2)
+    return data
+
+
+@register_compute_fun(
+    name="Z_ttz",
+    label="\\partial_{\\theta \\theta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative wrt poloidal "
+    + "angle twice and toroidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 2, 1]]},
+    profiles=[],
+    data=[],
+)
+def _Z_ttz(params, transforms, profiles, data, **kwargs):
+    data["Z_ttz"] = transforms["Z"].transform(params["Z_lmn"], 0, 2, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_tzz",
+    label="\\partial_{\\theta \\zeta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative wrt poloidal "
+    + "angle and toroidal angle twice",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[0, 1, 2]]},
+    profiles=[],
+    data=[],
+)
+def _Z_tzz(params, transforms, profiles, data, **kwargs):
+    data["Z_tzz"] = transforms["Z"].transform(params["Z_lmn"], 0, 1, 2)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rtz",
+    label="\\partial_{\\rho \\theta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, third derivative wrt radius, "
+    + "poloidal angle, and toroidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[1, 1, 1]]},
+    profiles=[],
+    data=[],
+)
+def _Z_rtz(params, transforms, profiles, data, **kwargs):
+    data["Z_rtz"] = transforms["Z"].transform(params["Z_lmn"], 1, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="phi",
+    label="\\phi = \\zeta",
+    units="rad",
+    units_long="radians",
+    description="Toroidal angle in lab frame",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["zeta"],
+)
+def _phi(params, transforms, profiles, data, **kwargs):
+    data["phi"] = data["zeta"]
+    return data
+
+
+@register_compute_fun(
+    name="X",
+    label="X = R \\cos{\\phi}",
+    units="m",
+    units_long="meters",
+    description="Cartesian X coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["R", "phi"],
+)
+def _X(params, transforms, profiles, data, **kwargs):
+    data["X"] = data["R"] * jnp.cos(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="Y",
+    label="Y = R \\sin{\\phi}",
+    units="m",
+    units_long="meters",
+    description="Cartesian Y coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    data=["R", "phi"],
+)
+def _Y(params, transforms, profiles, data, **kwargs):
+    data["Y"] = data["R"] * jnp.sin(data["phi"])
+    return data
+
+
+@register_compute_fun(
+    name="lambda",
+    label="\\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda(params, transforms, profiles, data, **kwargs):
+    data["lambda"] = transforms["L"].transform(params["L_lmn"], 0, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_r",
+    label="\\partial_{\\rho} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, first radial derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[1, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_r(params, transforms, profiles, data, **kwargs):
+    data["lambda_r"] = transforms["L"].transform(params["L_lmn"], 1, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_t",
+    label="\\partial_{\\theta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, first poloidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_t(params, transforms, profiles, data, **kwargs):
+    data["lambda_t"] = transforms["L"].transform(params["L_lmn"], 0, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_z",
+    label="\\partial_{\\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, first toroidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_z(params, transforms, profiles, data, **kwargs):
+    data["lambda_z"] = transforms["L"].transform(params["L_lmn"], 0, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rr",
+    label="\\partial_{\\rho \\rho} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, second radial derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[2, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rr(params, transforms, profiles, data, **kwargs):
+    data["lambda_rr"] = transforms["L"].transform(params["L_lmn"], 2, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_tt",
+    label="\\partial_{\\theta \\theta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, second poloidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 2, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_tt(params, transforms, profiles, data, **kwargs):
+    data["lambda_tt"] = transforms["L"].transform(params["L_lmn"], 0, 2, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_zz",
+    label="\\partial_{\\zeta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, second toroidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 0, 2]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_zz(params, transforms, profiles, data, **kwargs):
+    data["lambda_zz"] = transforms["L"].transform(params["L_lmn"], 0, 0, 2)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rt",
+    label="\\partial_{\\rho \\theta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, second derivative wrt radius and "
+    + "poloidal angle",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[1, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rt(params, transforms, profiles, data, **kwargs):
+    data["lambda_rt"] = transforms["L"].transform(params["L_lmn"], 1, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rz",
+    label="\\partial_{\\rho \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, second derivative wrt radius and "
+    + "toroidal angle",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[1, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rz(params, transforms, profiles, data, **kwargs):
+    data["lambda_rz"] = transforms["L"].transform(params["L_lmn"], 1, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_tz",
+    label="\\partial_{\\theta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, second derivative wrt poloidal and "
+    + "toroidal angles",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 1, 1]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_tz(params, transforms, profiles, data, **kwargs):
+    data["lambda_tz"] = transforms["L"].transform(params["L_lmn"], 0, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rrr",
+    label="\\partial_{\rho \\rho \\rho} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third radial derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[3, 0, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rrr(params, transforms, profiles, data, **kwargs):
+    data["lambda_rrr"] = transforms["L"].transform(params["L_lmn"], 3, 0, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_ttt",
+    label="\\partial_{\\theta \\theta \\theta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third poloidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 3, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_ttt(params, transforms, profiles, data, **kwargs):
+    data["lambda_ttt"] = transforms["L"].transform(params["L_lmn"], 0, 3, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_zzz",
+    label="\\partial_{\\zeta \\zeta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third toroidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 0, 3]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_zzz(params, transforms, profiles, data, **kwargs):
+    data["lambda_zzz"] = transforms["L"].transform(params["L_lmn"], 0, 0, 3)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rrt",
+    label="\\partial_{\\rho \\rho \\theta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative, wrt radius twice "
+    + "and poloidal angle",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[2, 1, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rrt(params, transforms, profiles, data, **kwargs):
+    data["lambda_rrt"] = transforms["L"].transform(params["L_lmn"], 2, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rtt",
+    label="\\partial_{\\rho \\theta \\theta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative wrt radius and "
+    + "poloidal angle twice",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[1, 2, 0]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rtt(params, transforms, profiles, data, **kwargs):
+    data["lambda_rtt"] = transforms["L"].transform(params["L_lmn"], 1, 2, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rrz",
+    label="\\partial_{\\rho \\rho \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative, wrt radius twice "
+    + "and toroidal angle",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[2, 0, 1]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rrz(params, transforms, profiles, data, **kwargs):
+    data["lambda_rrz"] = transforms["L"].transform(params["L_lmn"], 2, 0, 1)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rzz",
+    label="\\partial_{\\rho \\zeta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative wrt radius and "
+    + "toroidal angle twice",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[1, 0, 2]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rzz(params, transforms, profiles, data, **kwargs):
+    data["lambda_rzz"] = transforms["L"].transform(params["L_lmn"], 1, 0, 2)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_ttz",
+    label="\\partial_{\\theta \\theta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative wrt poloidal angle "
+    + "twice and toroidal angle",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 2, 1]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_ttz(params, transforms, profiles, data, **kwargs):
+    data["lambda_ttz"] = transforms["L"].transform(params["L_lmn"], 0, 2, 1)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_tzz",
+    label="\\partial_{\\theta \\zeta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative wrt poloidal angle "
+    + "and toroidal angle twice",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[0, 1, 2]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_tzz(params, transforms, profiles, data, **kwargs):
+    data["lambda_tzz"] = transforms["L"].transform(params["L_lmn"], 0, 1, 2)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rtz",
+    label="\\partial_{\\rho \\theta \\zeta} \\lambda",
+    units="m",
+    units_long="meters",
+    description="Poloidal stream function, third derivative wrt radius, poloidal "
+    + " angle, and toroidal angle",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[1, 1, 1]]},
+    profiles=[],
+    data=[],
+)
+def _lambda_rtz(params, transforms, profiles, data, **kwargs):
+    data["lambda_rtz"] = transforms["L"].transform(params["L_lmn"], 1, 1, 1)
     return data

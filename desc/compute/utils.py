@@ -53,11 +53,37 @@ def compute(*names, params, transforms, profiles, data=None, **kwargs):
             name, transforms
         ), f"Don't have transforms to compute {name}"
 
-    import desc.compute
+    if data is None:
+        data = {}
 
+    data = _compute(
+        *names,
+        params=params,
+        transforms=transforms,
+        profiles=profiles,
+        data=data,
+        **kwargs,
+    )
+    return data
+
+
+def _compute(*names, params, transforms, profiles, data=None, **kwargs):
+    """Same as above but without checking inputs for faster recursion."""
     for name in names:
-        fun = getattr(desc.compute, data_index[name]["fun"])
-        data = fun(params, transforms, profiles, data, **kwargs)
+        if name in data:
+            continue
+        if has_dependencies(name, params, transforms, profiles, data):
+            data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
+        else:
+            data = _compute(
+                *data_index[name]["dependencies"]["data"],
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
+                data=data,
+                **kwargs,
+            )
+            data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
     return data
 
 

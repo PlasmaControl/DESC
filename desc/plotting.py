@@ -2099,7 +2099,7 @@ def plot_qs_error(
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
-            data = eq.compute("|B|_mn", grid=grid, data=data)
+            data = eq.compute("|B|_mn", "B modes", grid=grid, data=data)
             modes = data["B modes"]
             idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(

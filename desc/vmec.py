@@ -464,7 +464,7 @@ class VMECIO:
         volume_p[:] = eq.compute("V")["V"]
 
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute("D_Mercier", grid=grid)
+        data = eq.compute("D_Mercier", "I", "G", grid=grid)
 
         # Boozer currents
         buco = file.createVariable("buco", np.float64, ("radius",))
@@ -632,12 +632,13 @@ class VMECIO:
 
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        data_half_grid = eq.compute("|B|", grid=half_grid)
-        data_half_grid = eq.compute("J", grid=half_grid, data=data_half_grid)
+        data_half_grid = eq.compute(
+            "J", "|B|", "B_rho", "B_theta", "B_zeta", grid=half_grid
+        )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute("J", grid=full_grid)
+        data_full_grid = eq.compute("J", "B_rho", "B_theta", "B_zeta", grid=full_grid)
 
         # Jacobian
         timer.start("Jacobian")

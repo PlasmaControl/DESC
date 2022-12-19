@@ -11,7 +11,7 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
-from desc.compute.utils import compress, get_profiles, get_transforms
+from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -954,15 +954,7 @@ class _Configuration(IOAble, ABC):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         if params is None:
-            params = {
-                "R_lmn": self.R_lmn,
-                "Z_lmn": self.Z_lmn,
-                "L_lmn": self.L_lmn,
-                "p_l": self.p_l,
-                "i_l": self.i_l,
-                "c_l": self.c_l,
-                "Psi": self.Psi,
-            }
+            params = get_params(*names, eq=self)
         if profiles is None:
             profiles = get_profiles(*names, eq=self, grid=grid)
         if transforms is None:

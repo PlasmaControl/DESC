@@ -36,7 +36,7 @@ def test_enclosed_volumes():
     eq = Equilibrium()  # torus
     rho = np.linspace(1 / 128, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute("V_rr(r)", "R0", "V(r)", grid=grid)
+    data = eq.compute("V_rr(r)", "R0", "V(r)", "V_r(r)", grid=grid)
     np.testing.assert_allclose(
         2 * data["R0"] * (np.pi * rho) ** 2,
         compress(grid, data["V(r)"]),
@@ -429,8 +429,8 @@ def test_currents(DSHAPE_current):
     grid_sym = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=True)
 
     data_booz = eq.compute("|B|_mn", grid=grid_full, M_booz=eq.M, N_booz=eq.N)
-    data_full = eq.compute("I", grid=grid_full)
-    data_sym = eq.compute("I", grid=grid_sym)
+    data_full = eq.compute("I", "G", grid=grid_full)
+    data_sym = eq.compute("I", "G", grid=grid_sym)
 
     np.testing.assert_allclose(data_full["I"].mean(), data_booz["I"], atol=1e-16)
     np.testing.assert_allclose(data_sym["I"].mean(), data_booz["I"], atol=1e-16)

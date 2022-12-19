@@ -6,7 +6,8 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jit, jnp, put, while_loop
-from desc.compute import compute_jacobian, get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Index
@@ -221,13 +222,14 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
     transforms = get_transforms("sqrt(g)", eq=eq, grid=grid)
-    data = compute_jacobian(
-        {
+    data = compute_fun(
+        "sqrt(g)",
+        params={
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         },
-        transforms,
-        {},  # no profiles needed
+        transforms=transforms,
+        profiles={},  # no profiles needed
     )
 
     nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))

@@ -1,6 +1,7 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.compute import compute_geometry, get_profiles, get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
 
@@ -119,10 +120,11 @@ class Volume(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        data = compute_geometry(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         return self._shift_scale(data["V"])
 
@@ -235,9 +237,10 @@ class AspectRatio(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        data = compute_geometry(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         return self._shift_scale(data["R0/a"])

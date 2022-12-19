@@ -5,13 +5,8 @@ import warnings
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.compute import (
-    compute_contravariant_current_density,
-    compute_energy,
-    compute_force_error,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -173,10 +168,11 @@ class ForceBalance(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_force_error(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
@@ -338,10 +334,11 @@ class RadialForceBalance(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_force_error(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -500,10 +497,11 @@ class HelicalForceBalance(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_force_error(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = data["F_beta"] * data["|beta|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -674,10 +672,11 @@ class Energy(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_energy(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
             gamma=self._gamma,
         )
         return self._shift_scale(data["W"])
@@ -838,10 +837,11 @@ class CurrentDensity(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_contravariant_current_density(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights

@@ -3,12 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import (
-    compute_magnetic_well,
-    compute_mercier_stability,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -154,10 +150,11 @@ class MercierStability(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_mercier_stability(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = compress(self.grid, data["D_Mercier"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
@@ -298,10 +295,11 @@ class MagneticWell(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_magnetic_well(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            *self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = compress(self.grid, data["magnetic well"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")

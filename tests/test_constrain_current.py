@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 import desc.io
+from desc.compute import compute as compute_fun
 from desc.compute import get_transforms
-from desc.compute._core import compute_rotational_transform
 from desc.compute.utils import compress
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
@@ -56,10 +56,12 @@ class TestConstrainCurrent:
                 "c_l": None,
                 "Psi": eq.Psi,
             }
-            data = compute_rotational_transform(
-                params,
-                transforms,
-                profiles,
+            data = compute_fun(
+                "iota",
+                "iota_r",
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
             )
             benchmark_data = eq.compute("iota_r", grid=grid)
 

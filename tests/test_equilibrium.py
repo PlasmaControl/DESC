@@ -131,7 +131,7 @@ def test_continuation_resolution(tmpdir_factory):
 @pytest.mark.unit
 def test_grid_resolution_warning():
     """Test that a warning is thrown if grid resolution is too low."""
-    eq = Equilibrium(L=2, M=2, N=2)
+    eq = Equilibrium(L=3, M=3, N=3)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
     with pytest.warns(Warning):

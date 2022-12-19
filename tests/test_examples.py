@@ -188,7 +188,7 @@ def test_1d_optimization(SOLOVEV):
     with pytest.warns(UserWarning):
         eq.optimize(objective, constraints, options=options)
 
-    np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
 
 
 @pytest.mark.regression
@@ -207,7 +207,7 @@ def test_1d_optimization_old(SOLOVEV):
         },
     )
 
-    np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
 
 
 def run_qh_step(n, eq):
@@ -300,7 +300,7 @@ def test_qh_optimization3():
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
     grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
-    data = eq3a.compute("|B|_mn", grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
+    data = eq3a.compute("|B|_mn", "B modes", grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
     np.testing.assert_array_less(B_asym, 2e-3)

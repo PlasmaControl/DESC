@@ -4,8 +4,9 @@ import numpy as np
 
 from desc.basis import FourierSeries
 from desc.grid import LinearGrid
-from desc.objectives import FixSumModesR, FixSumModesZ
 from desc.transform import Transform
+
+from .linear_objectives import FixSumModesR, FixSumModesZ
 
 
 def _calc_1st_order_NAE_coeffs(qsc, desc_eq):

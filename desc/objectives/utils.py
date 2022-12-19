@@ -14,14 +14,18 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    FixAxisR,
+    FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
     FixIota,
     FixLambdaGauge,
+    FixLambdaZero,
     FixPressure,
     FixPsi,
 )
+from .nae_utils import make_RZ_cons_1st_order, make_RZ_cons_2nd_order
 from .objective_funs import ObjectiveFunction
 
 
@@ -65,12 +69,89 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
     return constraints
 
 
+def get_fixed_axis_constraints(profiles=True, iota=True):
+    """Get the constraints necessary for a fixed-axis equilibrium problem.
+
+    Parameters
+    ----------
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-axis problems.
+
+    """
+    constraints = (
+        FixAxisR(fixed_boundary=True),
+        FixAxisZ(fixed_boundary=True),
+        FixLambdaGauge(),
+        FixPsi(),
+    )
+    if profiles:
+        constraints += (FixPressure(),)
+
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
+    return constraints
+
+
+def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=True, order=1):
+    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
+
+    Parameters
+    ----------
+    desc_eq : Equilibrium
+        Equilibrium to constrain behavior of
+        (assumed to be a fit from the NAE equil using .from_near_axis()).
+    qsc_eq : Qsc
+        Qsc object defining the near-axis equilibrium to constrain behavior to.
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+    order : int
+        order (in rho) of near-axis behavior to constrain
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-axis problems.
+    """
+
+    constraints = (
+        FixAxisR(fixed_boundary=True),
+        FixAxisZ(fixed_boundary=True),
+        FixLambdaZero(),
+        # lambda=0 as the mapping from NAE->DESC assumes theta is boozer angle
+        FixPsi(),
+    )
+    if profiles:
+        constraints += (FixPressure(),)
+
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
+    if order >= 1:  # first order constraints
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+    if order == 2:  # 2nd order constraints
+        constraints += make_RZ_cons_2nd_order(qsc=qsc_eq, desc_eq=desc_eq)
+
+    return constraints
+
+
 def get_equilibrium_objective(mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
     ----------
-    mode : {"force", "forces", "energy", "vacuum"}
+    mode : one of {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
@@ -81,7 +162,6 @@ def get_equilibrium_objective(mode="force", normalize=True):
     -------
     objective, ObjectiveFunction
         An objective function with default force balance objectives.
-
     """
     if mode == "energy":
         objectives = Energy(normalize=normalize, normalize_target=normalize)

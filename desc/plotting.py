@@ -523,7 +523,6 @@ def plot_2d(
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -685,7 +684,6 @@ def plot_3d(
         Whether to plot full torus or one field period. Ignored if grid is specified.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -882,7 +880,6 @@ def plot_fsa(
         volume average of the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1012,7 +1009,6 @@ def plot_section(
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1196,7 +1192,6 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1415,7 +1410,6 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
         Whether or not to plot the magnetic axis locations. Default is False.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1547,7 +1541,6 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1705,7 +1698,6 @@ def plot_comparison(
         Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1867,7 +1859,6 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         Grid to use for evaluating geometry
     ax : matplotlib AxesSubplot, optional
         Axis to plot on    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1996,7 +1987,6 @@ def plot_boozer_modes(
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -2122,7 +2112,6 @@ def plot_boozer_surface(
         Number of contours to plot.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -2259,7 +2248,6 @@ def plot_qs_error(
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
 

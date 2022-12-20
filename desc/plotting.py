@@ -805,13 +805,10 @@ def plot_3d(
         alpha=alpha,
     )
     fig.colorbar(m, ax=ax)
-    xlabel = _AXIS_LABELS_XYZ[0]
-    ylabel = _AXIS_LABELS_XYZ[1]
-    zlabel = _AXIS_LABELS_XYZ[2]
 
-    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
-    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
-    ax.set_zlabel(zlabel, fontsize=zlabel_fontsize)
+    ax.set_xlabel(_AXIS_LABELS_XYZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
+    ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
     ax.set_title(label, fontsize=title_font_size)
     fig.set_tight_layout(True)
 
@@ -841,9 +838,9 @@ def plot_3d(
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
     plot_data = {}
-    plot_data[xlabel.strip("$").strip("\\")] = X
-    plot_data[ylabel.strip("$").strip("\\")] = Y
-    plot_data[zlabel.strip("$").strip("\\")] = Z
+    plot_data["X"] = X
+    plot_data["Y"] = Y
+    plot_data["Z"] = Z
     plot_data[name] = data
 
     return fig, ax if not return_data else fig, ax, plot_data
@@ -989,7 +986,7 @@ def plot_fsa(
 
     plot_data = {}
     plot_data["rho"] = rho
-    plot_data[name] = data
+    plot_data[f"<{name}>_fsa"] = data
 
     return fig, ax if not return_data else fig, ax, plot_data
 
@@ -1327,6 +1324,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     Zr = r_coords["Z"].reshape(
         (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
     )
+    plot_data = {}
+
     if plot_theta:
         # vartheta contours
         v_coords = eq.compute("R", "Z", grid=v_grid)
@@ -1336,6 +1335,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         Zv = v_coords["Z"].reshape(
             (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
         )
+        plot_data["vartheta_R_coords"] = Rv
+        plot_data["vartheta_Z_coords"] = Zv
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1393,11 +1394,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         )
     fig.set_tight_layout(True)
 
-    plot_data = {}
     plot_data["rho_R_coords"] = Rr
     plot_data["rho_Z_coords"] = Zr
-    plot_data["vartheta_R_coords"] = Rv
-    plot_data["vartheta_Z_coords"] = Zv
 
     return fig, ax if not return_data else fig, ax, plot_data
 
@@ -1933,9 +1931,9 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     plot_data = {}
     for i, coil in enumerate(coils_list):
         x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
-        plot_data[f"x_{i}"] = x
-        plot_data[f"y_{i}"] = y
-        plot_data[f"z_{i}"] = z
+        plot_data[f"X_{i}"] = x
+        plot_data[f"Y_{i}"] = y
+        plot_data[f"Z_{i}"] = z
         ax.plot(
             x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
         )

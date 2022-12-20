@@ -2085,7 +2085,7 @@ def plot_boozer_modes(
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
-        plot_data[f"|B|_{M}{N}"]
+        plot_data[f"|B|_{M}{N}"] = B_mn[:, i]
     plot_data["rho"] = rho
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0])

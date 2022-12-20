@@ -119,6 +119,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     equal : bool
         Whether axes should have equal scales for x and y.
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -179,6 +180,7 @@ def _get_grid(**kwargs):
     kwargs
          Any arguments taken by LinearGrid.
 
+
     Returns
     -------
     grid : LinearGrid
@@ -213,6 +215,7 @@ def _get_plot_axes(grid):
     grid : Grid
         Grid of coordinates to evaluate at.
 
+
     Returns
     -------
     axes : tuple of int
@@ -243,6 +246,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
+
 
     Returns
     -------
@@ -312,7 +316,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     N : bool
         Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -324,12 +330,16 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         title_font_size: integer, font size of the title
 
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -387,7 +397,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
+def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs):
     """Plot 1D profiles.
 
     Parameters
@@ -402,13 +412,9 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         Whether to use a log scale.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
 
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Figure being plotted to.
-    ax : matplotlib.axes.Axes or ndarray of Axes
-        Axes being plotted to.
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -425,6 +431,17 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         linecolor: str or tuple, color to use for plot line
         ls: str, linestyle to use for plot line
         lw: float, linewidth to use for plot line
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
+
 
     Examples
     --------
@@ -475,14 +492,19 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     assert len(kwargs) == 0, f"plot_1d got unexpected keyword argument: {kwargs.keys()}"
-
-    ax.set_xlabel(_AXIS_LABELS_RTZ[plot_axes[0]], fontsize=xlabel_fontsize)
+    xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
+    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
     fig.set_tight_layout(True)
-    return fig, ax
+    plot_data = {}
+    plot_data[xlabel.strip("$").strip("\\")] = grid.nodes[:, plot_axes[0]]
+    plot_data[name] = data
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
+def plot_2d(
+    eq, name, grid=None, log=False, norm_F=False, ax=None, return_data=False, **kwargs
+):
     """Plot 2D cross-sections.
 
     Parameters
@@ -500,7 +522,11 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         Vacuum equilibria are normalized by the gradient of magnetic pressure,
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -517,12 +543,16 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
         xlabel_fontsize: float, fontsize of the xlabel
         ylabel_fontsize: float, fontsize of the ylabel
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -608,9 +638,10 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
-
-    ax.set_xlabel(_AXIS_LABELS_RTZ[plot_axes[1]], fontsize=xlabel_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_RTZ[plot_axes[0]], fontsize=ylabel_fontsize)
+    xlabel = _AXIS_LABELS_RTZ[plot_axes[1]]
+    ylabel = _AXIS_LABELS_RTZ[plot_axes[0]]
+    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
     ax.set_title(label, fontsize=title_font_size)
     if norm_F:
         ax.set_title(
@@ -621,10 +652,23 @@ def plot_2d(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
             )
         )
     fig.set_tight_layout(True)
-    return fig, ax
+    plot_data = {}
+    plot_data[xlabel.strip("$").strip("\\")] = xx
+    plot_data[ylabel.strip("$").strip("\\")] = yy
+    plot_data[name] = data
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **kwargs):
+def plot_3d(
+    eq,
+    name,
+    grid=None,
+    log=False,
+    all_field_periods=True,
+    ax=None,
+    return_data=False,
+    **kwargs,
+):
     """Plot 3D surfaces.
 
     Parameters
@@ -640,7 +684,11 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     all_field_periods : bool, optional
         Whether to plot full torus or one field period. Ignored if grid is specified.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -660,12 +708,16 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         ylabel_fontsize: float, fontsize of the ylabel
         zlabel_fontsize: float, fontsize of the zlabel
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -753,10 +805,13 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
         alpha=alpha,
     )
     fig.colorbar(m, ax=ax)
+    xlabel = _AXIS_LABELS_XYZ[0]
+    ylabel = _AXIS_LABELS_XYZ[1]
+    zlabel = _AXIS_LABELS_XYZ[2]
 
-    ax.set_xlabel(_AXIS_LABELS_XYZ[0], fontsize=xlabel_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
-    ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
+    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+    ax.set_zlabel(zlabel, fontsize=zlabel_fontsize)
     ax.set_title(label, fontsize=title_font_size)
     fig.set_tight_layout(True)
 
@@ -785,7 +840,13 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-    return fig, ax
+    plot_data = {}
+    plot_data[xlabel.strip("$").strip("\\")] = X
+    plot_data[ylabel.strip("$").strip("\\")] = Y
+    plot_data[zlabel.strip("$").strip("\\")] = Z
+    plot_data[name] = data
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
 def plot_fsa(
@@ -797,6 +858,7 @@ def plot_fsa(
     N=None,
     norm_F=False,
     ax=None,
+    return_data=False,
     **kwargs,
 ):
     """Plot flux surface averaged quantities.
@@ -822,7 +884,11 @@ def plot_fsa(
         of magnetic pressure, while finite beta equilibria are normalized by the
         volume average of the pressure gradient.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -840,12 +906,16 @@ def plot_fsa(
         ls: str, linestyle to use for plot line
         lw: float, linewidth to use for plot line
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -903,8 +973,8 @@ def plot_fsa(
 
     label = label.split("~")
     label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
-
-    ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
+    xlabel = _AXIS_LABELS_RTZ[0]
+    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
     if norm_F:
         ax.set_ylabel(
@@ -916,10 +986,17 @@ def plot_fsa(
             fontsize=ylabel_fontsize,
         )
     fig.set_tight_layout(True)
-    return fig, ax
+
+    plot_data = {}
+    plot_data["rho"] = rho
+    plot_data[name] = data
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs):
+def plot_section(
+    eq, name, grid=None, log=False, norm_F=False, ax=None, return_data=False, **kwargs
+):
     """Plot Poincare sections.
 
     Parameters
@@ -937,7 +1014,11 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         Vacuum equilibria are normalized by the gradient of magnetic pressure,
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -956,12 +1037,16 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         xlabel_fontsize: float, fontsize of the xlabel
         ylabel_fontsize: float, fontsize of the ylabel
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -1086,10 +1171,16 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
                 fontsize=title_font_size,
             )
     fig.set_tight_layout(True)
-    return fig, ax
+
+    plot_data = {}
+    plot_data["R"] = R
+    plot_data["Z"] = Z
+    plot_data[name] = data
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
+def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **kwargs):
     """Plot flux surfaces.
 
     Parameters
@@ -1107,7 +1198,11 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         If an integer, plot that many contours linearly spaced in (0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1136,12 +1231,16 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
         xlabel_fontsize: float, fontsize of the xlabel
         ylabel_fontsize: float, fontsize of the ylabel
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -1293,10 +1392,17 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
             fontsize=title_font_size,
         )
     fig.set_tight_layout(True)
-    return fig, ax
+
+    plot_data = {}
+    plot_data["rho_R_coords"] = Rr
+    plot_data["rho_Z_coords"] = Zr
+    plot_data["vartheta_R_coords"] = Rv
+    plot_data["vartheta_Z_coords"] = Zv
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
+def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundary at multiple toroidal coordinates.
 
     Parameters
@@ -1310,7 +1416,11 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
     plot_axis : bool
         Whether or not to plot the magnetic axis locations. Default is False.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1328,12 +1438,16 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
         label_fontsize: float, fontsize of the x and y labels
         legend_fontsize: float, fontsize of the legend
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -1412,10 +1526,15 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
 
     fig.legend(fontsize=legend_fontsize)
     fig.set_tight_layout(True)
-    return fig, ax
+
+    plot_data = {}
+    plot_data["R"] = R
+    plot_data["Z"] = Z
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
+def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
     Parameters
@@ -1429,7 +1548,11 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1445,12 +1568,16 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         label_fontsize: float, fontsize of the x and y labels
         legend_fontsize: float, fontsize of the legend
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -1495,6 +1622,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         ls = [ls for i in range(neq)]
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
+    plot_data = {}
 
     for i in range(neq):
         grid_kwargs = {
@@ -1511,6 +1639,10 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
         Z = coords["Z"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )
+
+        plot_data[f"R_{i}"] = R
+        plot_data[f"Z_{i}"] = Z
+
         for j in range(grid.num_zeta - 1):
             (line,) = ax.plot(
                 R[:, -1, j],
@@ -1528,7 +1660,8 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
 
     fig.legend(fontsize=legend_fontsize)
     fig.set_tight_layout(True)
-    return fig, ax
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
 def plot_comparison(
@@ -1542,6 +1675,7 @@ def plot_comparison(
     lws=None,
     linestyles=None,
     labels=None,
+    return_data=False,
     **kwargs,
 ):
     """Plot comparison between flux surfaces of multiple equilibria.
@@ -1573,6 +1707,10 @@ def plot_comparison(
         Array the same length as eqs of linestyles to use for each equilibrium.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1587,12 +1725,16 @@ def plot_comparison(
         xlabel_fontsize: float, fontsize of the xlabel
         ylabel_fontsize: float, fontsize of the ylabel
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -1649,31 +1791,63 @@ def plot_comparison(
         equal=True,
     )
     ax = np.atleast_1d(ax).flatten()
+
+    plot_data = {}
+
     for i, eq in enumerate(eqs):
-        fig, ax = plot_surfaces(
-            eq,
-            rho,
-            theta,
-            zeta,
-            ax,
-            theta_color=colors[i % len(colors)],
-            theta_ls=linestyles[i % len(linestyles)],
-            theta_lw=lws[i % len(lws)],
-            rho_color=colors[i % len(colors)],
-            rho_ls=linestyles[i % len(linestyles)],
-            rho_lw=lws[i % len(lws)],
-            lcfs_color=colors[i % len(colors)],
-            lcfs_ls=linestyles[i % len(linestyles)],
-            lcfs_lw=lws[i % len(lws)],
-            axis_color=colors[i % len(colors)],
-            axis_alpha=0,
-            axis_marker="o",
-            axis_size=0,
-            label=labels[i % len(labels)],
-            title_font_size=title_font_size,
-            xlabel_fontsize=xlabel_fontsize,
-            ylabel_fontsize=ylabel_fontsize,
-        )
+        if return_data:
+            fig, ax, _plot_data = plot_surfaces(
+                eq,
+                rho,
+                theta,
+                zeta,
+                ax,
+                theta_color=colors[i % len(colors)],
+                theta_ls=linestyles[i % len(linestyles)],
+                theta_lw=lws[i % len(lws)],
+                rho_color=colors[i % len(colors)],
+                rho_ls=linestyles[i % len(linestyles)],
+                rho_lw=lws[i % len(lws)],
+                lcfs_color=colors[i % len(colors)],
+                lcfs_ls=linestyles[i % len(linestyles)],
+                lcfs_lw=lws[i % len(lws)],
+                axis_color=colors[i % len(colors)],
+                axis_alpha=0,
+                axis_marker="o",
+                axis_size=0,
+                label=labels[i % len(labels)],
+                title_font_size=title_font_size,
+                xlabel_fontsize=xlabel_fontsize,
+                ylabel_fontsize=ylabel_fontsize,
+                return_data=return_data,
+            )
+            for key in _plot_data.keys():
+                plot_data[key + labels[i % len(labels)]] = plot_data[key]
+        else:
+            fig, ax = plot_surfaces(
+                eq,
+                rho,
+                theta,
+                zeta,
+                ax,
+                theta_color=colors[i % len(colors)],
+                theta_ls=linestyles[i % len(linestyles)],
+                theta_lw=lws[i % len(lws)],
+                rho_color=colors[i % len(colors)],
+                rho_ls=linestyles[i % len(linestyles)],
+                rho_lw=lws[i % len(lws)],
+                lcfs_color=colors[i % len(colors)],
+                lcfs_ls=linestyles[i % len(linestyles)],
+                lcfs_lw=lws[i % len(lws)],
+                axis_color=colors[i % len(colors)],
+                axis_alpha=0,
+                axis_marker="o",
+                axis_size=0,
+                label=labels[i % len(labels)],
+                title_font_size=title_font_size,
+                xlabel_fontsize=xlabel_fontsize,
+                ylabel_fontsize=ylabel_fontsize,
+            )
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))
 
@@ -1681,10 +1855,10 @@ def plot_comparison(
         len(kwargs) == 0
     ), f"plot_comparison got unexpected keyword argument: {kwargs.keys()}"
 
-    return fig, ax
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
-def plot_coils(coils, grid=None, ax=None, **kwargs):
+def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     """Create 3D plot of coil geometry.
 
     Parameters
@@ -1694,7 +1868,11 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
     grid : Grid, optional
         Grid to use for evaluating geometry
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on
+        Axis to plot on    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1707,6 +1885,7 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
         ls: str, linestyle of plotted coils
         color: str, color of plotted coils
         cmap: str, colormap to be passed to matplotlib.cm.get_cmap()
+
 
     Returns
     -------
@@ -1751,9 +1930,12 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
             return [coilset]
 
     coils_list = flatten_coils(coils)
-
+    plot_data = {}
     for i, coil in enumerate(coils_list):
         x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
+        plot_data[f"x_{i}"] = x
+        plot_data[f"y_{i}"] = y
+        plot_data[f"z_{i}"] = z
         ax.plot(
             x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
         )
@@ -1783,11 +1965,19 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
     ax.set_ylabel(_AXIS_LABELS_XYZ[1])
     ax.set_zlabel(_AXIS_LABELS_XYZ[2])
 
-    return fig, ax
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
 def plot_boozer_modes(
-    eq, log=True, B0=True, norm=False, num_modes=10, rho=None, ax=None, **kwargs
+    eq,
+    log=True,
+    B0=True,
+    norm=False,
+    num_modes=10,
+    rho=None,
+    ax=None,
+    return_data=False,
+    **kwargs,
 ):
     """Plot Fourier harmonics of :math:`|B|` in Boozer coordinates.
 
@@ -1807,7 +1997,11 @@ def plot_boozer_modes(
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1819,12 +2013,16 @@ def plot_boozer_modes(
         linewidth: float, linewidth
         linestyle: str, linestyle
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -1866,7 +2064,7 @@ def plot_boozer_modes(
     assert (
         len(kwargs) == 0
     ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
-
+    plot_data = {}
     for i in range(modes.shape[0]):
         M = modes[i, 1]
         N = modes[i, 2]
@@ -1889,17 +2087,26 @@ def plot_boozer_modes(
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
+        plot_data[f"|B|_{M}{N}"]
+    plot_data["rho"] = rho
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0])
     ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$")
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
-    return fig, ax
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
 def plot_boozer_surface(
-    eq, grid_compute=None, grid_plot=None, fill=False, ncontours=100, ax=None, **kwargs
+    eq,
+    grid_compute=None,
+    grid_plot=None,
+    fill=False,
+    ncontours=100,
+    ax=None,
+    return_data=False,
+    **kwargs,
 ):
     """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
 
@@ -1916,7 +2123,11 @@ def plot_boozer_surface(
     ncontours : int, optional
         Number of contours to plot.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -1928,6 +2139,7 @@ def plot_boozer_surface(
         cmap: str, matplotib colormap scheme to use, passed to ax.contourf
         levels: int or array-like, passed to contourf
         title_font_size: integer, font size of the title
+
 
     Returns
     -------
@@ -2008,7 +2220,12 @@ def plot_boozer_surface(
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_font_size)
 
     fig.set_tight_layout(True)
-    return fig, ax
+    plot_data = {}
+    plot_data["zeta_Boozer"] = xx
+    plot_data["theta_Boozer"] = yy
+    plot_data["|B|"] = data
+
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
 def plot_qs_error(
@@ -2020,6 +2237,7 @@ def plot_qs_error(
     helicity=(1, 0),
     rho=None,
     ax=None,
+    return_data=False,
     **kwargs,
 ):
     """Plot quasi-symmetry errors f_B, f_C, and f_T as normalized flux functions.
@@ -2042,7 +2260,11 @@ def plot_qs_error(
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2059,12 +2281,16 @@ def plot_qs_error(
         legend: bool, whether to display legend or not
         legend_kw: dict, any keyword arguments to be pased to ax.legend()
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -2096,6 +2322,7 @@ def plot_qs_error(
     f_B = np.array([])
     f_C = np.array([])
     f_T = np.array([])
+    plot_data = {}
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
@@ -2123,7 +2350,10 @@ def plot_qs_error(
                 / B0**4
             )
             f_T = np.append(f_T, f_t)
-
+    plot_data["f_B"] = f_B
+    plot_data["f_C"] = f_C
+    plot_data["f_T"] = f_T
+    plot_data["rho"] = rho
     if log is True:
         if fB:
             ax.semilogy(
@@ -2190,7 +2420,7 @@ def plot_qs_error(
     ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
     fig.set_tight_layout(True)
-    return fig, ax
+    return fig, ax if not return_data else fig, ax, plot_data
 
 
 def plot_grid(grid, **kwargs):
@@ -2199,7 +2429,9 @@ def plot_grid(grid, **kwargs):
     Parameters
     ----------
     grid : Grid
-        Grid to plot.
+        Grid to plot.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2210,12 +2442,16 @@ def plot_grid(grid, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_font_size: integer, font size of the title
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -2295,13 +2531,16 @@ def plot_basis(basis, **kwargs):
     basis : Basis
         basis to plot
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes, ndarray of axes, or dict of axes
         Axes used for plotting. A single axis is used for 1d basis functions,
-        2d or 3d bases return an ndarray or dict of axes.
+        2d or 3d bases return an ndarray or dict of axes.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2501,6 +2740,7 @@ def plot_logo(savepath=None, **kwargs):
         additional plot formatting parameters.
         options include ``'Dcolor'``, ``'Dcolor_rho'``, ``'Dcolor_theta'``,
         ``'Ecolor'``, ``'Scolor'``, ``'Ccolor'``, ``'BGcolor'``, ``'fig_width'``
+
 
     Returns
     -------
@@ -2716,7 +2956,14 @@ def plot_logo(savepath=None, **kwargs):
 
 
 def plot_field_lines_sfl(
-    eq, rho, seed_thetas=0, phi_start=0, phi_end=2 * np.pi, dphi=1e-2, ax=None, **kwargs
+    eq,
+    rho,
+    seed_thetas=0,
+    phi_start=0,
+    phi_end=2 * np.pi,
+    dphi=1e-2,
+    ax=None,
+    **kwargs,
 ):
     r"""Plots field lines on specified flux surface.
 
@@ -2748,7 +2995,9 @@ def plot_field_lines_sfl(
     dphi: float
         spacing in phi to sample field lines along, in radians. Default is 1e-2.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.
+        Axis to plot on.    return_data : bool
+        if True, return the data plotted as well as fig,ax
+
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -2757,6 +3006,7 @@ def plot_field_lines_sfl(
         Valid keyword arguments are:
 
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+
 
     Returns
     -------
@@ -2931,6 +3181,7 @@ def plot_field_lines_real_space(
         interpolating the magnetic field in (R,phi,Z)
 
 
+
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -3061,7 +3312,12 @@ def plot_field_lines_real_space(
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
     if return_B_interp:
-        return fig, ax, field_line_coords, B_interp
+        return (
+            fig,
+            ax,
+            field_line_coords,
+            B_interp,
+        )
     else:
         return fig, ax, field_line_coords
 
@@ -3079,6 +3335,7 @@ def _find_idx(rho0, theta0, phi0, grid):
         phi to find closest grid point to.
     grid : Grid
         grid to find closest point on
+
 
 
     Returns

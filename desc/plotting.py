@@ -499,7 +499,10 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = grid.nodes[:, plot_axes[0]]
     plot_data[name] = data
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_2d(
@@ -655,7 +658,10 @@ def plot_2d(
     plot_data[xlabel.strip("$").strip("\\")] = xx
     plot_data[ylabel.strip("$").strip("\\")] = yy
     plot_data[name] = data
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_3d(
@@ -841,7 +847,10 @@ def plot_3d(
     plot_data["Z"] = Z
     plot_data[name] = data
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_fsa(
@@ -985,7 +994,10 @@ def plot_fsa(
     plot_data["rho"] = rho
     plot_data[f"<{name}>_fsa"] = data
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_section(
@@ -1170,7 +1182,10 @@ def plot_section(
     plot_data["Z"] = Z
     plot_data[name] = data
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **kwargs):
@@ -1391,8 +1406,10 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
 
     plot_data["rho_R_coords"] = Rr
     plot_data["rho_Z_coords"] = Zr
+    if return_data:
+        return fig, ax, plot_data
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    return fig, ax
 
 
 def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **kwargs):
@@ -1523,7 +1540,10 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     plot_data["R"] = R
     plot_data["Z"] = Z
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **kwargs):
@@ -1652,7 +1672,10 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
     fig.legend(fontsize=legend_fontsize)
     fig.set_tight_layout(True)
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_comparison(
@@ -1845,7 +1868,10 @@ def plot_comparison(
         len(kwargs) == 0
     ), f"plot_comparison got unexpected keyword argument: {kwargs.keys()}"
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
@@ -1954,7 +1980,10 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     ax.set_ylabel(_AXIS_LABELS_XYZ[1])
     ax.set_zlabel(_AXIS_LABELS_XYZ[2])
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_boozer_modes(
@@ -2083,7 +2112,10 @@ def plot_boozer_modes(
     fig.legend(loc="center right")
 
     fig.set_tight_layout(True)
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_boozer_surface(
@@ -2212,10 +2244,13 @@ def plot_boozer_surface(
     plot_data["theta_Boozer"] = yy
     plot_data["|B|"] = data
 
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
-def plot_qs_error(
+def plot_qs_error(  # noqa: 16 fxn too complex
     eq,
     log=True,
     fB=True,
@@ -2406,7 +2441,10 @@ def plot_qs_error(
     ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
     fig.set_tight_layout(True)
-    return fig, ax if not return_data else fig, ax, plot_data
+    if return_data:
+        return fig, ax, plot_data
+
+    return fig, ax
 
 
 def plot_grid(grid, **kwargs):

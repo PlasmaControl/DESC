@@ -70,6 +70,7 @@ def _theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="z",
     data=[],
 )
 def _zeta(params, transforms, profiles, data, **kwargs):

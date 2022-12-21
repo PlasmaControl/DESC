@@ -13,6 +13,7 @@ def register_compute_fun(
     params,
     transforms,
     profiles,
+    function_of,
     data,
     **kwargs
 ):
@@ -40,6 +41,9 @@ def register_compute_fun(
         Dictionary of keys and derivative orders [rho, theta, zeta] for R, Z, etc.
     profiles : list of str
         Names of profiles needed, eg "iota", "pressure"
+    function_of : str
+        Coordinate dependency. IE, "rtz" for a function of rho, theta, zeta, or "r" for
+        a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty
 
@@ -64,6 +68,7 @@ def register_compute_fun(
             "description": description,
             "fun": func,
             "dim": dim,
+            "function_of": function_of,
             "dependencies": deps,
         }
         data_index[name] = d

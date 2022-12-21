@@ -14,6 +14,7 @@ from .utils import cross, dot
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_theta", "e_zeta"],
 )
 def _sqrtg(params, transforms, profiles, data, **kwargs):
@@ -31,6 +32,7 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_theta", "e_zeta"],
 )
 def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
@@ -50,6 +52,7 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_zeta"],
 )
 def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
@@ -69,6 +72,7 @@ def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_theta"],
 )
 def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
@@ -88,6 +92,7 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_theta", "e_zeta", "e_rho_r", "e_theta_r", "e_zeta_r"],
 )
 def _sqrtg_r(params, transforms, profiles, data, **kwargs):
@@ -109,6 +114,7 @@ def _sqrtg_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_theta", "e_zeta", "e_rho_t", "e_theta_t", "e_zeta_t"],
 )
 def _sqrtg_t(params, transforms, profiles, data, **kwargs):
@@ -130,6 +136,7 @@ def _sqrtg_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_theta", "e_zeta", "e_rho_z", "e_theta_z", "e_zeta_z"],
 )
 def _sqrtg_z(params, transforms, profiles, data, **kwargs):
@@ -151,6 +158,7 @@ def _sqrtg_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=[
         "e_rho",
         "e_theta",
@@ -185,6 +193,7 @@ def _sqrtg_rr(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=[
         "e_rho",
         "e_theta",
@@ -219,6 +228,7 @@ def _sqrtg_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=[
         "e_rho",
         "e_theta",
@@ -254,6 +264,7 @@ def _sqrtg_zz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=[
         "e_rho",
         "e_theta",
@@ -294,6 +305,7 @@ def _sqrtg_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho"],
 )
 def _g_sub_rr(params, transforms, profiles, data, **kwargs):
@@ -311,6 +323,7 @@ def _g_sub_rr(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_theta"],
 )
 def _g_sub_tt(params, transforms, profiles, data, **kwargs):
@@ -328,6 +341,7 @@ def _g_sub_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_zeta"],
 )
 def _g_sub_zz(params, transforms, profiles, data, **kwargs):
@@ -345,6 +359,7 @@ def _g_sub_zz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_theta"],
 )
 def _g_sub_rt(params, transforms, profiles, data, **kwargs):
@@ -362,6 +377,7 @@ def _g_sub_rt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_rho", "e_zeta"],
 )
 def _g_sub_rz(params, transforms, profiles, data, **kwargs):
@@ -379,6 +395,7 @@ def _g_sub_rz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_theta", "e_zeta"],
 )
 def _g_sub_tz(params, transforms, profiles, data, **kwargs):
@@ -397,6 +414,7 @@ def _g_sub_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_theta", "e_theta_r"],
 )
 def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
@@ -415,6 +433,7 @@ def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r"],
 )
 def _g_sub_tz_r(params, transforms, profiles, data, **kwargs):
@@ -434,6 +453,7 @@ def _g_sub_tz_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e^rho"],
 )
 def _g_sup_rr(params, transforms, profiles, data, **kwargs):
@@ -451,6 +471,7 @@ def _g_sup_rr(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e^theta"],
 )
 def _g_sup_tt(params, transforms, profiles, data, **kwargs):
@@ -468,6 +489,7 @@ def _g_sup_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e^zeta"],
 )
 def _g_sup_zz(params, transforms, profiles, data, **kwargs):
@@ -485,6 +507,7 @@ def _g_sup_zz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e^rho", "e^theta"],
 )
 def _g_sup_rt(params, transforms, profiles, data, **kwargs):
@@ -502,6 +525,7 @@ def _g_sup_rt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e^rho", "e^zeta"],
 )
 def _g_sup_rz(params, transforms, profiles, data, **kwargs):
@@ -519,6 +543,7 @@ def _g_sup_rz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["e^theta", "e^zeta"],
 )
 def _g_sup_tz(params, transforms, profiles, data, **kwargs):
@@ -536,6 +561,7 @@ def _g_sup_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["g^rr"],
 )
 def _gradrho(params, transforms, profiles, data, **kwargs):
@@ -553,6 +579,7 @@ def _gradrho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["g^tt"],
 )
 def _gradtheta(params, transforms, profiles, data, **kwargs):
@@ -570,6 +597,7 @@ def _gradtheta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["g^zz"],
 )
 def _gradzeta(params, transforms, profiles, data, **kwargs):

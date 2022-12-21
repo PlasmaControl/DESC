@@ -18,6 +18,7 @@ from .utils import dot, surface_integrals
     params=[],
     transforms={},
     profiles=[],
+    function_of="r",
     data=["iota_r", "psi_r"],
 )
 def _D_shear(params, transforms, profiles, data, **kwargs):
@@ -37,6 +38,7 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=["psi_r", "iota_r", "B", "J", "G", "I_r", "|grad(psi)|", "|e_theta x e_zeta|"],
 )
 def _D_current(params, transforms, profiles, data, **kwargs):
@@ -66,6 +68,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=[
         "p_r",
         "psi",
@@ -114,9 +117,10 @@ def _D_well(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=["|grad(psi)|", "J*B", "|B|^2", "|e_theta x e_zeta|"],
 )
-def _D_geodesicl(params, transforms, profiles, data, **kwargs):
+def _D_geodesic(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.19 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
     data["D_geodesic"] = (
@@ -150,6 +154,7 @@ def _D_geodesicl(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="r",
     data=["D_shear", "D_current", "D_well", "D_geodesic"],
 )
 def _D_Mercier(params, transforms, profiles, data, **kwargs):
@@ -164,13 +169,14 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="magnetic well",
     label="Magnetic Well",
-    units="T^2",
-    units_long="Tesla squared",
-    description="Flux surface average magnetic field squared, radial derivative",
+    units="~",
+    units_long="None",
+    description="Magnetic well proxy for MHD stability",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=[
         "V(r)",
         "V_r(r)",

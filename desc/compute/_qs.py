@@ -16,6 +16,7 @@ from .data_index import register_compute_fun
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["B_theta"],
 )
 def _B_theta_mn(params, transforms, profiles, data, **kwargs):
@@ -34,6 +35,7 @@ def _B_theta_mn(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["B_zeta"],
 )
 def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
@@ -52,6 +54,7 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"w": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["B_theta_mn", "B_zeta_mn"],
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
@@ -80,6 +83,7 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"w": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["w_mn", "G", "I", "iota", "lambda"],
 )
 def _nu(params, transforms, profiles, data, **kwargs):
@@ -99,6 +103,7 @@ def _nu(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"w": [[0, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["w_mn", "G", "I", "iota", "lambda_t"],
 )
 def _nu_t(params, transforms, profiles, data, **kwargs):
@@ -118,6 +123,7 @@ def _nu_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"w": [[0, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=["w_mn", "G", "I", "iota", "lambda_z"],
 )
 def _nu_z(params, transforms, profiles, data, **kwargs):
@@ -137,6 +143,7 @@ def _nu_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["theta", "lambda", "iota", "nu"],
 )
 def _theta_B(params, transforms, profiles, data, **kwargs):
@@ -154,6 +161,7 @@ def _theta_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["zeta", "nu"],
 )
 def _zeta_B(params, transforms, profiles, data, **kwargs):
@@ -171,6 +179,7 @@ def _zeta_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
 )
 def _sqrtg_B(params, transforms, profiles, data, **kwargs):
@@ -190,6 +199,7 @@ def _sqrtg_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
 )
 def _B_mn(params, transforms, profiles, data, **kwargs):
@@ -215,6 +225,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
 )
 def _B_modes(params, transforms, profiles, data, **kwargs):
@@ -233,6 +244,7 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=[
         "iota",
         "psi_r",
@@ -267,6 +279,7 @@ def _f_C(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=[
         "psi_r",
         "sqrt(g)",

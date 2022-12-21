@@ -14,6 +14,7 @@ from .utils import cross, surface_integrals
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="",
     data=["sqrt(g)"],
 )
 def _V(params, transforms, profiles, data, **kwargs):
@@ -31,6 +32,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=["e_theta", "e_zeta", "Z"],
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
@@ -54,6 +56,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=["sqrt(g)"],
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
@@ -73,6 +76,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=["sqrt(g)_r", "sqrt(g)"],
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
@@ -92,6 +96,7 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="",
     data=["sqrt(g)", "R"],
 )
 def _A(params, transforms, profiles, data, **kwargs):
@@ -115,6 +120,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=["|e_theta x e_zeta|"],
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
@@ -132,6 +138,7 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="",
     data=["V", "A"],
 )
 def _R0(params, transforms, profiles, data, **kwargs):
@@ -149,6 +156,7 @@ def _R0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="",
     data=["A"],
 )
 def _a(params, transforms, profiles, data, **kwargs):
@@ -166,6 +174,7 @@ def _a(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="",
     data=["R0", "a"],
 )
 def _R0_over_a(params, transforms, profiles, data, **kwargs):

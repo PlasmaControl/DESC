@@ -15,6 +15,7 @@ from .data_index import register_compute_fun
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="",
     data=[],
 )
 def _0(params, transforms, profiles, data, **kwargs):
@@ -33,6 +34,7 @@ def _0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="r",
     data=[],
 )
 def _rho(params, transforms, profiles, data, **kwargs):
@@ -50,6 +52,7 @@ def _rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
+    function_of="t",
     data=[],
 )
 def _theta(params, transforms, profiles, data, **kwargs):
@@ -84,6 +87,7 @@ def _zeta(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R(params, transforms, profiles, data, **kwargs):
@@ -101,6 +105,7 @@ def _R(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[1, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_r(params, transforms, profiles, data, **kwargs):
@@ -118,6 +123,7 @@ def _R_r(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_t(params, transforms, profiles, data, **kwargs):
@@ -135,6 +141,7 @@ def _R_t(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_z(params, transforms, profiles, data, **kwargs):
@@ -152,6 +159,7 @@ def _R_z(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[2, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rr(params, transforms, profiles, data, **kwargs):
@@ -169,6 +177,7 @@ def _R_rr(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 2, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_tt(params, transforms, profiles, data, **kwargs):
@@ -186,6 +195,7 @@ def _R_tt(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 0, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_zz(params, transforms, profiles, data, **kwargs):
@@ -204,6 +214,7 @@ def _R_zz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[1, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rt(params, transforms, profiles, data, **kwargs):
@@ -222,6 +233,7 @@ def _R_rt(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[1, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rz(params, transforms, profiles, data, **kwargs):
@@ -240,6 +252,7 @@ def _R_rz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 1, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_tz(params, transforms, profiles, data, **kwargs):
@@ -257,6 +270,7 @@ def _R_tz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[3, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rrr(params, transforms, profiles, data, **kwargs):
@@ -274,6 +288,7 @@ def _R_rrr(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 3, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_ttt(params, transforms, profiles, data, **kwargs):
@@ -291,6 +306,7 @@ def _R_ttt(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 0, 3]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_zzz(params, transforms, profiles, data, **kwargs):
@@ -309,6 +325,7 @@ def _R_zzz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[2, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rrt(params, transforms, profiles, data, **kwargs):
@@ -327,6 +344,7 @@ def _R_rrt(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[1, 2, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rtt(params, transforms, profiles, data, **kwargs):
@@ -345,6 +363,7 @@ def _R_rtt(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[2, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rrz(params, transforms, profiles, data, **kwargs):
@@ -363,6 +382,7 @@ def _R_rrz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[1, 0, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rzz(params, transforms, profiles, data, **kwargs):
@@ -381,6 +401,7 @@ def _R_rzz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 2, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_ttz(params, transforms, profiles, data, **kwargs):
@@ -399,6 +420,7 @@ def _R_ttz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[0, 1, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_tzz(params, transforms, profiles, data, **kwargs):
@@ -417,6 +439,7 @@ def _R_tzz(params, transforms, profiles, data, **kwargs):
     params=["R_lmn"],
     transforms={"R": [[1, 1, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _R_rtz(params, transforms, profiles, data, **kwargs):
@@ -434,6 +457,7 @@ def _R_rtz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z(params, transforms, profiles, data, **kwargs):
@@ -451,6 +475,7 @@ def _Z(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[1, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_r(params, transforms, profiles, data, **kwargs):
@@ -468,6 +493,7 @@ def _Z_r(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_t(params, transforms, profiles, data, **kwargs):
@@ -485,6 +511,7 @@ def _Z_t(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_z(params, transforms, profiles, data, **kwargs):
@@ -502,6 +529,7 @@ def _Z_z(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[2, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rr(params, transforms, profiles, data, **kwargs):
@@ -519,6 +547,7 @@ def _Z_rr(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 2, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_tt(params, transforms, profiles, data, **kwargs):
@@ -536,6 +565,7 @@ def _Z_tt(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 0, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_zz(params, transforms, profiles, data, **kwargs):
@@ -554,6 +584,7 @@ def _Z_zz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[1, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rt(params, transforms, profiles, data, **kwargs):
@@ -572,6 +603,7 @@ def _Z_rt(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[1, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rz(params, transforms, profiles, data, **kwargs):
@@ -590,6 +622,7 @@ def _Z_rz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 1, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_tz(params, transforms, profiles, data, **kwargs):
@@ -607,6 +640,7 @@ def _Z_tz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[3, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rrr(params, transforms, profiles, data, **kwargs):
@@ -624,6 +658,7 @@ def _Z_rrr(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 3, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_ttt(params, transforms, profiles, data, **kwargs):
@@ -641,6 +676,7 @@ def _Z_ttt(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 0, 3]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_zzz(params, transforms, profiles, data, **kwargs):
@@ -659,6 +695,7 @@ def _Z_zzz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[2, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rrt(params, transforms, profiles, data, **kwargs):
@@ -677,6 +714,7 @@ def _Z_rrt(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[1, 2, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rtt(params, transforms, profiles, data, **kwargs):
@@ -695,6 +733,7 @@ def _Z_rtt(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[2, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rrz(params, transforms, profiles, data, **kwargs):
@@ -713,6 +752,7 @@ def _Z_rrz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[1, 0, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rzz(params, transforms, profiles, data, **kwargs):
@@ -731,6 +771,7 @@ def _Z_rzz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 2, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_ttz(params, transforms, profiles, data, **kwargs):
@@ -749,6 +790,7 @@ def _Z_ttz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[0, 1, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_tzz(params, transforms, profiles, data, **kwargs):
@@ -767,6 +809,7 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
     params=["Z_lmn"],
     transforms={"Z": [[1, 1, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _Z_rtz(params, transforms, profiles, data, **kwargs):
@@ -784,6 +827,7 @@ def _Z_rtz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="z",
     data=["zeta"],
 )
 def _phi(params, transforms, profiles, data, **kwargs):
@@ -801,6 +845,7 @@ def _phi(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["R", "phi"],
 )
 def _X(params, transforms, profiles, data, **kwargs):
@@ -818,6 +863,7 @@ def _X(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
+    function_of="rtz",
     data=["R", "phi"],
 )
 def _Y(params, transforms, profiles, data, **kwargs):
@@ -835,6 +881,7 @@ def _Y(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda(params, transforms, profiles, data, **kwargs):
@@ -852,6 +899,7 @@ def _lambda(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[1, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_r(params, transforms, profiles, data, **kwargs):
@@ -869,6 +917,7 @@ def _lambda_r(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_t(params, transforms, profiles, data, **kwargs):
@@ -886,6 +935,7 @@ def _lambda_t(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_z(params, transforms, profiles, data, **kwargs):
@@ -903,6 +953,7 @@ def _lambda_z(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[2, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rr(params, transforms, profiles, data, **kwargs):
@@ -920,6 +971,7 @@ def _lambda_rr(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 2, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_tt(params, transforms, profiles, data, **kwargs):
@@ -937,6 +989,7 @@ def _lambda_tt(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 0, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_zz(params, transforms, profiles, data, **kwargs):
@@ -955,6 +1008,7 @@ def _lambda_zz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[1, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rt(params, transforms, profiles, data, **kwargs):
@@ -973,6 +1027,7 @@ def _lambda_rt(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[1, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rz(params, transforms, profiles, data, **kwargs):
@@ -991,6 +1046,7 @@ def _lambda_rz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 1, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_tz(params, transforms, profiles, data, **kwargs):
@@ -1008,6 +1064,7 @@ def _lambda_tz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[3, 0, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rrr(params, transforms, profiles, data, **kwargs):
@@ -1025,6 +1082,7 @@ def _lambda_rrr(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 3, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_ttt(params, transforms, profiles, data, **kwargs):
@@ -1042,6 +1100,7 @@ def _lambda_ttt(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 0, 3]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_zzz(params, transforms, profiles, data, **kwargs):
@@ -1060,6 +1119,7 @@ def _lambda_zzz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[2, 1, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rrt(params, transforms, profiles, data, **kwargs):
@@ -1078,6 +1138,7 @@ def _lambda_rrt(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[1, 2, 0]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rtt(params, transforms, profiles, data, **kwargs):
@@ -1096,6 +1157,7 @@ def _lambda_rtt(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[2, 0, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rrz(params, transforms, profiles, data, **kwargs):
@@ -1114,6 +1176,7 @@ def _lambda_rrz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[1, 0, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rzz(params, transforms, profiles, data, **kwargs):
@@ -1132,6 +1195,7 @@ def _lambda_rzz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 2, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_ttz(params, transforms, profiles, data, **kwargs):
@@ -1150,6 +1214,7 @@ def _lambda_ttz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[0, 1, 2]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_tzz(params, transforms, profiles, data, **kwargs):
@@ -1168,6 +1233,7 @@ def _lambda_tzz(params, transforms, profiles, data, **kwargs):
     params=["L_lmn"],
     transforms={"L": [[1, 1, 1]]},
     profiles=[],
+    function_of="rtz",
     data=[],
 )
 def _lambda_rtz(params, transforms, profiles, data, **kwargs):

@@ -17,7 +17,7 @@ def register_compute_fun(
     data,
     **kwargs
 ):
-    """Decorator to wrap a funtion and add it to the list of things we can compute.
+    """Decorator to wrap a function and add it to the list of things we can compute.
 
     Parameters
     ----------

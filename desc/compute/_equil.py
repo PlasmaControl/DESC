@@ -65,7 +65,7 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J",
     label="\\mathbf{J}",
-    units="A \\cdot m^{-2}",
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Plasma current density",
     dim=3,
@@ -87,7 +87,7 @@ def _J(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J_R",
     label="J_{R}",
-    units="A \\cdot m^{-2}",
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Radial componenet of plasma current density in lab frame",
     dim=1,
@@ -105,7 +105,7 @@ def _J_R(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J_phi",
     label="J_{\\phi}",
-    units="A \\cdot m^{-2}",
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Toroidal componenet of plasma current density in lab frame",
     dim=1,
@@ -123,7 +123,7 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J_Z",
     label="J_{Z}",
-    units="A \\cdot m^{-2}",
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Vertical componenet of plasma current density in lab frame",
     dim=1,
@@ -141,7 +141,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="|J|",
     label="|\\mathbf{J}|",
-    units="A \\cdot m^{-2}",
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Magnitue of plasma current density",
     dim=1,
@@ -160,7 +160,7 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
     name="J*B",
     label="\\mathbf{J} \\cdot \\mathbf{B}",
     units="N / m^{3}",
-    units_long="Newtons / meters cubed",
+    units_long="Newtons / cubic meter",
     description="Bootstrap current",
     dim=1,
     params=[],
@@ -177,7 +177,7 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="J_parallel",
     label="\\mathbf{J} \\cdot \\mathbf{b}",
-    units="A \\cdot m^{-2}",
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Plasma current density parallel to magnetic field",
     dim=1,

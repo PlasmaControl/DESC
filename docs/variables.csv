@@ -107,7 +107,7 @@ Name,Label,Units,Description,Module
 ``J_phi``,:math:`J_{\phi}`,Amperes / cubic meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
 ``J_Z``,:math:`J_{Z}`,Amperes / cubic meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
 ``|J|``,:math:`|\mathbf{J}|`,Amperes / cubic meter,Magnitue of plasma current density,``desc.compute._equil``
-``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / meters cubed,Bootstrap current,``desc.compute._equil``
+``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current,``desc.compute._equil``
 ``J_parallel``,:math:`\mathbf{J} \cdot \mathbf{b}`,Amperes / cubic meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
 ``div(J_perp)``,:math:`\nabla \cdot \mathbf{J}_{\perp}`,Amperes / cubic meter,Divergence of plasma current density perpendicular to magnetic field,``desc.compute._equil``
 ``F_rho``,:math:`F_{\rho}`,Newtons / square meter,Covariant radial component of force balance error,``desc.compute._equil``
@@ -263,4 +263,4 @@ Name,Label,Units,Description,Module
 ``D_well``,:math:`D_{well}`,Inverse Webers squared,Mercier stability criterion magnetic well term,``desc.compute._stability``
 ``D_geodesic``,:math:`D_{geodesic}`,Inverse Webers squared,Mercier stability criterion geodesic curvature term,``desc.compute._stability``
 ``D_Mercier``,:math:`D_{Mercier}`,Inverse Webers squared,Mercier stability criterion,``desc.compute._stability``
-``magnetic well``,:math:`Magnetic Well`,Tesla squared,"Flux surface average magnetic field squared, radial derivative",``desc.compute._stability``
+``magnetic well``,:math:`Magnetic Well`,None,Magnetic well proxy for MHD stability,``desc.compute._stability``

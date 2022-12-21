@@ -199,7 +199,7 @@ def test_3d_tz(DSHAPE_current):
     """Test 3d plot of force on interior surface."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
-    fig, ax, data = plot_3d(eq, "|F|", log=True, grid=grid)
+    fig, ax = plot_3d(eq, "|F|", log=True, grid=grid)
     return fig
 
 
@@ -210,7 +210,7 @@ def test_3d_rz(DSHAPE_current):
     """Test 3d plotting of pressure on toroidal cross section."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-    fig, ax, data = plot_3d(eq, "p", grid=grid)
+    fig, ax = plot_3d(eq, "p", grid=grid)
     return fig
 
 
@@ -231,7 +231,7 @@ def test_3d_rt(DSHAPE_current):
 def test_fsa_I(DSHAPE_current):
     """Test plotting of flux surface average toroidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_fsa(eq, "B_theta")
+    fig, ax, data = plot_fsa(eq, "B_theta", return_data=True)
     assert "rho" in data.keys()
     assert "<B_theta>_fsa" in data.keys()
 
@@ -244,7 +244,7 @@ def test_fsa_I(DSHAPE_current):
 def test_fsa_G(DSHAPE_current):
     """Test plotting of flux surface average poloidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_fsa(eq, "B_zeta", log=True)
+    fig, ax = plot_fsa(eq, "B_zeta", log=True)
     ax.set_ylim([1e-1, 1e0])
     return fig
 
@@ -266,7 +266,7 @@ def test_fsa_F_normalized(DSHAPE_current):
 def test_section_J(DSHAPE_current):
     """Test plotting poincare section of radial current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "J^rho")
+    fig, ax, data = plot_section(eq, "J^rho", reutrn_data=True)
     assert "R" in data.keys()
     assert "Z" in data.keys()
     assert "J^rho" in data.keys()
@@ -279,7 +279,7 @@ def test_section_J(DSHAPE_current):
 def test_section_Z(DSHAPE_current):
     """Test plotting poincare section of Z coordinate."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "Z")
+    fig, ax = plot_section(eq, "Z")
     return fig
 
 
@@ -289,7 +289,7 @@ def test_section_Z(DSHAPE_current):
 def test_section_R(DSHAPE_current):
     """Test plotting poincare section of R coordinate."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "R")
+    fig, ax = plot_section(eq, "R")
     return fig
 
 
@@ -299,7 +299,7 @@ def test_section_R(DSHAPE_current):
 def test_section_F(DSHAPE_current):
     """Test plotting poincare section of radial force."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "F_rho")
+    fig, ax = plot_section(eq, "F_rho")
     return fig
 
 
@@ -309,7 +309,7 @@ def test_section_F(DSHAPE_current):
 def test_section_F_normalized_vac(DSHAPE_current):
     """Test plotting poincare section of normalized vacuum force error."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[1]
-    fig, ax, data = plot_section(eq, "|F|", norm_F=True)
+    fig, ax = plot_section(eq, "|F|", norm_F=True)
     return fig
 
 
@@ -319,7 +319,7 @@ def test_section_F_normalized_vac(DSHAPE_current):
 def test_section_logF(DSHAPE_current):
     """Test plotting poincare section of force magnitude on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "|F|", log=True)
+    fig, ax = plot_section(eq, "|F|", log=True)
     return fig
 
 
@@ -330,7 +330,7 @@ def test_section_logF(DSHAPE_current):
 def test_plot_surfaces(DSHAPE_current):
     """Test plotting flux surfaces."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_surfaces(eq)
+    fig, ax, data = plot_surfaces(eq, return_data=True)
     for string in [
         "rho_R_coords",
         "rho_Z_coords",
@@ -349,7 +349,7 @@ def test_plot_surfaces(DSHAPE_current):
 def test_plot_surfaces_no_theta(DSHAPE_current):
     """Test plotting flux surfaces without theta contours."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_surfaces(eq, theta=False)
+    fig, ax, data = plot_surfaces(eq, theta=False, return_data=True)
     for string in ["rho_R_coords", "rho_Z_coords"]:
         assert string in data.keys()
 
@@ -361,7 +361,7 @@ def test_plot_surfaces_no_theta(DSHAPE_current):
 def test_plot_boundary():
     """Test plotting boundary."""
     eq = get("W7-X")
-    fig, ax, data = plot_boundary(eq, plot_axis=True)
+    fig, ax, data = plot_boundary(eq, plot_axis=True, return_data=True)
     assert "R" in data.keys()
     assert "Z" in data.keys()
 
@@ -375,7 +375,7 @@ def test_plot_boundaries():
     eq1 = get("SOLOVEV")
     eq2 = get("DSHAPE")
     eq3 = get("W7-X")
-    fig, ax, data = plot_boundaries((eq1, eq2, eq3))
+    fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
     for i in range(3):
         assert f"R_{i}" in data.keys()
         assert f"Z_{i}" in data.keys()
@@ -389,7 +389,7 @@ def test_plot_boundaries():
 def test_plot_comparison(DSHAPE_current):
     """Test plotting comparison of flux surfaces."""
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))
-    fig, ax, data = plot_comparison(eqf)
+    fig, ax, data = plot_comparison(eqf, return_data=True)
     for i in range(len(eqf)):
         for string in [
             "rho_R_coords",
@@ -409,7 +409,7 @@ def test_plot_comparison(DSHAPE_current):
 def test_plot_comparison_no_theta(DSHAPE_current):
     """Test plotting comparison of flux surfaces without theta contours."""
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))
-    fig, ax, data = plot_comparison(eqf, theta=0)
+    fig, ax = plot_comparison(eqf, theta=0)
     return fig
 
 
@@ -488,7 +488,7 @@ def test_plot_normF_2d(DSHAPE_current):
 def test_plot_normF_section(DSHAPE_current):
     """Test Poincare section plot of normalized force on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "|F|", norm_F=True, log=True)
+    fig, ax = plot_section(eq, "|F|", norm_F=True, log=True)
     return fig
 
 
@@ -498,7 +498,7 @@ def test_plot_normF_section(DSHAPE_current):
 def test_plot_coefficients(DSHAPE_current):
     """Test scatter plot of spectral coefficients."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_coefficients(eq)
+    fig, ax = plot_coefficients(eq)
     ax[0, 0].set_ylim([1e-8, 1e1])
     return fig
 
@@ -507,7 +507,7 @@ def test_plot_coefficients(DSHAPE_current):
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
 def test_plot_logo():
     """Test plotting the DESC logo."""
-    fig, ax, data = plot_logo()
+    fig, ax = plot_logo()
     return fig
 
 
@@ -519,7 +519,7 @@ class TestPlotGrid:
     def test_plot_grid_linear(self):
         """Test plotting linear grid."""
         grid = LinearGrid(rho=10, theta=10, zeta=1)
-        fig, ax, data = plot_grid(grid)
+        fig, ax = plot_grid(grid)
         return fig
 
     @pytest.mark.unit
@@ -527,7 +527,7 @@ class TestPlotGrid:
     def test_plot_grid_quad(self):
         """Test plotting quadrature grid."""
         grid = QuadratureGrid(L=10, M=10, N=1)
-        fig, ax, data = plot_grid(grid, figsize=(6, 6))
+        fig, ax = plot_grid(grid, figsize=(6, 6))
         return fig
 
     @pytest.mark.unit
@@ -535,7 +535,7 @@ class TestPlotGrid:
     def test_plot_grid_jacobi(self):
         """Test plotting concentric grid with jacobi nodes."""
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="jacobi")
-        fig, ax, data = plot_grid(grid)
+        fig, ax = plot_grid(grid)
         return fig
 
     @pytest.mark.unit
@@ -543,7 +543,7 @@ class TestPlotGrid:
     def test_plot_grid_cheb1(self):
         """Test plotting concentric grid with chebyshev 1 nodes."""
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb1")
-        fig, ax, data = plot_grid(grid)
+        fig, ax = plot_grid(grid)
         return fig
 
     @pytest.mark.unit
@@ -551,7 +551,7 @@ class TestPlotGrid:
     def test_plot_grid_cheb2(self):
         """Test plotting concentric grid with chebyshev 2 nodes."""
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="cheb2")
-        fig, ax, data = plot_grid(grid)
+        fig, ax = plot_grid(grid)
         return fig
 
     @pytest.mark.unit
@@ -559,7 +559,7 @@ class TestPlotGrid:
     def test_plot_grid_ocs(self):
         """Test plotting concentric grid with optimal concentric sampling nodes."""
         grid = ConcentricGrid(L=20, M=10, N=1, node_pattern="ocs")
-        fig, ax, data = plot_grid(grid)
+        fig, ax = plot_grid(grid)
         return fig
 
 
@@ -571,7 +571,7 @@ class TestPlotBasis:
     def test_plot_basis_powerseries(self):
         """Test plotting power series basis."""
         basis = PowerSeries(L=6)
-        fig, ax, data = plot_basis(basis)
+        fig, ax = plot_basis(basis)
         return fig
 
     @pytest.mark.unit
@@ -579,7 +579,7 @@ class TestPlotBasis:
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
-        fig, ax, data = plot_basis(basis)
+        fig, ax = plot_basis(basis)
         return fig
 
     @pytest.mark.unit
@@ -588,7 +588,7 @@ class TestPlotBasis:
     def test_plot_basis_doublefourierseries(self):
         """Test plotting double fourier series basis."""
         basis = DoubleFourierSeries(M=3, N=2)
-        fig, ax, data = plot_basis(basis)
+        fig, ax = plot_basis(basis)
         return fig
 
     @pytest.mark.unit
@@ -597,7 +597,7 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
-        fig, ax, data = plot_basis(basis)
+        fig, ax = plot_basis(basis)
         return fig
 
 
@@ -621,9 +621,7 @@ class TestPlotFieldLines:
     def test_plot_field_line(self, DSHAPE_current):
         """Test plotting single field line over 1 transit."""
         eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, data, _ = plot_field_lines_sfl(
-            eq, rho=1, seed_thetas=0, phi_end=2 * np.pi
-        )
+        fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
         return fig
 
     @pytest.mark.unit
@@ -633,7 +631,7 @@ class TestPlotFieldLines:
     def test_plot_field_lines(self, DSHAPE_current):
         """Test plotting multiple field lines over 1 transit."""
         eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, data, _ = plot_field_lines_sfl(
+        fig, ax, _ = plot_field_lines_sfl(
             eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
         )
         return fig
@@ -645,7 +643,7 @@ class TestPlotFieldLines:
 def test_plot_boozer_modes(DSHAPE_current):
     """Test plotting boozer spectrum."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_boozer_modes(eq)
+    fig, ax, data = plot_boozer_modes(eq, return_data=True)
     ax.set_ylim([1e-12, 1e0])
     for string in ["|B|_00", "|B|_10", "|B|_20", "|B|_30", "rho"]:
         assert string in data.keys()
@@ -674,7 +672,7 @@ def test_plot_boozer_surface(DSHAPE_current):
 def test_plot_qs_error(DSHAPE_current):
     """Test plotting qs error metrics."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_qs_error(eq, helicity=(0, 0), log=False)
+    fig, ax, data = plot_qs_error(eq, helicity=(0, 0), log=False, return_data=True)
     for string in ["rho", "f_T", "f_B", "f_C"]:
         assert string in data.keys()
     return fig
@@ -692,7 +690,7 @@ def test_plot_coils():
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils.grid = 100
     coils2 = CoilSet.from_symmetry(coils, NFP, True)
-    fig, ax, data = plot_coils(coils2)
+    fig, ax, data = plot_coils(coils2, return_data=True)
     for string in ["X", "Y", "Z"]:
         for i in range(len(coils2)):
             assert string + f"_{i}" in data.keys()

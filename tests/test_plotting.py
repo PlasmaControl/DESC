@@ -221,7 +221,7 @@ def test_3d_rt(DSHAPE_current):
     """Test 3d plotting of flux on poloidal ribbon."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-    fig, ax, data = plot_3d(eq, "psi", grid=grid)
+    fig, ax = plot_3d(eq, "psi", grid=grid)
     return fig
 
 
@@ -266,7 +266,7 @@ def test_fsa_F_normalized(DSHAPE_current):
 def test_section_J(DSHAPE_current):
     """Test plotting poincare section of radial current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_section(eq, "J^rho", reutrn_data=True)
+    fig, ax, data = plot_section(eq, "J^rho", return_data=True)
     assert "R" in data.keys()
     assert "Z" in data.keys()
     assert "J^rho" in data.keys()

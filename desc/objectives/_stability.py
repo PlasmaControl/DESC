@@ -163,6 +163,33 @@ class MercierStability(_Objective):
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f) * w
 
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + "(normalized)"
+            )
+
 
 class MagneticWell(_Objective):
     """The magnetic well is a fast proxy for MHD stability.
@@ -306,3 +333,13 @@ class MagneticWell(_Objective):
         f = compress(self.grid, data["magnetic well"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)

@@ -102,8 +102,8 @@ class GenericObjective(_Objective):
 
         Parameters
         ----------
-        args : list of ndarray
-            Any of the arguments given in `arg_order`.
+        args : ndarray
+            Parameters given by `desc.compute.get_params(f)`
 
         Returns
         -------

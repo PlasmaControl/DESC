@@ -6,7 +6,6 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import put, use_jax
-from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
@@ -213,14 +212,15 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
         )
     # all other perturbations besides the boundary
-    other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
-    if len([arg for arg in other_args if arg in deltas.keys()]):
-        dc = np.concatenate([deltas[arg] for arg in other_args if arg in deltas.keys()])
-        x_idx = np.concatenate(
-            [objective.x_idx[arg] for arg in other_args if arg in deltas.keys()]
-        )
-        x_idx.sort(kind="mergesort")
-        tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
+    other_args = sorted(
+        {arg for arg in objective.args if arg not in ["Rb_lmn", "Zb_lmn"]}
+    )
+    for arg in other_args:
+        if arg in deltas:
+            dc = deltas[arg]
+            x_idx = objective.x_idx[arg]
+            x_idx.sort(kind="mergesort")
+            tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
 
     # 1st order
     if order > 0:
@@ -570,8 +570,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if arg in deltas.keys()
         ]
     ):
+        ordered_args = sorted(set(objective_f.args + objective_g.args))
         x_idx = np.concatenate(
-            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
+            [objective_f.x_idx[arg] for arg in ordered_args if arg in deltas.keys()]
         )
         x_idx.sort(kind="mergesort")
         dxdc = np.eye(objective_f.dim_x)[:, x_idx]

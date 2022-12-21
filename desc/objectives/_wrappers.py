@@ -3,7 +3,6 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import arg_order
 
 from ._equilibrium import CurrentDensity
 from .objective_funs import ObjectiveFunction
@@ -100,7 +99,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._dim_x += self.dimensions[arg]
 
         self._full_args = np.concatenate((self.args, self._eq_objective.args))
-        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        self._full_args = sorted(set(self._full_args))
 
         (
             xp,

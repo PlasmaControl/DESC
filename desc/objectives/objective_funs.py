@@ -6,12 +6,9 @@ from inspect import getfullargspec
 import numpy as np
 
 from desc.backend import block_diag, jit, jnp, use_jax
-from desc.compute import arg_order
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer
-
-# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -57,7 +54,7 @@ class ObjectiveFunction(IOAble):
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
         self._args = np.concatenate([obj.args for obj in self.objectives])
-        self._args = [arg for arg in arg_order if arg in self._args]
+        self._args = sorted(set(self._args))
 
         self._dimensions = self.objectives[0].dimensions
 
@@ -514,33 +511,22 @@ class _Objective(IOAble, ABC):
         """Set up derivatives of the objective wrt each argument."""
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
 
-        for arg in arg_order:
-            if arg in self.args:  # derivative wrt arg
-                self._derivatives["jac"][arg] = Derivative(
-                    self.compute,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["grad"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="grad",
-                )
-                self._derivatives["hess"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="hess",
-                )
-            else:  # these derivatives are always zero
-                self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["grad"][arg] = lambda *args, **kwargs: jnp.zeros(
-                    (1, self.dimensions[arg])
-                )
-                self._derivatives["hess"][arg] = lambda *args, **kwargs: jnp.zeros(
-                    (self.dimensions[arg], self.dimensions[arg])
-                )
+        for arg in self.args:
+            self._derivatives["jac"][arg] = Derivative(
+                self.compute,
+                argnum=self.args.index(arg),
+                mode="fwd",
+            )
+            self._derivatives["grad"][arg] = Derivative(
+                self.compute_scalar,
+                argnum=self.args.index(arg),
+                mode="grad",
+            )
+            self._derivatives["hess"][arg] = Derivative(
+                self.compute_scalar,
+                argnum=self.args.index(arg),
+                mode="hess",
+            )
 
     def jit(self):
         """Apply JIT to compute methods, or re-apply after updating self."""

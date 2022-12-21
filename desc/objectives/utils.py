@@ -3,7 +3,6 @@
 import numpy as np
 
 from desc.backend import block_diag, jnp, put
-from desc.compute import arg_order
 from desc.utils import svd_inv_null
 
 from ._equilibrium import (
@@ -137,14 +136,13 @@ def factorize_linear_constraints(constraints, objective_args):
     args = np.concatenate([obj.args for obj in constraints])
     args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
-    args = [arg for arg in arg_order if arg in args]
+    args = sorted(set(args))
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
     for arg in objective_args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
-
     A = {}
     b = {}
     Ainv = {}
@@ -186,11 +184,9 @@ def factorize_linear_constraints(constraints, objective_args):
 
     # full A matrix for all unfixed constraints
     if len(A):
-        unfixed_idx = jnp.concatenate(
-            [x_idx[arg] for arg in arg_order if arg in A.keys()]
-        )
-        A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-        b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+        unfixed_idx = jnp.concatenate([x_idx[arg] for arg in args if arg in A.keys()])
+        A_full = block_diag(*[A[arg] for arg in args if arg in A.keys()])
+        b_full = jnp.concatenate([b[arg] for arg in args if arg in b.keys()])
         Ainv_full, Z = svd_inv_null(A_full)
         xp = put(xp, unfixed_idx, Ainv_full @ b_full)
 
@@ -231,7 +227,7 @@ def align_jacobian(Fx, objective_f, objective_g):
     dim_f = Fx.shape[:1]
     A = {arg: Fx.T[x_idx[arg]] for arg in args}
     allargs = np.concatenate([objective_f.args, objective_g.args])
-    allargs = [arg for arg in arg_order if arg in allargs]
+    allargs = sorted(set(allargs))
     for arg in allargs:
         if arg not in A.keys():
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)

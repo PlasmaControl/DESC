@@ -72,15 +72,11 @@ def get_vmec_data(stellarator, quantity):
 def test_mercier_vacuum():
     """Test that the Mercier stability criteria are 0 without pressure."""
     eq = Equilibrium()
-    grid = LinearGrid(L=10, M=10, N=5)
-    np.testing.assert_allclose(eq.compute("D_shear", grid=grid)["D_shear"], 0)
-    np.testing.assert_allclose(eq.compute("D_current", grid=grid)["D_current"], 0)
-    np.testing.assert_allclose(eq.compute("D_well", grid=grid)["D_well"], 0)
-    np.testing.assert_allclose(eq.compute("D_geodesic", grid=grid)["D_geodesic"], 0)
-    np.testing.assert_allclose(eq.compute("D_Mercier", grid=grid)["D_Mercier"], 0)
-
-    mercier_obj = MercierStability(eq=eq, grid=grid)
-    np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
+    np.testing.assert_allclose(eq.compute("D_shear")["D_shear"], 0)
+    np.testing.assert_allclose(eq.compute("D_current")["D_current"], 0)
+    np.testing.assert_allclose(eq.compute("D_well")["D_well"], 0)
+    np.testing.assert_allclose(eq.compute("D_geodesic")["D_geodesic"], 0)
+    np.testing.assert_allclose(eq.compute("D_Mercier")["D_Mercier"], 0)
 
 
 @pytest.mark.unit

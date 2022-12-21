@@ -64,7 +64,18 @@ from .utils import (
 )
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "multipliers",
+    "Rb_lmn",
+    "Zb_lmn",
+)
 
 
 # rather than having to recursively compute the full dependencies every time we

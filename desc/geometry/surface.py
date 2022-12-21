@@ -326,35 +326,6 @@ class FourierRZToroidalSurface(Surface):
         N = jnp.sum(rzz * n, axis=-1)
         return L, M, N
 
-    def compute_curvature(self, R_lmn=None, Z_lmn=None, grid=None):
-        """Compute gaussian and mean curvature.
-
-        Parameters
-        ----------
-        R_lmn, Z_lmn: array-like
-            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
-        grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        K, H, k1, k2 : ndarray, shape(k,)
-            Gaussian, mean and 2 principle curvatures at points specified in grid.
-        """
-        E, F, G = self._compute_first_fundamental_form(R_lmn, Z_lmn, grid)
-        L, M, N = self._compute_second_fundamental_form(R_lmn, Z_lmn, grid)
-        a = E * G - F**2
-        b = F * M - L * G - E * N
-        c = L * N - M**2
-        r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-        k1 = jnp.maximum(r1, r2)
-        k2 = jnp.minimum(r1, r2)
-        K = k1 * k2
-        H = (k1 + k2) / 2
-        return K, H, k1, k2
-
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0, basis="rpz"
     ):

@@ -27,6 +27,7 @@ __all__ = [
     "plot_basis",
     "plot_boozer_modes",
     "plot_boozer_surface",
+    "plot_boundaries",
     "plot_boundary",
     "plot_coefficients",
     "plot_comparison",
@@ -275,7 +276,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
-        data = compute_eq.compute(name, grid)[name]
+        data = compute_eq.compute(name, grid=grid)[name]
 
     if data_index[name]["dim"] > 1:
         if component is None:
@@ -695,7 +696,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.pop("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        coords = eq.compute("X", grid)
+        coords = eq.compute("X", "Y", "Z", grid=grid)
     X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -1019,7 +1020,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     )
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute("R", grid)
+    coords = eq.compute("R", "Z", grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1047,7 +1048,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot section got unexpected keyword argument: {kwargs.keys()}"
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
@@ -1220,7 +1221,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
-    r_coords = eq.compute("R", r_grid)
+    r_coords = eq.compute("R", "Z", grid=r_grid)
     Rr = r_coords["R"].reshape(
         (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
     )
@@ -1229,7 +1230,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, **kwargs):
     )
     if plot_theta:
         # vartheta contours
-        v_coords = eq.compute("R", v_grid)
+        v_coords = eq.compute("R", "Z", grid=v_grid)
         Rv = v_coords["R"].reshape(
             (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
         )
@@ -1356,7 +1357,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot boundary got unexpected keyword argument: {kwargs.keys()}"
 
     if zeta is None:
         zeta = 1 if eq.N == 0 else 4
@@ -1379,7 +1380,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
     if isinstance(ls, str):
         ls = [ls for i in range(grid.num_zeta - 1)]
 
-    coords = eq.compute("R", grid)
+    coords = eq.compute("R", "Z", grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1404,6 +1405,122 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, **kwargs):
                 marker=marker,
                 s=size,
             )
+
+    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
+    ax.tick_params(labelbottom=True, labelleft=True)
+
+    fig.legend(fontsize=legend_fontsize)
+    fig.set_tight_layout(True)
+    return fig, ax
+
+
+def plot_boundaries(eqs, labels=None, zeta=None, ax=None, **kwargs):
+    """Plot stellarator boundaries at multiple toroidal coordinates.
+
+    Parameters
+    ----------
+    eqs : array-like of Equilibrium or EquilibriaFamily
+        Equilibria to plot.
+    labels : array-like
+        Array the same length as eqs of labels to apply to each equilibrium.
+    zeta : int or array-like or None
+        Values of zeta to plot boundary surface at.
+        If an integer, plot that many contours linearly spaced in [0,2pi).
+        Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        cmap : colormap to use for plotting, discretized into len(eqs) colors
+        colors: array of colors to use for each Equilibrium
+        ls : array of line styles to use for each Equilibrium
+        lw : array of line widths to use for each Equilibrium
+        label_fontsize: float, fontsize of the x and y labels
+        legend_fontsize: float, fontsize of the legend
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_boundaries.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_boundaries
+        fig, ax = plot_boundaries((eq1, eq2, eq3))
+
+    """
+    figsize = kwargs.pop("figsize", None)
+    cmap = kwargs.pop("cmap", "rainbow")
+    colors = kwargs.pop("colors", None)
+    ls = kwargs.pop("ls", None)
+    lw = kwargs.pop("lw", None)
+    label_fontsize = kwargs.pop("label_fontsize", None)
+    legend_fontsize = kwargs.pop("legend_fontsize", None)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
+
+    if zeta is None:
+        zeta = 4
+    if isinstance(zeta, int):
+        zeta = zeta + 1  # include zeta = 2*pi
+
+    neq = len(eqs)
+
+    if labels is None:
+        labels = [str(i) for i in range(neq)]
+    if colors is None:
+        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+    if lw is None:
+        lw = 1
+    if np.isscalar(lw):
+        lw = [lw for i in range(neq)]
+    if ls is None:
+        ls = "-"
+    if isinstance(ls, str):
+        ls = [ls for i in range(neq)]
+
+    fig, ax = _format_ax(ax, figsize=figsize, equal=True)
+
+    for i in range(neq):
+        grid_kwargs = {
+            "NFP": eqs[i].NFP,
+            "theta": 100,
+            "zeta": zeta if eqs[i].N > 0 else 2,
+        }
+        grid = _get_grid(**grid_kwargs)
+
+        coords = eqs[i].compute("R", "Z", grid=grid)
+        R = coords["R"].reshape(
+            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
+        )
+        Z = coords["Z"].reshape(
+            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
+        )
+        for j in range(grid.num_zeta - 1):
+            (line,) = ax.plot(
+                R[:, -1, j],
+                Z[:, -1, j],
+                color=colors[i],
+                linestyle=ls[i],
+                lw=lw[i],
+            )
+            if j == 0:
+                line.set_label(labels[i])
 
     ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
@@ -1441,7 +1558,7 @@ def plot_comparison(
         If an integer, plot that many contours linearly spaced in (0,2pi).
     zeta : int or array-like or None
         Values of zeta to plot contours at.
-        If an integer, plot that many contours linearly spaced in (0,2pi).
+        If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
@@ -1508,7 +1625,7 @@ def plot_comparison(
     N = np.max([eq.N for eq in eqs])
     nfp = eqs[0].NFP
     if isinstance(zeta, numbers.Integral):
-        zeta = np.linspace(0, 2 * np.pi / nfp, zeta)
+        zeta = np.linspace(0, 2 * np.pi / nfp, zeta, endpoint=False)
     elif zeta is None:
         if N == 0:
             zeta = np.array([0])
@@ -1669,7 +1786,9 @@ def plot_coils(coils, grid=None, ax=None, **kwargs):
     return fig, ax
 
 
-def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **kwargs):
+def plot_boozer_modes(
+    eq, log=True, B0=True, norm=False, num_modes=10, rho=None, ax=None, **kwargs
+):
     """Plot Fourier harmonics of :math:`|B|` in Boozer coordinates.
 
     Parameters
@@ -1680,6 +1799,8 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
         Whether to use a log scale.
     B0 : bool, optional
         Whether to include the m=n=0 mode.
+    norm : bool, optional
+        Whether to normalize the magnitudes such that B0=1 Tesla.
     num_modes : int, optional
         How many modes to include. Default (-1) is all.
     rho : int or ndarray, optional
@@ -1726,7 +1847,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        data = eq.compute("|B|_mn", grid)
+        data = eq.compute("|B|_mn", "B modes", grid=grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
@@ -1736,13 +1857,15 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
     else:
         idx = idx[-1 : -num_modes - 1 : -1]
     B_mn = B_mn[:, idx]
+    if norm:
+        B_mn = B_mn / np.max(B_mn)
     modes = data["B modes"][idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
 
     for i in range(modes.shape[0]):
         M = modes[i, 1]
@@ -1776,7 +1899,7 @@ def plot_boozer_modes(eq, log=True, B0=True, num_modes=10, rho=None, ax=None, **
 
 
 def plot_boozer_surface(
-    eq, grid_compute=None, grid_plot=None, fill=True, ncontours=100, ax=None, **kwargs
+    eq, grid_compute=None, grid_plot=None, fill=False, ncontours=100, ax=None, **kwargs
 ):
     """Plot :math:`|B|` on a surface vs the Boozer poloidal and toroidal angles.
 
@@ -1836,7 +1959,7 @@ def plot_boozer_surface(
         grid_plot = _get_grid(**grid_kwargs)
     title_font_size = kwargs.pop("title_font_size", None)
 
-    data = eq.compute("|B|_mn", grid_compute)
+    data = eq.compute("|B|_mn", grid=grid_compute)
     B_transform = Transform(
         grid_plot,
         DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
@@ -1965,8 +2088,7 @@ def plot_qs_error(
     markers = kwargs.pop("markers", ["o", "o", "o"])
     labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_B$"])
 
-    data = eq.compute("R0")
-    data = eq.compute("|B|", data=data)
+    data = eq.compute("R0", "|B|")
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
@@ -1977,7 +2099,7 @@ def plot_qs_error(
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
-            data = eq.compute("|B|_mn", grid, data)
+            data = eq.compute("|B|_mn", grid=grid, data=data)
             modes = data["B modes"]
             idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
@@ -1985,7 +2107,7 @@ def plot_qs_error(
             )
             f_B = np.append(f_B, f_b)
         if fC:
-            data = eq.compute("f_C", grid, data, helicity=helicity)
+            data = eq.compute("f_C", grid=grid, data=data, helicity=helicity)
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -1993,7 +2115,7 @@ def plot_qs_error(
             )
             f_C = np.append(f_C, f_c)
         if fT:
-            data = eq.compute("f_T", grid, data)
+            data = eq.compute("f_T", grid=grid, data=data)
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -2065,7 +2187,7 @@ def plot_qs_error(
 
     assert (
         len(kwargs) == 0
-    ), f"plot surfaces got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
     fig.set_tight_layout(True)
     return fig, ax
@@ -2671,7 +2793,7 @@ def plot_field_lines_sfl(
     grid_single_rho = Grid(
         nodes=np.array([[rho, 0, 0]])
     )  # grid to get the iota value at the specified rho surface
-    iota = eq.compute("iota", grid_single_rho)["iota"][0]
+    iota = eq.compute("iota", grid=grid_single_rho)["iota"][0]
 
     varthetas = []
     phi = np.linspace(phi0, phi_end, N_pts)
@@ -2708,7 +2830,7 @@ def plot_field_lines_sfl(
     field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
         grid = Grid(nodes=coords)
-        toroidal_coords = eq.compute("R", grid)
+        toroidal_coords = eq.compute("R", "Z", grid=grid)
         field_line_coords["Rs"].append(toroidal_coords["R"])
         field_line_coords["Zs"].append(toroidal_coords["Z"])
         field_line_coords["phis"].append(phi)
@@ -2849,13 +2971,13 @@ def plot_field_lines_real_space(
     phi0 = kwargs.get("phi0", 0)
 
     # calculate toroidal coordinates
-    toroidal_coords = eq.compute("phi", grid)
+    toroidal_coords = eq.compute("phi", grid=grid)
     Rs = toroidal_coords["R"]
     Zs = toroidal_coords["Z"]
     phis = toroidal_coords["phi"]
 
     # calculate cylindrical B
-    magnetic_field = eq.compute("B", grid)
+    magnetic_field = eq.compute("B", grid=grid)
     BR = magnetic_field["B_R"]
     BZ = magnetic_field["B_Z"]
     Bphi = magnetic_field["B_phi"]

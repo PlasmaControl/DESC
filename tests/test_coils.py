@@ -22,7 +22,9 @@ class TestCoil:
         coil = FourierXYZCoil(I)
         coil.grid = LinearGrid(zeta=100, endpoint=True)
         assert coil.grid.num_nodes == 100
-        B_approx = coil.compute_magnetic_field(Grid([[10, y, 0]]), basis="xyz")[0]
+        B_approx = coil.compute_magnetic_field(
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz"
+        )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit

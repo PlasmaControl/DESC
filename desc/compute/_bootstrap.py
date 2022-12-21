@@ -465,17 +465,9 @@ def j_dot_B_Redl(
 
 
 def compute_J_dot_B_Redl(
-    R_lmn,
-    Z_lmn,
-    L_lmn,
-    i_l,
-    c_l,
-    Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
-    iota,
-    current,
+    params,
+    transforms,
+    profiles,
     data=None,
     **kwargs,
 ):
@@ -491,41 +483,27 @@ def compute_J_dot_B_Redl(
     transformation to Boozer coordinates is involved in this
     method. However, the approach here may over-estimate ``epsilon``.
     """
-    grid = R_transform.grid
+    grid = transforms["grid"]
     data = compute_magnetic_field_magnitude(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
+        params,
+        transforms,
+        profiles,
         data=data,
+        **kwargs,
     )
     data = compute_jacobian(
-        R_lmn,
-        Z_lmn,
-        R_transform,
-        Z_transform,
+        params,
+        transforms,
+        profiles,
         data=data,
+        **kwargs,
     )
     data = compute_boozer_magnetic_field(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
+        params,
+        transforms,
+        profiles,
         data=data,
+        **kwargs,
     )
     # Note that geom_data contains info only as a function of rho, not
     # theta or zeta, i.e. on the compressed grid. In contrast, data
@@ -538,14 +516,19 @@ def compute_J_dot_B_Redl(
     geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
         "<1/B>"
     ]
-    geom_data["psi_edge"] = Psi / (2 * jnp.pi)
+    geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
+    ne = kwargs.get("ne", PowerSeriesProfile([1e20]))
+    Te = kwargs.get("Te", PowerSeriesProfile([1e3]))
+    Ti = kwargs.get("Ti", PowerSeriesProfile([1e3]))
+    Zeff = kwargs.get("Zeff", 1.0)
+    helicity_N = kwargs.get("helicity_N", 0)
     j_dot_B_data = j_dot_B_Redl(
         geom_data,
-        kwargs["ne"],
-        kwargs["Te"],
-        kwargs["Ti"],
-        kwargs["Zeff"],
-        kwargs["helicity_N"],
+        ne,
+        Te,
+        Ti,
+        Zeff,
+        helicity_N,
         plot=False,
     )
     data["<J dot B> Redl"] = expand(grid, j_dot_B_data["jdotB"])

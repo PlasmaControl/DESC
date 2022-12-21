@@ -11,7 +11,7 @@ from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
-from ._constraint_wrappers import ProximalProjection
+from ._constraint_wrappers import Lagrangian, ProximalProjection
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
@@ -48,6 +48,7 @@ class Optimizer(IOAble):
     _io_attrs_ = ["_method"]
 
     # TODO: better way to organize these:
+    _wrappers = [None, "prox", "proximal", "lag", "lagrangian"]
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
         "scipy-bfgs",
@@ -123,7 +124,10 @@ class Optimizer(IOAble):
 
     @method.setter
     def method(self, method):
-        if method not in Optimizer._all_methods:
+        wrapper, submethod = _parse_method(method)
+        if wrapper not in self._wrappers:
+            raise ValueError("got unknown wrapper {}".format(wrapper))
+        if submethod not in Optimizer._all_methods:
             raise NotImplementedError(
                 colored(
                     "method must be one of {}".format(
@@ -203,40 +207,27 @@ class Optimizer(IOAble):
         """
         # TODO: document options
         timer = Timer()
+        wrapper, method = _parse_method(self.method)
 
-        if (
-            self.method in Optimizer._desc_methods
-            and self.method not in Optimizer._desc_stochastic_methods
-        ):
-            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-                options.setdefault("initial_trust_radius", 0.5)
-                options.setdefault("max_trust_radius", 1.0)
-
-        linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
-        # wrap nonlinear constraints if necessary
-        wrapped = False
-        if len(nonlinear_constraints) > 0 and (
-            self.method not in Optimizer._constrained_methods
-        ):
-            wrapped = True
-            objective = _wrap_nonlinear_constraints(
-                objective, nonlinear_constraints, self.method, options
-            )
+        linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
+        objective = _maybe_wrap_nonlinear_constraints(
+            objective, nonlinear_constraint, self.method, options
+        )
 
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
-            mode = "scalar" if self.method in Optimizer._scalar_methods else "lsq"
+            mode = "scalar" if method in Optimizer._scalar_methods else "lsq"
             objective.compile(mode, verbose)
         for constraint in linear_constraints:
             if not constraint.built:
                 constraint.build(eq, verbose=verbose)
 
-        if objective.scalar and (self.method in Optimizer._least_squares_methods):
+        if objective.scalar and (method in Optimizer._least_squares_methods):
             warnings.warn(
                 colored(
                     "method {} is not intended for scalar objective function".format(
-                        ".".join([self.method])
+                        ".".join([method])
                     ),
                     "yellow",
                 )
@@ -253,7 +244,7 @@ class Optimizer(IOAble):
             jac_wrapped,
             project,
             recover,
-        ) = _wrap_objective_with_constraints(objective, linear_constraints, self.method)
+        ) = _wrap_objective_with_constraints(objective, linear_constraints, method)
         timer.stop("linear constraint factorize")
         if verbose > 1:
             timer.disp("linear constraint factorize")
@@ -261,7 +252,7 @@ class Optimizer(IOAble):
         x0_reduced = project(objective.x(eq))
 
         stoptol = _get_default_tols(
-            self.method,
+            method,
             ftol,
             xtol,
             gtol,
@@ -277,61 +268,54 @@ class Optimizer(IOAble):
             print("Starting optimization")
         timer.start("Solution time")
 
-        if self.method in Optimizer._scipy_scalar_methods:
+        if method in Optimizer._scipy_scalar_methods:
 
-            method = self.method[len("scipy-") :]
             x_scale = 1 if x_scale == "auto" else x_scale
             if isinstance(x_scale, str):
                 raise ValueError(
-                    f"Method {self.method} does not support x_scale type {x_scale}"
+                    f"Method {method} does not support x_scale type {x_scale}"
                 )
             result = _optimize_scipy_minimize(
                 compute_scalar_wrapped,
                 grad_wrapped,
                 hess_wrapped,
                 x0_reduced,
-                method,
+                method.replace("scipy-", ""),
                 x_scale,
                 verbose,
                 stoptol,
                 options,
             )
 
-        elif self.method in Optimizer._scipy_least_squares_methods:
+        elif method in Optimizer._scipy_least_squares_methods:
 
             x_scale = "jac" if x_scale == "auto" else x_scale
-            method = self.method[len("scipy-") :]
 
             result = _optimize_scipy_least_squares(
                 compute_wrapped,
                 jac_wrapped,
                 x0_reduced,
-                method,
+                method.replace("scipy-", ""),
                 x_scale,
                 verbose,
                 stoptol,
                 options,
             )
 
-        elif self.method in Optimizer._desc_scalar_methods:
+        elif method in Optimizer._desc_scalar_methods:
 
-            hess = hess_wrapped if "bfgs" not in self.method else "bfgs"
-            method = (
-                self.method if "bfgs" not in self.method else self.method.split("-")[0]
-            )
-            if isinstance(x_scale, str):
-                if x_scale == "auto":
-                    if "bfgs" not in self.method:
-                        x_scale = "hess"
-                    else:
-                        x_scale = 1
+            hess = hess_wrapped if "bfgs" in method else "bfgs"
+            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
+                options.setdefault("initial_trust_ratio", 1e-3)
+                options.setdefault("max_trust_radius", 1.0)
+
             result = fmintr(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
                 grad=grad_wrapped,
                 hess=hess,
                 args=(),
-                method=method,
+                method=method.replace("-bfgs", ""),
                 x_scale=x_scale,
                 ftol=stoptol["ftol"],
                 xtol=stoptol["xtol"],
@@ -342,14 +326,14 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        elif self.method in Optimizer._desc_stochastic_methods:
+        elif method in Optimizer._desc_stochastic_methods:
 
             result = sgd(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
                 grad=grad_wrapped,
                 args=(),
-                method=self.method,
+                method=method,
                 ftol=stoptol["ftol"],
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
@@ -359,7 +343,11 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        elif self.method in Optimizer._desc_least_squares_methods:
+        elif method in Optimizer._desc_least_squares_methods:
+
+            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
+                options.setdefault("initial_trust_radius", 1e-3)
+                options.setdefault("max_trust_radius", 1.0)
 
             result = lsqtr(
                 compute_wrapped,
@@ -376,7 +364,7 @@ class Optimizer(IOAble):
                 options=options,
             )
 
-        if wrapped:
+        if isinstance(objective, ProximalProjection):
             # history from objective includes steps the optimizer didn't accept
             # need to find where the optimizer actually stepped and only take those
             wrapped_allx = objective._allx
@@ -412,8 +400,34 @@ class Optimizer(IOAble):
         return result
 
 
+def _parse_method(method):
+    """Split string into wrapper and method parts."""
+    wrapper = None
+    submethod = method
+    for key in Optimizer._wrappers[1:]:
+        if method.lower().startswith(key):
+            wrapper = key
+            submethod = method[len(key) + 1 :]
+    return wrapper, submethod
+
+
 def _parse_constraints(constraints):
-    if not isinstance(constraints, tuple):
+    """Break constraints into linear and nonlinear, and combine nonlinear constraints.
+
+    Parameters
+    ----------
+    constraints : tuple of Objective
+        constraints to parse
+
+    Returns
+    -------
+    linear_constraints : tuple of Objective
+        Individual linear constraints
+    nonlinear_constraints : ObjectiveFunction or None
+        if any nonlinear constraints are present, they are combined into a single
+        ObjectiveFunction, otherwise returns None
+    """
+    if not isinstance(constraints, (tuple, list)):
         constraints = (constraints,)
     linear_constraints = tuple(
         constraint for constraint in constraints if constraint.linear
@@ -421,6 +435,7 @@ def _parse_constraints(constraints):
     nonlinear_constraints = tuple(
         constraint for constraint in constraints if not constraint.linear
     )
+    # check for incompatible constraints
     if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
         isinstance(lc, FixIota) for lc in linear_constraints
     ):
@@ -428,13 +443,24 @@ def _parse_constraints(constraints):
             "Toroidal current and rotational transform cannot be "
             + "constrained simultaneously."
         )
+    # make sure any nonlinear constraints are combined into a single ObjectiveFunction
+    if len(nonlinear_constraints) == 1 and isinstance(
+        nonlinear_constraints[0], ObjectiveFunction
+    ):
+        nonlinear_constraints = nonlinear_constraints[0]
+    elif len(nonlinear_constraints):
+        nonlinear_constraints = ObjectiveFunction(nonlinear_constraints)
+    else:
+        nonlinear_constraints = None
     return linear_constraints, nonlinear_constraints
 
 
 def _wrap_objective_with_constraints(objective, linear_constraints, method):
     """Factorize constraints and make new functions that project/recover + evaluate."""
     _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        linear_constraints, objective.args
+        linear_constraints,
+        objective.args,
+        objective.dimensions,
     )
 
     def compute_wrapped(x_reduced):
@@ -475,18 +501,43 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
     )
 
 
-def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, options):
-    """Use ProximalProjection to handle nonlinear equilibrium constraints."""
-    if isinstance(nonlinear_constraints, (list, tuple)):
-        nonlinear_constraints = ObjectiveFunction(nonlinear_constraints)
-    perturb_options = options.pop("perturb_options", {})
-    solve_options = options.pop("solve_options", {})
-    objective = ProximalProjection(
-        objective,
-        constraint=nonlinear_constraints,
-        perturb_options=perturb_options,
-        solve_options=solve_options,
-    )
+def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
+    """Use ProximalProjection or Lagrangian to handle nonlinear constraints."""
+    wrapper, method = _parse_method(method)
+    if nonlinear_constraint is None:
+        if wrapper is not None:
+            warnings.warn(
+                f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
+            )
+        return objective
+    if wrapper is None:
+        warnings.warn(
+            FutureWarning(
+                f"""
+                Nonlinear constraints detected but method {method} does not support
+                nonlinear constraints. Defaulting to method "proximal-{method}"
+                In the future this will raise an error. To ignore this warnging, specify
+                a wrapper to convert the nonlinearly constrained problem into an
+                unconstrained one, either "proximal-" or "lagrangian-"
+                """
+            )
+        )
+        wrapper = "proximal"
+    if wrapper.lower() in ["prox", "proximal"]:
+        perturb_options = options.pop("perturb_options", {})
+        solve_options = options.pop("solve_options", {})
+        objective = ProximalProjection(
+            objective,
+            constraint=nonlinear_constraint,
+            perturb_options=perturb_options,
+            solve_options=solve_options,
+        )
+    elif wrapper.lower() in ["lag", "lagrangian"]:
+        objective = Lagrangian(
+            objective,
+            nonlinear_constraint,
+            multipliers=options.pop("multipliers", None),
+        )
     return objective
 
 

@@ -17,11 +17,7 @@ def compute_scaling_factors(eq):
     scales["V"] = 2 * np.pi * scales["R0"] * scales["A"]
     scales["B_T"] = abs(eq.Psi) / scales["A"]
     iota = eq.get_profile("iota")(np.linspace(0, 1, 20))
-    scales["B_P"] = (
-        scales["B_T"] * np.mean(np.abs(iota))
-        if not np.allclose(iota, 0)
-        else scales["B_T"]
-    )
+    scales["B_P"] = scales["B_T"] * np.mean(np.abs(iota))
     scales["B"] = np.sqrt(scales["B_T"] ** 2 + scales["B_P"] ** 2)
     scales["I"] = scales["B_P"] * 2 * np.pi / mu_0
     scales["p"] = scales["B"] ** 2 / (2 * mu_0)
@@ -30,4 +26,9 @@ def compute_scaling_factors(eq):
     scales["F"] = scales["p"] / scales["a"]
     scales["f"] = scales["F"] * scales["V"]
     scales["Psi"] = abs(eq.Psi)
+    # replace 0 scales to avoid normalizing by zero
+    for scale in scales.keys():
+        if np.isclose(scales[scale], 0):
+            scales[scale] = 1
+
     return scales

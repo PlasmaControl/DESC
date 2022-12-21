@@ -280,9 +280,15 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
         input values
     axis : int
         axis along which to make comparison. If None, the flattened array is used
-    tol : float
-        tolerance for comparison.
-        Array is considered equal if std(x)*len(x)< tol along axis
+    rtol : float
+        relative tolerance for comparison.
+    atol : float
+        absolute tolerance for comparison.
+        If the following equation is element-wise True, then isalmostequal returns True.
+            absolute(a - b) <= (atol + rtol * absolute(b))
+        where a= x[0] and b is every other element of x, if flattened array,
+        or if axis is not None, a = x[:,0,:] and b = x[:,i,:] for all i, and
+        the 0,i placement is in the dimension indicated by axis
 
     Returns
     -------
@@ -327,9 +333,13 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
         input values
     axis : int
         axis along which to make comparison. If None, the flattened array is used
-    tol : float
-        tolerance for comparison.
-        Array is considered linearly spaced if std(diff(x)) < tol along axis
+    rtol : float
+        relative tolerance for comparison.
+    atol : float
+        absolute tolerance for comparison.
+        If the following equation is element-wise True for,
+         then isalmostequal returns True.
+            absolute(a - b) <= (atol + rtol * absolute(b))
 
     Returns
     -------

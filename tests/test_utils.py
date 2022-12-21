@@ -52,4 +52,4 @@ def test_islinspaced():
     assert islinspaced(zz)
 
     # 0D arrays will return True
-    assert isalmostequal(np.array(0))
+    assert islinspaced(np.array(0))

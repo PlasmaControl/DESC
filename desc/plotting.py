@@ -1835,7 +1835,7 @@ def plot_comparison(
                 return_data=return_data,
             )
             for key in _plot_data.keys():
-                plot_data[key + labels[i % len(labels)]] = plot_data[key]
+                plot_data[key + "_" + labels[i % len(labels)]] = _plot_data[key]
         else:
             fig, ax = plot_surfaces(
                 eq,

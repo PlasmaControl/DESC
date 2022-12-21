@@ -188,7 +188,7 @@ def test_3d_J(DSHAPE_current):
     """Test 3d plotting of poloidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=1.0, theta=100, zeta=100)
-    fig, ax, data = plot_3d(eq, "J^theta", grid=grid)
+    fig, ax = plot_3d(eq, "J^theta", grid=grid)
     return fig
 
 
@@ -255,7 +255,7 @@ def test_fsa_G(DSHAPE_current):
 def test_fsa_F_normalized(DSHAPE_current):
     """Test plotting flux surface average normalized force error on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
     ax.set_ylim([1e-5, 1e-2])
     return fig
 
@@ -397,7 +397,8 @@ def test_plot_comparison(DSHAPE_current):
             "vartheta_R_coords",
             "vartheta_Z_coords",
         ]:
-            assert string + f"_{i}" in data.keys()
+            check_string = str(string + f"_{i}")
+            assert check_string in data.keys()
 
     return fig
 

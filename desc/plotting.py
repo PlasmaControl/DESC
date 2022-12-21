@@ -316,8 +316,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     N : bool
         Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
-        if True, return the data plotted as well as fig,ax
+        Axis to plot on.
 
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
@@ -337,9 +336,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
-    plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
+
 
     Examples
     --------
@@ -525,7 +522,7 @@ def plot_2d(
         Vacuum equilibria are normalized by the gradient of magnetic pressure,
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -689,7 +686,7 @@ def plot_3d(
     all_field_periods : bool, optional
         Whether to plot full torus or one field period. Ignored if grid is specified.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -888,7 +885,7 @@ def plot_fsa(
         of magnetic pressure, while finite beta equilibria are normalized by the
         volume average of the pressure gradient.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1020,7 +1017,7 @@ def plot_section(
         Vacuum equilibria are normalized by the gradient of magnetic pressure,
         while finite beta equilibria are normalized by the pressure gradient.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1206,7 +1203,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         If an integer, plot that many contours linearly spaced in (0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1426,7 +1423,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     plot_axis : bool
         Whether or not to plot the magnetic axis locations. Default is False.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1560,7 +1557,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -1908,6 +1905,9 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         Figure being plotted to
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)
@@ -2015,7 +2015,7 @@ def plot_boozer_modes(
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -2143,7 +2143,7 @@ def plot_boozer_surface(
     ncontours : int, optional
         Number of contours to plot.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -2166,6 +2166,9 @@ def plot_boozer_surface(
         figure being plotted to
     ax : matplotlib.axes.Axes or ndarray of Axes
         axes being plotted to
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -2282,7 +2285,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 
@@ -2473,9 +2476,6 @@ def plot_grid(grid, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
-    plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
 
     Examples
     --------
@@ -3019,7 +3019,7 @@ def plot_field_lines_sfl(
     dphi: float
         spacing in phi to sample field lines along, in radians. Default is 1e-2.
     ax : matplotlib AxesSubplot, optional
-        Axis to plot on.    return_data : bool
+        Axis to plot on.
         if True, return the data plotted as well as fig,ax
 
     **kwargs : fig,ax and plotting properties

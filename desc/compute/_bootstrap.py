@@ -517,11 +517,14 @@ def compute_J_dot_B_Redl(
         "<1/B>"
     ]
     geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
+
+    # The "backup" PowerSeriesProfiles here are necessary for test_compute_funs.py::test_compute_everything
     ne = kwargs.get("ne", PowerSeriesProfile([1e20]))
     Te = kwargs.get("Te", PowerSeriesProfile([1e3]))
     Ti = kwargs.get("Ti", PowerSeriesProfile([1e3]))
     Zeff = kwargs.get("Zeff", 1.0)
     helicity_N = kwargs.get("helicity_N", 0)
+
     j_dot_B_data = j_dot_B_Redl(
         geom_data,
         ne,

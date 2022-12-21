@@ -194,12 +194,12 @@ class BootstrapRedlConsistency(_Objective):
             "i_l": i_l,
             "c_l": c_l,
             "Psi": Psi,
-            "helicity_N": self.helicity_N,
-            "ne": self.ne,
-            "Te": self.Te,
-            "Ti": self.Ti,
-            "Zeff": self.Zeff,
         }
+        kwargs["ne"] = self.ne
+        kwargs["Te"] = self.Te
+        kwargs["Ti"] = self.Ti
+        kwargs["Zeff"] = self.Zeff
+        kwargs["helicity_N"] = self.helicity_N
         data = compute_contravariant_current_density(
             params,
             self._transforms,
@@ -210,6 +210,7 @@ class BootstrapRedlConsistency(_Objective):
             self._transforms,
             self._profiles,
             data=data,
+            **kwargs,
         )
         data = compute_flux_coords(params, self._transforms, self._profiles, data=data)
 

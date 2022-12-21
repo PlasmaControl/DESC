@@ -163,14 +163,14 @@ def factorize_linear_constraints(constraints, objective_args, dimensions=None):
         if arg not in objective_args:
             continue
         constraint_args.append(arg)
-        if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
+        if obj.fixed and obj.dim_f == dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
-            A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
+            A_ = obj.derivatives["jac"][arg](jnp.zeros(dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute(jnp.zeros(obj.dimensions[arg]))
+            b_ = -obj.compute(jnp.zeros(dimensions[arg]))
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
             else:
@@ -184,7 +184,7 @@ def factorize_linear_constraints(constraints, objective_args, dimensions=None):
     for arg in x_idx.keys():
         if arg not in constraint_args:
             unfixed_args.append(arg)
-            A[arg] = jnp.zeros((1, constraints[0].dimensions[arg]))
+            A[arg] = jnp.zeros((1, dimensions[arg]))
             b[arg] = jnp.zeros((1,))
 
     # full A matrix for all unfixed constraints

@@ -85,9 +85,7 @@ class ProximalProjection(ObjectiveFunction):
         self._built = False
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
-        # need compiled=True to avoid calling objective.compile which calls
-        # compute with all zeros, leading to error in perturb/resolve
-        self._compiled = True
+        self._compiled = False
 
         if eq is not None:
             self.build(eq, verbose=verbose)
@@ -162,6 +160,22 @@ class ProximalProjection(ObjectiveFunction):
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
+
+    def compile(self, mode="lsq", verbose=1):
+        """Call the necessary functions to ensure the function is compiled.
+
+        Parameters
+        ----------
+        mode : {"auto", "lsq", "scalar", "all"}
+            Whether to compile for least squares optimization or scalar optimization.
+            "auto" compiles based on the type of objective,
+            "all" compiles all derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._objective.compile(mode, verbose)
+        self._constraint.compile(mode, verbose)
 
     def _update_equilibrium(self, x, store=False):
         """Update the internal equilibrium with new boundary, profile etc.
@@ -442,9 +456,8 @@ class Lagrangian(ObjectiveFunction):
             self._multipliers.ndim == 1
             and len(self._multipliers) == self._constraint.dim_f
         )
-        self._dim_f = self._objective.dim_f + self._constraint.dim_f
-
         self._set_state_vector()
+        self._dim_f = self._dim_x
         self._set_derivatives()
         if self.use_jit:
             self.jit()

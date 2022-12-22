@@ -1805,7 +1805,13 @@ def plot_comparison(
     ax = np.atleast_1d(ax).flatten()
 
     plot_data = {}
-
+    for string in [
+        "rho_R_coords",
+        "rho_Z_coords",
+        "vartheta_R_coords",
+        "vartheta_Z_coords",
+    ]:
+        plot_data[string] = []
     for i, eq in enumerate(eqs):
         if return_data:
             fig, ax, _plot_data = plot_surfaces(
@@ -1833,8 +1839,6 @@ def plot_comparison(
                 ylabel_fontsize=ylabel_fontsize,
                 return_data=return_data,
             )
-            for key in _plot_data.keys():
-                plot_data[key] = []
             for key in _plot_data.keys():
                 plot_data[key].append(_plot_data[key])
 
@@ -1913,6 +1917,10 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        each key is a flattened list of coords corresponding to each coil
+        i..e if the coils given is [Coilset,Coilset,Coilset] each of len 3,
+        plot_data["X"] is length 9, with the first three corresponding to the
+        x coordinates of the first Coilset
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)

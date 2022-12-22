@@ -707,7 +707,15 @@ def test_plot_coils():
     coils.grid = 100
     coils2 = CoilSet.from_symmetry(coils, NFP, True)
     fig, ax, data = plot_coils(coils2, return_data=True)
+
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coil_list = flatten_coils(coils2)
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
-        assert len(data[string]) == len(coils2)
+        assert len(data[string]) == len(coil_list)
     return fig

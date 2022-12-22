@@ -916,7 +916,7 @@ class _Configuration(IOAble, ABC):
 
     def compute(
         self,
-        *names,
+        names,
         grid=None,
         params=None,
         transforms=None,
@@ -928,8 +928,8 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        names : str
-            Names of the quantity(s) to compute.
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
@@ -954,14 +954,14 @@ class _Configuration(IOAble, ABC):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         if params is None:
-            params = get_params(*names, eq=self)
+            params = get_params(names, eq=self)
         if profiles is None:
-            profiles = get_profiles(*names, eq=self, grid=grid)
+            profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
-            transforms = get_transforms(*names, eq=self, grid=grid, **kwargs)
+            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
 
         data = compute_fun(
-            *names,
+            names,
             params=params,
             transforms=transforms,
             profiles=profiles,

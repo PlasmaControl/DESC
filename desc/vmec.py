@@ -464,7 +464,7 @@ class VMECIO:
         volume_p[:] = eq.compute("V")["V"]
 
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute("D_Mercier", "I", "G", grid=grid)
+        data = eq.compute(["D_Mercier", "I", "G"], grid=grid)
 
         # Boozer currents
         buco = file.createVariable("buco", np.float64, ("radius",))
@@ -599,7 +599,7 @@ class VMECIO:
         # derived quantities (approximate conversion)
 
         grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
-        coords = eq.compute("R", "Z", grid=grid)
+        coords = eq.compute(["R", "Z"], grid=grid)
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
         full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
@@ -633,12 +633,12 @@ class VMECIO:
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute(
-            "J", "|B|", "B_rho", "B_theta", "B_zeta", grid=half_grid
+            ["J", "|B|", "B_rho", "B_theta", "B_zeta"], grid=half_grid
         )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute("J", "B_rho", "B_theta", "B_zeta", grid=full_grid)
+        data_full_grid = eq.compute(["J", "B_rho", "B_theta", "B_zeta"], grid=full_grid)
 
         # Jacobian
         timer.start("Jacobian")
@@ -1367,8 +1367,8 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-        r_coords_desc = equil.compute("R", "Z", grid=r_grid)
-        v_coords_desc = equil.compute("R", "Z", grid=v_grid)
+        r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
+        v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
 
         # rho contours
         Rr_desc = r_coords_desc["R"].reshape(

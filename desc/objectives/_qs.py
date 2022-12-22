@@ -111,9 +111,9 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(
-            *self._data_keys,
+            self._data_keys,
             eq=eq,
             grid=self.grid,
             M_booz=self.M_booz,
@@ -182,7 +182,7 @@ class QuasisymmetryBoozer(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
@@ -303,8 +303,8 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -349,7 +349,7 @@ class QuasisymmetryTwoTerm(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
@@ -458,8 +458,8 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -506,7 +506,7 @@ class QuasisymmetryTripleProduct(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,

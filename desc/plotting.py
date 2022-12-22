@@ -436,6 +436,19 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         plot_1d(eq, 'p')
 
     """
+    # If the quantity is a flux surface function, call plot_fsa instead.
+    # This is done because the computation of some quantities relies on a
+    # surface average. Surface averages should be computed over a 2-D grid to
+    # sample the entire surface. Computing this on a 1-D grid would return a
+    # misleading plot.
+    if "r" in data_index[name]["function_of"]:
+        if grid is None:
+            return plot_fsa(eq, name, log=log, ax=ax, **kwargs)
+        rho = grid.nodes[:, 0]
+        if not np.all(np.isclose(rho, rho[0])):
+            # rho nodes are not constant, so user must be plotting against rho
+            return plot_fsa(eq, name, rho=rho, log=log, ax=ax, **kwargs)
+
     if grid is None:
         grid_kwargs = {"L": 100, "NFP": eq.NFP}
         grid = _get_grid(**grid_kwargs)
@@ -791,6 +804,7 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
 def plot_fsa(
     eq,
     name,
+    use_sqrt_g=True,
     log=False,
     rho=20,
     M=None,
@@ -799,7 +813,7 @@ def plot_fsa(
     ax=None,
     **kwargs,
 ):
-    """Plot flux surface averaged quantities.
+    """Plot flux surface averages of quantities.
 
     Parameters
     ----------
@@ -807,6 +821,12 @@ def plot_fsa(
         Object from which to plot.
     name : str
         Name of variable to plot.
+    use_sqrt_g : bool, optional
+        Whether to weight the flux surface average with the 3-D jacobean.
+        Note that this boolean has no effect for quantities which are defined
+        as surface functions, such as the rotational transform. This boolean
+        will affect plots of quantities which are not defined as surface
+        functions, such as the magnetic field magnitude.
     log : bool, optional
         Whether to use a log scale.
     rho : int or array-like
@@ -871,9 +891,20 @@ def plot_fsa(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
-    g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
-    values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
+    values, label = _compute(
+        eq, name, grid, kwargs.pop("component", None), reshape=False
+    )
+    if "r" not in data_index[name]["function_of"]:
+        # If the quantity (values) is a surface function, averaging it again
+        # has no effect, regardless of whether sqrt(g) is used. This condition
+        # just avoids unnecessary computation.
+        if use_sqrt_g:
+            sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+            values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
+        else:
+            values = surface_averages(grid, q=values)
+    values = compress(grid, values)
+
     if norm_F:
         assert name == "|F|", "Can only normalize |F|."
         if (

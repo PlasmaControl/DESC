@@ -61,6 +61,21 @@ def test_1d_p(SOLOVEV):
 
 @pytest.mark.unit
 @pytest.mark.solve
+def test_1d_fsa_consistency(SOLOVEV):
+    """Test that plot_1d uses 2d grid to compute quantities with surface averages."""
+    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    _, ax_0 = plot_1d(eq, "magnetic well")
+    _, ax_1 = plot_fsa(eq, "magnetic well")
+    np.testing.assert_allclose(ax_0.lines[0].get_xydata(), ax_1.lines[0].get_xydata())
+
+    rho = np.linspace(0, 1, 30)
+    _, ax_2 = plot_1d(eq, "current", grid=LinearGrid(rho=rho))
+    _, ax_3 = plot_fsa(eq, "current", rho=rho)
+    np.testing.assert_allclose(ax_2.lines[0].get_xydata(), ax_3.lines[0].get_xydata())
+
+
+@pytest.mark.unit
+@pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_dpdr(DSHAPE_current):
     """Test plotting 1d pressure derivative."""
@@ -94,7 +109,7 @@ def test_1d_iota_radial(DSHAPE_current):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_logpsi(DSHAPE_current):
-    """Test plotting 1d flux funciton with log scale."""
+    """Test plotting 1d flux function with log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax = plot_1d(eq, "psi", log=True, figsize=(4, 4))
     ax.set_ylim([1e-5, 1e0])

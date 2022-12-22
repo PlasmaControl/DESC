@@ -3193,8 +3193,9 @@ def plot_field_lines_sfl(
         import desc.examples
         import numpy as np
         eq = desc.examples.get("DSHAPE")
+        seed_thetas=np.linspace(0, 2 * np.pi, 3,endpoint=False)
         fig, ax, _ = plot_field_lines_sfl(
-            eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
+            eq, rho=1,seed_thetas=seed_thetas , phi_end=2 * np.pi
         )
 
     """

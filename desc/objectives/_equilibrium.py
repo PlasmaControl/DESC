@@ -20,9 +20,9 @@ class ForceBalance(_Objective):
     F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
     f_rho = F_rho |grad(rho)| dV  (N)
 
-    F_beta = sqrt(g) J^rho
-    beta = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_beta = F_beta |beta| dV  (N)
+    F_helical = sqrt(g) J^rho
+    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
+    f_helical = F_helical |e^helical| dV  (N)
 
     Parameters
     ----------
@@ -112,7 +112,13 @@ class ForceBalance(_Objective):
                 )
 
         self._dim_f = 2 * self.grid.num_nodes
-        self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)", "F_beta", "|beta|"]
+        self._data_keys = [
+            "F_rho",
+            "|grad(rho)|",
+            "sqrt(g)",
+            "F_helical",
+            "|e^helical|",
+        ]
 
         timer = Timer()
         if verbose > 0:
@@ -177,7 +183,7 @@ class ForceBalance(_Objective):
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
 
-        fb = data["F_beta"] * data["|beta|"]
+        fb = data["F_helical"] * data["|e^helical|"]
         fb = fb * data["sqrt(g)"] * self.grid.weights
 
         f = jnp.concatenate([fr, fb])
@@ -349,9 +355,9 @@ class RadialForceBalance(_Objective):
 class HelicalForceBalance(_Objective):
     """Helical MHD force balance.
 
-    F_beta = sqrt(g) J^rho
-    beta = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_beta = F_beta |beta| dV  (N)
+    F_helical = sqrt(g) J^rho
+    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
+    f_helical = F_helical |e^helical| dV  (N)
 
     Parameters
     ----------
@@ -441,7 +447,7 @@ class HelicalForceBalance(_Objective):
                 )
 
         self._dim_f = self.grid.num_nodes
-        self._data_keys = ["F_beta", "|beta|", "sqrt(g)"]
+        self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
@@ -503,7 +509,7 @@ class HelicalForceBalance(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = data["F_beta"] * data["|beta|"]
+        f = data["F_helical"] * data["|e^helical|"]
         f = f * data["sqrt(g)"] * self.grid.weights
 
         return self._shift_scale(f)

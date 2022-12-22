@@ -267,8 +267,8 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="F_beta",
-    label="F_{\\beta}",
+    name="F_helical",
+    label="F_{helical}",
     units="N \\cdot m^{-2}",
     units_long="Newtons / square meter",
     description="Covariant helical component of force balance error",
@@ -279,8 +279,8 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
     function_of="rtz",
     data=["sqrt(g)", "J^rho"],
 )
-def _F_beta(params, transforms, profiles, data, **kwargs):
-    data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
+def _F_helical(params, transforms, profiles, data, **kwargs):
+    data["F_helical"] = data["sqrt(g)"] * data["J^rho"]
     return data
 
 
@@ -346,7 +346,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|beta|",
+    name="|e^helical|",
     label="|B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta|",
     units="T \\cdot m^{-2}",
     units_long="Tesla / square meter",
@@ -358,8 +358,8 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     function_of="rtz",
     data=["B^theta", "B^zeta", "g^tt", "g^zz", "g^tz"],
 )
-def _beta_mag(params, transforms, profiles, data, **kwargs):
-    data["|beta|"] = jnp.sqrt(
+def _helical_mag(params, transforms, profiles, data, **kwargs):
+    data["|helical|"] = jnp.sqrt(
         data["B^zeta"] ** 2 * data["g^tt"]
         + data["B^theta"] ** 2 * data["g^zz"]
         - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]

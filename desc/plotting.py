@@ -556,8 +556,10 @@ def plot_2d(
         only returned if return_data=True
         plot_data keys:
             two of "rho","theta" or "zeta", depending on what 1-D variable
-                 is plotted against
-            key of the name of variable plotted
+                 is plotted against.
+            "normalization": normalization used in the plot,
+                 if norm_F=False or F is not plotted, this is just equal to 1.
+            key of the name of variable plotted.
 
     Examples
     --------
@@ -661,6 +663,10 @@ def plot_2d(
     plot_data[xlabel.strip("$").strip("\\")] = xx
     plot_data[ylabel.strip("$").strip("\\")] = yy
     plot_data[name] = data
+    if norm_F:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
     if return_data:
         return fig, ax, plot_data
 
@@ -928,6 +934,9 @@ def plot_fsa(
         plot_data keys:
             "rho"
             "<name>_FSA" where name is the passed name of variable plotted
+            "normalization": normalization used in the plot,
+                 if norm_F=False or F is not plotted, this is just equal to 1.
+
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_fsa.png
@@ -1001,6 +1010,10 @@ def plot_fsa(
     plot_data = {}
     plot_data["rho"] = rho
     plot_data[f"<{name}>_fsa"] = data
+    if norm_F:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, ax, plot_data
@@ -1063,6 +1076,9 @@ def plot_section(
         plot_data keys:
             "R","Z" cylindrical coordinates
             key of the name of variable plotted
+            "normalization": normalization used in the plot,
+                 if norm_F=False or F is not plotted, this is just equal to 1.
+
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_section.png
@@ -1191,6 +1207,10 @@ def plot_section(
     plot_data["R"] = R
     plot_data["Z"] = Z
     plot_data[name] = data
+    if norm_F:
+        plot_data["normalization"] = np.nanmean(np.abs(norm_data))
+    else:
+        plot_data["normalization"] = 1
 
     if return_data:
         return fig, ax, plot_data

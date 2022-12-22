@@ -234,6 +234,8 @@ def test_fsa_I(DSHAPE_current):
     fig, ax, data = plot_fsa(eq, "B_theta", return_data=True)
     assert "rho" in data.keys()
     assert "<B_theta>_fsa" in data.keys()
+    assert "normalization" in data.keys()
+    assert data["normalization"] == 1
 
     return fig
 
@@ -270,6 +272,9 @@ def test_section_J(DSHAPE_current):
     assert "R" in data.keys()
     assert "Z" in data.keys()
     assert "J^rho" in data.keys()
+    assert "normalization" in data.keys()
+    assert data["normalization"] == 1
+
     return fig
 
 
@@ -424,8 +429,10 @@ def test_plot_con_basis(DSHAPE_current):
     fig, ax, data = plot_2d(
         eq, "e^rho", component="R", figsize=(4, 4), return_data=True
     )
-    for string in ["e^rho"]:
+    for string in ["e^rho", "normalization", "theta", "zeta"]:
         assert string in data.keys()
+    assert data["normalization"] == 1
+
     return fig
 
 

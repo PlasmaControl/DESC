@@ -441,7 +441,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
-    if "r" in data_index[name]["function_of"]:
+    if "r" == data_index[name]["function_of"]:
         if grid is None:
             return plot_fsa(eq, name, log=log, ax=ax, **kwargs)
         rho = grid.nodes[:, 0]
@@ -894,7 +894,7 @@ def plot_fsa(
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
-    if "r" not in data_index[name]["function_of"]:
+    if "r" != data_index[name]["function_of"]:
         # If the quantity (values) is a surface function, averaging it again
         # has no effect, regardless of whether sqrt(g) is used. This condition
         # just avoids unnecessary computation.

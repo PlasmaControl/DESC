@@ -359,7 +359,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data=["B^theta", "B^zeta", "g^tt", "g^zz", "g^tz"],
 )
 def _helical_mag(params, transforms, profiles, data, **kwargs):
-    data["|helical|"] = jnp.sqrt(
+    data["|e^helical|"] = jnp.sqrt(
         data["B^zeta"] ** 2 * data["g^tt"]
         + data["B^theta"] ** 2 * data["g^zz"]
         - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
@@ -423,4 +423,22 @@ def _W_p(params, transforms, profiles, data, **kwargs):
 )
 def _W(params, transforms, profiles, data, **kwargs):
     data["W"] = data["W_B"] + data["W_p"]
+    return data
+
+
+@register_compute_fun(
+    name="<beta>_vol",
+    label="\\langle \\beta \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Normalized plasma pressure",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="",
+    data=["W_p", "W_B"],
+)
+def _beta_vol(params, transforms, profiles, data, **kwargs):
+    data["<beta>_vol"] = data["W_p"] / data["W_B"]
     return data

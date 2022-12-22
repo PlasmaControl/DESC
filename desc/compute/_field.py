@@ -1355,6 +1355,49 @@ def _B_mag_tz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<|B|>_vol",
+    label="\\langle |B| \\rangle_{vol}",
+    units="T",
+    units_long="Tesla",
+    description="Volume average magnetic field",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    function_of="",
+    data=["sqrt(g)", "|B|", "V"],
+)
+def _B_vol(params, transforms, profiles, data, **kwargs):
+    data["<|B|>_vol"] = (
+        jnp.sum(transforms["grid"].weights * data["sqrt(g)"] * data["|B|"]) / data["V"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="<|B|>",
+    label="\\langle |B| \\rangle",
+    units="T",
+    units_long="Tesla",
+    description="Flux surface average magnetic field",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    function_of="r",
+    data=["sqrt(g)", "|B|", "V_r(r)"],
+)
+def _B_fsa(params, transforms, profiles, data, **kwargs):
+    data["<|B|>"] = surface_averages(
+        transforms["grid"],
+        data["|B|"],
+        jnp.abs(data["sqrt(g)"]),
+        denominator=data["V_r(r)"],
+    )
+    return data
+
+
+@register_compute_fun(
     name="<B^2>",
     label="\\langle B^2 \\rangle",
     units="T^2",

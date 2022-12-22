@@ -99,7 +99,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(constraints, extra_args):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -111,7 +111,7 @@ def factorize_linear_constraints(constraints, objective_args):
     ----------
     constraints : tuple of Objectives
         linear objectives/constraints to factorize for projection method.
-    objective_args : list of str
+    extra_args : list of str
         names of all arguments used by the desired objective.
 
     Returns
@@ -135,13 +135,13 @@ def factorize_linear_constraints(constraints, objective_args):
     """
     # set state vector
     args = np.concatenate([obj.args for obj in constraints])
-    args = np.concatenate((args, objective_args))
+    args = np.concatenate((args, extra_args))
     # this is all args used by both constraints and objective
     args = [arg for arg in arg_order if arg in args]
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
-    for arg in objective_args:
+    for arg in extra_args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
 
@@ -157,7 +157,7 @@ def factorize_linear_constraints(constraints, objective_args):
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
         arg = obj.args[0]
-        if arg not in objective_args:
+        if arg not in extra_args:
             continue
         constraint_args.append(arg)
         if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
@@ -207,33 +207,41 @@ def factorize_linear_constraints(constraints, objective_args):
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
 
 
-def align_jacobian(Fx, objective_f, objective_g):
-    """Pad jacobian with zeros in the right places so that the arguments line up.
+def align_arguments(x, objective, extra_args):
+    """Pad array with zeros in the right places so that the arguments line up.
 
     Parameters
     ----------
-    Fx : ndarray
-        jacobian wrt args the objective_f takes
-    objective_f : ObjectiveFunction
-        Objective corresponding to Fx
-    objective_g : ObjectiveFunction
-        Other objective we want to align jacobian against
+    x : ndarray
+        Array wrt arguments the objective takes.
+    objective : ObjectiveFunction
+        Objective corresponding to x.
+    extra_args : ObjectiveFunction
+        Extra arguments to align x with.
 
     Returns
     -------
-    A : ndarray
-        Jacobian matrix, reordered and padded so that it broadcasts
-        correctly against the other jacobian
-    """
-    x_idx = objective_f.x_idx
-    args = objective_f.args
+    y : ndarray
+        Aligned array, padded so that it broadcasts correctly between both objectives.
+    y_idx : dict
+        Indices of the components of the aligned array y.
 
-    dim_f = Fx.shape[:1]
-    A = {arg: Fx.T[x_idx[arg]] for arg in args}
-    allargs = np.concatenate([objective_f.args, objective_g.args])
-    allargs = [arg for arg in arg_order if arg in allargs]
-    for arg in allargs:
-        if arg not in A.keys():
-            A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
-    A = jnp.concatenate([A[arg] for arg in allargs])
-    return A.T
+    """
+    x_idx = objective.x_idx
+    all_args = np.concatenate([objective.args, extra_args])
+    all_args = [arg for arg in arg_order if arg in all_args]
+
+    dim_y = 0
+    y_idx = {}
+    for arg in all_args:
+        y_idx[arg] = np.arange(dim_y, dim_y + objective.dimensions[arg])
+        dim_y += objective.dimensions[arg]
+
+    y = np.zeros((dim_y,))
+    if len(y.shape) < len(x.shape):
+        y = np.tile(y, x.shape[:-1] + (1,)).T
+
+    for arg in objective.args:
+        y[y_idx[arg]] = x.T[x_idx[arg]]
+
+    return y.T, y_idx

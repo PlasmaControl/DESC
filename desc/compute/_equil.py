@@ -161,7 +161,7 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{J} \\cdot \\mathbf{B}",
     units="N / m^{3}",
     units_long="Newtons / cubic meter",
-    description="Bootstrap current",
+    description="Bootstrap current (note units are not Amperes)",
     dim=1,
     params=[],
     transforms={},

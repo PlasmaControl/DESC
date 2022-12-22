@@ -647,7 +647,7 @@ class TestPlotFieldLines:
     def test_plot_field_lines(self, DSHAPE_current):
         """Test plotting multiple field lines over 1 transit."""
         eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, _ = plot_field_lines_sfl(
+        fig, ax = plot_field_lines_sfl(
             eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
         )
         return fig

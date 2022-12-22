@@ -438,7 +438,9 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
-
+        plot_data keys:
+            "rho","theta" or "zeta", depending on what 1-D variable is plotted against
+            key of the name of variable plotted
 
     Examples
     --------
@@ -552,6 +554,10 @@ def plot_2d(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            two of "rho","theta" or "zeta", depending on what 1-D variable
+                 is plotted against
+            key of the name of variable plotted
 
     Examples
     --------
@@ -719,6 +725,9 @@ def plot_3d(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "X","Y","Z", cartesian coordinates
+            key of the name of variable plotted
 
     Examples
     --------
@@ -916,7 +925,9 @@ def plot_fsa(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
-
+        plot_data keys:
+            "rho"
+            "<name>_FSA" where name is the passed name of variable plotted
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_fsa.png
@@ -1049,7 +1060,9 @@ def plot_section(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
-
+        plot_data keys:
+            "R","Z" cylindrical coordinates
+            key of the name of variable plotted
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_section.png
@@ -1245,6 +1258,10 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "rho_R_coords","rho_Z_coords", Cylindrical R,Z coordinates of rho contours
+            "vartheta_R_coords", "vartheta_Z_coords",
+                Cylindrical R,Z coordinates of vartheta contours
 
     Examples
     --------
@@ -1454,6 +1471,8 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "R","Z" cylindrical coordinates of boundary
 
     Examples
     --------
@@ -1586,6 +1605,8 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys: list of len(eqs) corresponding to input eqs
+            "R","Z" cylindrical coordinates of boundary
 
     Examples
     --------
@@ -1747,6 +1768,10 @@ def plot_comparison(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys: Each are a list of len(eqs) corresponding to each eq input
+            "rho_R_coords","rho_Z_coords", Cylindrical R,Z coordinates of rho contours
+            "vartheta_R_coords", "vartheta_Z_coords",
+                Cylindrical R,Z coordinates of vartheta contours
 
     Examples
     --------
@@ -1921,6 +1946,9 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         i..e if the coils given is [Coilset,Coilset,Coilset] each of len 3,
         plot_data["X"] is length 9, with the first three corresponding to the
         x coordinates of the first Coilset
+        plot_data keys:
+            "X","Y","Z" are the cartesian coordinates of the coil
+
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)
@@ -2056,6 +2084,12 @@ def plot_boozer_modes(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "B_mn": |B| harmonic in boozer angles, shape [num_rho,num_modes]
+                where first index corresponds to the rho surface
+                and second to the modes in B_modes
+            "B_modes": array of modes corresponding to B_mn, given as (0,m,n)
+            "rho"
 
     Examples
     --------
@@ -2186,6 +2220,10 @@ def plot_boozer_surface(
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "|B|": magnetic field magntitude on surface
+            "theta_Boozer","zeta_Boozer": Boozer poloidal, toroidal angles
+                array of shape (num_theta, num_zeta)
 
     Examples
     --------
@@ -2332,6 +2370,11 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys: each are arrays of length num_rho
+            "f_T": QS triple product metric
+            "f_B": Boozer QS metric (sum of symmetry-breaking modes)
+            "f_C": QS two-term metric
+            "rho"
 
     Examples
     --------
@@ -2497,6 +2540,9 @@ def plot_grid(grid, return_data=False, **kwargs):
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "rho", "theta": rho,theta positions of the grid nodes on zeta=0 surface
+            plots are made as a polar plot using above keys
 
     Examples
     --------
@@ -2598,6 +2644,20 @@ def plot_basis(basis, return_data=False, **kwargs):
     plot_data : dict
         dictionary of the data plotted
         only returned if return_data=True
+        plot_data keys:
+            "rho", "theta", "zeta": varies, what coordinate(s) the basis depends on
+                FourierSeries will return "zeta"
+                PowerSeries will return "rho"
+                DoubleFourierSeries will return "theta","zeta"
+                FourierZernike and ZernikePolynomial return "rho","theta"
+                (FourierZernike only plotted at zeta=0 plane)
+            "l","m","n": basis radial, poloidal, and toroidal modenumbers
+                FourierSeries will return "n"
+                PowerSeries will return "l"
+                DoubleFourierSeries will return "m","n"
+                FourierZernike and ZernikePolynomial return "l","m"
+                (FourierZernike only plotted at zeta=0 plane)
+            "amplitude": the amplitude of the basis functions
 
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
@@ -3122,6 +3182,20 @@ def plot_field_lines_sfl(
         Dictionary entries are lists corresponding to the field lines for
         each seed_theta given. Also contains the scipy IVP solutions for info
         on how each line was integrated
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/DSHAPE_field_lines_plot.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_field_lines_sfl
+        import desc.examples
+        import numpy as np
+        eq = desc.examples.get("DSHAPE")
+        fig, ax, _ = plot_field_lines_sfl(
+            eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
+        )
 
     """
     if rho == 0:

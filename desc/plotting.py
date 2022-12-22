@@ -2371,7 +2371,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                / B0**3
+                / B0 ** 3
             )
             f_C = np.append(f_C, f_c)
         if fT:
@@ -2379,8 +2379,8 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                * R0**2
-                / B0**4
+                * R0 ** 2
+                / B0 ** 4
             )
             f_T = np.append(f_T, f_t)
     plot_data["f_B"] = f_B
@@ -2912,7 +2912,7 @@ def plot_logo(savepath=None, **kwargs):
     fig_width = kwargs.get("fig_width", 3)
     fig_height = fig_width / 2
     contour_lw_ratio = kwargs.get("contour_lw_ratio", 0.3)
-    lw = fig_width**0.5
+    lw = fig_width ** 0.5
 
     transparent = False
     if BGcolor == "dark":
@@ -3055,6 +3055,7 @@ def plot_field_lines_sfl(
     phi_end=2 * np.pi,
     dphi=1e-2,
     ax=None,
+    return_data=True,
     **kwargs,
 ):
     r"""Plots field lines on specified flux surface.
@@ -3171,23 +3172,23 @@ def plot_field_lines_sfl(
         "Calculating field line (R,phi,Z) coordinates corresponding to "
         + "(rho,theta,zeta) coordinates"
     )
-    field_line_coords = {"Rs": [], "Zs": [], "phis": [], "seed_thetas": seed_thetas}
+    field_line_coords = {"R": [], "Z": [], "phi": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
         grid = Grid(nodes=coords)
         toroidal_coords = eq.compute("R", "Z", grid=grid)
-        field_line_coords["Rs"].append(toroidal_coords["R"])
-        field_line_coords["Zs"].append(toroidal_coords["Z"])
-        field_line_coords["phis"].append(phi)
+        field_line_coords["R"].append(toroidal_coords["R"])
+        field_line_coords["Z"].append(toroidal_coords["Z"])
+        field_line_coords["phi"].append(phi)
 
     for i in range(n_lines):
-        xline = np.asarray(field_line_coords["Rs"][i]) * np.cos(
-            field_line_coords["phis"][i]
+        xline = np.asarray(field_line_coords["R"][i]) * np.cos(
+            field_line_coords["phi"][i]
         )
-        yline = np.asarray(field_line_coords["Rs"][i]) * np.sin(
-            field_line_coords["phis"][i]
+        yline = np.asarray(field_line_coords["R"][i]) * np.sin(
+            field_line_coords["phi"][i]
         )
 
-        ax.plot(xline, yline, field_line_coords["Zs"][i], linewidth=2)
+        ax.plot(xline, yline, field_line_coords["Z"][i], linewidth=2)
 
     ax.set_xlabel(_AXIS_LABELS_XYZ[0])
     ax.set_ylabel(_AXIS_LABELS_XYZ[1])
@@ -3216,6 +3217,11 @@ def plot_field_lines_sfl(
     ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+    plot_data = field_line_coords
+
+    if return_data:
+        return fig, ax, plot_data
 
     return fig, ax
 

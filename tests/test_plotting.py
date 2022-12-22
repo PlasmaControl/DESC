@@ -633,7 +633,11 @@ class TestPlotFieldLines:
     def test_plot_field_line(self, DSHAPE_current):
         """Test plotting single field line over 1 transit."""
         eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
+        fig, ax, data = plot_field_lines_sfl(
+            eq, rho=1, seed_thetas=0, phi_end=2 * np.pi, return_data=True
+        )
+        for string in ["R", "Z", "phi", "seed_thetas"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit

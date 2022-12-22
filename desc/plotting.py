@@ -1631,6 +1631,8 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
     plot_data = {}
+    plot_data["R"] = []
+    plot_data["Z"] = []
 
     for i in range(neq):
         grid_kwargs = {
@@ -1648,8 +1650,8 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )
 
-        plot_data[f"R_{i}"] = R
-        plot_data[f"Z_{i}"] = Z
+        plot_data["R"].append(R)
+        plot_data["Z"].append(Z)
 
         for j in range(grid.num_zeta - 1):
             (line,) = ax.plot(
@@ -1832,7 +1834,10 @@ def plot_comparison(
                 return_data=return_data,
             )
             for key in _plot_data.keys():
-                plot_data[key + "_" + labels[i % len(labels)]] = _plot_data[key]
+                plot_data[key] = []
+            for key in _plot_data.keys():
+                plot_data[key].append(_plot_data[key])
+
         else:
             fig, ax = plot_surfaces(
                 eq,
@@ -1946,11 +1951,14 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
 
     coils_list = flatten_coils(coils)
     plot_data = {}
+    plot_data["X"] = []
+    plot_data["Y"] = []
+    plot_data["Z"] = []
     for i, coil in enumerate(coils_list):
         x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
-        plot_data[f"X_{i}"] = x
-        plot_data[f"Y_{i}"] = y
-        plot_data[f"Z_{i}"] = z
+        plot_data["X"].append(x)
+        plot_data["Y"].append(y)
+        plot_data["Z"].append(z)
         ax.plot(
             x, y, z, lw=lw[i % len(lw)], ls=ls[i % len(ls)], c=color[i % len(color)]
         )
@@ -2104,7 +2112,8 @@ def plot_boozer_modes(
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
-        plot_data[f"|B|_{M}{N}"] = B_mn[:, i]
+    plot_data["B_mn"] = B_mn
+    plot_data["B_modes"] = modes
     plot_data["rho"] = rho
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0])
@@ -2450,13 +2459,14 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     return fig, ax
 
 
-def plot_grid(grid, **kwargs):
+def plot_grid(grid, return_data=False, **kwargs):
     """Plot the location of collocation nodes on the zeta=0 plane.
 
     Parameters
     ----------
     grid : Grid
         Grid to plot.    return_data : bool
+    return_data : bool
         if True, return the data plotted as well as fig,ax
 
     **kwargs : fig,ax and plotting properties
@@ -2476,6 +2486,9 @@ def plot_grid(grid, **kwargs):
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     Examples
     --------
@@ -2544,16 +2557,26 @@ def plot_grid(grid, **kwargs):
             fontsize=title_font_size,
         )
     fig.set_tight_layout(True)
+
+    plot_data = {}
+    plot_data["rho"] = nodes[:, 0]
+    plot_data["theta"] = nodes[:, 1]
+
+    if return_data:
+        return fig, ax, plot_data
+
     return fig, ax
 
 
-def plot_basis(basis, **kwargs):
+def plot_basis(basis, return_data=False, **kwargs):
     """Plot basis functions.
 
     Parameters
     ----------
     basis : Basis
         basis to plot
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
 
 
     Returns
@@ -2564,6 +2587,9 @@ def plot_basis(basis, **kwargs):
         Axes used for plotting. A single axis is used for 1d basis functions,
         2d or 3d bases return an ndarray or dict of axes.    return_data : bool
         if True, return the data plotted as well as fig,ax
+    plot_data : dict
+        dictionary of the data plotted
+        only returned if return_data=True
 
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
@@ -2600,8 +2626,14 @@ def plot_basis(basis, **kwargs):
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
+        plot_data = {}
+        plot_data["l"] = basis.modes[:, 0]
+        plot_data["amplitude"] = []
+        plot_data["rho"] = r
+
         for fi, l in zip(f.T, basis.modes[:, 0]):
             ax.plot(r, fi, label="$l={:d}$".format(int(l)))
+            plot_data["amplitude"].append(fi)
         ax.set_xlabel("$\\rho$")
         ax.set_ylabel("$f_l(\\rho)$")
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
@@ -2612,6 +2644,9 @@ def plot_basis(basis, **kwargs):
             fontsize=title_font_size,
         )
         fig.set_tight_layout(True)
+        if return_data:
+            return fig, ax, plot_data
+
         return fig, ax
 
     elif basis.__class__.__name__ == "FourierSeries":
@@ -2621,8 +2656,15 @@ def plot_basis(basis, **kwargs):
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
+        plot_data = {}
+        plot_data["n"] = basis.modes[:, 2]
+        plot_data["amplitude"] = []
+        plot_data["zeta"] = z
+
         for fi, n in zip(f.T, basis.modes[:, 2]):
             ax.plot(z, fi, label="$n={:d}$".format(int(n)))
+            plot_data["amplitude"].append(fi)
+
         ax.set_xlabel("$\\zeta$")
         ax.set_ylabel("$f_n(\\zeta)$")
         ax.legend(bbox_to_anchor=(1.04, 0.5), loc="center left", borderaxespad=0)
@@ -2634,6 +2676,9 @@ def plot_basis(basis, **kwargs):
             fontsize=title_font_size,
         )
         fig.set_tight_layout(True)
+        if return_data:
+            return fig, ax, plot_data
+
         return fig, ax
 
     elif basis.__class__.__name__ == "DoubleFourierSeries":
@@ -2654,6 +2699,13 @@ def plot_basis(basis, **kwargs):
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
         f = basis.evaluate(grid.nodes)
+        plot_data = {}
+        plot_data["m"] = basis.modes[:, 1]
+        plot_data["n"] = basis.modes[:, 2]
+        plot_data["amplitude"] = []
+        plot_data["zeta"] = z
+        plot_data["theta"] = t
+
         for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
             ax[mmax + m, nmax + n] = plt.subplot(gs[mmax + m + 1, n + nmax])
             ax[mmax + m, nmax + n].set_xticks(
@@ -2677,6 +2729,8 @@ def plot_basis(basis, **kwargs):
                 vmax=1,
                 cmap=kwargs.get("cmap", "coolwarm"),
             )
+            plot_data["amplitude"].append(fi.reshape((grid.num_theta, grid.num_zeta)))
+
             if m == mmax:
                 ax[mmax + m, nmax + n].set_xlabel(
                     "$\\zeta$ \n $n={}$".format(n), fontsize=10
@@ -2699,8 +2753,10 @@ def plot_basis(basis, **kwargs):
             y=0.98,
             fontsize=title_font_size,
         )
-        return fig, ax
+        if return_data:
+            return fig, ax, plot_data
 
+        return fig, ax
     elif basis.__class__.__name__ in ["ZernikePolynomial", "FourierZernikeBasis"]:
         lmax = abs(basis.modes[:, 0]).max().astype(int)
         mmax = abs(basis.modes[:, 1]).max().astype(int)
@@ -2711,6 +2767,12 @@ def plot_basis(basis, **kwargs):
 
         fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
 
+        plot_data = {}
+
+        plot_data["amplitude"] = []
+        plot_data["rho"] = r
+        plot_data["theta"] = v
+
         ax = {i: {} for i in range(lmax + 1)}
         ratios = np.ones(2 * (mmax + 1) + 1)
         ratios[-1] = kwargs.get("cbar_ratio", 0.25)
@@ -2719,6 +2781,8 @@ def plot_basis(basis, **kwargs):
         )
 
         modes = basis.modes[np.where(basis.modes[:, 2] == 0)]
+        plot_data["l"] = basis.modes[:, 0]
+        plot_data["m"] = basis.modes[:, 1]
         Zs = basis.evaluate(grid.nodes, modes=modes)
         for i, (l, m) in enumerate(
             zip(modes[:, 0].astype(int), modes[:, 1].astype(int))
@@ -2736,6 +2800,7 @@ def plot_basis(basis, **kwargs):
                 levels=np.linspace(-1, 1, 100),
                 cmap=kwargs.get("cmap", "coolwarm"),
             )
+            plot_data["amplitude"].append(Zs)
 
         cb_ax = plt.subplot(gs[:, -1])
         plt.subplots_adjust(right=0.8)
@@ -2749,6 +2814,9 @@ def plot_basis(basis, **kwargs):
             fontsize=title_font_size,
         )
         fig.set_tight_layout(True)
+        if return_data:
+            return fig, ax, plot_data
+
         return fig, ax
 
 
@@ -3021,6 +3089,8 @@ def plot_field_lines_sfl(
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
         if True, return the data plotted as well as fig,ax
+    return_data : bool
+        if True, return the data plotted as well as fig,ax
 
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
@@ -3038,7 +3108,7 @@ def plot_field_lines_sfl(
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
-    field_line_coords : dict
+    plot_data : dict
         Dict containing the R,phi,Z coordinates of each field line traced.
         Dictionary entries are lists corresponding to the field lines for
         each seed_theta given. Also contains the scipy IVP solutions for info
@@ -3147,7 +3217,7 @@ def plot_field_lines_sfl(
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-    return fig, ax, field_line_coords
+    return fig, ax
 
 
 def plot_field_lines_real_space(
@@ -3343,7 +3413,7 @@ def plot_field_lines_real_space(
             B_interp,
         )
     else:
-        return fig, ax, field_line_coords
+        return fig, ax
 
 
 def _find_idx(rho0, theta0, phi0, grid):

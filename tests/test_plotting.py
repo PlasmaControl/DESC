@@ -376,9 +376,11 @@ def test_plot_boundaries():
     eq2 = get("DSHAPE")
     eq3 = get("W7-X")
     fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
-    for i in range(3):
-        assert f"R_{i}" in data.keys()
-        assert f"Z_{i}" in data.keys()
+    assert "R" in data.keys()
+    assert "Z" in data.keys()
+    assert len(data["R"]) == 3
+    assert len(data["Z"]) == 3
+
     return fig
 
 
@@ -390,15 +392,14 @@ def test_plot_comparison(DSHAPE_current):
     """Test plotting comparison of flux surfaces."""
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))
     fig, ax, data = plot_comparison(eqf, return_data=True)
-    for i in range(len(eqf)):
-        for string in [
-            "rho_R_coords",
-            "rho_Z_coords",
-            "vartheta_R_coords",
-            "vartheta_Z_coords",
-        ]:
-            check_string = str(string + f"_{i}")
-            assert check_string in data.keys()
+    for string in [
+        "rho_R_coords",
+        "rho_Z_coords",
+        "vartheta_R_coords",
+        "vartheta_Z_coords",
+    ]:
+        assert string in data.keys()
+        assert len(data[string]) == len(eqf)
 
     return fig
 
@@ -520,7 +521,9 @@ class TestPlotGrid:
     def test_plot_grid_linear(self):
         """Test plotting linear grid."""
         grid = LinearGrid(rho=10, theta=10, zeta=1)
-        fig, ax = plot_grid(grid)
+        fig, ax, data = plot_grid(grid, return_data=True)
+        for string in ["theta", "rho"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -572,7 +575,9 @@ class TestPlotBasis:
     def test_plot_basis_powerseries(self):
         """Test plotting power series basis."""
         basis = PowerSeries(L=6)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -580,7 +585,9 @@ class TestPlotBasis:
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "n", "zeta"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -589,7 +596,9 @@ class TestPlotBasis:
     def test_plot_basis_doublefourierseries(self):
         """Test plotting double fourier series basis."""
         basis = DoubleFourierSeries(M=3, N=2)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "n", "zeta", "m", "theta"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -598,7 +607,9 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
         return fig
 
 
@@ -646,7 +657,7 @@ def test_plot_boozer_modes(DSHAPE_current):
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax, data = plot_boozer_modes(eq, return_data=True)
     ax.set_ylim([1e-12, 1e0])
-    for string in ["|B|_00", "|B|_10", "|B|_20", "|B|_30", "rho"]:
+    for string in ["B_mn", "B_modes", "rho"]:
         assert string in data.keys()
     return fig
 
@@ -693,6 +704,6 @@ def test_plot_coils():
     coils2 = CoilSet.from_symmetry(coils, NFP, True)
     fig, ax, data = plot_coils(coils2, return_data=True)
     for string in ["X", "Y", "Z"]:
-        for i in range(len(coils2)):
-            assert string + f"_{i}" in data.keys()
+        assert string in data.keys()
+        assert len(data[string]) == len(coils2)
     return fig

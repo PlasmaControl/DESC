@@ -2371,7 +2371,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                / B0 ** 3
+                / B0**3
             )
             f_C = np.append(f_C, f_c)
         if fT:
@@ -2379,8 +2379,8 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                * R0 ** 2
-                / B0 ** 4
+                * R0**2
+                / B0**4
             )
             f_T = np.append(f_T, f_t)
     plot_data["f_B"] = f_B
@@ -2912,7 +2912,7 @@ def plot_logo(savepath=None, **kwargs):
     fig_width = kwargs.get("fig_width", 3)
     fig_height = fig_width / 2
     contour_lw_ratio = kwargs.get("contour_lw_ratio", 0.3)
-    lw = fig_width ** 0.5
+    lw = fig_width**0.5
 
     transparent = False
     if BGcolor == "dark":

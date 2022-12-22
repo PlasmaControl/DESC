@@ -8,6 +8,7 @@ from desc.compute import arg_order
 from ._equilibrium import CurrentDensity
 from .objective_funs import ObjectiveFunction
 from .utils import (
+    align_jacobian,
     factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
@@ -123,8 +124,21 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self._built = True
 
-    def _update_equilibrium(self, x):
-        """Update the internal equilibrium with new boundary, profile etc."""
+    def _update_equilibrium(self, x, store=False):
+        """Update the internal equilibrium with new boundary, profile etc.
+
+        Parameters
+        ----------
+        x : ndarray
+            New values of optimization variables.
+        store : bool
+            Whether the new x should be stored in self.history
+
+        Notes
+        -----
+        After updating, if store=False, self._eq will revert back to the previous
+        solution when store was True
+        """
         if jnp.allclose(x, self._x_old, rtol=1e-14, atol=1e-14):
             pass
         else:
@@ -145,11 +159,20 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 constraints=self._constraints,
                 **self._solve_options
             )
+
+        xopt = self._objective.x(self._eq)
+        xeq = self._eq_objective.x(self._eq)
+        if store:
             self._x_old = x
             self._allx.append(x)
-
             for arg in self._full_args:
                 self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
+        else:
+            for arg in self._full_args:
+                val = self.history[arg][-1].copy()
+                if val.size:
+                    setattr(self._eq, arg, val)
+        return xopt, xeq
 
     def compute(self, x):
         """Compute the objective function.
@@ -165,9 +188,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Objective function value(s).
 
         """
-        self._update_equilibrium(x)
-        x_obj = self._objective.x(self._eq)
-        return self._objective.compute(x_obj)
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute(xopt)
 
     def grad(self, x):
         """Compute gradient of the sum of squares of residuals.
@@ -199,7 +221,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         J : ndarray
             Jacobian matrix.
         """
-        self._update_equilibrium(x)
+        xg, xf = self._update_equilibrium(x, store=True)
 
         # dx/dc
         x_idx = np.concatenate(
@@ -222,24 +244,12 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         )
         dxdc = np.hstack((dxdc, dxdZb))
 
-        # state vectors
-        xf = self._eq_objective.x(self._eq)
-        xg = self._objective.x(self._eq)
-
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
         Gx = self._objective.jac(xg)
-        Fx = {
-            arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
-        }
-        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
-        for arg in self._eq_objective.args:
-            if arg not in Fx.keys():
-                Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-            if arg not in Gx.keys():
-                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
-        Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
-        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
+        Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
@@ -247,9 +257,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Fx_reduced_inv = jnp.linalg.pinv(Fx_reduced, rcond=1e-6)
 
         Gc = Gx @ dxdc
-
-        GxFx = Gx_reduced @ Fx_reduced_inv
-        LHS = GxFx @ Fc - Gc
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
         return -LHS
 
     def hess(self, x):

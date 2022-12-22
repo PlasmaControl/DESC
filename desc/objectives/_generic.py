@@ -1,15 +1,17 @@
 """Generic objectives that don't belong anywhere else."""
 
-from inspect import signature
-
 import desc.compute as compute_funs
-from desc.basis import DoubleFourierSeries
-from desc.compute import arg_order, compute_boozer_magnetic_field, data_index
-from desc.compute.utils import compress
+from desc.backend import jnp
+from desc.compute import (
+    compute_boozer_magnetic_field,
+    compute_rotational_transform,
+    data_index,
+)
+from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -28,6 +30,14 @@ class GenericObjective(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -37,15 +47,32 @@ class GenericObjective(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(Unknown)"
+    _print_value_fmt = "Residual: {:10.3e} "
 
-    def __init__(self, f, eq=None, target=0, weight=1, grid=None, name="generic"):
+    def __init__(
+        self,
+        f,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="generic",
+    ):
 
         self.f = f
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = (
-            "Residual: {:10.3e} (" + data_index[self.f]["units"] + ")"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
         )
+        self._units = "(" + data_index[self.f]["units"] + ")"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -63,74 +90,14 @@ class GenericObjective(_Objective):
         if self.grid is None:
             self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-        args = []
         self._dim_f = self.grid.num_nodes
-
         self.fun = getattr(compute_funs, data_index[self.f]["fun"])
-        self.sig = signature(self.fun)
-        self.inputs = {"data": None}
-
-        for arg in self.sig.parameters.keys():
-            if arg in arg_order:
-                args.append(arg)
-            elif arg == "R_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    eq.R_basis,
-                    derivs=data_index[self.f]["R_derivs"],
-                    build=True,
-                )
-            elif arg == "Z_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    eq.Z_basis,
-                    derivs=data_index[self.f]["R_derivs"],
-                    build=True,
-                )
-            elif arg == "L_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    eq.L_basis,
-                    derivs=data_index[self.f]["L_derivs"],
-                    build=True,
-                )
-            elif arg == "B_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    DoubleFourierSeries(
-                        M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP
-                    ),
-                    derivs=0,
-                    build_pinv=True,
-                )
-            elif arg == "w_transform":
-                self.inputs[arg] = Transform(
-                    self.grid,
-                    DoubleFourierSeries(
-                        M=2 * eq.M, N=2 * eq.N, sym=eq.Z_basis.sym, NFP=eq.NFP
-                    ),
-                    derivs=1,
-                )
-            elif arg == "pressure":
-                self.inputs[arg] = eq.pressure.copy()
-                self.inputs[arg].grid = self.grid
-            elif arg == "iota":
-                if eq.iota is not None:
-                    self.inputs[arg] = eq.iota.copy()
-                    self.inputs[arg].grid = self.grid
-                else:
-                    self.inputs[arg] = None
-            elif arg == "current":
-                if eq.current is not None:
-                    self.inputs[arg] = eq.current.copy()
-                    self.inputs[arg].grid = self.grid
-                else:
-                    self.inputs[arg] = None
-
-        self._args = args
+        self._args = get_params(self.f)
+        self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, **kwargs):
+    def compute(self, **params):
         """Compute the quantity.
 
         Parameters
@@ -144,14 +111,13 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        data = self.fun(**kwargs, **self.inputs)
-        f = data[self.f]
+        data = self.fun(params, self._transforms, self._profiles)
+        f = data[self.f] * self.grid.weights
         return self._shift_scale(f)
 
 
-# TODO: move this class to a different file (not generic)
 class ToroidalCurrent(_Objective):
-    """Toroidal current enclosed by a surface.
+    """Target toroidal current profile.
 
     Parameters
     ----------
@@ -159,10 +125,16 @@ class ToroidalCurrent(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
+        len(target) must be equal to Objective.dim_f == grid.num_rho
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
+        len(weight) must be equal to Objective.dim_f == grid.num_rho
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -172,12 +144,29 @@ class ToroidalCurrent(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(A)"
+    _print_value_fmt = "Toroidal current: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="toroidal current"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="toroidal current",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Toroidal current: {:10.3e} (A)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -193,37 +182,33 @@ class ToroidalCurrent(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+            self.grid = LinearGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["current"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["current"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["current"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["current"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -247,22 +232,156 @@ class ToroidalCurrent(_Objective):
 
         Returns
         -------
-        I : float
-            Toroidal current (A).
+        current : ndarray
+            Toroidal current (A) through specified surfaces.
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_boozer_magnetic_field(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         I = compress(self.grid, data["current"], surface_label="rho")
-        return self._shift_scale(I)
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return self._shift_scale(I) * w
+
+
+class RotationalTransform(_Objective):
+    """Targets a rotational transform profile.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f == grid.num_rho
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f == grid.num_rho
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+    """
+
+    _scalar = False
+    _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Rotational transform: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="rotational transform",
+    ):
+
+        self.grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(
+                L=eq.L_grid,
+                M=eq.M_grid,
+                N=eq.N_grid,
+                NFP=eq.NFP,
+                sym=eq.sym,
+                axis=False,
+            )
+
+        self._dim_f = self.grid.num_rho
+        self._data_keys = ["iota"]
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+        """Compute rotational transform profile errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        iota : ndarray
+            rotational transform on specified flux surfaces.
+        """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
+        data = compute_rotational_transform(
+            params,
+            self._transforms,
+            self._profiles,
+        )
+        iota = compress(self.grid, data["iota"], surface_label="rho")
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return self._shift_scale(iota) * w

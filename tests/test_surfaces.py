@@ -126,6 +126,17 @@ class TestFourierRZToroidalSurface:
             atol=1e-6,
         )
 
+    def test_curvature(self):
+        """Tests for gaussian, mean, principle curvatures."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
+        s.grid = grid
+        K, H, k1, k2 = s.compute_curvature()
+        np.testing.assert_allclose(K, 0)
+        np.testing.assert_allclose(H, 1 / 2)
+        np.testing.assert_allclose(k1, 1)
+        np.testing.assert_allclose(k2, 0)
+
 
 class TestZernikeRZToroidalSection:
     """Tests for ZerinkeRZTorioidalSection class."""
@@ -189,3 +200,17 @@ class TestZernikeRZToroidalSection:
             c.Z_lmn = s.Z_lmn
 
         assert c.sym
+
+    def test_curvature(self):
+        """Tests for gaussian, mean, principle curvatures.
+
+        (kind of pointless since its a flat surface so its always 0)
+        """
+        s = ZernikeRZToroidalSection()
+        grid = LinearGrid(theta=np.pi / 2, rho=0.5)
+        s.grid = grid
+        K, H, k1, k2 = s.compute_curvature()
+        np.testing.assert_allclose(K, 0)
+        np.testing.assert_allclose(H, 0)
+        np.testing.assert_allclose(k1, 0)
+        np.testing.assert_allclose(k2, 0)

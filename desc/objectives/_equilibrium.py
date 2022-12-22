@@ -9,12 +9,13 @@ from desc.compute import (
     compute_contravariant_current_density,
     compute_energy,
     compute_force_error,
-    data_index,
+    get_profiles,
+    get_transforms,
 )
 from desc.grid import ConcentricGrid, QuadratureGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -38,6 +39,12 @@ class ForceBalance(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -47,13 +54,29 @@ class ForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Total force: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="force",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Total force: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -94,36 +117,24 @@ class ForceBalance(_Objective):
                 )
 
         self._dim_f = 2 * self.grid.num_nodes
+        self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)", "F_beta", "|beta|"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -153,20 +164,19 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_force_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
@@ -194,6 +204,12 @@ class RadialForceBalance(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -203,13 +219,29 @@ class RadialForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Radial force: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="radial force"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="radial force",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Radial force: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -250,36 +282,24 @@ class RadialForceBalance(_Objective):
                 )
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -309,20 +329,19 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_force_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -347,6 +366,12 @@ class HelicalForceBalance(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -356,13 +381,29 @@ class HelicalForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(N)"
+    _print_value_fmt = "Helical force: {:10.3e}, "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="helical force"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="helical force",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(N)"
-        self._print_value_fmt = "Helical force: {:10.3e}, " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -403,36 +444,24 @@ class HelicalForceBalance(_Objective):
                 )
 
         self._dim_f = self.grid.num_nodes
+        self._data_keys = ["F_beta", "|beta|", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["F_beta"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["F_beta"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -462,20 +491,19 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_force_error(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         f = data["F_beta"] * data["|beta|"]
         f = f * data["sqrt(g)"] * self.grid.weights
@@ -498,6 +526,12 @@ class Energy(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
         This will default to a QuadratureGrid
@@ -511,13 +545,31 @@ class Energy(_Objective):
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
     _linear = False
+    _units = "(J)"
+    _print_value_fmt = "Total MHD energy: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, gamma=0, name="energy"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        gamma=0,
+        name="energy",
+    ):
 
         self.grid = grid
         self.gamma = gamma
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Total MHD energy: {:10.3e} (J)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -567,36 +619,23 @@ class Energy(_Objective):
                 )
 
         self._dim_f = 1
+        self._data_keys = ["W"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["W"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["W"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["W"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["W"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -626,21 +665,20 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_energy(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
-            self._gamma,
+            params,
+            self._transforms,
+            self._profiles,
+            gamma=self._gamma,
         )
         return self._shift_scale(data["W"])
 
@@ -669,6 +707,12 @@ class CurrentDensity(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -678,20 +722,29 @@ class CurrentDensity(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(A*m)"
+    _print_value_fmt = "Total current density: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=0,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="current density",
     ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        units = "(A/m^2)"
-        self._print_value_fmt = "Total current density: {:10.3e} " + units
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -732,34 +785,24 @@ class CurrentDensity(_Objective):
                 )
 
         self._dim_f = 3 * self.grid.num_nodes
+        self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["J"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["J"]["R_derivs"], build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=data_index["J"]["L_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            # local quantity, want to divide by number of nodes
+            self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -787,18 +830,18 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_contravariant_current_density(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
         jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights

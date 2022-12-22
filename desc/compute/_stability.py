@@ -10,124 +10,67 @@ from ._field import (
     compute_contravariant_current_density,
     compute_magnetic_field_magnitude,
 )
-from .utils import check_derivs, dot, surface_averages, surface_integrals
+from .utils import dot, has_dependencies, surface_averages, surface_integrals
 
 
-def compute_mercier_stability(
-    R_lmn,
-    Z_lmn,
-    L_lmn,
-    p_l,
-    i_l,
-    c_l,
-    Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
-    pressure,
-    iota,
-    current,
-    data=None,
-):
+def compute_mercier_stability(params, transforms, profiles, data=None, **kwargs):
     """Compute the Mercier stability criterion.
 
     Notes
     -----
         Implements equations 4.16 through 4.20 in M. Landreman & R. Jorge (2020)
         doi:10.1017/S002237782000121X.
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-    L_lmn : ndarray
-        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-    p_l : ndarray
-        Spectral coefficients of p(rho) -- pressure profile.
-    i_l : ndarray
-        Spectral coefficients of iota(rho) -- rotational transform profile.
-    c_l : ndarray
-        Spectral coefficients of I(rho) -- toroidal current profile.
-    Psi : float
-        Total toroidal magnetic flux within the last closed flux surface (Wb).
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-    L_transform : Transform
-        Transforms L_lmn coefficients to real space.
-    pressure : Profile
-        Transforms p_l coefficients to real space.
-    iota : Profile
-        Transforms i_l coefficients to real space.
-    current : Profile
-        Transforms c_l coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of Mercier criterion terms.
-        Keys are 'D_shear', 'D_current', 'D_well', 'D_geodesic', and 'D_Mercier'.
-
     """
-    grid = R_transform.grid
-    data = compute_pressure(p_l, pressure, data=data)
-    data = compute_toroidal_flux_gradient(
-        R_lmn, Z_lmn, Psi, R_transform, Z_transform, data=data
-    )
-    data = compute_geometry(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
-    data = compute_magnetic_field_magnitude(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
+    data = compute_pressure(
+        params,
+        transforms,
+        profiles,
         data=data,
+        **kwargs,
+    )
+    data = compute_toroidal_flux_gradient(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_geometry(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_magnetic_field_magnitude(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
     )
     data = compute_boozer_magnetic_field(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
     )
     data = compute_contravariant_current_density(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
-        data,
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
     )
 
     dS = jnp.abs(data["sqrt(g)"]) * data["|grad(rho)|"]
-    grad_psi_3 = data["|grad(psi)|"] ** 3
+    data["|grad(psi)|^3"] = data["|grad(psi)|"] ** 3
 
-    if check_derivs("D_shear", R_transform, Z_transform, L_transform):
+    if has_dependencies("D_shear", params, transforms, profiles, data):
         data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
 
-    if check_derivs("D_current", R_transform, Z_transform, L_transform):
+    if has_dependencies("D_current", params, transforms, profiles, data):
         Xi = (
             mu_0 * data["J"] - jnp.atleast_2d(data["I_r"] / data["psi_r"]).T * data["B"]
         )
@@ -136,10 +79,12 @@ def compute_mercier_stability(
             / (2 * jnp.pi) ** 4
             * data["iota_r"]
             / data["psi_r"]
-            * surface_integrals(grid, dS / grad_psi_3 * dot(Xi, data["B"]))
+            * surface_integrals(
+                transforms["grid"], dS / data["|grad(psi)|^3"] * dot(Xi, data["B"])
+            )
         )
 
-    if check_derivs("D_well", R_transform, Z_transform, L_transform):
+    if has_dependencies("D_well", params, transforms, profiles, data):
         dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
         d2V_dpsi2 = (
             data["V_rr(r)"] - data["V_r(r)"] * data["psi_rr"] / data["psi_r"]
@@ -149,21 +94,36 @@ def compute_mercier_stability(
             * (
                 jnp.sign(data["psi"]) * d2V_dpsi2
                 - dp_dpsi
-                * surface_integrals(grid, dS / (data["|B|^2"] * data["|grad(psi)|"]))
+                * surface_integrals(
+                    transforms["grid"], dS / (data["|B|^2"] * data["|grad(psi)|"])
+                )
             )
-            * surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
+            * surface_integrals(
+                transforms["grid"], dS * data["|B|^2"] / data["|grad(psi)|^3"]
+            )
             / (2 * jnp.pi) ** 6
         )
 
-    if check_derivs("D_geodesic", R_transform, Z_transform, L_transform):
-        J_dot_B = mu_0 * dot(data["J"], data["B"])
+    if has_dependencies("D_geodesic", params, transforms, profiles, data):
+        data["J*B"] = dot(data["J"], data["B"])
         data["D_geodesic"] = (
-            surface_integrals(grid, dS * J_dot_B / grad_psi_3) ** 2
-            - surface_integrals(grid, dS * data["|B|^2"] / grad_psi_3)
-            * surface_integrals(grid, dS * J_dot_B**2 / (data["|B|^2"] * grad_psi_3))
+            surface_integrals(
+                transforms["grid"], dS * mu_0 * data["J*B"] / data["|grad(psi)|^3"]
+            )
+            ** 2
+            - surface_integrals(
+                transforms["grid"], dS * data["|B|^2"] / data["|grad(psi)|^3"]
+            )
+            * surface_integrals(
+                transforms["grid"],
+                dS
+                * mu_0**2
+                * data["J*B"] ** 2
+                / (data["|B|^2"] * data["|grad(psi)|^3"]),
+            )
         ) / (2 * jnp.pi) ** 6
 
-    if check_derivs("D_Mercier", R_transform, Z_transform, L_transform):
+    if has_dependencies("D_Mercier", params, transforms, profiles, data):
         data["D_Mercier"] = (
             data["D_shear"] + data["D_current"] + data["D_well"] + data["D_geodesic"]
         )
@@ -171,85 +131,39 @@ def compute_mercier_stability(
     return data
 
 
-def compute_magnetic_well(
-    R_lmn,
-    Z_lmn,
-    L_lmn,
-    p_l,
-    i_l,
-    c_l,
-    Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
-    pressure,
-    iota,
-    current,
-    data=None,
-):
+def compute_magnetic_well(params, transforms, profiles, data=None, **kwargs):
     """Compute the magnetic well proxy for MHD stability.
 
     Notes
     -----
         Implements equation 3.2 in M. Landreman & R. Jorge (2020)
         doi:10.1017/S002237782000121X.
-
-    Parameters
-    ----------
-    R_lmn : ndarray
-        Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-    Z_lmn : ndarray
-        Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-    L_lmn : ndarray
-        Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-    p_l : ndarray
-        Spectral coefficients of p(rho) -- pressure profile.
-    i_l : ndarray
-        Spectral coefficients of iota(rho) -- rotational transform profile.
-    c_l : ndarray
-        Spectral coefficients of I(rho) -- toroidal current profile.
-    Psi : float
-        Total toroidal magnetic flux within the last closed flux surface (Wb).
-    R_transform : Transform
-        Transforms R_lmn coefficients to real space.
-    Z_transform : Transform
-        Transforms Z_lmn coefficients to real space.
-    L_transform : Transform
-        Transforms L_lmn coefficients to real space.
-    pressure : Profile
-        Transforms p_l coefficients to real space.
-    iota : Profile
-        Transforms i_l coefficients to real space.
-    current : Profile
-        Transforms c_l coefficients to real space.
-
-    Returns
-    -------
-    data : dict
-        Dictionary of ndarray, shape(num_nodes,) of the magnetic well parameter.
-
     """
-    grid = R_transform.grid
-    data = compute_pressure(p_l, pressure, data=data)
-    data = compute_geometry(R_lmn, Z_lmn, R_transform, Z_transform, data=data)
-    data = compute_magnetic_field_magnitude(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        iota,
-        current,
+    data = compute_pressure(
+        params,
+        transforms,
+        profiles,
         data=data,
+        **kwargs,
+    )
+    data = compute_geometry(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_magnetic_field_magnitude(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
     )
 
-    if check_derivs("magnetic well", R_transform, Z_transform, L_transform):
-        B2_avg = surface_averages(
-            grid,
+    if has_dependencies("<B^2>", params, transforms, profiles, data):
+        data["<B^2>"] = surface_averages(
+            transforms["grid"],
             data["|B|^2"],
             jnp.abs(data["sqrt(g)"]),
             denominator=data["V_r(r)"],
@@ -258,17 +172,20 @@ def compute_magnetic_well(
         # The surface average operation is an additive homomorphism.
         # Thermal pressure is constant over a rho surface.
         # surface average(pressure) = thermal + surface average(magnetic)
-        dp_drho = 2 * mu_0 * data["p_r"]
-        dB2_avg_drho = (
+    if has_dependencies("<B^2>_r", params, transforms, profiles, data):
+        data["<B^2>_r"] = (
             surface_integrals(
-                grid,
+                transforms["grid"],
                 data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"]) * data["|B|^2"]
                 + jnp.abs(data["sqrt(g)"]) * 2 * dot(data["B"], data["B_r"]),
             )
-            - data["V_rr(r)"] * B2_avg
+            - data["V_rr(r)"] * data["<B^2>"]
         ) / data["V_r(r)"]
+    if has_dependencies("magnetic well", params, transforms, profiles, data):
         data["magnetic well"] = (
-            data["V(r)"] * (dp_drho + dB2_avg_drho) / (data["V_r(r)"] * B2_avg)
+            data["V(r)"]
+            * (2 * mu_0 * data["p_r"] + data["<B^2>_r"])
+            / (data["V_r(r)"] * data["<B^2>"])
         )
 
     return data

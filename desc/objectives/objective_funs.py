@@ -458,17 +458,43 @@ class _Objective(IOAble, ABC):
 
     """
 
-    _io_attrs_ = ["_target", "_weight", "_name", "_args"]
+    _io_attrs_ = [
+        "_target",
+        "_weight",
+        "_name",
+        "_args",
+        "_normalize",
+        "_normalize_target",
+        "_normalization",
+    ]
 
-    def __init__(self, eq=None, target=0, weight=1, name=None):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name=None,
+    ):
 
         assert np.all(np.asarray(weight) > 0)
+        assert normalize in {True, False}
+        assert normalize_target in {True, False}
         self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)
+        self._normalize = normalize
+        self._normalize_target = normalize_target
+        self._normalization = 1
         self._name = name
         self._use_jit = None
         self._built = False
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
+        # if args is already set don't overwrite it
+        self._args = getattr(
+            self,
+            "_args",
+            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
+        )
         if eq is not None:
             self.build(eq)
 
@@ -597,15 +623,26 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._print_value_fmt.format(jnp.linalg.norm(x)))
+        print(self._print_value_fmt.format(jnp.linalg.norm(x)) + self._units)
+        if self._normalize:
+            print(
+                self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization))
+                + "(normalized)"
+            )
 
     def _shift_scale(self, x):
         """Apply target and weighting."""
-        return (jnp.atleast_1d(x) - self.target) * self.weight
+        target = (
+            self.target / self.normalization if self._normalize_target else self.target
+        )
+        return (jnp.atleast_1d(x) / self.normalization - target) * self.weight
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
-        return x / self.weight + self.target
+        target = (
+            self.target / self.normalization if self._normalize_target else self.target
+        )
+        return (x / self.weight + target) * self.normalization
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
@@ -631,6 +668,13 @@ class _Objective(IOAble, ABC):
         assert np.all(np.asarray(weight) > 0)
         self._weight = np.atleast_1d(weight)
         self._check_dimensions()
+
+    @property
+    def normalization(self):
+        """float: normalizing scale factor."""
+        if self._normalize and not self.built:
+            raise ValueError("Objective must be built first")
+        return self._normalization
 
     @property
     def built(self):

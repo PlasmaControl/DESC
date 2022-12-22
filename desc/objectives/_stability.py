@@ -2,12 +2,18 @@
 
 import numpy as np
 
-from desc.compute import compute_magnetic_well, compute_mercier_stability, data_index
+from desc.backend import jnp
+from desc.compute import (
+    compute_magnetic_well,
+    compute_mercier_stability,
+    get_profiles,
+    get_transforms,
+)
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -32,6 +38,12 @@ class MercierStability(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -41,13 +53,28 @@ class MercierStability(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(Wb^-2)"
+    _print_value_fmt = "Mercier Stability: {:10.3e} "
 
     def __init__(
-        self, eq=None, target=0, weight=1, grid=None, name="Mercier Stability"
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="Mercier Stability",
     ):
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Mercier Stability: {:10.3e}"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -72,45 +99,23 @@ class MercierStability(_Objective):
             )
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["D_Mercier"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid,
-            eq.R_basis,
-            derivs=data_index["D_Mercier"]["R_derivs"],
-            build=True,
-        )
-        self._Z_transform = Transform(
-            self.grid,
-            eq.Z_basis,
-            derivs=data_index["D_Mercier"]["R_derivs"],
-            build=True,
-        )
-        self._L_transform = Transform(
-            self.grid,
-            eq.L_basis,
-            derivs=data_index["D_Mercier"]["L_derivs"],
-            build=True,
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = 1 / scales["Psi"] ** 2 / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -140,22 +145,50 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_mercier_stability(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
-        return self._shift_scale(compress(self.grid, data["D_Mercier"]))
+        f = compress(self.grid, data["D_Mercier"], surface_label="rho")
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + "(normalized)"
+            )
 
 
 class MagneticWell(_Objective):
@@ -179,6 +212,14 @@ class MagneticWell(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -188,11 +229,28 @@ class MagneticWell(_Objective):
 
     _scalar = False
     _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Magnetic Well: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="Magnetic Well"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="Magnetic Well",
+    ):
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Magnetic Well: {:10.3e}"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -216,41 +274,15 @@ class MagneticWell(_Objective):
             )
 
         self._dim_f = self.grid.num_rho
+        self._data_keys = ["magnetic well"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._pressure = eq.pressure.copy()
-        self._pressure.grid = self.grid
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._current = None
-        else:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._iota = None
-
-        self._R_transform = Transform(
-            self.grid,
-            eq.R_basis,
-            derivs=data_index["magnetic well"]["R_derivs"],
-            build=True,
-        )
-        self._Z_transform = Transform(
-            self.grid,
-            eq.Z_basis,
-            derivs=data_index["magnetic well"]["R_derivs"],
-            build=True,
-        )
-        self._L_transform = Transform(
-            self.grid,
-            eq.L_basis,
-            derivs=data_index["magnetic well"]["L_derivs"],
-            build=True,
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -284,19 +316,30 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         data = compute_magnetic_well(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            p_l,
-            i_l,
-            c_l,
-            Psi,
-            self._R_transform,
-            self._Z_transform,
-            self._L_transform,
-            self._pressure,
-            self._iota,
-            self._current,
+            params,
+            self._transforms,
+            self._profiles,
         )
-        return self._shift_scale(compress(self.grid, data["magnetic well"]))
+        f = compress(self.grid, data["magnetic well"], surface_label="rho")
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)

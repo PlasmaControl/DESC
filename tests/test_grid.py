@@ -223,7 +223,7 @@ class TestGrid:
 
         eq = Equilibrium(**inputs)
         grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
-        g = eq.compute("sqrt(g)", grid)
+        g = eq.compute("sqrt(g)", grid=grid)
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         np.testing.assert_allclose(vol, vol_quad)

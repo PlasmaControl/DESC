@@ -133,9 +133,38 @@ class Surface(IOAble, ABC):
     def compute_surface_area(self, params=None, grids=None):
         """Compute surface area via quadrature."""
 
-    @abstractmethod
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
+    def compute_curvature(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute gaussian and mean curvature.
+
+        Parameters
+        ----------
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
+        grid : Grid or array-like
+            toroidal coordinates to compute at. Defaults to self.grid
+            If an integer, assumes that many linearly spaced points in (0,2pi)
+
+        Returns
+        -------
+        K, H, k1, k2 : ndarray, shape(k,)
+            Gaussian, mean and 2 principle curvatures at points specified in grid.
+
+        """
+        # following notation from
+        # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+        E, F, G = self._compute_first_fundamental_form(R_lmn, Z_lmn, grid)
+        L, M, N = self._compute_second_fundamental_form(R_lmn, Z_lmn, grid)
+        # coeffs of quadratic eqn for determinant
+        a = E * G - F**2
+        b = F * M - L * G - E * N
+        c = L * N - M**2
+        r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        k1 = jnp.maximum(r1, r2)
+        k2 = jnp.minimum(r1, r2)
+        K = k1 * k2
+        H = (k1 + k2) / 2
+        return K, H, k1, k2
 
     def __repr__(self):
         """Get the string form of the object."""

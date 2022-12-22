@@ -3143,7 +3143,7 @@ def plot_field_lines_sfl(
     phi_end=2 * np.pi,
     dphi=1e-2,
     ax=None,
-    return_data=True,
+    return_data=False,
     **kwargs,
 ):
     r"""Plots field lines on specified flux surface.

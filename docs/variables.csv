@@ -79,48 +79,49 @@ Name,Label,Units,Description,Module
 ``phi``,:math:`\phi = \zeta`,radians,Toroidal angle in lab frame,``desc.compute._core``
 ``X``,:math:`X = R \cos{\phi}`,meters,Cartesian X coordinate,``desc.compute._core``
 ``Y``,:math:`Y = R \sin{\phi}`,meters,Cartesian Y coordinate,``desc.compute._core``
-``lambda``,:math:`\lambda`,meters,Poloidal stream function,``desc.compute._core``
-``lambda_r``,:math:`\partial_{\rho} \lambda`,meters,"Poloidal stream function, first radial derivative",``desc.compute._core``
-``lambda_t``,:math:`\partial_{\theta} \lambda`,meters,"Poloidal stream function, first poloidal derivative",``desc.compute._core``
-``lambda_z``,:math:`\partial_{\zeta} \lambda`,meters,"Poloidal stream function, first toroidal derivative",``desc.compute._core``
-``lambda_rr``,:math:`\partial_{\rho \rho} \lambda`,meters,"Poloidal stream function, second radial derivative",``desc.compute._core``
-``lambda_tt``,:math:`\partial_{\theta \theta} \lambda`,meters,"Poloidal stream function, second poloidal derivative",``desc.compute._core``
-``lambda_zz``,:math:`\partial_{\zeta \zeta} \lambda`,meters,"Poloidal stream function, second toroidal derivative",``desc.compute._core``
-``lambda_rt``,:math:`\partial_{\rho \theta} \lambda`,meters,"Poloidal stream function, second derivative wrt radius and poloidal angle",``desc.compute._core``
-``lambda_rz``,:math:`\partial_{\rho \zeta} \lambda`,meters,"Poloidal stream function, second derivative wrt radius and toroidal angle",``desc.compute._core``
-``lambda_tz``,:math:`\partial_{\theta \zeta} \lambda`,meters,"Poloidal stream function, second derivative wrt poloidal and toroidal angles",``desc.compute._core``
-``lambda_rrr``,":math:`\partial_{ho \rho \rho} \lambda`",meters,"Poloidal stream function, third radial derivative",``desc.compute._core``
-``lambda_ttt``,:math:`\partial_{\theta \theta \theta} \lambda`,meters,"Poloidal stream function, third poloidal derivative",``desc.compute._core``
-``lambda_zzz``,:math:`\partial_{\zeta \zeta \zeta} \lambda`,meters,"Poloidal stream function, third toroidal derivative",``desc.compute._core``
-``lambda_rrt``,:math:`\partial_{\rho \rho \theta} \lambda`,meters,"Poloidal stream function, third derivative, wrt radius twice and poloidal angle",``desc.compute._core``
-``lambda_rtt``,:math:`\partial_{\rho \theta \theta} \lambda`,meters,"Poloidal stream function, third derivative wrt radius and poloidal angle twice",``desc.compute._core``
-``lambda_rrz``,:math:`\partial_{\rho \rho \zeta} \lambda`,meters,"Poloidal stream function, third derivative, wrt radius twice and toroidal angle",``desc.compute._core``
-``lambda_rzz``,:math:`\partial_{\rho \zeta \zeta} \lambda`,meters,"Poloidal stream function, third derivative wrt radius and toroidal angle twice",``desc.compute._core``
-``lambda_ttz``,:math:`\partial_{\theta \theta \zeta} \lambda`,meters,"Poloidal stream function, third derivative wrt poloidal angle twice and toroidal angle",``desc.compute._core``
-``lambda_tzz``,:math:`\partial_{\theta \zeta \zeta} \lambda`,meters,"Poloidal stream function, third derivative wrt poloidal angle and toroidal angle twice",``desc.compute._core``
-``lambda_rtz``,:math:`\partial_{\rho \theta \zeta} \lambda`,meters,"Poloidal stream function, third derivative wrt radius, poloidal  angle, and toroidal angle",``desc.compute._core``
+``lambda``,:math:`\lambda`,radians,Poloidal stream function,``desc.compute._core``
+``lambda_r``,:math:`\partial_{\rho} \lambda`,radians,"Poloidal stream function, first radial derivative",``desc.compute._core``
+``lambda_t``,:math:`\partial_{\theta} \lambda`,radians,"Poloidal stream function, first poloidal derivative",``desc.compute._core``
+``lambda_z``,:math:`\partial_{\zeta} \lambda`,radians,"Poloidal stream function, first toroidal derivative",``desc.compute._core``
+``lambda_rr``,:math:`\partial_{\rho \rho} \lambda`,radians,"Poloidal stream function, second radial derivative",``desc.compute._core``
+``lambda_tt``,:math:`\partial_{\theta \theta} \lambda`,radians,"Poloidal stream function, second poloidal derivative",``desc.compute._core``
+``lambda_zz``,:math:`\partial_{\zeta \zeta} \lambda`,radians,"Poloidal stream function, second toroidal derivative",``desc.compute._core``
+``lambda_rt``,:math:`\partial_{\rho \theta} \lambda`,radians,"Poloidal stream function, second derivative wrt radius and poloidal angle",``desc.compute._core``
+``lambda_rz``,:math:`\partial_{\rho \zeta} \lambda`,radians,"Poloidal stream function, second derivative wrt radius and toroidal angle",``desc.compute._core``
+``lambda_tz``,:math:`\partial_{\theta \zeta} \lambda`,radians,"Poloidal stream function, second derivative wrt poloidal and toroidal angles",``desc.compute._core``
+``lambda_rrr``,":math:`\partial_{ho \rho \rho} \lambda`",radians,"Poloidal stream function, third radial derivative",``desc.compute._core``
+``lambda_ttt``,:math:`\partial_{\theta \theta \theta} \lambda`,radians,"Poloidal stream function, third poloidal derivative",``desc.compute._core``
+``lambda_zzz``,:math:`\partial_{\zeta \zeta \zeta} \lambda`,radians,"Poloidal stream function, third toroidal derivative",``desc.compute._core``
+``lambda_rrt``,:math:`\partial_{\rho \rho \theta} \lambda`,radians,"Poloidal stream function, third derivative, wrt radius twice and poloidal angle",``desc.compute._core``
+``lambda_rtt``,:math:`\partial_{\rho \theta \theta} \lambda`,radians,"Poloidal stream function, third derivative wrt radius and poloidal angle twice",``desc.compute._core``
+``lambda_rrz``,:math:`\partial_{\rho \rho \zeta} \lambda`,radians,"Poloidal stream function, third derivative, wrt radius twice and toroidal angle",``desc.compute._core``
+``lambda_rzz``,:math:`\partial_{\rho \zeta \zeta} \lambda`,radians,"Poloidal stream function, third derivative wrt radius and toroidal angle twice",``desc.compute._core``
+``lambda_ttz``,:math:`\partial_{\theta \theta \zeta} \lambda`,radians,"Poloidal stream function, third derivative wrt poloidal angle twice and toroidal angle",``desc.compute._core``
+``lambda_tzz``,:math:`\partial_{\theta \zeta \zeta} \lambda`,radians,"Poloidal stream function, third derivative wrt poloidal angle and toroidal angle twice",``desc.compute._core``
+``lambda_rtz``,:math:`\partial_{\rho \theta \zeta} \lambda`,radians,"Poloidal stream function, third derivative wrt radius, poloidal  angle, and toroidal angle",``desc.compute._core``
 ``J^rho``,:math:`J^{\rho}`,Amperes / cubic meter,Contravariant radial component of plasma current density,``desc.compute._equil``
 ``J^theta``,:math:`J^{\theta}`,Amperes / cubic meter,Contravariant poloidal component of plasma current density,``desc.compute._equil``
 ``J^zeta``,:math:`J^{\zeta}`,Amperes / cubic meter,Contravariant toroidal component of plasma current density,``desc.compute._equil``
-``J``,:math:`\mathbf{J}`,Amperes / cubic meter,Plasma current density,``desc.compute._equil``
-``J_R``,:math:`J_{R}`,Amperes / cubic meter,Radial componenet of plasma current density in lab frame,``desc.compute._equil``
-``J_phi``,:math:`J_{\phi}`,Amperes / cubic meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
-``J_Z``,:math:`J_{Z}`,Amperes / cubic meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
-``|J|``,:math:`|\mathbf{J}|`,Amperes / cubic meter,Magnitue of plasma current density,``desc.compute._equil``
-``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current,``desc.compute._equil``
-``J_parallel``,:math:`\mathbf{J} \cdot \mathbf{b}`,Amperes / cubic meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
+``J``,:math:`\mathbf{J}`,Amperes / square meter,Plasma current density,``desc.compute._equil``
+``J_R``,:math:`J_{R}`,Amperes / square meter,Radial componenet of plasma current density in lab frame,``desc.compute._equil``
+``J_phi``,:math:`J_{\phi}`,Amperes / square meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
+``J_Z``,:math:`J_{Z}`,Amperes / square meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
+``|J|``,:math:`|\mathbf{J}|`,Amperes / square meter,Magnitue of plasma current density,``desc.compute._equil``
+``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current (note units are not Amperes),``desc.compute._equil``
+``J_parallel``,:math:`\mathbf{J} \cdot \mathbf{b}`,Amperes / square meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
 ``div(J_perp)``,:math:`\nabla \cdot \mathbf{J}_{\perp}`,Amperes / cubic meter,Divergence of plasma current density perpendicular to magnetic field,``desc.compute._equil``
 ``F_rho``,:math:`F_{\rho}`,Newtons / square meter,Covariant radial component of force balance error,``desc.compute._equil``
 ``F_theta``,:math:`F_{\theta}`,Newtons / square meter,Covariant poloidal component of force balance error,``desc.compute._equil``
 ``F_zeta``,:math:`F_{\zeta}`,Newtons / square meter,Covariant toroidal component of force balance error,``desc.compute._equil``
-``F_beta``,:math:`F_{\beta}`,Newtons / square meter,Covariant helical component of force balance error,``desc.compute._equil``
+``F_helical``,:math:`F_{helical}`,Newtons / square meter,Covariant helical component of force balance error,``desc.compute._equil``
 ``F``,:math:`\mathbf{J} \times \mathbf{B} - \nabla p`,Newtons / cubic meter,Force balance error,``desc.compute._equil``
 ``|F|``,:math:`|\mathbf{J} \times \mathbf{B} - \nabla p|`,Newtons / cubic meter,Magnitude of force balance error,``desc.compute._equil``
 ``<|F|>_vol``,:math:`<|\mathbf{J} \times \mathbf{B} - \nabla p|>_{vol}`,Newtons / cubic meter,Volume average of magnitude of force balance error,``desc.compute._equil``
-``|beta|``,:math:`|B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta|`,Tesla / square meter,Magnitude of helical basis vector,``desc.compute._equil``
+``|e^helical|``,:math:`|B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta|`,Tesla / square meter,Magnitude of helical basis vector,``desc.compute._equil``
 ``W_B``,:math:`W_B`,Joules,Plasma magnetic energy,``desc.compute._equil``
 ``W_p``,:math:`W_p`,Joules,Plasma thermodynamic energy,``desc.compute._equil``
 ``W``,:math:`W`,Joules,Plasma total energy,``desc.compute._equil``
+``<beta>_vol``,:math:`\langle \beta \rangle_{vol}`,None,Normalized plasma pressure,``desc.compute._equil``
 ``B0``,:math:`\psi' / \sqrt{g}`,Tesla / meters,,``desc.compute._field``
 ``B^rho``,:math:`B^{\rho}`,Tesla / meters,Contravariant radial component of magnetic field,``desc.compute._field``
 ``B^theta``,:math:`B^{\theta}`,Tesla / meters,Contravariant poloidal component of magnetic field,``desc.compute._field``
@@ -169,6 +170,8 @@ Name,Label,Units,Description,Module
 ``|B|_tt``,:math:`\partial_{\theta\theta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
 ``|B|_zz``,:math:`\partial_{\zeta\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
 ``|B|_tz``,:math:`\partial_{\theta\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``<|B|>_vol``,:math:`\langle |B| \rangle_{vol}`,Tesla,Volume average magnetic field,``desc.compute._field``
+``<|B|>``,:math:`\langle |B| \rangle`,Tesla,Flux surface average magnetic field,``desc.compute._field``
 ``<B^2>``,:math:`\langle B^2 \rangle`,Tesla squared,Flux surface average magnetic field squared,``desc.compute._field``
 ``<B^2>_r``,:math:`\partial_{\rho} \langle B^2 \rangle`,Tesla squared,"Flux surface average magnetic field squared, radial derivative",``desc.compute._field``
 ``grad(|B|^2)_rho``,:math:`(\nabla B^{2})_{\rho}`,Tesla squared,Covariant radial component of magnetic pressure gradient,``desc.compute._field``
@@ -197,6 +200,14 @@ Name,Label,Units,Description,Module
 ``R0``,:math:`R_{0}`,meters,Average major radius,``desc.compute._geometry``
 ``a``,:math:`a`,meters,Average minor radius,``desc.compute._geometry``
 ``R0/a``,:math:`R_{0} / a`,None,Aspect ratio,``desc.compute._geometry``
+``n_rho``,:math:`n_{rho}`,None,Unit normal vector to constant rho surface,``desc.compute._geometry``
+``L_sff``,:math:`L_{sff}`,meters,L coefficient of second fundamental form,``desc.compute._geometry``
+``M_sff``,:math:`M_{sff}`,meters,M coefficient of second fundamental form,``desc.compute._geometry``
+``N_sff``,:math:`N_{sff}`,meters,N coefficient of second fundamental form,``desc.compute._geometry``
+``curvature_k1``,:math:`k_{1}`,Inverse meters,First principle curvature of flux surfaces,``desc.compute._geometry``
+``curvature_k2``,:math:`k_{2}`,Inverse meters,Second principle curvature of flux surfaces,``desc.compute._geometry``
+``curvature_K``,:math:`K`,meters squared,Gaussian curvature of flux surfaces,``desc.compute._geometry``
+``curvature_H``,:math:`H`,meters,Mean curvature of flux surfaces,``desc.compute._geometry``
 ``sqrt(g)``,:math:`\sqrt{g}`,cubic meters,Jacobian determinant,``desc.compute._metric``
 ``|e_theta x e_zeta|``,:math:`|e_{\theta} \times e_{\zeta}|`,square meters,2D jacobian determinant for constant rho surface,``desc.compute._metric``
 ``|e_zeta x e_rho|``,:math:`|e_{\zeta} \times e_{\rho}|`,square meters,2D jacobian determinant for constant theta surface,``desc.compute._metric``
@@ -226,8 +237,8 @@ Name,Label,Units,Description,Module
 ``|grad(theta)|``,:math:`|\nabla \theta|`,inverse meters,Magnitude of contravariant poloidal basis vector,``desc.compute._metric``
 ``|grad(zeta)|``,:math:`|\nabla \zeta|`,inverse meters,Magnitude of contravariant toroidal basis vector,``desc.compute._metric``
 ``psi``,:math:`\psi = \Psi / (2 \pi)`,Webers,Toroidal flux,``desc.compute._profiles``
-``psi_r``,:math:`\partial_{\rho} \psi' = \partial_{\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux, first radial derivative",``desc.compute._profiles``
-``psi_rr``,:math:`\partial_{\rho\rho} \psi' = \partial_{\rho\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux, second radial derivative",``desc.compute._profiles``
+``psi_r``,:math:`\partial_{\rho} \psi = \partial_{\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux, first radial derivative",``desc.compute._profiles``
+``psi_rr``,:math:`\partial_{\rho\rho} \psi = \partial_{\rho\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux, second radial derivative",``desc.compute._profiles``
 ``grad(psi)``,:math:`\nabla\psi`,Webers per meter,Toroidal flux gradient,``desc.compute._profiles``
 ``|grad(psi)|^2``,:math:`|\nabla\psi|^{2}`,Webers squared per square meter,Toroidal flux gradient magnitude squared,``desc.compute._profiles``
 ``|grad(psi)|``,:math:`|\nabla\psi|`,Webers per meter,Toroidal flux gradient magnitude,``desc.compute._profiles``
@@ -237,14 +248,14 @@ Name,Label,Units,Description,Module
 ``|grad(p)|^2``,:math:`|\nabla p|^{2}`,Newtons per cubic meter squared,Magnitude of pressure gradient squared,``desc.compute._profiles``
 ``|grad(p)|``,:math:`|\nabla p|`,Newtons per cubic meter,Magnitude of pressure gradient,``desc.compute._profiles``
 ``<|grad(p)|>_vol``,:math:`<|\nabla p|>_{vol}`,Newtons per cubic meter,Volume average of magnitude of pressure gradient,``desc.compute._profiles``
-``iota``,:math:`\iota`,None,Rotational transform,``desc.compute._profiles``
-``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform, first radial derivative",``desc.compute._profiles``
-``I``,:math:`I`,Tesla * meters,Boozer toroidal current,``desc.compute._profiles``
-``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Boozer toroidal current, derivative wrt radial coordinate",``desc.compute._profiles``
-``G``,:math:`G`,Tesla * meters,Boozer poloidal current,``desc.compute._profiles``
-``G_r``,:math:`\partial_{\rho} G`,Tesla * meters,"Boozer poloidal current, derivative wrt radial coordinate",``desc.compute._profiles``
-``current``,:math:`\frac{2\pi}{\mu_0} I`,Amperes,Net toroidal current,``desc.compute._profiles``
-``current_r``,:math:`\frac{2\pi}{\mu_0} \partial_{\rho} I`,Amperes,"Net toroidal current, derivative wrt radial coordinate",``desc.compute._profiles``
+``iota``,:math:`\iota`,None,Rotational transform (normalized by 2pi),``desc.compute._profiles``
+``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform (normalized by 2pi), first radial derivative",``desc.compute._profiles``
+``I``,:math:`I`,Tesla * meters,Boozer toroidal current enclosed by flux surfaces,``desc.compute._profiles``
+``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Boozer toroidal current enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._profiles``
+``G``,:math:`G`,Tesla * meters,Boozer poloidal current enclosed by flux surfaces,``desc.compute._profiles``
+``G_r``,:math:`\partial_{\rho} G`,Tesla * meters,"Boozer poloidal current enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._profiles``
+``current``,:math:`\frac{2\pi}{\mu_0} I`,Amperes,Net toroidal current enclosed by flux surfaces,``desc.compute._profiles``
+``current_r``,:math:`\frac{2\pi}{\mu_0} \partial_{\rho} I`,Amperes,"Net toroidal current enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._profiles``
 ``B_theta_mn``,":math:`B_{\theta, m, n}`",Tesla * meters,Fourier coefficients for covariant poloidal component of magnetic field,``desc.compute._qs``
 ``B_zeta_mn``,":math:`B_{\zeta, m, n}`",Tesla * meters,Fourier coefficients for covariant toroidal component of magnetic field,``desc.compute._qs``
 ``w_mn``,":math:`w_{m,n}`",Tesla * meters,RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``

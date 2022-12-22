@@ -26,7 +26,7 @@ def _psi(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="psi_r",
-    label="\\partial_{\\rho} \\psi' = \\partial_{\\rho} \\Psi / (2 \\pi)",
+    label="\\partial_{\\rho} \\psi = \\partial_{\\rho} \\Psi / (2 \\pi)",
     units="Wb",
     units_long="Webers",
     description="Toroidal flux, first radial derivative",
@@ -44,7 +44,7 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="psi_rr",
-    label="\\partial_{\\rho\\rho} \\psi' = \\partial_{\\rho\\rho} \\Psi / (2 \\pi)",
+    label="\\partial_{\\rho\\rho} \\psi = \\partial_{\\rho\\rho} \\Psi / (2 \\pi)",
     units="Wb",
     units_long="Webers",
     description="Toroidal flux, second radial derivative",

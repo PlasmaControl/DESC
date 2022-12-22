@@ -2516,7 +2516,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     Parameters
     ----------
     grid : Grid
-        Grid to plot.    return_data : bool
+        Grid to plot.
     return_data : bool
         if True, return the data plotted as well as fig,ax
 

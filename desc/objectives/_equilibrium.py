@@ -119,8 +119,8 @@ class ForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -169,7 +169,7 @@ class ForceBalance(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
@@ -285,8 +285,8 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -335,7 +335,7 @@ class RadialForceBalance(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
@@ -448,8 +448,8 @@ class HelicalForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -498,7 +498,7 @@ class HelicalForceBalance(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
@@ -624,8 +624,8 @@ class Energy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -673,7 +673,7 @@ class Energy(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
@@ -791,8 +791,8 @@ class CurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -838,7 +838,7 @@ class CurrentDensity(_Objective):
             "Psi": Psi,
         }
         data = compute_fun(
-            *self._data_keys,
+            self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,

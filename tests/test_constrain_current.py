@@ -57,8 +57,7 @@ class TestConstrainCurrent:
                 "Psi": eq.Psi,
             }
             data = compute_fun(
-                "iota",
-                "iota_r",
+                ["iota", "iota_r"],
                 params=params,
                 transforms=transforms,
                 profiles=profiles,

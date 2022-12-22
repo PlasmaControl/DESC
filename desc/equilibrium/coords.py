@@ -312,13 +312,13 @@ def to_sfl(
     grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
     bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
 
-    toroidal_coords = eq.compute("R", "Z", "lambda", grid=grid)
+    toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]
     vartheta = theta + toroidal_coords["lambda"]
     sfl_grid = grid
     sfl_grid.nodes[:, 1] = vartheta
 
-    bdry_coords = eq.compute("R", "Z", "lambda", grid=bdry_grid)
+    bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
     bdry_theta = bdry_grid.nodes[:, 1]
     bdry_vartheta = bdry_theta + bdry_coords["lambda"]
     bdry_sfl_grid = bdry_grid

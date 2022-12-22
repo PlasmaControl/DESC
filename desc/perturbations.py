@@ -7,10 +7,8 @@ from termcolor import colored
 
 from desc.backend import put, use_jax
 from desc.compute import arg_order
-from desc.objectives import get_fixed_boundary_constraints
-from desc.objectives.utils import align_jacobian, factorize_linear_constraints
+from desc.objectives.utils import align_arguments, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.optimize.utils import evaluate_quadratic_form_jac
 from desc.utils import Timer
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
@@ -365,17 +363,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
 def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
-    objective_f,
-    objective_g,
-    dR=False,
-    dZ=False,
-    dL=False,
-    dp=False,
-    di=False,
-    dPsi=False,
-    dRb=False,
-    dZb=False,
-    subspace=None,
+    objective,
+    constraints,
     order=2,
     tr_ratio=[0.1, 0.25],
     cutoff=None,
@@ -388,18 +377,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     ----------
     eq : Equilibrium
         Equilibrium to perturb.
-    objective_f : ObjectiveFunction
-        Objective function to satisfy.
-    objective_g : ObjectiveFunction
+    objective : ObjectiveFunction
         Objective function to optimize.
-    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
-        Array of indices of modes to include in the perturbations of R, Z, lambda,
-        pressure, rotational transform, total magnetic flux, R_boundary, and Z_boundary.
-        Setting to True (False) includes (excludes) all modes.
-    subspace : ndarray, optional
-        Transform matrix to give a subspace from the full parameter space.
-        Can be used to enforce custom optimization constraints.
-    order : {0,1,2,3}
+    constraints : tuple of Objective, optional
+        List of objectives to be used as constraints during optimization.
+    order : {0,1,2}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
         Radius of the trust region, as a fraction of ||x||.
@@ -428,6 +410,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 "yellow",
             )
         )
+
     if np.isscalar(tr_ratio):
         tr_ratio = tr_ratio * np.ones(order)
     elif len(tr_ratio) < order:
@@ -437,269 +420,82 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             )
         )
 
-    if not objective_f.built:
-        objective_f.build(eq, verbose=verbose)
-    if not objective_g.built:
-        objective_g.build(eq, verbose=verbose)
+    if not objective.built:
+        objective.build(eq, verbose=verbose)
+    for constraint in constraints:
+        if not constraint.built:
+            constraint.build(eq, verbose=verbose)
 
-    deltas = {}
-    if type(dR) is bool or dR is None:
-        if dR is True:
-            deltas["R_lmn"] = np.ones((objective_f.dimensions["R_lmn"],), dtype=bool)
-    elif np.any(dR):
-        deltas["R_lmn"] = dR
-    if type(dZ) is bool or dZ is None:
-        if dZ is True:
-            deltas["Z_lmn"] = np.ones((objective_f.dimensions["Z_lmn"],), dtype=bool)
-    elif np.any(dZ):
-        deltas["Z_lmn"] = dZ
-    if type(dL) is bool or dL is None:
-        if dL is True:
-            deltas["L_lmn"] = np.ones((objective_f.dimensions["L_lmn"],), dtype=bool)
-    elif np.any(dL):
-        deltas["L_lmn"] = dL
-    if type(dp) is bool or dp is None:
-        if dp is True:
-            deltas["p_l"] = np.ones((objective_f.dimensions["p_l"],), dtype=bool)
-    elif np.any(dp):
-        deltas["p_l"] = dp
-    if type(di) is bool or di is None:
-        if di is True:
-            deltas["i_l"] = np.ones((objective_f.dimensions["i_l"],), dtype=bool)
-    elif np.any(di):
-        deltas["i_l"] = di
-    if type(dPsi) is bool or dPsi is None:
-        if dPsi is True:
-            deltas["Psi"] = np.ones((objective_f.dimensions["Psi"],), dtype=bool)
-    if type(dRb) is bool or dRb is None:
-        if dRb is True:
-            deltas["Rb_lmn"] = np.ones((objective_f.dimensions["Rb_lmn"],), dtype=bool)
-    elif np.any(dRb):
-        deltas["Rb_lmn"] = dRb
-    if type(dZb) is bool or dZb is None:
-        if dZb is True:
-            deltas["Zb_lmn"] = np.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
-    elif np.any(dZb):
-        deltas["Zb_lmn"] = dZb
+    _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints, objective.args + ["Rb_lmn", "Zb_lmn"]  # FIXME: generalize
+    )
 
-    if not len(deltas):
+    if False:
         raise ValueError("At least one input must be a free variable for optimization.")
 
     if verbose > 0:
-        print("Perturbing {}".format(", ".join(deltas.keys())))
+        print("Perturbing which variables?")  # FIXME: fix
 
     timer = Timer()
     timer.start("Total perturbation")
 
-    # parameter vector
-    c = np.array([])
-    c_idx = np.array([], dtype=bool)
-    for key, value in deltas.items():
-        c_idx = np.append(c_idx, np.where(value)[0] + c.size)
-        c = np.concatenate((c, getattr(eq, key)))
-    c_norm = np.linalg.norm(c)
-
-    # optimization subspace matrix
-    if subspace is None:
-        subspace = np.eye(c.size)[:, c_idx]
-    dim_c, dim_opt = subspace.shape
-
-    if dim_c != c.size:
-        raise ValueError(
-            "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
-        )
-    if verbose > 0:
-        print("Number of parameters: {}".format(dim_opt))
-        print("Number of objectives: {}".format(objective_g.dim_f))
-
-    # FIXME: generalize to other constraints
-    constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
-    for constraint in constraints:
-        if not constraint.built:
-            constraint.build(eq, verbose=verbose)
-    (
-        xp,
-        A,
-        Ainv,
-        b,
-        Z,
-        unfixed_idx,
-        project,
-        recover,
-    ) = factorize_linear_constraints(constraints, objective_f.args)
-
-    # state vector
-    xf = objective_f.x(eq)
-    xg = objective_g.x(eq)
-
-    x_reduced = project(xf)
-    x_norm = np.linalg.norm(x_reduced)
-
     # perturbation vectors
-    dc1 = 0
-    dc2 = 0
     dx1_reduced = 0
     dx2_reduced = 0
 
-    # dx/dx_reduced
-    dxdx_reduced = np.eye(objective_f.dim_x)[:, unfixed_idx] @ Z
-
-    # dx/dc
-    dxdc = np.zeros((objective_f.dim_x, 0))
-    if len(
-        [
-            arg
-            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi")
-            if arg in deltas.keys()
-        ]
-    ):
-        x_idx = np.concatenate(
-            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
-        )
-        x_idx.sort(kind="mergesort")
-        dxdc = np.eye(objective_f.dim_x)[:, x_idx]
-    if "Rb_lmn" in deltas.keys():
-        dxdRb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv["R_lmn"]
-        dxdc = np.hstack((dxdc, dxdRb))
-    if "Zb_lmn" in deltas.keys():
-        dxdZb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv["Z_lmn"]
-        dxdc = np.hstack((dxdc, dxdZb))
+    if verbose > 0:
+        print("Number of parameters: {}".format(Z.shape[-1]))
+        print("Number of objectives: {}".format(objective.dim_f))
 
     # 1st order
     if order > 0:
 
-        f = objective_f.compute(xf)
-        g = objective_g.compute(xg)
+        x_obj = objective.x(eq)
+        f = objective.compute(x_obj)
 
-        # 1st partial derivatives of f objective wrt both x and c
+        # Jacobian matrix df/dx
         if verbose > 0:
-            print("Computing df")
-        timer.start("df computation")
-        Fx = objective_f.jac(xf)
-        Fx = align_jacobian(Fx, objective_f, objective_g)
-        Fx_reduced = Fx[:, unfixed_idx] @ Z
-        Fc = Fx @ dxdc
-        if cutoff is None:
-            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
-        Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
-        timer.stop("df computation")
+            print("Computing df/dx")
+        timer.start("df/dx computation")
+        Fx = objective.jac(x_obj)
+        timer.stop("df/dx computation")
         if verbose > 1:
-            timer.disp("df computation")
+            timer.disp("df/dx computation")
 
-        # 1st partial derivatives of g objective wrt both x and c
-        if verbose > 0:
-            print("Computing dg")
-        timer.start("dg computation")
-        Gx = objective_g.jac(xg)
-        Gx = align_jacobian(Gx, objective_g, objective_f)
-        Gx_reduced = Gx[:, unfixed_idx] @ Z
-        Gc = Gx @ dxdc
-        timer.stop("dg computation")
-        if verbose > 1:
-            timer.disp("dg computation")
+        # FIXME: generalize arguments
+        Fx, x_idx = align_arguments(Fx, objective, ["Rb_lmn", "Zb_lmn"])
+        Fx_reduced = np.dot(Fx[:, unfixed_idx], Z)
 
-        GxFx = Gx_reduced @ Fx_reduced_inv
-        LHS = GxFx @ Fc - Gc
-        RHS_1g = g - GxFx @ f
-
-        # restrict to optimization subspace
-        LHS_opt = LHS @ subspace
+        x = np.zeros((Fx.shape[-1],))
+        for key, value in x_idx.items():
+            x[value] = getattr(eq, key)
+        x_reduced = project(x)
+        x_reduced_norm = np.linalg.norm(x_reduced)
 
         if verbose > 0:
             print("Factoring LHS")
         timer.start("LHS factorization")
-        ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
+        u, s, vt = np.linalg.svd(Fx_reduced, full_matrices=False)
         timer.stop("LHS factorization")
         if verbose > 1:
             timer.disp("LHS factorization")
 
-        dc1_opt, bound_hit, alpha = trust_region_step_exact_svd(
-            -RHS_1g,
-            ug,
-            sg,
-            vtg.T,
-            tr_ratio[0] * c_norm,
+        # TODO: add scaling, see optimizer example
+        dx1_reduced, bound_hit, alpha = trust_region_step_exact_svd(
+            f,
+            u,
+            s,
+            vt.T,
+            tr_ratio[0] * x_reduced_norm,
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
             threshold=1e-6,
         )
-
-        dc1 = dc1_opt @ subspace.T
-        RHS_1f = -f - Fc @ dc1
-        uf, sf, vtf = np.linalg.svd(Fx_reduced, full_matrices=False)
-
-        dx1_reduced, _, _ = trust_region_step_exact_svd(
-            -RHS_1f,
-            uf,
-            sf,
-            vtf.T,
-            tr_ratio[0] * x_norm,
-            initial_alpha=None,
-            rtol=0.01,
-            max_iter=10,
-            threshold=1e-6,
-        )
-
-        print(dc1_opt)
 
     # 2nd order
     if order > 1:
-
-        idx = np.array([], dtype=int)
-        for arg in objective_f.args:
-            if arg not in objective_g.args:
-                idx = np.concatenate((idx, objective_f.x_idx[arg]))
-        dxf_dxg = np.delete(np.eye(objective_f.dim_x), idx, 1)
-
-        # 2nd partial derivatives of f objective wrt both x and c
-        if verbose > 0:
-            print("Computing d^2f")
-        timer.start("d^2f computation")
-        tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
-        RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), xf)
-        timer.stop("d^2f computation")
-        if verbose > 1:
-            timer.disp("d^2f computation")
-
-        # 2nd partial derivatives of g objective wrt both x and c
-        if verbose > 0:
-            print("Computing d^2g")
-        timer.start("d^2g computation")
-        tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
-        RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
-        timer.stop("d^2g computation")
-        if verbose > 1:
-            timer.disp("d^2g computation")
-
-        dc2_opt, _, _ = trust_region_step_exact_svd(
-            -RHS_2g,
-            ug,
-            sg,
-            vtg.T,
-            tr_ratio[1] * np.linalg.norm(dc1_opt),
-            initial_alpha=None,
-            rtol=0.01,
-            max_iter=10,
-            threshold=1e-6,
-        )
-
-        dc2 = dc2_opt @ subspace.T
-        RHS_2f += -Fc @ dc2
-
-        dx2_reduced, _, _ = trust_region_step_exact_svd(
-            -RHS_2f,
-            uf,
-            sf,
-            vtf.T,
-            tr_ratio[1] * np.linalg.norm(dx1_reduced),
-            initial_alpha=None,
-            rtol=0.01,
-            max_iter=10,
-            threshold=1e-6,
-        )
-
-        print(dc2_opt)
+        pass
 
     if order > 2:
         raise ValueError(
@@ -711,40 +507,18 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     else:
         eq_new = eq
 
-    dc = dc1 + dc2
-    dc_opt = dc @ subspace
-
-    # update perturbation attributes
-    idx0 = 0
-    for key, value in deltas.items():
-        setattr(eq_new, key, getattr(eq_new, key) + dc[idx0 : idx0 + len(value)])
-        idx0 += len(value)
-    for constraint in constraints:
-        constraint.update_target(eq_new)
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, objective_f.args
-    )
-
-    # update other attributes
+    # update equilibrium attributes
     dx_reduced = dx1_reduced + dx2_reduced
     x_new = recover(x_reduced + dx_reduced)
-    args = objective_f.unpack_state(x_new)
-    for key, value in args.items():
-        if key not in deltas:
-            value = put(  # parameter values below threshold are set to 0
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
-            )
-            # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value.size:
-                setattr(eq_new, key, value)
-
-    predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
+    for key, value in x_idx.items():
+        if len(value):
+            setattr(eq_new, key, x_new[value])
 
     timer.stop("Total perturbation")
     if verbose > 0:
-        print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+        print("||dx||/||x|| = {:10.3e}".format(
+            np.linalg.norm(dx_reduced) / x_reduced_norm))
     if verbose > 1:
         timer.disp("Total perturbation")
 
-    return eq_new, predicted_reduction, dc_opt, dc, c_norm, bound_hit
+    return eq_new

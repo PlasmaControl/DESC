@@ -875,8 +875,8 @@ def _Y(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda",
     label="\\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function",
     dim=1,
     params=["L_lmn"],
@@ -893,8 +893,8 @@ def _lambda(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_r",
     label="\\partial_{\\rho} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, first radial derivative",
     dim=1,
     params=["L_lmn"],
@@ -911,8 +911,8 @@ def _lambda_r(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_t",
     label="\\partial_{\\theta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, first poloidal derivative",
     dim=1,
     params=["L_lmn"],
@@ -929,8 +929,8 @@ def _lambda_t(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_z",
     label="\\partial_{\\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, first toroidal derivative",
     dim=1,
     params=["L_lmn"],
@@ -947,8 +947,8 @@ def _lambda_z(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rr",
     label="\\partial_{\\rho \\rho} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, second radial derivative",
     dim=1,
     params=["L_lmn"],
@@ -965,8 +965,8 @@ def _lambda_rr(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_tt",
     label="\\partial_{\\theta \\theta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, second poloidal derivative",
     dim=1,
     params=["L_lmn"],
@@ -983,8 +983,8 @@ def _lambda_tt(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_zz",
     label="\\partial_{\\zeta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, second toroidal derivative",
     dim=1,
     params=["L_lmn"],
@@ -1001,8 +1001,8 @@ def _lambda_zz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rt",
     label="\\partial_{\\rho \\theta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, second derivative wrt radius and "
     + "poloidal angle",
     dim=1,
@@ -1020,8 +1020,8 @@ def _lambda_rt(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rz",
     label="\\partial_{\\rho \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, second derivative wrt radius and "
     + "toroidal angle",
     dim=1,
@@ -1039,8 +1039,8 @@ def _lambda_rz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_tz",
     label="\\partial_{\\theta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, second derivative wrt poloidal and "
     + "toroidal angles",
     dim=1,
@@ -1058,8 +1058,8 @@ def _lambda_tz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rrr",
     label="\\partial_{\rho \\rho \\rho} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third radial derivative",
     dim=1,
     params=["L_lmn"],
@@ -1076,8 +1076,8 @@ def _lambda_rrr(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_ttt",
     label="\\partial_{\\theta \\theta \\theta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third poloidal derivative",
     dim=1,
     params=["L_lmn"],
@@ -1094,8 +1094,8 @@ def _lambda_ttt(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_zzz",
     label="\\partial_{\\zeta \\zeta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third toroidal derivative",
     dim=1,
     params=["L_lmn"],
@@ -1112,8 +1112,8 @@ def _lambda_zzz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rrt",
     label="\\partial_{\\rho \\rho \\theta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative, wrt radius twice "
     + "and poloidal angle",
     dim=1,
@@ -1131,8 +1131,8 @@ def _lambda_rrt(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rtt",
     label="\\partial_{\\rho \\theta \\theta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative wrt radius and "
     + "poloidal angle twice",
     dim=1,
@@ -1150,8 +1150,8 @@ def _lambda_rtt(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rrz",
     label="\\partial_{\\rho \\rho \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative, wrt radius twice "
     + "and toroidal angle",
     dim=1,
@@ -1169,8 +1169,8 @@ def _lambda_rrz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rzz",
     label="\\partial_{\\rho \\zeta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative wrt radius and "
     + "toroidal angle twice",
     dim=1,
@@ -1188,8 +1188,8 @@ def _lambda_rzz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_ttz",
     label="\\partial_{\\theta \\theta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative wrt poloidal angle "
     + "twice and toroidal angle",
     dim=1,
@@ -1207,8 +1207,8 @@ def _lambda_ttz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_tzz",
     label="\\partial_{\\theta \\zeta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative wrt poloidal angle "
     + "and toroidal angle twice",
     dim=1,
@@ -1226,8 +1226,8 @@ def _lambda_tzz(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="lambda_rtz",
     label="\\partial_{\\rho \\theta \\zeta} \\lambda",
-    units="m",
-    units_long="meters",
+    units="rad",
+    units_long="radians",
     description="Poloidal stream function, third derivative wrt radius, poloidal "
     + " angle, and toroidal angle",
     dim=1,

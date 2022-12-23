@@ -441,16 +441,17 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
-    if "r" == data_index[name]["function_of"]:
+    default_L = 100
+    if data_index[name]["function_of"] == "r":
         if grid is None:
-            return plot_fsa(eq, name, log=log, ax=ax, **kwargs)
+            return plot_fsa(eq, name, rho=default_L, log=log, ax=ax, **kwargs)
         rho = grid.nodes[:, 0]
         if not np.all(np.isclose(rho, rho[0])):
             # rho nodes are not constant, so user must be plotting against rho
             return plot_fsa(eq, name, rho=rho, log=log, ax=ax, **kwargs)
 
     if grid is None:
-        grid_kwargs = {"L": 100, "NFP": eq.NFP}
+        grid_kwargs = {"L": default_L, "NFP": eq.NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 1:
@@ -878,7 +879,11 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.linspace(1 / rho, 1, rho)
+        if data_index[name]["function_of"] == "r":
+            # OK to plot origin for most quantities denoted as functions of rho
+            rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
+        else:
+            rho = np.linspace(1 / rho, 1, rho)
     else:
         rho = np.atleast_1d(rho)
     if M is None:
@@ -894,7 +899,7 @@ def plot_fsa(
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
-    if "r" != data_index[name]["function_of"]:
+    if data_index[name]["function_of"] != "r":
         # If the quantity (values) is a surface function, averaging it again
         # has no effect, regardless of whether sqrt(g) is used. This condition
         # just avoids unnecessary computation.
@@ -933,7 +938,11 @@ def plot_fsa(
     ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
 
     label = label.split("~")
-    label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+    if data_index[name]["function_of"] == "r":
+        # Quantity was not surface averaged again. Avoid <> around labels.
+        label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
+    else:
+        label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)

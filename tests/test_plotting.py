@@ -65,7 +65,7 @@ def test_1d_fsa_consistency(SOLOVEV):
     """Test that plot_1d uses 2d grid to compute quantities with surface averages."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     _, ax_0 = plot_1d(eq, "magnetic well")
-    _, ax_1 = plot_fsa(eq, "magnetic well")
+    _, ax_1 = plot_fsa(eq, "magnetic well", rho=100)
     np.testing.assert_allclose(ax_0.lines[0].get_xydata(), ax_1.lines[0].get_xydata())
 
     rho = np.linspace(0, 1, 30)

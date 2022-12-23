@@ -104,9 +104,6 @@ class FixBoundaryR(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.R_basis.modes
             idx = np.arange(eq.surface.R_basis.num_modes)
-            self._internal_idx = idx
-
-            self._internal_modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -118,12 +115,7 @@ class FixBoundaryR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            idx.sort()
-            modes_idx.sort()
-            self._internal_modes = modes
-            self._internal_idx = idx
-
-            self._internal_modes_idx = modes_idx
+            modes = eq.surface.R_basis.modes[idx, :]
 
             if idx.size < modes.shape[0]:
                 warnings.warn(

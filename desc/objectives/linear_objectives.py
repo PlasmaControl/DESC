@@ -127,7 +127,7 @@ class FixBoundaryR(_Objective):
                         "yellow",
                     )
                 )
-
+        self._dim_f = idx.size
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
             for i, (l, m, n) in enumerate(eq.R_basis.modes):

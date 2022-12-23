@@ -28,12 +28,12 @@ from desc.plotting import (
     plot_comparison,
     plot_field_lines_sfl,
     plot_fsa,
-    plot_tsa,
     plot_grid,
     plot_logo,
     plot_qs_error,
     plot_section,
     plot_surfaces,
+    plot_tsa,
 )
 
 tol_1d = 7.8

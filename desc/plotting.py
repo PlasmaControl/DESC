@@ -899,8 +899,10 @@ def plot_tsa(
     ax=None,
     **kwargs,
 ):
-    """Plot theta surface averages of quantities. This is like an unweighted
-    flux surface average - the integrals lack the 3-D jacobean factor.
+    """Plot theta surface averages of quantities.
+
+    This is like an unweighted flux surface average - the integrals lack the
+    3-D jacobean factor.
 
     Parameters
     ----------

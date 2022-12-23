@@ -115,7 +115,8 @@ class FixBoundaryR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.surface.modes and eq.surface.R_lmn
+            # rearrange modes to match order of eq.surface.R_basis.modes
+            # and eq.surface.R_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = eq.surface.R_basis.modes[idx, :]
 
@@ -128,6 +129,7 @@ class FixBoundaryR(_Objective):
                     )
                 )
         self._dim_f = idx.size
+
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
             for i, (l, m, n) in enumerate(eq.R_basis.modes):
@@ -265,6 +267,11 @@ class FixBoundaryZ(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.surface.Z_basis.modes
+            # and eq.surface.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = eq.surface.Z_basis.modes[idx, :]
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -293,7 +300,7 @@ class FixBoundaryZ(_Objective):
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
+        if self.weight.size == modes.shape[0] and self.weight.size > 1:
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed

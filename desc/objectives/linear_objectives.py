@@ -150,6 +150,9 @@ class FixBoundaryR(_Objective):
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0] and self.weight.size > 1:
             self.weight = self._weight[modes_idx]
+        elif self.weight.size == modes.shape[0] and self.weight != np.array(1):
+            # catch if weight is array of size 1 but not default weight
+            self.weight = self._weight
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
@@ -302,6 +305,9 @@ class FixBoundaryZ(_Objective):
             self.target = self._target[modes_idx]
         if self.weight.size == modes.shape[0] and self.weight.size > 1:
             self.weight = self._weight[modes_idx]
+        elif self.weight.size == modes.shape[0] and self.weight != np.array(1):
+            # catch if weight is array of size 1 but not default weight
+            self.weight = self._weight
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:

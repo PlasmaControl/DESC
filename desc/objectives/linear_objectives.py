@@ -115,6 +115,8 @@ class FixBoundaryR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.surface.modes and eq.surface.R_lmn
+            # necessary so that the A matrix rows match up with the target b
             modes = eq.surface.R_basis.modes[idx, :]
 
             if idx.size < modes.shape[0]:
@@ -125,8 +127,6 @@ class FixBoundaryR(_Objective):
                         "yellow",
                     )
                 )
-        self._internal_modes = modes
-        self._dim_f = idx.size
 
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -146,14 +146,12 @@ class FixBoundaryR(_Objective):
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-            print("using provided target as target!")
         if self.weight.size == modes.shape[0] and self.weight.size > 1:
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.R_lmn[idx]
-            print("using surface modes as tareget")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

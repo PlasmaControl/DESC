@@ -1,16 +1,21 @@
 """Tests for linear constraints and objectives."""
-
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
+from desc.io import load
 from desc.objectives import (
+    AspectRatio,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
     FixIota,
     FixLambdaGauge,
+    ObjectiveFunction,
+    QuasisymmetryTwoTerm,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -180,3 +185,132 @@ def test_build_init():
     A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
+
+
+@pytest.mark.unit
+def test_correct_indexing_passed_modes():
+    """Test Indexing when passing in specified modes, related to gh issue #380."""
+    n = 1
+
+    eq = load(".//tests//inputs//precise_QH_step0.h5")[0]
+
+    grid = LinearGrid(
+        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+    )
+
+    objective = ObjectiveFunction(
+        (
+            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(target=8, weight=1e2),
+        ),
+        verbose=0,
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > n + 1, :
+            ],
+        )
+    )
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
+    ]
+    Z_modes = True
+    constraints = (
+        FixBoundaryR(modes=R_modes, fixed_boundary=True, normalize=False),
+        FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),
+    )
+    for con in constraints:
+        con.build(eq, verbose=0)
+    objective.build(eq)
+    from desc.objectives.utils import factorize_linear_constraints
+
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints,
+        objective.args,
+    )
+
+    from scipy.linalg import block_diag
+
+    from desc.compute import arg_order
+
+    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
+    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+
+    x1 = objective.x(eq)
+    x2 = recover(project(x1))
+
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=1e-15)
+
+
+@pytest.mark.unit
+def test_correct_indexing_passed_modes_and_passed_target():
+    """Test Indexing when passing in specified modes, related to gh issue #380."""
+    n = 1
+
+    eq = load(".//tests//inputs//precise_QH_step0.h5")[0]
+
+    grid = LinearGrid(
+        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+    )
+
+    objective = ObjectiveFunction(
+        (
+            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(target=8, weight=1e2),
+        ),
+        verbose=0,
+    )
+    R_modes = np.vstack(
+        (
+            [0, 0, 0],
+            eq.surface.R_basis.modes[
+                np.max(np.abs(eq.surface.R_basis.modes), 1) > n + 1, :
+            ],
+        )
+    )
+    idxs = []
+    for mode in R_modes:
+        idxs.append(eq.surface.R_basis.get_idx(*mode))
+    target_R = eq.surface.R_lmn[idxs]
+
+    Z_modes = eq.surface.Z_basis.modes[
+        np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
+    ]
+    Z_modes = True
+    constraints = (
+        FixBoundaryR(
+            modes=R_modes, fixed_boundary=True, normalize=False, target=target_R
+        ),
+        FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),
+    )
+    for con in constraints:
+        con.build(eq, verbose=0)
+    objective.build(eq)
+    from desc.objectives.utils import factorize_linear_constraints
+
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints,
+        objective.args,
+    )
+
+    from scipy.linalg import block_diag
+
+    from desc.compute import arg_order
+
+    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
+    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+
+    x1 = objective.x(eq)
+    x2 = recover(project(x1))
+
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=1e-15)

@@ -104,6 +104,9 @@ class FixBoundaryR(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.R_basis.modes
             idx = np.arange(eq.surface.R_basis.num_modes)
+            self._internal_idx = idx
+
+            self._internal_modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -115,6 +118,13 @@ class FixBoundaryR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            idx.sort()
+            modes_idx.sort()
+            self._internal_modes = modes
+            self._internal_idx = idx
+
+            self._internal_modes_idx = modes_idx
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -123,7 +133,7 @@ class FixBoundaryR(_Objective):
                         "yellow",
                     )
                 )
-
+        self._internal_modes = modes
         self._dim_f = idx.size
 
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
@@ -144,12 +154,14 @@ class FixBoundaryR(_Objective):
         # use given targets and weights if specified
         if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
+            print("using provided target as target!")
+        if self.weight.size == modes.shape[0] and self.weight.size > 1:
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.R_lmn[idx]
+            print("using surface modes as tareget")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

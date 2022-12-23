@@ -28,6 +28,7 @@ from desc.plotting import (
     plot_comparison,
     plot_field_lines_sfl,
     plot_fsa,
+    plot_tsa,
     plot_grid,
     plot_logo,
     plot_qs_error,
@@ -61,17 +62,27 @@ def test_1d_p(SOLOVEV):
 
 @pytest.mark.unit
 @pytest.mark.solve
-def test_1d_fsa_consistency(SOLOVEV):
+def test_1d_surface_averages_consistency(SOLOVEV):
     """Test that plot_1d uses 2d grid to compute quantities with surface averages."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    _, ax_0 = plot_1d(eq, "magnetic well")
-    _, ax_1 = plot_fsa(eq, "magnetic well", rho=100)
-    np.testing.assert_allclose(ax_0.lines[0].get_xydata(), ax_1.lines[0].get_xydata())
 
-    rho = np.linspace(0, 1, 30)
-    _, ax_2 = plot_1d(eq, "current", grid=LinearGrid(rho=rho))
-    _, ax_3 = plot_fsa(eq, "current", rho=rho)
-    np.testing.assert_allclose(ax_2.lines[0].get_xydata(), ax_3.lines[0].get_xydata())
+    def test(plot_function, name, grid=None):
+        if grid is None:
+            _, ax_0 = plot_1d(eq, name)
+            _, ax_1 = plot_function(eq, name, rho=100)  # 100 is plot_1d default
+        else:
+            _, ax_0 = plot_1d(eq, name, grid=grid)
+            _, ax_1 = plot_function(eq, name, rho=grid.nodes[:, 0])
+
+        np.testing.assert_allclose(
+            ax_0.lines[0].get_xydata(), ax_1.lines[0].get_xydata(), err_msg=name
+        )
+
+    lg = LinearGrid(rho=np.linspace(0, 1, 30))
+    test(plot_fsa, "magnetic well")
+    test(plot_fsa, "magnetic well", grid=lg)
+    test(plot_tsa, "current")
+    test(plot_tsa, "current", grid=lg)
 
 
 @pytest.mark.unit

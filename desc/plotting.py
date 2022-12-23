@@ -32,6 +32,7 @@ __all__ = [
     "plot_coefficients",
     "plot_comparison",
     "plot_fsa",
+    "plot_tsa",
     "plot_grid",
     "plot_logo",
     "plot_qs_error",
@@ -165,7 +166,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         else:
             raise TypeError(
                 colored(
-                    "ax agument must be None or an axis instance or array of axes",
+                    "ax argument must be None or an axis instance or array of axes",
                     "red",
                 )
             )
@@ -436,7 +437,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
         plot_1d(eq, 'p')
 
     """
-    # If the quantity is a flux surface function, call plot_fsa instead.
+    # If the quantity is a flux surface function, call plot_surface_averages.
     # This is done because the computation of some quantities relies on a
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
@@ -444,11 +445,13 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, **kwargs):
     default_L = 100
     if data_index[name]["function_of"] == "r":
         if grid is None:
-            return plot_fsa(eq, name, rho=default_L, log=log, ax=ax, **kwargs)
+            return _plot_surface_averages(
+                eq, name, rho=default_L, log=log, ax=ax, **kwargs
+            )
         rho = grid.nodes[:, 0]
         if not np.all(np.isclose(rho, rho[0])):
             # rho nodes are not constant, so user must be plotting against rho
-            return plot_fsa(eq, name, rho=rho, log=log, ax=ax, **kwargs)
+            return _plot_surface_averages(eq, name, rho=rho, log=log, ax=ax, **kwargs)
 
     if grid is None:
         grid_kwargs = {"L": default_L, "NFP": eq.NFP}
@@ -805,7 +808,6 @@ def plot_3d(eq, name, grid=None, log=False, all_field_periods=True, ax=None, **k
 def plot_fsa(
     eq,
     name,
-    use_sqrt_g=True,
     log=False,
     rho=20,
     M=None,
@@ -822,12 +824,6 @@ def plot_fsa(
         Object from which to plot.
     name : str
         Name of variable to plot.
-    use_sqrt_g : bool, optional
-        Whether to weight the flux surface average with the 3-D jacobean.
-        Note that this boolean has no effect for quantities which are defined
-        as surface functions, such as the rotational transform. This boolean
-        will affect plots of quantities which are not defined as surface
-        functions, such as the magnetic field magnitude.
     log : bool, optional
         Whether to use a log scale.
     rho : int or array-like
@@ -878,6 +874,131 @@ def plot_fsa(
         fig, ax = plot_fsa(eq, "B_theta")
 
     """
+    return _plot_surface_averages(
+        eq=eq,
+        name=name,
+        use_sqrt_g=True,
+        log=log,
+        rho=rho,
+        M=M,
+        N=N,
+        norm_F=norm_F,
+        ax=ax,
+        **kwargs,
+    )
+
+
+def plot_tsa(
+    eq,
+    name,
+    log=False,
+    rho=20,
+    M=None,
+    N=None,
+    norm_F=False,
+    ax=None,
+    **kwargs,
+):
+    """Plot theta surface averages of quantities. This is like an unweighted
+    flux surface average - the integrals lack the 3-D jacobean factor.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Object from which to plot.
+    name : str
+        Name of variable to plot.
+    log : bool, optional
+        Whether to use a log scale.
+    rho : int or array-like
+        Values of rho to plot contours of.
+        If an integer, plot that many contours linearly spaced in (0,1).
+    M : int, optional
+        Poloidal grid resolution. Default is eq.M_grid.
+    N : int, optional
+        Toroidal grid resolution. Default is eq.N_grid.
+    norm_F : bool, optional
+        Whether to normalize a plot of force error to be unitless.
+        Vacuum equilibria are normalized by the volume average of the gradient
+        of magnetic pressure, while finite beta equilibria are normalized by the
+        volume average of the pressure gradient.
+    ax : matplotlib AxesSubplot, optional
+        Axis to plot on.
+    **kwargs : fig,ax and plotting properties
+        Specify properties of the figure, axis, and plot appearance e.g.::
+
+            plot_X(figsize=(4,6),label="your_label")
+
+        Valid keyword arguments are:
+
+        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
+        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
+            element to plot. Default is the norm of the vector.
+        label: str, label of the plotted line (e.g. to be shown with ax.legend())
+        xlabel_fontsize: float, fontsize of the xlabel
+        ylabel_fontsize: float, fontsize of the ylabel
+        linecolor: str or tuple, color to use for plot line
+        ls: str, linestyle to use for plot line
+        lw: float, linewidth to use for plot line
+
+    Returns
+    -------
+    fig : matplotlib.figure.Figure
+        Figure being plotted to.
+    ax : matplotlib.axes.Axes or ndarray of Axes
+        Axes being plotted to.
+
+    Examples
+    --------
+    .. image:: ../../_static/images/plotting/plot_tsa.png
+
+    .. code-block:: python
+
+        from desc.plotting import plot_tsa
+        fig, ax = plot_tsa(eq, "B_theta")
+
+    """
+    return _plot_surface_averages(
+        eq=eq,
+        name=name,
+        use_sqrt_g=False,
+        log=log,
+        rho=rho,
+        M=M,
+        N=N,
+        norm_F=norm_F,
+        ax=ax,
+        **kwargs,
+    )
+
+
+def _plot_surface_averages(
+    eq,
+    name,
+    use_sqrt_g=True,
+    log=False,
+    rho=20,
+    M=None,
+    N=None,
+    norm_F=False,
+    ax=None,
+    **kwargs,
+):
+    """Plot surface averages of quantities.
+
+    Parameters
+    ----------
+    use_sqrt_g : bool
+        Whether to weight the surface average with sqrt(g), the 3-D jacobian.
+
+        The weighted surface average is also known as a flux surface average.
+        The unweighted surface average is also known as a theta surface average.
+
+        Note that this boolean has no effect for quantities which are defined
+        as surface functions because averaging such functions is the identity
+        operation.
+
+    """
     if np.isscalar(rho) and (int(rho) == rho):
         if data_index[name]["function_of"] == "r":
             # OK to plot origin for most quantities denoted as functions of rho
@@ -899,15 +1020,23 @@ def plot_fsa(
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
-    if data_index[name]["function_of"] != "r":
-        # If the quantity (values) is a surface function, averaging it again
-        # has no effect, regardless of whether sqrt(g) is used. This condition
-        # just avoids unnecessary computation.
-        if use_sqrt_g:
-            sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-            values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
-        else:
-            values = surface_averages(grid, q=values)
+    label = label.split("~")
+    if data_index[name]["function_of"] == "r":
+        # If the quantity is a surface function, averaging it again has no
+        # effect, regardless of whether sqrt(g) is used.
+        # So we avoid surface averaging it and forgo the <> around the label.
+        label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
+    elif use_sqrt_g:
+        # flux surface average
+        label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+        values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
+    else:
+        # theta surface average
+        label = (
+            r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
+        )
+        values = surface_averages(grid, q=values)
     values = compress(grid, values)
 
     if norm_F:
@@ -935,14 +1064,7 @@ def plot_fsa(
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
         len(kwargs) == 0
-    ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
-
-    label = label.split("~")
-    if data_index[name]["function_of"] == "r":
-        # Quantity was not surface averaged again. Avoid <> around labels.
-        label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
-    else:
-        label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+    ), f"plot_surface_averages got unexpected keyword argument: {kwargs.keys()}"
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)

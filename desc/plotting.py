@@ -1858,60 +1858,34 @@ def plot_comparison(
     ]:
         plot_data[string] = []
     for i, eq in enumerate(eqs):
-        if return_data:
-            fig, ax, _plot_data = plot_surfaces(
-                eq,
-                rho,
-                theta,
-                zeta,
-                ax,
-                theta_color=colors[i % len(colors)],
-                theta_ls=linestyles[i % len(linestyles)],
-                theta_lw=lws[i % len(lws)],
-                rho_color=colors[i % len(colors)],
-                rho_ls=linestyles[i % len(linestyles)],
-                rho_lw=lws[i % len(lws)],
-                lcfs_color=colors[i % len(colors)],
-                lcfs_ls=linestyles[i % len(linestyles)],
-                lcfs_lw=lws[i % len(lws)],
-                axis_color=colors[i % len(colors)],
-                axis_alpha=0,
-                axis_marker="o",
-                axis_size=0,
-                label=labels[i % len(labels)],
-                title_font_size=title_font_size,
-                xlabel_fontsize=xlabel_fontsize,
-                ylabel_fontsize=ylabel_fontsize,
-                return_data=return_data,
-            )
-            for key in _plot_data.keys():
-                plot_data[key].append(_plot_data[key])
+        fig, ax, _plot_data = plot_surfaces(
+            eq,
+            rho,
+            theta,
+            zeta,
+            ax,
+            theta_color=colors[i % len(colors)],
+            theta_ls=linestyles[i % len(linestyles)],
+            theta_lw=lws[i % len(lws)],
+            rho_color=colors[i % len(colors)],
+            rho_ls=linestyles[i % len(linestyles)],
+            rho_lw=lws[i % len(lws)],
+            lcfs_color=colors[i % len(colors)],
+            lcfs_ls=linestyles[i % len(linestyles)],
+            lcfs_lw=lws[i % len(lws)],
+            axis_color=colors[i % len(colors)],
+            axis_alpha=0,
+            axis_marker="o",
+            axis_size=0,
+            label=labels[i % len(labels)],
+            title_font_size=title_font_size,
+            xlabel_fontsize=xlabel_fontsize,
+            ylabel_fontsize=ylabel_fontsize,
+            return_data=return_data,
+        )
+        for key in _plot_data.keys():
+            plot_data[key].append(_plot_data[key])
 
-        else:
-            fig, ax = plot_surfaces(
-                eq,
-                rho,
-                theta,
-                zeta,
-                ax,
-                theta_color=colors[i % len(colors)],
-                theta_ls=linestyles[i % len(linestyles)],
-                theta_lw=lws[i % len(lws)],
-                rho_color=colors[i % len(colors)],
-                rho_ls=linestyles[i % len(linestyles)],
-                rho_lw=lws[i % len(lws)],
-                lcfs_color=colors[i % len(colors)],
-                lcfs_ls=linestyles[i % len(linestyles)],
-                lcfs_lw=lws[i % len(lws)],
-                axis_color=colors[i % len(colors)],
-                axis_alpha=0,
-                axis_marker="o",
-                axis_size=0,
-                label=labels[i % len(labels)],
-                title_font_size=title_font_size,
-                xlabel_fontsize=xlabel_fontsize,
-                ylabel_fontsize=ylabel_fontsize,
-            )
     if any(labels) and kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {}))
 

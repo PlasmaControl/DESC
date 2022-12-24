@@ -172,7 +172,9 @@ class VMECIO:
         for key, value in args.items():
             setattr(eq, key, value)
 
-        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs = sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
         if signgs < 0:
             # vmec always outputs negative jacobian - flip theta and iota
             rone = np.ones_like(eq.R_lmn)
@@ -189,7 +191,9 @@ class VMECIO:
 
             if eq.iota is not None:
                 eq.i_l *= -1
-        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs = sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
         assert signgs == 1
 
         return eq
@@ -225,7 +229,9 @@ class VMECIO:
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
-        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs = sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -350,7 +356,9 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = -sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = -sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -428,7 +436,7 @@ class VMECIO:
         else:
             # value closest to axis will be nan
             grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
-            iotaf[:] = signgs[:] * compress(grid, eq.compute("iota", grid)["iota"])
+            iotaf[:] = signgs[:] * compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
@@ -437,7 +445,9 @@ class VMECIO:
             iotas[1:] = signgs[:] * eq.iota(r_half)
         else:
             grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
-            iotas[1:] = signgs[:] * compress(grid, eq.compute("iota", grid)["iota"])
+            iotas[1:] = signgs[:] * compress(
+                grid, eq.compute("iota", grid=grid)["iota"]
+            )
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"

@@ -216,7 +216,6 @@ def test_correct_indexing_passed_modes():
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
     ]
-    Z_modes = True
     constraints = (
         FixBoundaryR(modes=R_modes, fixed_boundary=True, normalize=False),
         FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),

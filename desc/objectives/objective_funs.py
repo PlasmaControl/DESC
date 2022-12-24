@@ -481,8 +481,8 @@ class _Objective(IOAble, ABC):
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
-        self._target = np.atleast_1d(target)
-        self._weight = np.atleast_1d(weight)
+        self._target = target
+        self._weight = weight
         self._normalize = normalize
         self._normalize_target = normalize_target
         self._normalization = 1
@@ -565,23 +565,21 @@ class _Objective(IOAble, ABC):
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""
-        if len(self.target) == 0:
-            # need this so if the objective was previously built at a resolution where
-            # target is [] and the resolution changes the target and weight get
-            # set correctly
-            self._target = np.zeros(1)
-            self._weight = np.ones(1)
-        if np.unique(self.target).size == 1:
-            self._target = np.repeat(self.target[0], self.dim_f)
-        if np.unique(self.weight).size == 1:
-            self._weight = np.repeat(self.weight[0], self.dim_f)
 
-        if self.target.size != self.dim_f:
+        def _is_broadcastable(shp1, shp2):
+            for a, b in zip(shp1[::-1], shp2[::-1]):
+                if a == 1 or b == 1 or a == b:
+                    pass
+                else:
+                    return False
+            return True
+
+        self._target = np.asarray(self._target)
+        self._weight = np.asarray(self._weight)
+        if not _is_broadcastable((self.dim_f,), self.target.shape):
             raise ValueError("len(target) != dim_f")
-        if self.weight.size != self.dim_f:
+        if not _is_broadcastable((self.dim_f,), self.weight.shape):
             raise ValueError("len(weight) != dim_f")
-
-        return None
 
     def update_target(self, eq):
         """Update target values using an Equilibrium.

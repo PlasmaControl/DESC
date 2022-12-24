@@ -1881,7 +1881,7 @@ def plot_comparison(
             title_font_size=title_font_size,
             xlabel_fontsize=xlabel_fontsize,
             ylabel_fontsize=ylabel_fontsize,
-            return_data=return_data,
+            return_data=True,
         )
         for key in _plot_data.keys():
             plot_data[key].append(_plot_data[key])

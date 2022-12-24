@@ -159,19 +159,6 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
-        # apply boundary conditions
-        constraints = (
-            FixBoundaryR(fixed_boundary=True),
-            FixBoundaryZ(fixed_boundary=True),
-        )
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
-        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective.args
-        )
-        args = objective.unpack_state(recover(project(objective.x(eq))))
-        for key, value in args.items():
-            setattr(eq, key, value)
-
         signgs = sign(
             eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
         )
@@ -191,6 +178,21 @@ class VMECIO:
 
             if eq.iota is not None:
                 eq.i_l *= -1
+            eq.surface = eq.get_surface_at(rho=1)
+
+        # apply boundary conditions
+        constraints = (
+            FixBoundaryR(fixed_boundary=True),
+            FixBoundaryZ(fixed_boundary=True),
+        )
+        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
+            constraints, objective.args
+        )
+        args = objective.unpack_state(recover(project(objective.x(eq))))
+        for key, value in args.items():
+            setattr(eq, key, value)
+
         signgs = sign(
             eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
         )

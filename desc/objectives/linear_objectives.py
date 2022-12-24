@@ -75,6 +75,7 @@ class FixBoundaryR(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
+        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -83,8 +84,6 @@ class FixBoundaryR(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
-        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -116,6 +115,11 @@ class FixBoundaryR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.surface.R_basis.modes
+            # and eq.surface.R_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.surface.R_basis.modes[idx, :])
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -124,7 +128,6 @@ class FixBoundaryR(_Objective):
                         "yellow",
                     )
                 )
-
         self._dim_f = idx.size
 
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
@@ -142,14 +145,8 @@ class FixBoundaryR(_Objective):
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
-
         # use surface parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = eq.surface.R_lmn[idx]
 
         if self._normalize:
@@ -224,6 +221,7 @@ class FixBoundaryZ(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
+        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -232,8 +230,6 @@ class FixBoundaryZ(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
-        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -265,6 +261,11 @@ class FixBoundaryZ(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.surface.Z_basis.modes
+            # and eq.surface.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.surface.Z_basis.modes[idx, :])
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -290,14 +291,8 @@ class FixBoundaryZ(_Objective):
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
-
         # use surface parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = eq.surface.Z_lmn[idx]
 
         if self._normalize:
@@ -554,24 +549,14 @@ class _FixProfile(_Objective, ABC):
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
-            indices = np.array([[]], dtype=int)
-            idx = self._idx
         elif self._indices is True:  # all indices of Profile.params
             self._idx = np.arange(np.size(self._profile.params))
-            indices = self._idx
-            idx = self._idx
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
-            idx = self._idx
 
         self._dim_f = self._idx.size
-        # use given targets and weights if specified
-        if self.target.size == indices.shape[0]:
-            self.target = self._target[idx]
-        if self.weight.size == indices.shape[0]:
-            self.weight = self._weight[idx]
         # use profile parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = self._profile.params[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
@@ -957,7 +942,7 @@ class FixPsi(_Objective):
         """
         self._dim_f = 1
 
-        if None in self.target:
+        if self.target is None:
             self.target = eq.Psi
 
         if self._normalize:

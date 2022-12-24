@@ -133,7 +133,7 @@ class TestFourierRZToroidalSurface:
         s.grid = grid
         K, H, k1, k2 = s.compute_curvature()
         np.testing.assert_allclose(K, 0)
-        np.testing.assert_allclose(H, 1 / 2)
+        np.testing.assert_allclose(H, -1 / 2)
         np.testing.assert_allclose(k1, 1)
         np.testing.assert_allclose(k2, 0)
 

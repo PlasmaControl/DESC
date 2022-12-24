@@ -118,7 +118,7 @@ class FixBoundaryR(_Objective):
             # rearrange modes to match order of eq.surface.R_basis.modes
             # and eq.surface.R_lmn,
             # necessary so that the A matrix rows match up with the target b
-            modes = eq.surface.R_basis.modes[idx, :]
+            modes = np.atleast_2d(eq.surface.R_basis.modes[idx, :])
 
             if idx.size < modes.shape[0]:
                 warnings.warn(
@@ -273,7 +273,7 @@ class FixBoundaryZ(_Objective):
             # rearrange modes to match order of eq.surface.Z_basis.modes
             # and eq.surface.Z_lmn,
             # necessary so that the A matrix rows match up with the target b
-            modes = eq.surface.Z_basis.modes[idx, :]
+            modes = np.atleast_2d(eq.surface.Z_basis.modes[idx, :])
 
             if idx.size < modes.shape[0]:
                 warnings.warn(

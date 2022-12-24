@@ -282,12 +282,17 @@ def test_correct_indexing_passed_modes_and_passed_target():
     Z_modes = eq.surface.Z_basis.modes[
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
     ]
-    Z_modes = True
+    idxs = []
+    for mode in Z_modes:
+        idxs.append(eq.surface.Z_basis.get_idx(*mode))
+    target_Z = eq.surface.Z_lmn[idxs]
     constraints = (
         FixBoundaryR(
             modes=R_modes, fixed_boundary=True, normalize=False, target=target_R
         ),
-        FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),
+        FixBoundaryZ(
+            modes=Z_modes, fixed_boundary=True, normalize=False, target=target_Z
+        ),
     )
     for con in constraints:
         con.build(eq, verbose=0)
@@ -314,3 +319,19 @@ def test_correct_indexing_passed_modes_and_passed_target():
     assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
     assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
     assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=1e-15)
+
+
+@pytest.mark.unit
+def test_FixBoundary_with_single_weight():
+    """Test Fixing boundary with only a single, passed weight."""
+    eq = Equilibrium()
+    w = 1.1
+    FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), fixed_boundary=True, weight=w)
+    FixZ.build(eq)
+    print(FixZ._weight)
+    np.testing.assert_array_equal(FixZ.weight.size, 1)
+    np.testing.assert_array_equal(FixZ.weight, w)
+    FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), fixed_boundary=True, weight=w)
+    FixR.build(eq)
+    np.testing.assert_array_equal(FixR.weight.size, 1)
+    np.testing.assert_array_equal(FixR.weight, w)

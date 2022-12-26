@@ -306,9 +306,25 @@ class FourierRZToroidalSurface(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        rz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
+        E = jnp.sum(rt * rt, axis=-1)
+        F = jnp.sum(rt * rz, axis=-1)
+        G = jnp.sum(rz * rz, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        rtz = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1, dz=1)
+        rzz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rtt * n, axis=-1)
+        M = jnp.sum(rtz * n, axis=-1)
+        N = jnp.sum(rzz * n, axis=-1)
+        return L, M, N
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0, basis="rpz"
@@ -825,9 +841,25 @@ class ZernikeRZToroidalSection(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1)
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        E = jnp.sum(rr * rr, axis=-1)
+        F = jnp.sum(rr * rt, axis=-1)
+        G = jnp.sum(rt * rt, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rrr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=2)
+        rrt = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1, dt=1)
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rrr * n, axis=-1)
+        M = jnp.sum(rrt * n, axis=-1)
+        N = jnp.sum(rtt * n, axis=-1)
+        return L, M, N
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0, basis="rpz"

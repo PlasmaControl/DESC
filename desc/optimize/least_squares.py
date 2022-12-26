@@ -136,6 +136,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     max_njev = options.pop("max_njev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
+    max_dx = options.pop("max_dx", np.inf)
 
     ga_fd_step = options.pop("ga_fd_step", 1e-3)
     ga_tr_ratio = options.pop("ga_tr_ratio", 0)
@@ -241,6 +242,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             nhev=njev,
             max_nhev=max_njev,
             min_trust_radius=min_trust_radius,
+            dx_total=np.linalg.norm(x - x0),
+            max_dx=max_dx,
         )
 
         while actual_reduction <= 0 and nfev <= max_nfev:
@@ -329,6 +332,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 njev,
                 max_njev,
                 min_trust_radius=min_trust_radius,
+                dx_total=np.linalg.norm(x - x0),
+                max_dx=max_dx,
             )
             if success is not None:
                 break

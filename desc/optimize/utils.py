@@ -290,6 +290,9 @@ def check_termination(
     elif dx_norm < kwargs.get("min_trust_radius", np.finfo(x_norm.dtype).eps):
         success = False
         message = STATUS_MESSAGES["approx"]
+    elif kwargs.get("dx_total", 0) > kwargs.get("max_dx", np.inf):
+        success = False
+        message = STATUS_MESSAGES["out_of_bounds"]
     else:
         success = None
         message = None

@@ -259,6 +259,7 @@ def check_termination(
     max_ngev,
     nhev,
     max_nhev,
+    **kwargs,
 ):
     """Check termination condition and get message."""
     ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
@@ -286,6 +287,9 @@ def check_termination(
     elif nhev >= max_nhev:
         success = False
         message = STATUS_MESSAGES["max_nhev"]
+    elif dx_norm < kwargs.get("min_trust_radius", np.finfo(x_norm.dtype).eps):
+        success = False
+        message = STATUS_MESSAGES["approx"]
     else:
         success = None
         message = None

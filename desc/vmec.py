@@ -10,6 +10,7 @@ from scipy import integrate, interpolate, optimize
 
 from desc.backend import sign
 from desc.basis import DoubleFourierSeries
+from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
@@ -159,26 +160,7 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
-        signgs = sign(
-            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
-        )
-        if signgs < 0:
-            # vmec always outputs negative jacobian - flip theta and iota
-            rone = np.ones_like(eq.R_lmn)
-            rone[eq.R_basis.modes[:, 1] < 0] *= -1
-            eq.R_lmn *= rone
-
-            zone = np.ones_like(eq.Z_lmn)
-            zone[eq.Z_basis.modes[:, 1] < 0] *= -1
-            eq.Z_lmn *= zone
-
-            lone = np.ones_like(eq.L_lmn)
-            lone[eq.L_basis.modes[:, 1] >= 0] *= -1
-            eq.L_lmn *= lone
-
-            if eq.iota is not None:
-                eq.i_l *= -1
-            eq.surface = eq.get_surface_at(rho=1)
+        eq = ensure_positive_jacobian(eq)
 
         # apply boundary conditions
         constraints = (
@@ -192,11 +174,6 @@ class VMECIO:
         args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():
             setattr(eq, key, value)
-
-        signgs = sign(
-            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
-        )
-        assert signgs == 1
 
         return eq
 

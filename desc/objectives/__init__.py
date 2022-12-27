@@ -6,9 +6,10 @@ from ._equilibrium import (
     ForceBalance,
     HelicalForceBalance,
     RadialForceBalance,
+    ForceBalanceGalerkin,
 )
 from ._generic import GenericObjective, ToroidalCurrent
-from ._geometry import AspectRatio, Volume
+from ._geometry import AspectRatio, Volume, SpectralCondensation
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective

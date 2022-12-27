@@ -1,11 +1,12 @@
 """Objectives for targeting geometrical quantities."""
 
 from desc.compute import compute_geometry, data_index
-from desc.grid import QuadratureGrid
+from desc.grid import QuadratureGrid, ConcentricGrid
 from desc.transform import Transform
 from desc.utils import Timer
-
+from scipy.constants import mu_0
 from .objective_funs import _Objective
+from desc.backend import jnp, put
 
 
 class Volume(_Objective):
@@ -180,3 +181,98 @@ class AspectRatio(_Objective):
         """
         data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
         return self._shift_scale(data["R0/a"])
+
+
+class SpectralCondensation(_Objective):
+    """Spectral width as described in Hirshman & Breslau (1988).
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="spectral"):
+
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        self._print_value_fmt = "spectral condensation: {:10.3e} (dimensionless)"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = ConcentricGrid(
+                L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP
+            )
+
+        #self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
+        self._dim_f = 1
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=2, build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=2, build=True
+        )
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+        
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+        
+    def compute(self, R_lmn, Z_lmn, L_lmn, **kwargs):
+        """Compute spectral width.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        I : float
+            spectral width, dimensionless.
+
+        """
+        R_weights = jnp.square(jnp.arange(len(R_lmn)))
+        Z_weights = jnp.square(jnp.arange(len(Z_lmn)))
+        L_weights = jnp.square(jnp.arange(len(L_lmn)))
+
+        I = jnp.dot(jnp.abs(R_lmn),R_weights) + jnp.dot(jnp.abs(Z_lmn),Z_weights) + jnp.dot(jnp.abs(L_lmn),L_weights)
+        
+        return self._shift_scale(jnp.atleast_1d(I))
+

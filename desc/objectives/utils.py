@@ -12,6 +12,7 @@ from ._equilibrium import (
     ForceBalance,
     HelicalForceBalance,
     RadialForceBalance,
+    ForceBalanceGalerkin,
 )
 from .linear_objectives import (
     FixBoundaryR,
@@ -23,6 +24,7 @@ from .linear_objectives import (
     FixPsi,
 )
 from .objective_funs import ObjectiveFunction
+from ._geometry import SpectralCondensation
 
 
 def get_fixed_boundary_constraints(profiles=True, iota=True):
@@ -81,6 +83,10 @@ def get_equilibrium_objective(mode="force"):
         objectives = (RadialForceBalance(), HelicalForceBalance())
     elif mode == "vacuum":
         objectives = CurrentDensity()
+    elif mode == "force_gal":
+        objectives = ForceBalanceGalerkin()
+    elif mode == "spectral":
+        objectives = SpectralCondensation()
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)

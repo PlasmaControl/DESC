@@ -17,6 +17,8 @@ from desc.objectives import (
     ObjectiveFunction,
     RadialForceBalance,
     WrappedEquilibriumObjective,
+    ForceBalanceGalerkin,
+    SpectralCondensation
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
@@ -267,6 +269,8 @@ class Optimizer(IOAble):
                         RadialForceBalance,
                         HelicalForceBalance,
                         CurrentDensity,
+                        ForceBalanceGalerkin,
+                        SpectralCondensation
                     ),
                 ):
                     raise ValueError(

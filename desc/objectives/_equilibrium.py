@@ -17,7 +17,6 @@ from desc.utils import Timer
 
 from .objective_funs import _Objective
 
-
 class ForceBalance(_Objective):
     """Radial and helical MHD force balance.
 
@@ -124,7 +123,7 @@ class ForceBalance(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-
+        
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
@@ -175,6 +174,7 @@ class ForceBalance(_Objective):
         fb = fb * data["sqrt(g)"] * self.grid.weights
 
         f = jnp.concatenate([fr, fb])
+
         return self._shift_scale(f)
 
 
@@ -481,6 +481,173 @@ class HelicalForceBalance(_Objective):
         f = f * data["sqrt(g)"] * self.grid.weights
 
         return self._shift_scale(f)
+
+class ForceBalanceGalerkin(_Objective):
+    """Projection of MHD force balance onto the basis functions.
+
+    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
+    f_rho = F_rho |grad(rho)| dV  (N)
+
+    F_beta = sqrt(g) J^rho
+    beta = -B^zeta grad(theta) + B^theta grad(zeta)
+    f_beta = F_beta |beta| dV  (N)
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="force_gal",equality = True, lb = None):
+
+        self.grid = grid
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        units = "(N)"
+        self._print_value_fmt = "Total force: {:10.3e} " + units
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            if eq.node_pattern is None or eq.node_pattern in [
+                "jacobi",
+                "cheb1",
+                "cheb2",
+                "ocs",
+                "linear",
+            ]:
+                self.grid = ConcentricGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                    node_pattern=eq.node_pattern,
+                )
+            elif eq.node_pattern == "quad":
+                self.grid = QuadratureGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                )
+ 
+        self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._pressure = eq.pressure.copy()
+        self._pressure.grid = self.grid
+        if eq.iota is not None:
+            self._iota = eq.iota.copy()
+            self._iota.grid = self.grid
+            self._current = None
+        else:
+            self._current = eq.current.copy()
+            self._current.grid = self.grid
+            self._iota = None
+
+       
+        self._R_transform = Transform(
+            self.grid, eq.R_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._Z_transform = Transform(
+            self.grid, eq.Z_basis, derivs=data_index["F_rho"]["R_derivs"], build=True
+        )
+        self._L_transform = Transform(
+            self.grid, eq.L_basis, derivs=data_index["F_rho"]["L_derivs"], build=True
+        )
+
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+  
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose) 
+       
+    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+        """Compute MHD force balance errors.
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        p_l : ndarray
+            Spectral coefficients of p(rho) -- pressure profile.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+       
+        Returns
+        -------
+        f : ndarray
+            MHD force balance error at each node (N) projected onto the basis functions.
+
+        """
+        data = compute_force_error(
+            R_lmn,
+            Z_lmn,
+            L_lmn,
+            p_l,
+            i_l,
+            c_l,
+            Psi,
+            self._R_transform,
+            self._Z_transform,
+            self._L_transform,
+            self._pressure,
+            self._iota,
+            self._current,
+        )
+
+        fr = data["F_rho"] * data["|grad(rho)|"]
+        fr = fr * data["sqrt(g)"] * self.grid.weights
+
+        fb = data["F_beta"] * data["|beta|"]
+        fb = fb * data["sqrt(g)"] * self.grid.weights
+        
+       
+        fr_proj = self._R_transform.project(fr)
+        fb_proj = self._Z_transform.project(fb)
+
+        f = jnp.concatenate([fr_proj, fb_proj])
+        
+        return self._shift_scale(f)
+
 
 
 class Energy(_Objective):

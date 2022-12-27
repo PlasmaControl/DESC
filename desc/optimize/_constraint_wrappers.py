@@ -450,7 +450,7 @@ class Lagrangian(ObjectiveFunction):
         self._objective.build(eq, use_jit, verbose)
         self._constraint.build(eq, use_jit, verbose)
         if self._multipliers is None:
-            self._multipliers = np.zeros(self._constraint.dim_f)
+            self._multipliers = self._estimate_lagrange_multipliers(eq)
         self._multipliers = np.atleast_1d(self._multipliers)
         assert (
             self._multipliers.ndim == 1
@@ -464,6 +464,13 @@ class Lagrangian(ObjectiveFunction):
         self._scalar = False
 
         self._built = True
+
+    def _estimate_lagrange_multipliers(self, eq):
+        A = self._constraint.jac(self._constraint.x(eq))
+        g = self._objective.grad(self._objective.x(eq))
+        A = align_jacobian(A, self._constraint, self._objective)
+        g = align_jacobian(jnp.atleast_2d(g), self._objective, self._constraint)[0]
+        return jnp.linalg.lstsq(A.T, g, rcond=None)[0]
 
     def compute_lagrangian(self, x):
         """Compute the value of the Lagrangian."""

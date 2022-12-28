@@ -51,6 +51,12 @@ class FixBoundaryR(_Objective):
     name : str
         Name of the objective function.
 
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulint constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
     """
 
     _scalar = False
@@ -197,6 +203,12 @@ class FixBoundaryZ(_Objective):
     name : str
         Name of the objective function.
 
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulint constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
     """
 
     _scalar = False

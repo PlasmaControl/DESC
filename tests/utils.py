@@ -9,20 +9,18 @@ from desc.grid import Grid, LinearGrid
 from desc.vmec import VMECIO
 
 
-def compute_coords(equil, check_all_zeta=False):
+def compute_coords(equil, check_all_zeta=False, Nr=10, Nt=8):
     """Computes coordinate values from a given equilibrium."""
     if equil.N == 0 and not check_all_zeta:
         Nz = 1
     else:
         Nz = 6
 
-    Nr = 10
-    Nt = 8
     num_theta = 1000
     num_rho = 1000
 
     # flux surfaces to plot
-    rr = np.linspace(0, 1, Nr)
+    rr = np.linspace(1, 0, Nr, endpoint=False)[::-1]
     rt = np.linspace(0, 2 * np.pi, num_theta)
     rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
     r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
@@ -198,8 +196,8 @@ def area_difference_desc(eq1, eq2, Nr=10, Nt=8, **kwargs):
         perimeter squared
 
     """
-    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1)
-    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2)
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1, Nr=Nr, Nt=Nt)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2, Nr=Nr, Nt=Nt)
 
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta

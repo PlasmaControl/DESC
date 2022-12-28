@@ -259,6 +259,7 @@ def check_termination(
     max_ngev,
     nhev,
     max_nhev,
+    **kwargs,
 ):
     """Check termination condition and get message."""
     ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
@@ -286,6 +287,12 @@ def check_termination(
     elif nhev >= max_nhev:
         success = False
         message = STATUS_MESSAGES["max_nhev"]
+    elif dx_norm < kwargs.get("min_trust_radius", np.finfo(x_norm.dtype).eps):
+        success = False
+        message = STATUS_MESSAGES["approx"]
+    elif kwargs.get("dx_total", 0) > kwargs.get("max_dx", np.inf):
+        success = False
+        message = STATUS_MESSAGES["out_of_bounds"]
     else:
         success = None
         message = None
@@ -311,31 +318,6 @@ def compute_hess_scale(H, prev_scale_inv=None):
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
     return 1 / scale_inv, scale_inv
-
-
-def find_matching_inds(arr1, arr2):
-    """Find indices into arr2 that match rows of arr1.
-
-    Parameters
-    ----------
-    arr1 : ndarray, shape(m,n)
-        Array to look for matches in.
-    arr2 : ndarray, shape(k,n)
-        Array to look for indices in.
-
-    Returns
-    -------
-    inds : ndarray of int
-        indices into arr2 of rows that also exist in arr1.
-    """
-    arr1, arr2 = map(np.atleast_2d, (arr1, arr2))
-    inds = []
-    for i, a in enumerate(arr2):
-        x = arr1 == a
-        j = np.where(x.all(axis=1))[0]
-        if len(j):
-            inds.append(i)
-    return np.asarray(inds)
 
 
 def f_where_x(x, xs, fs):

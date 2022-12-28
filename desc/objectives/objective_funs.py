@@ -489,7 +489,12 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
+        # if args is already set don't overwrite it
+        self._args = getattr(
+            self,
+            "_args",
+            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
+        )
         if eq is not None:
             self.build(eq)
 

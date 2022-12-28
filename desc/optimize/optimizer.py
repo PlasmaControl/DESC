@@ -503,6 +503,7 @@ def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, option
             )
     perturb_options = options.pop("perturb_options", {})
     perturb_options.setdefault("verbose", 0)
+    perturb_options.setdefault("include_f", False)
     solve_options = options.pop("solve_options", {})
     solve_options.setdefault("verbose", 0)
     objective = WrappedEquilibriumObjective(

@@ -88,6 +88,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     order=2,
     tr_ratio=0.1,
     weight="auto",
+    include_f=True,
     verbose=1,
     copy=True,
 ):
@@ -115,6 +116,10 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     weight : ndarray, "auto", or None, optional
         1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
         matrices. Default is to weight by (mode number)**2. None applies no weighting.
+    include_f : bool, optional
+        Whether to include the 0th order objective residual in the perturbation
+        equation. Including this term can improve force balance if the perturbation
+        step is large, but can result in too large a step if the perturbation is small.
     verbose : int
         Level of output.
     copy : bool
@@ -251,15 +256,16 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         scale_inv = W
         scale = np.linalg.inv(scale_inv)
 
-        f = objective.compute(x)
-
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
-        RHS1 = f + objective.jvp(tangents, x)
+        RHS1 = objective.jvp(tangents, x)
+        if include_f:
+            f = objective.compute(x)
+            RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")

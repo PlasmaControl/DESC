@@ -36,9 +36,10 @@ def rotation_matrix(axis, angle=None):
     rot : ndarray, shape(3,3)
         Matrix to rotate points in cartesian (X,Y,Z) coordinates
     """
+    axis = jnp.asarray(axis)
     if angle is None:
         angle = jnp.linalg.norm(axis)
-    axis = jnp.asarray(axis) / jnp.linalg.norm(axis)
+    axis = axis / jnp.linalg.norm(axis)
     R1 = jnp.cos(angle) * jnp.eye(3)
     R2 = jnp.sin(angle) * jnp.cross(axis, jnp.identity(axis.shape[0]) * -1)
     R3 = (1 - jnp.cos(angle)) * jnp.outer(axis, axis)

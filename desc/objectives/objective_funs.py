@@ -489,7 +489,12 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
+        # if args is already set don't overwrite it
+        self._args = getattr(
+            self,
+            "_args",
+            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
+        )
         if eq is not None:
             self.build(eq)
 
@@ -624,9 +629,9 @@ class _Objective(IOAble, ABC):
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
         target = (
-            self.target * self.normalization if self._normalize_target else self.target
+            self.target / self.normalization if self._normalize_target else self.target
         )
-        return x / self.weight * self.normalization + target
+        return (x / self.weight + target) * self.normalization
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""

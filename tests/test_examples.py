@@ -300,7 +300,7 @@ def test_qh_optimization3():
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
     grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
-    data = eq3a.compute("|B|_mn", grid, M_booz=eq3a.M, N_booz=eq3a.N)
+    data = eq3a.compute("|B|_mn", grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
     np.testing.assert_array_less(B_asym, 2e-3)
@@ -473,8 +473,10 @@ def test_simsopt_QH_comparison():
     qs_weight = np.sqrt(len(grid.weights) / (8 * (np.pi**4)))
     objective = ObjectiveFunction(
         (
-            AspectRatio(target=aspect_target, weight=aspect_weight),
-            QuasisymmetryTwoTerm(helicity=(1, nfp), grid=grid, weight=qs_weight),
+            AspectRatio(target=aspect_target, weight=aspect_weight, normalize=False),
+            QuasisymmetryTwoTerm(
+                helicity=(1, nfp), grid=grid, weight=qs_weight, normalize=False
+            ),
         )
     )
     eq2, result = eq.optimize(

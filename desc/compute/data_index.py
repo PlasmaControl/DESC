@@ -1119,7 +1119,7 @@ data_index["|grad(p)|"] = {
         "params": [],
         "transforms": {},
         "profiles": [],
-        "data": ["p_r", "p_t,", "p_z", "|grad(rho)|"],
+        "data": ["p_r", "p_t", "p_z", "|grad(rho)|"],
     },
 }
 data_index["<|grad(p)|>_vol"] = {

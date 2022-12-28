@@ -118,6 +118,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
         self._allx = [self._x_old]
+        self._allxopt = [self._objective.x(eq)]
+        self._allxeq = [self._eq_objective.x(eq)]
         self.history = {}
         for arg in self._full_args:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
@@ -139,7 +141,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         After updating, if store=False, self._eq will revert back to the previous
         solution when store was True
         """
-        if jnp.allclose(x, self._x_old, rtol=1e-14, atol=1e-14):
+        from desc.optimize.utils import f_where_x
+
+        # first check if its something we've seen before, if it is just return
+        # cached value, no need to perturb + resolve
+        xopt = f_where_x(x, self._allx, self._allxopt)
+        xeq = f_where_x(x, self._allx, self._allxeq)
+        if xopt.size > 0 and xeq.size > 0:
             pass
         else:
             x_dict = self.unpack_state(x)
@@ -159,14 +167,25 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 constraints=self._constraints,
                 **self._solve_options
             )
+            xopt = self._objective.x(self._eq)
+            xeq = self._eq_objective.x(self._eq)
+            self._allx.append(x)
+            self._allxopt.append(xopt)
+            self._allxeq.append(xeq)
 
-        xopt = self._objective.x(self._eq)
-        xeq = self._eq_objective.x(self._eq)
         if store:
             self._x_old = x
-            self._allx.append(x)
+            xd = self.unpack_state(x)
+            xod = self._objective.unpack_state(xopt)
+            xed = self._eq_objective.unpack_state(xeq)
+            xd.update(xod)
+            xd.update(xed)
             for arg in self._full_args:
-                self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
+                val = xd[arg]
+                self.history[arg] += [np.asarray(val).copy()]
+                # ensure eq has correct values if we didn't go into else block above.
+                if val.size:
+                    setattr(self._eq, arg, val)
         else:
             for arg in self._full_args:
                 val = self.history[arg][-1].copy()

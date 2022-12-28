@@ -24,7 +24,6 @@ from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_mini
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
-from .utils import find_matching_inds
 
 
 class Optimizer(IOAble):
@@ -387,16 +386,6 @@ class Optimizer(IOAble):
             )
 
         if wrapped:
-            # history from objective includes steps the optimizer didn't accept
-            # need to find where the optimizer actually stepped and only take those
-            wrapped_allx = objective._allx
-            projected_wrapped_allx = []
-            for i, x in enumerate(wrapped_allx):
-                projected_wrapped_allx.append(project(x))
-            optim_allx = result["allx"]
-            match_inds = find_matching_inds(optim_allx, projected_wrapped_allx)
-            for key, val in objective.history.items():
-                objective.history[key] = np.asarray(val)[match_inds]
             result["history"] = objective.history
         else:
             result["history"] = {}

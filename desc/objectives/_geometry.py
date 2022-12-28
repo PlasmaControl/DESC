@@ -1,12 +1,12 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.compute import compute_geometry, data_index
-from desc.grid import QuadratureGrid, ConcentricGrid
-from desc.transform import Transform
+from desc.compute import compute_geometry, get_profiles, get_transforms
+from desc.grid import QuadratureGrid
 from desc.utils import Timer
-from scipy.constants import mu_0
+
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from desc.backend import jnp, put
+from desc.backend import jnp
 
 
 class Volume(_Objective):
@@ -22,6 +22,12 @@ class Volume(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -31,12 +37,29 @@ class Volume(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(m^3)"
+    _print_value_fmt = "Plasma volume: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="volume"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="volume",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -57,22 +80,23 @@ class Volume(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["V"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -92,7 +116,15 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_geometry(
+            params,
+            self._transforms,
+            self._profiles,
+        )
         return self._shift_scale(data["V"])
 
 
@@ -109,6 +141,14 @@ class AspectRatio(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -118,12 +158,29 @@ class AspectRatio(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Aspect ratio: {:10.3e} "
 
-    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
+    def __init__(
+        self,
+        eq=None,
+        target=2,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="aspect ratio",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -144,18 +201,14 @@ class AspectRatio(_Objective):
             )
 
         self._dim_f = 1
-
+        self._data_keys = ["R0/a"]
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -179,7 +232,15 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_geometry(
+            params,
+            self._transforms,
+            self._profiles,
+        )
         return self._shift_scale(data["R0/a"])
 
 
@@ -205,12 +266,31 @@ class SpectralCondensation(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(m^2)"
+    _print_value_fmt = "Spectral width: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="spectral"):
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="spectral",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "spectral condensation: {:10.3e} (dimensionless)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -226,28 +306,28 @@ class SpectralCondensation(_Objective):
 
         """
         if self.grid is None:
-            self.grid = ConcentricGrid(
-                L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
-
-        #self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
+        
         self._dim_f = 1
+        self._data_keys = ["SC"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=2, build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=2, build=True
-        )
+        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["A"]
         
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -272,7 +352,7 @@ class SpectralCondensation(_Objective):
         Z_weights = jnp.square(jnp.arange(len(Z_lmn)))
         L_weights = jnp.square(jnp.arange(len(L_lmn)))
 
-        I = jnp.dot(jnp.abs(R_lmn),R_weights) + jnp.dot(jnp.abs(Z_lmn),Z_weights) + jnp.dot(jnp.abs(L_lmn),L_weights)
+        I = (jnp.dot(jnp.abs(R_lmn),R_weights) + jnp.dot(jnp.abs(Z_lmn),Z_weights) + jnp.dot(jnp.abs(L_lmn),L_weights))/(jnp.sum(jnp.abs(R_lmn)) + jnp.sum(jnp.abs(Z_lmn)) + jnp.sum(jnp.abs(L_lmn)))
         
         return self._shift_scale(jnp.atleast_1d(I))
 

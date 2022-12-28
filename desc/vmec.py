@@ -30,7 +30,9 @@ class VMECIO:
     """Performs input from VMEC netCDF files to DESC Equilibrium and vice-versa."""
 
     @classmethod
-    def load(cls, path, L=-1, M=-1, N=-1, spectral_indexing="ansi", profile="iota"):
+    def load(
+        cls, path, L=None, M=None, N=None, spectral_indexing="ansi", profile="iota"
+    ):
         """Load a VMEC netCDF file as an Equilibrium.
 
         Parameters
@@ -69,14 +71,14 @@ class VMECIO:
         # parameters
         inputs["Psi"] = float(file.variables["phi"][-1])
         inputs["NFP"] = int(file.variables["nfp"][0])
-        inputs["M"] = M if M > 0 else int(file.variables["mpol"][0] - 1)
-        inputs["N"] = N if N >= 0 else int(file.variables["ntor"][0])
+        inputs["M"] = M if M is not None else int(file.variables["mpol"][0] - 1)
+        inputs["N"] = N if N is not None else int(file.variables["ntor"][0])
         inputs["spectral_indexing"] = spectral_indexing
         default_L = {
             "ansi": inputs["M"],
             "fringe": 2 * inputs["M"],
         }
-        inputs["L"] = L if L >= 0 else default_L[inputs["spectral_indexing"]]
+        inputs["L"] = L if L is not None else default_L[inputs["spectral_indexing"]]
 
         # data
         xm = file.variables["xm"][:].filled()
@@ -158,9 +160,12 @@ class VMECIO:
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
         # apply boundary conditions
-        constraints = (FixBoundaryR(), FixBoundaryZ())
+        constraints = (
+            FixBoundaryR(fixed_boundary=True),
+            FixBoundaryZ(fixed_boundary=True),
+        )
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
-        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
@@ -323,7 +328,9 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -398,7 +405,7 @@ class VMECIO:
         else:
             # value closest to axis will be nan
             grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
-            iotaf[:] = compress(grid, eq.compute("iota", grid)["iota"])
+            iotaf[:] = compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
@@ -407,7 +414,7 @@ class VMECIO:
             iotas[1:] = eq.iota(r_half)
         else:
             grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
-            iotas[1:] = compress(grid, eq.compute("iota", grid)["iota"])
+            iotas[1:] = compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -592,7 +599,7 @@ class VMECIO:
         # derived quantities (approximate conversion)
 
         grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
-        coords = eq.compute("R", grid)
+        coords = eq.compute("R", "Z", grid=grid)
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
         full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
@@ -625,12 +632,12 @@ class VMECIO:
 
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        data_half_grid = eq.compute("|B|", half_grid)
-        data_half_grid = eq.compute("J", half_grid, data=data_half_grid)
+        data_half_grid = eq.compute("|B|", grid=half_grid)
+        data_half_grid = eq.compute("J", grid=half_grid, data=data_half_grid)
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute("J", full_grid)
+        data_full_grid = eq.compute("J", grid=full_grid)
 
         # Jacobian
         timer.start("Jacobian")
@@ -1359,8 +1366,8 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-        r_coords_desc = equil.compute("R", r_grid)
-        v_coords_desc = equil.compute("R", v_grid)
+        r_coords_desc = equil.compute("R", "Z", grid=r_grid)
+        v_coords_desc = equil.compute("R", "Z", grid=v_grid)
 
         # rho contours
         Rr_desc = r_coords_desc["R"].reshape(

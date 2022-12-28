@@ -259,6 +259,7 @@ def test_overstepping():
 
         name = "Dummy"
         _print_value_fmt = "Dummy: {:.3e}"
+        _units = "(Foo)"
 
         def build(self, eq, *args, **kwargs):
 

@@ -370,7 +370,7 @@ class Transform(IOAble):
             return
 
         if self.basis.num_modes == 0:
-            self._built = True
+            self._built = True            
             return
 
         if self.method == "direct1":
@@ -602,7 +602,7 @@ class Transform(IOAble):
 
         if self.method == "direct1":
             A = self.matrices["direct1"][0][0][0]
-            return jnp.matmul(A.T, y)
+            return jnp.matmul(A.T, y) if A != {} else np.zeros(self.basis.num_modes) 
 
         elif self.method == "direct2":
             A = self.matrices["fft"][0][0]

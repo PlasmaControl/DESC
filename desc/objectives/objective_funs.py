@@ -9,7 +9,7 @@ from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
 from desc.derivatives import Derivative
 from desc.io import IOAble
-from desc.utils import Timer
+from desc.utils import Timer, is_broadcastable
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
@@ -565,20 +565,11 @@ class _Objective(IOAble, ABC):
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""
-
-        def _is_broadcastable(shp1, shp2):
-            for a, b in zip(shp1[::-1], shp2[::-1]):
-                if a == 1 or b == 1 or a == b:
-                    pass
-                else:
-                    return False
-            return True
-
         self._target = np.asarray(self._target)
         self._weight = np.asarray(self._weight)
-        if not _is_broadcastable((self.dim_f,), self.target.shape):
+        if not is_broadcastable((self.dim_f,), self.target.shape):
             raise ValueError("len(target) != dim_f")
-        if not _is_broadcastable((self.dim_f,), self.weight.shape):
+        if not is_broadcastable((self.dim_f,), self.weight.shape):
             raise ValueError("len(weight) != dim_f")
 
     def update_target(self, eq):

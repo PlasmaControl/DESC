@@ -327,7 +327,6 @@ def test_FixBoundary_with_single_weight():
     w = 1.1
     FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), fixed_boundary=True, weight=w)
     FixZ.build(eq)
-    print(FixZ._weight)
     np.testing.assert_array_equal(FixZ.weight.size, 1)
     np.testing.assert_array_equal(FixZ.weight, w)
     FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), fixed_boundary=True, weight=w)

@@ -3,10 +3,10 @@
 from desc.compute import compute_geometry, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
+from desc.backend import jnp
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
-from desc.backend import jnp
 
 
 class Volume(_Objective):
@@ -269,7 +269,6 @@ class SpectralCondensation(_Objective):
     _units = "(m^2)"
     _print_value_fmt = "Spectral width: {:10.3e} "
 
-
     def __init__(
         self,
         eq=None,
@@ -291,7 +290,6 @@ class SpectralCondensation(_Objective):
             name=name,
         )
 
-
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
@@ -309,7 +307,7 @@ class SpectralCondensation(_Objective):
             self.grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
-        
+ 
         self._dim_f = 1
         self._data_keys = ["SC"]
 
@@ -327,11 +325,9 @@ class SpectralCondensation(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["A"]
-        
+            self._normalization = scales["A"]        
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-        
     def compute(self, R_lmn, Z_lmn, L_lmn, **kwargs):
         """Compute spectral width.
 
@@ -351,8 +347,10 @@ class SpectralCondensation(_Objective):
         R_weights = jnp.square(jnp.arange(len(R_lmn)))
         Z_weights = jnp.square(jnp.arange(len(Z_lmn)))
         L_weights = jnp.square(jnp.arange(len(L_lmn)))
-
-        I = (jnp.dot(jnp.abs(R_lmn),R_weights) + jnp.dot(jnp.abs(Z_lmn),Z_weights) + jnp.dot(jnp.abs(L_lmn),L_weights))/(jnp.sum(jnp.abs(R_lmn)) + jnp.sum(jnp.abs(Z_lmn)) + jnp.sum(jnp.abs(L_lmn)))
         
-        return self._shift_scale(jnp.atleast_1d(I))
+        R_width = jnp.dot(jnp.abs(R_lmn),R_weights)
+        Z_width = jnp.dot(jnp.abs(Z_lmn),Z_weights)
+        L_width = jnp.dot(jnp.abs(L_lmn),L_weights)
+        I = R_width + Z_width + L_width
 
+        return self._shift_scale(jnp.atleast_1d(I))

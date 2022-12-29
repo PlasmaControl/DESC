@@ -510,6 +510,7 @@ class HelicalForceBalance(_Objective):
 
         return self._shift_scale(f)
 
+
 class ForceBalanceGalerkin(_Objective):
     """Projection of MHD force balance onto the basis functions.
 
@@ -536,7 +537,7 @@ class ForceBalanceGalerkin(_Objective):
         Name of the objective function.
 
     """
-    
+ 
     _scalar = False
     _linear = False
     _units = "(N)"
@@ -612,7 +613,6 @@ class ForceBalanceGalerkin(_Objective):
         self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
 
-       
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -624,8 +624,8 @@ class ForceBalanceGalerkin(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-      
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+ 
         """Compute MHD force balance errors.
         Parameters
         ----------
@@ -643,7 +643,7 @@ class ForceBalanceGalerkin(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
-       
+ 
         Returns
         -------
         f : ndarray
@@ -665,14 +665,12 @@ class ForceBalanceGalerkin(_Objective):
             self._profiles,
         )
 
-       
         fr = data["F_rho"] * data["|grad(rho)|"]
         fr = fr * data["sqrt(g)"] * self.grid.weights
 
         fb = data["F_beta"] * data["|beta|"]
         fb = fb * data["sqrt(g)"] * self.grid.weights
-        
-       
+
         fr_proj = self._transforms["R"].project(fr)
         fb_proj = self._transforms["Z"].project(fb)
 

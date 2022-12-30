@@ -1369,6 +1369,7 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
     return data
 
 
+"""
 @register_compute_fun(
     name="|B|_rr",
     label="\\partial_{\\rho\\rho} |\\mathbf{B}|",
@@ -1407,6 +1408,7 @@ def _B_mag_rr(params, transforms, profiles, data, **kwargs):
         + data["B^zeta"] * data["B_zeta_rr"]
     ) / (2 * data["|B|"]) - data["|B|_r"] ** 2 / data["|B|"]
     return data
+"""
 
 
 @register_compute_fun(
@@ -1489,6 +1491,7 @@ def _B_mag_zz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+"""
 @register_compute_fun(
     name="|B|_rt",
     label="\\partial_{\\rho\\theta} |\\mathbf{B}|",
@@ -1535,6 +1538,7 @@ def _B_mag_rt(params, transforms, profiles, data, **kwargs):
         + data["B^zeta"] * data["B_zeta_rt"]
     ) / (2 * data["|B|"]) - data["|B|_r"] * data["|B|_t"] / data["|B|"]
     return data
+"""
 
 
 @register_compute_fun(
@@ -1585,6 +1589,7 @@ def _B_mag_tz(params, transforms, profiles, data, **kwargs):
     return data
 
 
+"""
 @register_compute_fun(
     name="|B|_rz",
     label="\\partial_{\\rho\\zeta} |\\mathbf{B}|",
@@ -1631,6 +1636,7 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
         + data["B^zeta"] * data["B_zeta_rz"]
     ) / (2 * data["|B|"]) - data["|B|_r"] * data["|B|_z"] / data["|B|"]
     return data
+"""
 
 
 @register_compute_fun(

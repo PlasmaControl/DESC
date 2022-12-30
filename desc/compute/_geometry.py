@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, surface_integrals
+from .utils import cross, dot, surface_integrals
 
 
 @register_compute_fun(
@@ -14,7 +14,7 @@ from .utils import cross, surface_integrals
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["sqrt(g)"],
 )
 def _V(params, transforms, profiles, data, **kwargs):
@@ -32,7 +32,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
@@ -56,7 +56,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["sqrt(g)"],
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
@@ -76,7 +76,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["sqrt(g)_r", "sqrt(g)"],
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
@@ -96,7 +96,7 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["sqrt(g)", "R"],
 )
 def _A(params, transforms, profiles, data, **kwargs):
@@ -120,7 +120,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["|e_theta x e_zeta|"],
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
@@ -138,7 +138,7 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["V", "A"],
 )
 def _R0(params, transforms, profiles, data, **kwargs):
@@ -156,7 +156,7 @@ def _R0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["A"],
 )
 def _a(params, transforms, profiles, data, **kwargs):
@@ -174,9 +174,181 @@ def _a(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["R0", "a"],
 )
 def _R0_over_a(params, transforms, profiles, data, **kwargs):
     data["R0/a"] = data["R0"] / data["a"]
+    return data
+
+
+@register_compute_fun(
+    name="n_rho",
+    label="n_{rho}",
+    units="~",
+    units_long="None",
+    description="Unit normal vector to constant rho surface",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho"],
+)
+def _n_rho(params, transforms, profiles, data, **kwargs):
+    data["n_rho"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"])).T
+    return data
+
+
+@register_compute_fun(
+    name="L_sff",
+    label="L_{sff}",
+    units="m",
+    units_long="meters",
+    description="L coefficient of second fundamental form",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_rho", "e_theta_t"],
+)
+def _L_sff(params, transforms, profiles, data, **kwargs):
+    data["L_sff"] = dot(data["e_theta_t"], data["n_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="M_sff",
+    label="M_{sff}",
+    units="m",
+    units_long="meters",
+    description="M coefficient of second fundamental form",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_rho", "e_theta_z"],
+)
+def _M_sff(params, transforms, profiles, data, **kwargs):
+    data["M_sff"] = dot(data["e_theta_z"], data["n_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="N_sff",
+    label="N_{sff}",
+    units="m",
+    units_long="meters",
+    description="N coefficient of second fundamental form",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_rho", "e_zeta_z"],
+)
+def _N_sff(params, transforms, profiles, data, **kwargs):
+    data["N_sff"] = dot(data["e_zeta_z"], data["n_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="curvature_k1",
+    label="k_{1}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="First principle curvature of flux surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
+)
+def _curvature_k1(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_tt"]
+    F = data["g_tz"]
+    G = data["g_zz"]
+    L = data["L_sff"]
+    M = data["M_sff"]
+    N = data["N_sff"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["curvature_k1"] = jnp.maximum(r1, r2)
+    data["curvature_k2"] = jnp.minimum(r1, r2)
+    return data
+
+
+@register_compute_fun(
+    name="curvature_k2",
+    label="k_{2}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Second principle curvature of flux surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
+)
+def _curvature_k2(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_tt"]
+    F = data["g_tz"]
+    G = data["g_zz"]
+    L = data["L_sff"]
+    M = data["M_sff"]
+    N = data["N_sff"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["curvature_k1"] = jnp.maximum(r1, r2)
+    data["curvature_k2"] = jnp.minimum(r1, r2)
+    return data
+
+
+@register_compute_fun(
+    name="curvature_K",
+    label="K",
+    units="m^2",
+    units_long="meters squared",
+    description="Gaussian curvature of flux surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["curvature_k1", "curvature_k2"],
+)
+def _curvature_K(params, transforms, profiles, data, **kwargs):
+    data["curvature_K"] = data["curvature_k1"] * data["curvature_k2"]
+    return data
+
+
+@register_compute_fun(
+    name="curvature_H",
+    label="H",
+    units="m",
+    units_long="meters",
+    description="Mean curvature of flux surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["curvature_k1", "curvature_k2"],
+)
+def _curvature_H(params, transforms, profiles, data, **kwargs):
+    data["curvature_H"] = (data["curvature_k1"] + data["curvature_k2"]) / 2
     return data

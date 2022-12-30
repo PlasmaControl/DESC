@@ -16,7 +16,7 @@ from .utils import dot, surface_averages
     params=["Psi"],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["rho"],
 )
 def _psi(params, transforms, profiles, data, **kwargs):
@@ -34,7 +34,7 @@ def _psi(params, transforms, profiles, data, **kwargs):
     params=["Psi"],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["rho"],
 )
 def _psi_r(params, transforms, profiles, data, **kwargs):
@@ -52,7 +52,7 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
     params=["Psi"],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="",
     data=["rho"],
 )
 def _psi_rr(params, transforms, profiles, data, **kwargs):
@@ -70,7 +70,7 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "e^rho"],
 )
 def _gradpsi(params, transforms, profiles, data, **kwargs):
@@ -88,7 +88,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["grad(psi)"],
 )
 def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
@@ -106,7 +106,7 @@ def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["|grad(psi)|^2"],
 )
 def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
@@ -124,7 +124,7 @@ def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
     params=["p_l"],
     transforms={},
     profiles=["pressure"],
-    function_of="r",
+    coordinates="r",
     data=[],
 )
 def _p(params, transforms, profiles, data, **kwargs):
@@ -142,7 +142,7 @@ def _p(params, transforms, profiles, data, **kwargs):
     params=["p_l"],
     transforms={},
     profiles=["pressure"],
-    function_of="r",
+    coordinates="r",
     data=[],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
@@ -160,7 +160,7 @@ def _p_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["p_r", "e^rho"],
 )
 def _gradp(params, transforms, profiles, data, **kwargs):
@@ -178,7 +178,7 @@ def _gradp(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["grad(p)"],
 )
 def _gradp_mag2(params, transforms, profiles, data, **kwargs):
@@ -196,7 +196,7 @@ def _gradp_mag2(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["|grad(p)|^2"],
 )
 def _gradp_mag(params, transforms, profiles, data, **kwargs):
@@ -214,7 +214,7 @@ def _gradp_mag(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["|grad(p)|", "sqrt(g)", "V"],
 )
 def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
@@ -237,7 +237,7 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     params=["i_l", "c_l"],
     transforms={"grid": []},
     profiles=["iota", "current"],
-    function_of="r",
+    coordinates="r",
     data=["psi_r", "lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)"],
 )
 def _iota(params, transforms, profiles, data, **kwargs):
@@ -278,7 +278,7 @@ def _iota(params, transforms, profiles, data, **kwargs):
     params=["i_l", "c_l"],
     transforms={"grid": []},
     profiles=["iota", "current"],
-    function_of="r",
+    coordinates="r",
     data=[
         "iota",
         "psi_r",
@@ -353,7 +353,7 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["B_theta"],
 )
 def _I(params, transforms, profiles, data, **kwargs):
@@ -372,7 +372,7 @@ def _I(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["B_theta_r"],
 )
 def _I_r(params, transforms, profiles, data, **kwargs):
@@ -390,7 +390,7 @@ def _I_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["B_zeta"],
 )
 def _G(params, transforms, profiles, data, **kwargs):
@@ -409,7 +409,7 @@ def _G(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["B_zeta_r"],
 )
 def _G_r(params, transforms, profiles, data, **kwargs):
@@ -427,7 +427,7 @@ def _G_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["I"],
 )
 def _current(params, transforms, profiles, data, **kwargs):
@@ -446,7 +446,7 @@ def _current(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["I_r"],
 )
 def _current_r(params, transforms, profiles, data, **kwargs):

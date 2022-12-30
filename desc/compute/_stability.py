@@ -18,7 +18,7 @@ from .utils import dot, surface_integrals
     params=[],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["iota_r", "psi_r"],
 )
 def _D_shear(params, transforms, profiles, data, **kwargs):
@@ -38,7 +38,7 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["psi_r", "iota_r", "B", "J", "G", "I_r", "|grad(psi)|", "|e_theta x e_zeta|"],
 )
 def _D_current(params, transforms, profiles, data, **kwargs):
@@ -68,7 +68,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=[
         "p_r",
         "psi",
@@ -117,7 +117,7 @@ def _D_well(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["|grad(psi)|", "J*B", "|B|^2", "|e_theta x e_zeta|"],
 )
 def _D_geodesic(params, transforms, profiles, data, **kwargs):
@@ -154,7 +154,7 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["D_shear", "D_current", "D_well", "D_geodesic"],
 )
 def _D_Mercier(params, transforms, profiles, data, **kwargs):
@@ -176,7 +176,7 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=[
         "V(r)",
         "V_r(r)",

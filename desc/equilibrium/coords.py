@@ -188,8 +188,8 @@ def compute_flux_coords(
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-    Does so by checking coordianate jacobian (sqrt(g)) sign.
-    If coordinate jacobian switches sign somewhere in the volume, this
+    Does so by checking coordianate Jacobian (sqrt(g)) sign.
+    If coordinate Jacobian switches sign somewhere in the volume, this
     indicates that it is zero at some point, meaning surfaces are touching and
     the equilibrium is not nested.
 
@@ -201,7 +201,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     eq : Equilibrium
         Equilibrium to use
     grid  :  Grid, optional
-        Grid on which to evaluate the coordinate jacobian and check for the sign.
+        Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
     R_lmn, Z_lmn : ndarray, optional
         spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn

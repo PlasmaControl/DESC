@@ -18,7 +18,7 @@ from .utils import dot
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -36,7 +36,7 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B_rho_z", "B_zeta_r"],
 )
 def _J_sup_theta(params, transforms, profiles, data, **kwargs):
@@ -54,7 +54,7 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B_theta_r", "B_rho_t"],
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
@@ -72,7 +72,7 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J^rho", "J^theta", "J^zeta", "e_rho", "e_theta", "e_zeta"],
 )
 def _J(params, transforms, profiles, data, **kwargs):
@@ -94,7 +94,7 @@ def _J(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J"],
 )
 def _J_R(params, transforms, profiles, data, **kwargs):
@@ -112,7 +112,7 @@ def _J_R(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J"],
 )
 def _J_phi(params, transforms, profiles, data, **kwargs):
@@ -130,7 +130,7 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J"],
 )
 def _J_Z(params, transforms, profiles, data, **kwargs):
@@ -148,7 +148,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J"],
 )
 def _Jmag(params, transforms, profiles, data, **kwargs):
@@ -166,7 +166,7 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J", "B"],
 )
 def _J_dot_B(params, transforms, profiles, data, **kwargs):
@@ -184,7 +184,7 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J*B", "|B|"],
 )
 def _J_parallel(params, transforms, profiles, data, **kwargs):
@@ -202,7 +202,7 @@ def _J_parallel(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["J^rho", "p_r", "|B|"],
 )
 def _div_J_perp(params, transforms, profiles, data, **kwargs):
@@ -220,7 +220,7 @@ def _div_J_perp(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["p_r", "sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
 )
 def _F_rho(params, transforms, profiles, data, **kwargs):
@@ -240,7 +240,7 @@ def _F_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B^zeta", "J^rho"],
 )
 def _F_theta(params, transforms, profiles, data, **kwargs):
@@ -258,7 +258,7 @@ def _F_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B^theta", "J^rho"],
 )
 def _F_zeta(params, transforms, profiles, data, **kwargs):
@@ -276,7 +276,7 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "J^rho"],
 )
 def _F_helical(params, transforms, profiles, data, **kwargs):
@@ -294,7 +294,7 @@ def _F_helical(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["F_rho", "F_theta", "F_zeta", "e^rho", "e^theta", "e^zeta"],
 )
 def _F(params, transforms, profiles, data, **kwargs):
@@ -316,7 +316,7 @@ def _F(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["F"],
 )
 def _Fmag(params, transforms, profiles, data, **kwargs):
@@ -334,7 +334,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["|F|", "sqrt(g)", "V"],
 )
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
@@ -355,7 +355,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B^theta", "B^zeta", "g^tt", "g^zz", "g^tz"],
 )
 def _helical_mag(params, transforms, profiles, data, **kwargs):
@@ -377,7 +377,7 @@ def _helical_mag(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["|B|", "sqrt(g)"],
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
@@ -397,7 +397,7 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["p", "sqrt(g)"],
     gamma="gamma",
 )
@@ -418,7 +418,7 @@ def _W_p(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["W_B", "W_p"],
 )
 def _W(params, transforms, profiles, data, **kwargs):
@@ -436,7 +436,7 @@ def _W(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["W_p", "W_B"],
 )
 def _beta_vol(params, transforms, profiles, data, **kwargs):

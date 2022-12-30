@@ -2074,20 +2074,20 @@ data_index["V"] = {
         "data": ["sqrt(g)"],
     },
 }
-data_index["SC"] = {
-    "label": "SC",
-    "units": "m^{2}",
-    "units_long": "square meters",
-    "description": "Spectral Condensation",
-    "fun": "",
-    "dim": 0,
-    "dependencies": {
-        "params": [],
-        "transforms": {"grid": []},
-        "profiles": [],
-        "data": [],
-    },
-}
+#data_index["SC"] = {
+#    "label": "SC",
+#    "units": "m^{2}",
+#    "units_long": "square meters",
+#    "description": "Spectral Condensation",
+#    "fun": "compute_geometry",
+#    "dim": 0,
+#    "dependencies": {
+#        "params": [],
+#        "transforms": {"grid": []},
+#        "profiles": [],
+#        "data": [],
+#    },
+#}
 
 data_index["A"] = {
     "label": "A",

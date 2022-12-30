@@ -309,7 +309,7 @@ class SpectralCondensation(_Objective):
             )
  
         self._dim_f = 1
-        self._data_keys = ["SC"]
+        self._data_keys = ["V"]
 
         timer = Timer()
         if verbose > 0:

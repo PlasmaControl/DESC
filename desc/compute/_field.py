@@ -505,6 +505,44 @@ def _B_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B_tt",
+    label="\\partial_{\\theta\\theta} \\mathbf{B}",
+    units="T",
+    units_long="Tesla",
+    description="Magnetic field, second derivative wrt poloidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=[
+        "B^theta",
+        "B^theta_t",
+        "B^theta_tt",
+        "B^zeta",
+        "B^zeta_t",
+        "B^zeta_tt",
+        "e_theta",
+        "e_theta_t",
+        "e_theta_tt",
+        "e_zeta",
+        "e_zeta_t",
+        "e_zeta_tt",
+    ],
+)
+def _B_tt(params, transforms, profiles, data, **kwargs):
+    data["B_tt"] = (
+        data["B^theta_tt"] * data["e_theta"].T
+        + 2 * data["B^theta_t"] * data["e_theta_t"].T
+        + data["B^theta"] * data["e_theta_tt"].T
+        + data["B^zeta_tt"] * data["e_zeta"].T
+        + 2 * data["B^zeta_t"] * data["e_zeta_t"].T
+        + data["B^zeta"] * data["e_zeta_tt"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="B0_zz",
     label="-\\psi' \\partial_{\\zeta\\zeta} \\sqrt{g} / g + "
     + "2 \\psi' (\\partial_{\\zeta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
@@ -570,6 +608,44 @@ def _B_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
         + 2 * data["B0_z"] * data["lambda_tz"]
         + data["B0"] * data["lambda_tzz"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="B_zz",
+    label="\\partial_{\\zeta\\zeta} \\mathbf{B}",
+    units="T",
+    units_long="Tesla",
+    description="Magnetic field, second derivative wrt toroidal angle",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=[
+        "B^theta",
+        "B^theta_z",
+        "B^theta_zz",
+        "B^zeta",
+        "B^zeta_z",
+        "B^zeta_zz",
+        "e_theta",
+        "e_theta_z",
+        "e_theta_zz",
+        "e_zeta",
+        "e_zeta_z",
+        "e_zeta_zz",
+    ],
+)
+def _B_zz(params, transforms, profiles, data, **kwargs):
+    data["B_zz"] = (
+        data["B^theta_zz"] * data["e_theta"].T
+        + 2 * data["B^theta_z"] * data["e_theta_z"].T
+        + data["B^theta"] * data["e_theta_zz"].T
+        + data["B^zeta_zz"] * data["e_zeta"].T
+        + 2 * data["B^zeta_z"] * data["e_zeta_z"].T
+        + data["B^zeta"] * data["e_zeta_zz"].T
+    ).T
     return data
 
 
@@ -905,6 +981,216 @@ def _B_sub_zeta_z(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="B_rho_tt",
+    label="\\partial_{\\theta\\theta} B_{\\rho}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant radial component of magnetic field, second derivative "
+    + "wrt poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_t", "B_tt", "e_rho", "e_rho_t", "e_rho_tt"],
+)
+def _B_sub_rho_tt(params, transforms, profiles, data, **kwargs):
+    data["B_rho_tt"] = (
+        dot(data["B_tt"], data["e_rho"])
+        + 2 * dot(data["B_t"], data["e_rho_t"])
+        + dot(data["B"], data["e_rho_tt"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_theta_tt",
+    label="\\partial_{\\theta\\theta} B_{\\theta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant poloidal component of magnetic field, second derivative "
+    + "wrt poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_t", "B_tt", "e_theta", "e_theta_t", "e_theta_tt"],
+)
+def _B_sub_theta_tt(params, transforms, profiles, data, **kwargs):
+    data["B_theta_tt"] = (
+        dot(data["B_tt"], data["e_theta"])
+        + 2 * dot(data["B_t"], data["e_theta_t"])
+        + dot(data["B"], data["e_theta_tt"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_zeta_tt",
+    label="\\partial_{\\theta\\theta} B_{\\zeta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant toroidal component of magnetic field, second derivative "
+    + "wrt poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_t", "B_tt", "e_zeta", "e_zeta_t", "e_zeta_tt"],
+)
+def _B_sub_zeta_tt(params, transforms, profiles, data, **kwargs):
+    data["B_zeta_tt"] = (
+        dot(data["B_tt"], data["e_zeta"])
+        + 2 * dot(data["B_t"], data["e_zeta_t"])
+        + dot(data["B"], data["e_zeta_tt"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_rho_zz",
+    label="\\partial_{\\zeta\\zeta} B_{\\rho}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant radial component of magnetic field, second derivative "
+    + "wrt toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_z", "B_zz", "e_rho", "e_rho_z", "e_rho_zz"],
+)
+def _B_sub_rho_zz(params, transforms, profiles, data, **kwargs):
+    data["B_rho_zz"] = (
+        dot(data["B_zz"], data["e_rho"])
+        + 2 * dot(data["B_z"], data["e_rho_z"])
+        + dot(data["B"], data["e_rho_zz"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_theta_zz",
+    label="\\partial_{\\zeta\\zeta} B_{\\theta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant poloidal component of magnetic field, second derivative "
+    + "wrt toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_z", "B_zz", "e_theta", "e_theta_z", "e_theta_zz"],
+)
+def _B_sub_theta_zz(params, transforms, profiles, data, **kwargs):
+    data["B_theta_zz"] = (
+        dot(data["B_zz"], data["e_theta"])
+        + 2 * dot(data["B_z"], data["e_theta_z"])
+        + dot(data["B"], data["e_theta_zz"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_zeta_zz",
+    label="\\partial_{\\zeta\\zeta} B_{\\zeta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant toroidal component of magnetic field, second derivative "
+    + "wrt toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_z", "B_zz", "e_zeta", "e_zeta_z", "e_zeta_zz"],
+)
+def _B_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
+    data["B_zeta_zz"] = (
+        dot(data["B_zz"], data["e_zeta"])
+        + 2 * dot(data["B_z"], data["e_zeta_z"])
+        + dot(data["B"], data["e_zeta_zz"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_rho_tz",
+    label="\\partial_{\\theta\\zeta} B_{\\rho}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant radial component of magnetic field, second derivative "
+    + "wrt poloidal and toroidal angles",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_t", "B_z", "B_tz", "e_rho", "e_rho_t", "e_rho_z", "e_rho_tz"],
+)
+def _B_sub_rho_tz(params, transforms, profiles, data, **kwargs):
+    data["B_rho_tz"] = (
+        dot(data["B_tz"], data["e_rho"])
+        + dot(data["B_t"], data["e_rho_z"])
+        + dot(data["B_z"], data["e_rho_t"])
+        + dot(data["B"], data["e_rho_tz"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_theta_tz",
+    label="\\partial_{\\theta\\zeta} B_{\\theta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant poloidal component of magnetic field, second derivative "
+    + "wrt poloidal and toroidal angles",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_t", "B_z", "B_tz", "e_theta", "e_theta_t", "e_theta_z", "e_theta_tz"],
+)
+def _B_sub_theta_tz(params, transforms, profiles, data, **kwargs):
+    data["B_theta_tz"] = (
+        dot(data["B_tz"], data["e_theta"])
+        + dot(data["B_t"], data["e_theta_z"])
+        + dot(data["B_z"], data["e_theta_t"])
+        + dot(data["B"], data["e_theta_tz"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="B_zeta_tz",
+    label="\\partial_{\\theta\\zeta} B_{\\zeta}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Covariant toroidal component of magnetic field, second derivative "
+    + "wrt poloidal and toroidal angles",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=["B", "B_t", "B_z", "B_tz", "e_zeta", "e_zeta_t", "e_zeta_z", "e_zeta_tz"],
+)
+def _B_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
+    data["B_zeta_tz"] = (
+        dot(data["B_tz"], data["e_zeta"])
+        + dot(data["B_t"], data["e_zeta_z"])
+        + dot(data["B_z"], data["e_zeta_t"])
+        + dot(data["B"], data["e_zeta_tz"])
+    )
+    return data
+
+
+@register_compute_fun(
     name="|B|^2",
     label="|\\mathbf{B}|^{2}",
     units="T^2",
@@ -940,7 +1226,39 @@ def _B_mag(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: |B|_r
+@register_compute_fun(
+    name="|B|_r",
+    label="\\partial_{\\rho} |\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=[
+        "B^theta",
+        "B^zeta",
+        "B_theta",
+        "B_zeta",
+        "B^theta_r",
+        "B^zeta_r",
+        "B_theta_r",
+        "B_zeta_r",
+        "|B|",
+    ],
+)
+def _B_mag_r(params, transforms, profiles, data, **kwargs):
+    data["|B|_r"] = (
+        data["B^theta_r"] * data["B_theta"]
+        + data["B^theta"] * data["B_theta_r"]
+        + data["B^zeta_r"] * data["B_zeta"]
+        + data["B^zeta"] * data["B_zeta_r"]
+    ) / (2 * data["|B|"])
+    return data
+
+
 @register_compute_fun(
     name="|B|_t",
     label="\\partial_{\\theta} |\\mathbf{B}|",
@@ -955,39 +1273,22 @@ def _B_mag(params, transforms, profiles, data, **kwargs):
     data=[
         "B^theta",
         "B^zeta",
+        "B_theta",
+        "B_zeta",
         "B^theta_t",
         "B^zeta_t",
-        "g_tt",
-        "g_tz",
-        "g_zz",
-        "e_theta",
-        "e_zeta",
-        "e_theta_t",
-        "e_zeta_t",
+        "B_theta_t",
+        "B_zeta_t",
         "|B|",
     ],
 )
 def _B_mag_t(params, transforms, profiles, data, **kwargs):
     data["|B|_t"] = (
-        data["B^theta"]
-        * (
-            data["B^zeta_t"] * data["g_tz"]
-            + data["B^theta_t"] * data["g_tt"]
-            + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_t"] * data["g_tz"]
-            + data["B^zeta_t"] * data["g_zz"]
-            + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"])
-        )
-        + data["B^theta"]
-        * data["B^zeta"]
-        * (
-            dot(data["e_theta_t"], data["e_zeta"])
-            + dot(data["e_zeta_t"], data["e_theta"])
-        )
-    ) / data["|B|"]
+        data["B^theta_t"] * data["B_theta"]
+        + data["B^theta"] * data["B_theta_t"]
+        + data["B^zeta_t"] * data["B_zeta"]
+        + data["B^zeta"] * data["B_zeta_t"]
+    ) / (2 * data["|B|"])
     return data
 
 
@@ -1005,43 +1306,65 @@ def _B_mag_t(params, transforms, profiles, data, **kwargs):
     data=[
         "B^theta",
         "B^zeta",
+        "B_theta",
+        "B_zeta",
         "B^theta_z",
         "B^zeta_z",
-        "g_tt",
-        "g_tz",
-        "g_zz",
-        "e_theta",
-        "e_zeta",
-        "e_theta_z",
-        "e_zeta_z",
+        "B_theta_z",
+        "B_zeta_z",
         "|B|",
     ],
 )
 def _B_mag_z(params, transforms, profiles, data, **kwargs):
     data["|B|_z"] = (
-        data["B^theta"]
-        * (
-            data["B^zeta_z"] * data["g_tz"]
-            + data["B^theta_z"] * data["g_tt"]
-            + data["B^theta"] * dot(data["e_theta_z"], data["e_theta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_z"] * data["g_tz"]
-            + data["B^zeta_z"] * data["g_zz"]
-            + data["B^zeta"] * dot(data["e_zeta_z"], data["e_zeta"])
-        )
-        + data["B^theta"]
-        * data["B^zeta"]
-        * (
-            dot(data["e_theta_z"], data["e_zeta"])
-            + dot(data["e_zeta_z"], data["e_theta"])
-        )
-    ) / data["|B|"]
+        data["B^theta_z"] * data["B_theta"]
+        + data["B^theta"] * data["B_theta_z"]
+        + data["B^zeta_z"] * data["B_zeta"]
+        + data["B^zeta"] * data["B_zeta_z"]
+    ) / (2 * data["|B|"])
     return data
 
 
-# TODO: |B|_rr
+@register_compute_fun(
+    name="|B|_rr",
+    label="\\partial_{\\rho\\rho} |\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, second derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=[
+        "B^theta",
+        "B^zeta",
+        "B_theta",
+        "B_zeta",
+        "B^theta_r",
+        "B^zeta_r",
+        "B_theta_r",
+        "B_zeta_r",
+        "B^theta_rr",
+        "B^zeta_rr",
+        "B_theta_rr",
+        "B_zeta_rr",
+        "|B|",
+        "|B|_r",
+    ],
+)
+def _B_mag_rr(params, transforms, profiles, data, **kwargs):
+    data["|B|_rr"] = (
+        data["B^theta_rr"] * data["B_theta"]
+        + 2 * data["B^theta_r"] * data["B_theta_r"]
+        + data["B^theta"] * data["B_theta_rr"]
+        + data["B^zeta_rr"] * data["B_zeta"]
+        + 2 * data["B^zeta_r"] * data["B_zeta_r"]
+        + data["B^zeta"] * data["B_zeta_rr"]
+    ) / (2 * data["|B|"]) - data["|B|_r"] ** 2 / data["|B|"]
+    return data
+
+
 @register_compute_fun(
     name="|B|_tt",
     label="\\partial_{\\theta\\theta} |\\mathbf{B}|",
@@ -1056,90 +1379,29 @@ def _B_mag_z(params, transforms, profiles, data, **kwargs):
     data=[
         "B^theta",
         "B^zeta",
+        "B_theta",
+        "B_zeta",
         "B^theta_t",
         "B^zeta_t",
+        "B_theta_t",
+        "B_zeta_t",
         "B^theta_tt",
         "B^zeta_tt",
-        "g_tt",
-        "g_tz",
-        "g_zz",
-        "e_theta",
-        "e_zeta",
-        "e_theta_t",
-        "e_zeta_t",
-        "e_theta_tt",
-        "e_zeta_tt",
+        "B_theta_tt",
+        "B_zeta_tt",
         "|B|",
         "|B|_t",
     ],
 )
 def _B_mag_tt(params, transforms, profiles, data, **kwargs):
     data["|B|_tt"] = (
-        data["B^theta_t"]
-        * (
-            data["B^zeta_t"] * data["g_tz"]
-            + data["B^theta_t"] * data["g_tt"]
-            + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * (
-            data["B^zeta_tt"] * data["g_tz"]
-            + data["B^theta_tt"] * data["g_tt"]
-            + data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * (
-            data["B^zeta_t"]
-            * (
-                dot(data["e_theta_t"], data["e_zeta"])  # TODO: this is just g_tz_t
-                + dot(data["e_theta"], data["e_zeta_t"])
-            )
-            + 2 * data["B^theta_t"] * dot(data["e_theta_t"], data["e_theta"])
-            + data["B^theta"]
-            * (
-                dot(data["e_theta_tt"], data["e_theta"])
-                + dot(data["e_theta_t"], data["e_theta_t"])
-            )
-        )
-        + data["B^zeta_t"]
-        * (
-            data["B^theta_t"] * data["g_tz"]
-            + data["B^zeta_t"] * data["g_zz"]
-            + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_tt"] * data["g_tz"]
-            + data["B^zeta_tt"] * data["g_zz"]
-            + data["B^zeta_t"] * dot(data["e_zeta_t"], data["e_zeta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_t"]
-            * (
-                dot(data["e_theta_t"], data["e_zeta"])
-                + dot(data["e_theta"], data["e_zeta_t"])
-            )
-            + 2 * data["B^zeta_t"] * dot(data["e_zeta_t"], data["e_zeta"])
-            + data["B^zeta"]
-            * (
-                dot(data["e_zeta_tt"], data["e_zeta"])
-                + dot(data["e_zeta_t"], data["e_zeta_t"])
-            )
-        )
-        + (data["B^theta_t"] * data["B^zeta"] + data["B^theta"] * data["B^zeta_t"])
-        * (
-            dot(data["e_theta_t"], data["e_zeta"])
-            + dot(data["e_zeta_t"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * data["B^zeta"]
-        * (
-            dot(data["e_theta_tt"], data["e_zeta"])
-            + dot(data["e_zeta_tt"], data["e_theta"])
-            + 2 * dot(data["e_zeta_t"], data["e_theta_t"])
-        )
-    ) / data["|B|"] - data["|B|_t"] ** 2 / data["|B|"]
+        data["B^theta_tt"] * data["B_theta"]
+        + 2 * data["B^theta_t"] * data["B_theta_t"]
+        + data["B^theta"] * data["B_theta_tt"]
+        + data["B^zeta_tt"] * data["B_zeta"]
+        + 2 * data["B^zeta_t"] * data["B_zeta_t"]
+        + data["B^zeta"] * data["B_zeta_tt"]
+    ) / (2 * data["|B|"]) - data["|B|_t"] ** 2 / data["|B|"]
     return data
 
 
@@ -1157,95 +1419,80 @@ def _B_mag_tt(params, transforms, profiles, data, **kwargs):
     data=[
         "B^theta",
         "B^zeta",
+        "B_theta",
+        "B_zeta",
         "B^theta_z",
         "B^zeta_z",
+        "B_theta_z",
+        "B_zeta_z",
         "B^theta_zz",
         "B^zeta_zz",
-        "g_tt",
-        "g_tz",
-        "g_zz",
-        "e_theta",
-        "e_zeta",
-        "e_theta_z",
-        "e_zeta_z",
-        "e_theta_zz",
-        "e_zeta_zz",
+        "B_theta_zz",
+        "B_zeta_zz",
         "|B|",
         "|B|_z",
     ],
 )
 def _B_mag_zz(params, transforms, profiles, data, **kwargs):
     data["|B|_zz"] = (
-        data["B^theta_z"]
-        * (
-            data["B^zeta_z"] * data["g_tz"]
-            + data["B^theta_z"] * data["g_tt"]
-            + data["B^theta"] * dot(data["e_theta_z"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * (
-            data["B^zeta_zz"] * data["g_tz"]
-            + data["B^theta_zz"] * data["g_tt"]
-            + data["B^theta_z"] * dot(data["e_theta_z"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * (
-            data["B^zeta_z"]
-            * (
-                dot(data["e_theta_z"], data["e_zeta"])
-                + dot(data["e_theta"], data["e_zeta_z"])
-            )
-            + 2 * data["B^theta_z"] * dot(data["e_theta_z"], data["e_theta"])
-            + data["B^theta"]
-            * (
-                dot(data["e_theta_zz"], data["e_theta"])
-                + dot(data["e_theta_z"], data["e_theta_z"])
-            )
-        )
-        + data["B^zeta_z"]
-        * (
-            data["B^theta_z"] * data["g_tz"]
-            + data["B^zeta_z"] * data["g_zz"]
-            + data["B^zeta"] * dot(data["e_zeta_z"], data["e_zeta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_zz"] * data["g_tz"]
-            + data["B^zeta_zz"] * data["g_zz"]
-            + data["B^zeta_z"] * dot(data["e_zeta_z"], data["e_zeta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_z"]
-            * (
-                dot(data["e_theta_z"], data["e_zeta"])
-                + dot(data["e_theta"], data["e_zeta_z"])
-            )
-            + 2 * data["B^zeta_z"] * dot(data["e_zeta_z"], data["e_zeta"])
-            + data["B^zeta"]
-            * (
-                dot(data["e_zeta_zz"], data["e_zeta"])
-                + dot(data["e_zeta_z"], data["e_zeta_z"])
-            )
-        )
-        + (data["B^theta_z"] * data["B^zeta"] + data["B^theta"] * data["B^zeta_z"])
-        * (
-            dot(data["e_theta_z"], data["e_zeta"])
-            + dot(data["e_zeta_z"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * data["B^zeta"]
-        * (
-            dot(data["e_theta_zz"], data["e_zeta"])
-            + dot(data["e_zeta_zz"], data["e_theta"])
-            + 2 * dot(data["e_theta_z"], data["e_zeta_z"])
-        )
-    ) / data["|B|"] - data["|B|_z"] ** 2 / data["|B|"]
+        data["B^theta_zz"] * data["B_theta"]
+        + 2 * data["B^theta_z"] * data["B_theta_z"]
+        + data["B^theta"] * data["B_theta_zz"]
+        + data["B^zeta_zz"] * data["B_zeta"]
+        + 2 * data["B^zeta_z"] * data["B_zeta_z"]
+        + data["B^zeta"] * data["B_zeta_zz"]
+    ) / (2 * data["|B|"]) - data["|B|_z"] ** 2 / data["|B|"]
     return data
 
 
-# TODO: |B|_rt
-# TODO: |B|_rz
+@register_compute_fun(
+    name="|B|_rt",
+    label="\\partial_{\\rho\\theta} |\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative wrt radial coordinate and "
+    + "poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=[
+        "B^theta",
+        "B^zeta",
+        "B_theta",
+        "B_zeeta",
+        "B^theta_r",
+        "B^zeta_r",
+        "B_theta_r",
+        "B_zeta_r",
+        "B^theta_t",
+        "B^zeta_t",
+        "B_theta_t",
+        "B_zeta_t",
+        "B^theta_rt",
+        "B^zeta_rt",
+        "B_theta_rt",
+        "B_zeeta_rt",
+        "|B|",
+        "|B|_r",
+        "|B|_t",
+    ],
+)
+def _B_mag_rt(params, transforms, profiles, data, **kwargs):
+    data["|B|_rt"] = (
+        data["B^theta_rt"] * data["B_theta"]
+        + data["B^theta_r"] * data["B_theta_t"]
+        + data["B^theta_t"] * data["B_theta_r"]
+        + data["B^theta"] * data["B_theta_rt"]
+        + data["B^zeta_rt"] * data["B_zeta"]
+        + data["B^zeta_r"] * data["B_zeta_t"]
+        + data["B^zeta_t"] * data["B_zeta_r"]
+        + data["B^zeta"] * data["B_zeta_rt"]
+    ) / (2 * data["|B|"]) - data["|B|_r"] * data["|B|_t"] / data["|B|"]
+    return data
+
+
 @register_compute_fun(
     name="|B|_tz",
     label="\\partial_{\\theta\\zeta} |\\mathbf{B}|",
@@ -1261,23 +1508,20 @@ def _B_mag_zz(params, transforms, profiles, data, **kwargs):
     data=[
         "B^theta",
         "B^zeta",
+        "B_theta",
+        "B_zeeta",
         "B^theta_t",
         "B^zeta_t",
+        "B_theta_t",
+        "B_zeta_t",
         "B^theta_z",
         "B^zeta_z",
+        "B_theta_z",
+        "B_zeta_z",
         "B^theta_tz",
         "B^zeta_tz",
-        "g_tt",
-        "g_tz",
-        "g_zz",
-        "e_theta",
-        "e_zeta",
-        "e_theta_t",
-        "e_zeta_t",
-        "e_theta_z",
-        "e_zeta_z",
-        "e_theta_tz",
-        "e_zeta_tz",
+        "B_theta_tz",
+        "B_zeeta_tz",
         "|B|",
         "|B|_t",
         "|B|_z",
@@ -1285,72 +1529,63 @@ def _B_mag_zz(params, transforms, profiles, data, **kwargs):
 )
 def _B_mag_tz(params, transforms, profiles, data, **kwargs):
     data["|B|_tz"] = (
-        data["B^theta_z"]
-        * (
-            data["B^zeta_t"] * data["g_tz"]
-            + data["B^theta_t"] * data["g_tt"]
-            + data["B^theta"] * dot(data["e_theta_t"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * (
-            data["B^zeta_tz"] * data["g_tz"]
-            + data["B^theta_tz"] * data["g_tt"]
-            + data["B^theta_z"] * dot(data["e_theta_t"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * (
-            data["B^zeta_t"]
-            * (
-                dot(data["e_theta_z"], data["e_zeta"])
-                + dot(data["e_theta"], data["e_zeta_z"])
-            )
-            + 2 * data["B^theta_t"] * dot(data["e_theta_z"], data["e_theta"])
-            + data["B^theta"]
-            * (
-                dot(data["e_theta_tz"], data["e_theta"])
-                + dot(data["e_theta_t"], data["e_theta_z"])
-            )
-        )
-        + data["B^zeta_z"]
-        * (
-            data["B^theta_t"] * data["g_tz"]
-            + data["B^zeta_t"] * data["g_zz"]
-            + data["B^zeta"] * dot(data["e_zeta_t"], data["e_zeta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_tz"] * data["g_tz"]
-            + data["B^zeta_tz"] * data["g_zz"]
-            + data["B^zeta_z"] * dot(data["e_zeta_t"], data["e_zeta"])
-        )
-        + data["B^zeta"]
-        * (
-            data["B^theta_t"]
-            * (
-                dot(data["e_theta_z"], data["e_zeta"])
-                + dot(data["e_theta"], data["e_zeta_z"])
-            )
-            + 2 * data["B^zeta_t"] * dot(data["e_zeta_z"], data["e_zeta"])
-            + data["B^zeta"]
-            * (
-                dot(data["e_zeta_tz"], data["e_zeta"])
-                + dot(data["e_zeta_t"], data["e_zeta_z"])
-            )
-        )
-        + (data["B^theta_z"] * data["B^zeta"] + data["B^theta"] * data["B^zeta_z"])
-        * (
-            dot(data["e_theta_t"], data["e_zeta"])
-            + dot(data["e_zeta_t"], data["e_theta"])
-        )
-        + data["B^theta"]
-        * data["B^zeta"]
-        * (
-            dot(data["e_theta_tz"], data["e_zeta"])
-            + dot(data["e_zeta_tz"], data["e_theta"])
-            + dot(data["e_theta_t"], data["e_zeta_z"])
-            + dot(data["e_zeta_t"], data["e_theta_z"])
-        )
-    ) / data["|B|"] - data["|B|_t"] * data["|B|_z"] / data["|B|"]
+        data["B^theta_tz"] * data["B_theta"]
+        + data["B^theta_t"] * data["B_theta_z"]
+        + data["B^theta_z"] * data["B_theta_t"]
+        + data["B^theta"] * data["B_theta_tz"]
+        + data["B^zeta_tz"] * data["B_zeta"]
+        + data["B^zeta_t"] * data["B_zeta_z"]
+        + data["B^zeta_z"] * data["B_zeta_t"]
+        + data["B^zeta"] * data["B_zeta_tz"]
+    ) / (2 * data["|B|"]) - data["|B|_t"] * data["|B|_z"] / data["|B|"]
+    return data
+
+
+@register_compute_fun(
+    name="|B|_rz",
+    label="\\partial_{\\rho\\zeta} |\\mathbf{B}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field, derivative wrt radial coordinate and "
+    + "toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    function_of="rtz",
+    data=[
+        "B^theta",
+        "B^zeta",
+        "B_theta",
+        "B_zeeta",
+        "B^theta_r",
+        "B^zeta_r",
+        "B_theta_r",
+        "B_zeta_r",
+        "B^theta_t",
+        "B^zeta_z",
+        "B_theta_z",
+        "B_zeta_z",
+        "B^theta_rz",
+        "B^zeta_rz",
+        "B_theta_rz",
+        "B_zeeta_rz",
+        "|B|",
+        "|B|_r",
+        "|B|_z",
+    ],
+)
+def _B_mag_rz(params, transforms, profiles, data, **kwargs):
+    data["|B|_rz"] = (
+        data["B^theta_rz"] * data["B_theta"]
+        + data["B^theta_r"] * data["B_theta_z"]
+        + data["B^theta_z"] * data["B_theta_r"]
+        + data["B^theta"] * data["B_theta_rz"]
+        + data["B^zeta_rz"] * data["B_zeta"]
+        + data["B^zeta_r"] * data["B_zeta_z"]
+        + data["B^zeta_z"] * data["B_zeta_r"]
+        + data["B^zeta"] * data["B_zeta_rz"]
+    ) / (2 * data["|B|"]) - data["|B|_r"] * data["|B|_z"] / data["|B|"]
     return data
 
 

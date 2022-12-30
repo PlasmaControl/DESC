@@ -67,13 +67,9 @@ def test_1d_surface_averages_consistency(SOLOVEV):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
     def test(plot_function, name, grid=None):
-        if grid is None:
-            _, ax_0 = plot_1d(eq, name)
-            _, ax_1 = plot_function(eq, name, rho=100)  # 100 is plot_1d default
-        else:
-            _, ax_0 = plot_1d(eq, name, grid=grid)
-            _, ax_1 = plot_function(eq, name, rho=grid.nodes[:, 0])
-
+        _, ax_0 = plot_1d(eq, name, grid=grid)
+        # 100 rho points is plot_1d default
+        _, ax_1 = plot_function(eq, name, rho=100 if grid is None else grid.nodes[:, 0])
         np.testing.assert_allclose(
             ax_0.lines[0].get_xydata(), ax_1.lines[0].get_xydata(), err_msg=name
         )

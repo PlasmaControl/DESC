@@ -902,7 +902,7 @@ def plot_tsa(
     """Plot theta surface averages of quantities.
 
     This is like an unweighted flux surface average - the integrals lack the
-    3-D jacobean factor.
+    3-D Jacbobian factor.
 
     Parameters
     ----------
@@ -991,7 +991,7 @@ def _plot_surface_averages(
     Parameters
     ----------
     use_sqrt_g : bool
-        Whether to weight the surface average with sqrt(g), the 3-D jacobian.
+        Whether to weight the surface average with sqrt(g), the 3-D Jacobian.
 
         The weighted surface average is also known as a flux surface average.
         The unweighted surface average is also known as a theta surface average.

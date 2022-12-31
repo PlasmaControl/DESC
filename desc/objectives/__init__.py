@@ -8,7 +8,12 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
+from ._generic import (
+    Generic1DObjective,
+    Generic0DObjective,
+    RotationalTransform,
+    ToroidalCurrent,
+)
 from ._geometry import AspectRatio, Volume
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability

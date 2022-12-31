@@ -15,8 +15,8 @@ from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
-class GenericObjective(_Objective):
-    """A generic objective that can compute any quantity from the `data_index`.
+class Generic1DObjective(_Objective):
+    """A generic objective that can compute any quantity with dim=1 from the `data_index`.
 
     Parameters
     ----------
@@ -62,6 +62,7 @@ class GenericObjective(_Objective):
         name="generic",
     ):
 
+        assert data_index[f]["dim"] == 1
         self.f = f
         self.grid = grid
         super().__init__(
@@ -114,6 +115,109 @@ class GenericObjective(_Objective):
         data = self.fun(params, self._transforms, self._profiles)
         f = data[self.f] * self.grid.weights
         return self._shift_scale(f)
+
+
+class Generic0DObjective(_Objective):
+    """A generic objective that can compute any quantity with dim=0 from the `data_index`.
+
+    This objective is useful for targeting a desired "a", "vol avg |B|", etc.
+
+    Parameters
+    ----------
+    f : str
+        Name of the quantity to compute.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+    _units = "(Unknown)"
+    _print_value_fmt = "Residual: {:10.3e} "
+
+    def __init__(
+        self,
+        f,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="generic",
+    ):
+
+        assert data_index[f]["dim"] == 0
+        self.f = f
+        self.grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+        self._units = "(" + data_index[self.f]["units"] + ")"
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+
+        self._dim_f = 1
+        self.fun = getattr(compute_funs, data_index[self.f]["fun"])
+        self._args = get_params(self.f)
+        self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, **params):
+        """Compute the quantity.
+
+        Parameters
+        ----------
+        args : list of ndarray
+            Any of the arguments given in `arg_order`.
+
+        Returns
+        -------
+        f : ndarray
+            Computed quantity.
+
+        """
+        data = self.fun(params, self._transforms, self._profiles)
+        return self._shift_scale(data[self.f])
 
 
 class ToroidalCurrent(_Objective):

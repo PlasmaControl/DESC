@@ -13,7 +13,8 @@ from desc.equilibrium import Equilibrium
 from desc.objectives import (
     AspectRatio,
     Energy,
-    GenericObjective,
+    Generic1DObjective,
+    Generic0DObjective,
     MagneticWell,
     MercierStability,
     ObjectiveFunction,
@@ -32,11 +33,11 @@ class TestObjectiveFunction:
     """Test ObjectiveFunction classes."""
 
     @pytest.mark.unit
-    def test_generic(self):
-        """Test GenericObjective for arbitrary quantities."""
+    def test_generic1d(self):
+        """Test Generic1DObjective for arbitrary quantities."""
 
         def test(f, eq):
-            obj = GenericObjective(f, eq=eq)
+            obj = Generic1DObjective(f, eq=eq)
             kwargs = {
                 "R_lmn": eq.R_lmn,
                 "Z_lmn": eq.Z_lmn,
@@ -53,6 +54,30 @@ class TestObjectiveFunction:
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_generic0D(self):
+        """Test Generic0DObjective for arbitrary quantities."""
+
+        def test(f, eq):
+            obj = Generic0DObjective(f, eq=eq)
+            kwargs = {
+                "R_lmn": eq.R_lmn,
+                "Z_lmn": eq.Z_lmn,
+                "L_lmn": eq.L_lmn,
+                "i_l": eq.i_l,
+                "c_l": eq.c_l,
+                "Psi": eq.Psi,
+            }
+            np.testing.assert_allclose(
+                obj.compute(**kwargs),
+                eq.compute(f, grid=obj.grid)[f],
+            )
+
+        test("a", Equilibrium(iota=PowerSeriesProfile(0)))
+        test("a", Equilibrium(current=PowerSeriesProfile(0)))
+        test("vol avg |B|", Equilibrium(iota=PowerSeriesProfile(0)))
+        test("vol avg |B|", Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
     def test_volume(self):

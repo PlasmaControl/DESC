@@ -3,10 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
+from desc.compute import compute as compute_fun
 from desc.compute import (
-    compute_flux_coords,
-    compute_J_dot_B_Redl,
-    compute_contravariant_current_density,
     get_profiles,
     get_transforms,
 )
@@ -147,15 +145,15 @@ class BootstrapRedlConsistency(_Objective):
             )
 
         self._dim_f = self.grid.num_rho
-        self._data_keys = ["<J dot B>", "<J dot B> Redl"]
+        self._data_keys = ["<J*B>", "<J*B> Redl", "rho"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -200,26 +198,20 @@ class BootstrapRedlConsistency(_Objective):
         kwargs["Ti"] = self.Ti
         kwargs["Zeff"] = self.Zeff
         kwargs["helicity_N"] = self.helicity_N
-        data = compute_contravariant_current_density(
-            params,
-            self._transforms,
-            self._profiles,
-        )
-        data = compute_J_dot_B_Redl(
-            params,
-            self._transforms,
-            self._profiles,
-            data=data,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
             **kwargs,
         )
-        data = compute_flux_coords(params, self._transforms, self._profiles, data=data)
 
         fourpi2 = 4 * jnp.pi * jnp.pi
         rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
         denominator = (
             jnp.sum(
-                (data["<J dot B>"] + data["<J dot B> Redl"]) ** 2
+                (data["<J*B>"] + data["<J*B> Redl"]) ** 2
                 * (data["rho"] ** self.rho_exponent)
                 * self.grid.weights
             )
@@ -228,7 +220,7 @@ class BootstrapRedlConsistency(_Objective):
 
         residuals = compress(
             self.grid,
-            (data["<J dot B>"] - data["<J dot B> Redl"])
+            (data["<J*B>"] - data["<J*B> Redl"])
             * jnp.sqrt(data["rho"] ** self.rho_exponent),
         ) * jnp.sqrt(rho_weights / denominator)
 

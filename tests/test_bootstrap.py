@@ -669,7 +669,7 @@ class TestBootstrapCompute:
     @pytest.mark.unit
     def test_Redl_sfincs_tokamak_benchmark(self):
         """
-        Compare the Redl <J dot B> to a SFINCS calculation for a
+        Compare the Redl <J*B> to a SFINCS calculation for a
         model tokamak.
 
         The SFINCS calculation is on Matt Landreman's laptop in
@@ -789,7 +789,7 @@ class TestBootstrapCompute:
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute(
-            "<J dot B> Redl",
+            "<J*B> Redl",
             grid=grid,
             helicity_N=helicity_N,
             ne=ne,
@@ -797,7 +797,7 @@ class TestBootstrapCompute:
             Ti=Ti,
             Zeff=1,
         )
-        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
+        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
         # Use True in this "if" statement to plot the bootstrap
         # current profiles:
@@ -807,7 +807,7 @@ class TestBootstrapCompute:
             plt.plot(rho, J_dot_B_Redl, "+-", label="Redl")
             plt.plot(rho, J_dot_B_sfincs, ".-", label="sfincs")
             plt.xlabel("rho")
-            plt.title("<J dot B> [T A / m^2]")
+            plt.title("<J*B> [T A / m^2]")
             plt.legend(loc=0)
             plt.show()
 
@@ -818,7 +818,7 @@ class TestBootstrapCompute:
     @pytest.mark.unit
     def test_Redl_sfincs_QA(self):
         """
-        Compare the Redl <J dot B> to a SFINCS calculation for a
+        Compare the Redl <J*B> to a SFINCS calculation for a
         reactor-scale quasi-axisymmetric configuration.
 
         This test reproduces figure 1.a of Landreman Buller
@@ -883,7 +883,7 @@ class TestBootstrapCompute:
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute(
-            "<J dot B> Redl",
+            "<J*B> Redl",
             grid=grid,
             helicity_N=helicity_N,
             ne=ne,
@@ -891,7 +891,7 @@ class TestBootstrapCompute:
             Ti=Ti,
             Zeff=1,
         )
-        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
+        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
         # Use True in this "if" statement to plot the bootstrap
         # current profiles, reproducing figure 1.a of Landreman Buller
@@ -904,7 +904,7 @@ class TestBootstrapCompute:
             plt.plot(rho**2, J_dot_B_sfincs, ".-", label="sfincs")
             plt.legend(loc=0)
             plt.xlabel(r"$\rho^2 = s$")
-            plt.ylabel("<J dot B> [T A / m^2]")
+            plt.ylabel("<J*B> [T A / m^2]")
             plt.xlim([0, 1])
             plt.show()
 
@@ -913,7 +913,7 @@ class TestBootstrapCompute:
     @pytest.mark.unit
     def test_Redl_sfincs_QH(self):
         """
-        Compare the Redl <J dot B> to a SFINCS calculation for a
+        Compare the Redl <J*B> to a SFINCS calculation for a
         reactor-scale quasi-helically symmetric configuration.
 
         This test reproduces figure 1.b of Landreman Buller
@@ -979,7 +979,7 @@ class TestBootstrapCompute:
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
         data = eq.compute(
-            "<J dot B> Redl",
+            "<J*B> Redl",
             grid=grid,
             helicity_N=helicity_N,
             ne=ne,
@@ -987,7 +987,7 @@ class TestBootstrapCompute:
             Ti=Ti,
             Zeff=1,
         )
-        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])
+        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
         # Use True in this "if" statement to plot the bootstrap
         # current profiles, reproducing figure 1.b of Landreman Buller
@@ -1000,7 +1000,7 @@ class TestBootstrapCompute:
             plt.plot(rho**2, J_dot_B_sfincs, ".-", label="sfincs")
             plt.legend(loc=0)
             plt.xlabel(r"$\rho^2 = s$")
-            plt.ylabel("<J dot B> [T A / m^2]")
+            plt.ylabel("<J*B> [T A / m^2]")
             plt.xlim([0, 1])
             plt.show()
 
@@ -1085,12 +1085,12 @@ class TestBootstrapObjectives:
         filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
         eq = desc.io.load(filename)[-1]
 
-        # Set to True to plot the profiles of <J dot B>
+        # Set to True to plot the profiles of <J*B>
         if False:
             grid = LinearGrid(L=eq.L, M=eq.M, N=0, axis=False)
-            data = eq.compute("<J dot B>", grid=grid)
+            data = eq.compute("<J*B>", grid=grid)
             data = eq.compute(
-                "<J dot B> Redl",
+                "<J*B> Redl",
                 data=data,
                 grid=grid,
                 ne=ne,
@@ -1102,10 +1102,10 @@ class TestBootstrapObjectives:
             data = eq.compute("rho", data=data, grid=grid)
             import matplotlib.pyplot as plt
 
-            plt.plot(data["rho"], data["<J dot B>"], label="MHD")
-            plt.plot(data["rho"], data["<J dot B> Redl"], label="Redl")
+            plt.plot(data["rho"], data["<J*B>"], label="MHD")
+            plt.plot(data["rho"], data["<J*B> Redl"], label="Redl")
             plt.xlabel("rho")
-            plt.title("<J dot B>")
+            plt.title("<J*B>")
             plt.legend(loc=0)
             plt.show()
 
@@ -1249,9 +1249,9 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute("<J dot B>", grid=grid)
+        data = eq.compute("<J*B>", grid=grid)
         data = eq.compute(
-            "<J dot B> Redl",
+            "<J*B> Redl",
             grid=grid,
             ne=ne,
             Te=Te,
@@ -1261,8 +1261,8 @@ class TestBootstrapObjectives:
             data=data,
         )
         # Innermost point has larger error, probably since iota -> 0 there, so drop it:
-        J_dot_B_MHD = compress(grid, data["<J dot B>"])[1:]
-        J_dot_B_Redl = compress(grid, data["<J dot B> Redl"])[1:]
+        J_dot_B_MHD = compress(grid, data["<J*B>"])[1:]
+        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])[1:]
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0

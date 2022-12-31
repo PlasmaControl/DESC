@@ -12,13 +12,13 @@ from desc.grid import ConcentricGrid
 from .data_index import data_index
 
 
-def compute(*names, params, transforms, profiles, data=None, **kwargs):
+def compute(names, params, transforms, profiles, data=None, **kwargs):
     """Compute the quantity given by name on grid.
 
     Parameters
     ----------
-    names : str
-        Names of the quantity(s) to compute.
+    names : str or array-like of str
+        Name(s) of the quantity(s) to compute.
     grid : Grid, optional
         Grid of coordinates to evaluate at. Defaults to the quadrature grid.
     params : dict of ndarray
@@ -38,6 +38,8 @@ def compute(*names, params, transforms, profiles, data=None, **kwargs):
         Computed quantity and intermediate variables.
 
     """
+    if isinstance(names, str):
+        names = [names]
     for name in names:
         if name not in data_index:
             raise ValueError("Unrecognized value '{}'.".format(name))
@@ -63,20 +65,46 @@ def compute(*names, params, transforms, profiles, data=None, **kwargs):
             name, transforms
         ), f"Don't have transforms to compute {name}"
 
-    import desc.compute
+    if data is None:
+        data = {}
 
-    for name in names:
-        fun = getattr(desc.compute, data_index[name]["fun"])
-        data = fun(params, transforms, profiles, data, **kwargs)
+    data = _compute(
+        names,
+        params=params,
+        transforms=transforms,
+        profiles=profiles,
+        data=data,
+        **kwargs,
+    )
     return data
 
 
-def get_data_deps(*keys):
+def _compute(names, params, transforms, profiles, data=None, **kwargs):
+    """Same as above but without checking inputs for faster recursion."""
+    for name in names:
+        if name in data:
+            continue
+        if has_dependencies(name, params, transforms, profiles, data):
+            data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
+        else:
+            data = _compute(
+                data_index[name]["dependencies"]["data"],
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
+                data=data,
+                **kwargs,
+            )
+            data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
+    return data
+
+
+def get_data_deps(keys):
     """Get list of data keys needed to compute a given quantity.
 
     Parameters
     ----------
-    keys : str
+    keys : str or array-like of str
         Name of the desired quantity from the data index
 
     Returns
@@ -84,6 +112,7 @@ def get_data_deps(*keys):
     deps : list of str
         Names of quantities needed to compute key
     """
+    keys = [keys] if isinstance(keys, str) else keys
 
     def _get_deps_1_key(key):
         if "full_dependencies" in data_index[key]:
@@ -102,12 +131,12 @@ def get_data_deps(*keys):
     return sorted(list(set(out)))
 
 
-def get_derivs(*keys):
+def get_derivs(keys):
     """Get dict of derivative orders needed to compute a given quantity.
 
     Parameters
     ----------
-    keys : str
+    keys : str or array-like of str
         Name of the desired quantity from the data index
 
     Returns
@@ -116,6 +145,7 @@ def get_derivs(*keys):
         Orders of derivatives needed to compute key.
         Keys for R, Z, L, etc
     """
+    keys = [keys] if isinstance(keys, str) else keys
 
     def _get_derivs_1_key(key):
         if "full_dependencies" in data_index[key]:
@@ -139,12 +169,12 @@ def get_derivs(*keys):
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
-def get_profiles(*keys, eq=None, grid=None, **kwargs):
+def get_profiles(keys, eq=None, grid=None, **kwargs):
     """Get profiles needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
-    keys : str
+    keys : str or array-like of str
         Name of the desired quantity from the data index
     eq : Equilibrium
         Equilibrium to compute quantity for.
@@ -159,7 +189,8 @@ def get_profiles(*keys, eq=None, grid=None, **kwargs):
         otherwise, returns a dict of Profiles
         Keys for pressure, iota, etc.
     """
-    deps = list(keys) + get_data_deps(*keys)
+    keys = [keys] if isinstance(keys, str) else keys
+    deps = list(keys) + get_data_deps(keys)
     profs = []
     for key in deps:
         profs += data_index[key]["dependencies"]["profiles"]
@@ -178,12 +209,12 @@ def get_profiles(*keys, eq=None, grid=None, **kwargs):
     return profiles
 
 
-def get_params(*keys, eq=None, **kwargs):
+def get_params(keys, eq=None, **kwargs):
     """Get parameters needed to compute a given quantity.
 
     Parameters
     ----------
-    keys : str
+    keys : str or array-like of str
         Name of the desired quantity from the data index
     eq : Equilibrium
         Equilibrium to compute quantity for.
@@ -195,7 +226,8 @@ def get_params(*keys, eq=None, **kwargs):
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
     """
-    deps = list(keys) + get_data_deps(*keys)
+    keys = [keys] if isinstance(keys, str) else keys
+    deps = list(keys) + get_data_deps(keys)
     params = []
     for key in deps:
         params += data_index[key]["dependencies"]["params"]
@@ -206,12 +238,12 @@ def get_params(*keys, eq=None, **kwargs):
     return params
 
 
-def get_transforms(*keys, eq, grid, **kwargs):
+def get_transforms(keys, eq, grid, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
-    keys : str
+    keys : str or array-like of str
         Name of the desired quantity from the data index
     eq : Equilibrium
         Equilibrium to compute quantity for.
@@ -228,7 +260,8 @@ def get_transforms(*keys, eq, grid, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
-    derivs = get_derivs(*keys)
+    keys = [keys] if isinstance(keys, str) else keys
+    derivs = get_derivs(keys)
     transforms = {"grid": grid}
     for c in ["R", "L", "Z"]:
         if c in derivs:

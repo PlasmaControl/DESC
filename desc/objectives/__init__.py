@@ -9,8 +9,7 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._generic import (
-    Generic1DObjective,
-    Generic0DObjective,
+    GenericObjective,
     RotationalTransform,
     ToroidalCurrent,
 )

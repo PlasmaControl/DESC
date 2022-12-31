@@ -23,39 +23,21 @@ data : dict of ndarray
 
 """
 
-from ._bootstrap import compute_J_dot_B_Redl
-from ._core import (
-    compute_cartesian_coords,
-    compute_contravariant_basis,
-    compute_contravariant_metric_coefficients,
-    compute_covariant_basis,
-    compute_covariant_metric_coefficients,
-    compute_flux_coords,
-    compute_geometry,
-    compute_jacobian,
-    compute_lambda,
-    compute_pressure,
-    compute_pressure_gradient,
-    compute_rotational_transform,
-    compute_toroidal_coords,
-    compute_toroidal_flux,
-    compute_toroidal_flux_gradient,
+# just need to import all the submodules here to register everything in the
+# data_index
+
+from . import (
+    _basis_vectors,
+    _bootstrap,
+    _core,
+    _equil,
+    _field,
+    _geometry,
+    _metric,
+    _profiles,
+    _qs,
+    _stability,
 )
-from ._equil import compute_energy, compute_force_error
-from ._field import (
-    compute_B_dot_gradB,
-    compute_boozer_magnetic_field,
-    compute_contravariant_current_density,
-    compute_contravariant_magnetic_field,
-    compute_covariant_magnetic_field,
-    compute_magnetic_field_magnitude,
-    compute_magnetic_pressure_gradient,
-    compute_magnetic_tension,
-    compute_avg_B,
-    compute_avg_beta,
-)
-from ._qs import compute_boozer_coordinates, compute_quasisymmetry_error
-from ._stability import compute_magnetic_well, compute_mercier_stability
 from .data_index import data_index
 from .utils import (
     compute,

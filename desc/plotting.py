@@ -764,7 +764,7 @@ def plot_3d(
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.pop("figsize", None))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        coords = eq.compute("X", "Y", "Z", grid=grid)
+        coords = eq.compute(["X", "Y", "Z"], grid=grid)
     X = coords["X"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Y = coords["Y"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
@@ -1136,7 +1136,7 @@ def plot_section(
     )
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute("R", "Z", grid=grid)
+    coords = eq.compute(["R", "Z"], grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1361,7 +1361,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
-    r_coords = eq.compute("R", "Z", grid=r_grid)
+    r_coords = eq.compute(["R", "Z"], grid=r_grid)
     Rr = r_coords["R"].reshape(
         (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
     )
@@ -1372,7 +1372,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
 
     if plot_theta:
         # vartheta contours
-        v_coords = eq.compute("R", "Z", grid=v_grid)
+        v_coords = eq.compute(["R", "Z"], grid=v_grid)
         Rv = v_coords["R"].reshape(
             (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
         )
@@ -1539,7 +1539,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     if isinstance(ls, str):
         ls = [ls for i in range(grid.num_zeta - 1)]
 
-    coords = eq.compute("R", "Z", grid=grid)
+    coords = eq.compute(["R", "Z"], grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1683,7 +1683,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         }
         grid = _get_grid(**grid_kwargs)
 
-        coords = eqs[i].compute("R", "Z", grid=grid)
+        coords = eqs[i].compute(["R", "Z"], grid=grid)
         R = coords["R"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )
@@ -2106,7 +2106,7 @@ def plot_boozer_modes(
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        data = eq.compute("|B|_mn", "B modes", grid=grid)
+        data = eq.compute(["|B|_mn", "B modes"], grid=grid)
         ds.append(data)
         b_mn = np.atleast_2d(data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
@@ -2392,7 +2392,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     markers = kwargs.pop("markers", ["o", "o", "o"])
     labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_B$"])
 
-    data = eq.compute("R0", "|B|")
+    data = eq.compute(["R0", "|B|"])
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
@@ -2404,7 +2404,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
-            data = eq.compute("|B|_mn", grid=grid, data=data)
+            data = eq.compute(["|B|_mn", "B modes"], grid=grid, data=data)
             modes = data["B modes"]
             idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
@@ -3252,7 +3252,7 @@ def plot_field_lines_sfl(
     field_line_coords = {"R": [], "Z": [], "phi": [], "seed_thetas": seed_thetas}
     for coords in theta_coords:
         grid = Grid(nodes=coords)
-        toroidal_coords = eq.compute("R", "Z", grid=grid)
+        toroidal_coords = eq.compute(["R", "Z"], grid=grid)
         field_line_coords["R"].append(toroidal_coords["R"])
         field_line_coords["Z"].append(toroidal_coords["Z"])
         field_line_coords["phi"].append(phi)

@@ -220,22 +220,22 @@ def factorize_linear_constraints(constraints, objective_args):
 
 
 def align_jacobian(Fx, objective_f, objective_g):
-    """Pad jacobian with zeros in the right places so that the arguments line up.
+    """Pad Jacobian with zeros in the right places so that the arguments line up.
 
     Parameters
     ----------
     Fx : ndarray
-        jacobian wrt args the objective_f takes
+        Jacobian wrt args the objective_f takes
     objective_f : ObjectiveFunction
         Objective corresponding to Fx
     objective_g : ObjectiveFunction
-        Other objective we want to align jacobian against
+        Other objective we want to align Jacobian against
 
     Returns
     -------
     A : ndarray
         Jacobian matrix, reordered and padded so that it broadcasts
-        correctly against the other jacobian
+        correctly against the other Jacobian
     """
     x_idx = objective_f.x_idx
     args = objective_f.args

@@ -75,6 +75,7 @@ class FixBoundaryR(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
+        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -83,8 +84,6 @@ class FixBoundaryR(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
-        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -227,6 +226,7 @@ class FixBoundaryZ(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
+        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -235,8 +235,6 @@ class FixBoundaryZ(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
-        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

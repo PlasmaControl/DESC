@@ -5,7 +5,13 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
-from desc.objectives import FixBoundaryZ, FixCurrent, FixIota, FixLambdaGauge
+from desc.objectives import (
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixCurrent,
+    FixIota,
+    FixLambdaGauge,
+)
 from desc.profiles import PowerSeriesProfile
 
 
@@ -111,3 +117,65 @@ def test_constrain_asserts():
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
         eqi.solve(constraints=(FixCurrent(), FixIota()))
+
+
+@pytest.mark.unit
+def test_build_init():
+    """Ensure that passing an equilibrium to init builds the objective correctly.
+
+    Related to gh issue #378
+    """
+    eq = Equilibrium(M=3, N=1)
+
+    # initialize the constraints without building
+    fbR1 = FixBoundaryR(fixed_boundary=False)
+    fbZ1 = FixBoundaryZ(fixed_boundary=False)
+    fbR2 = FixBoundaryR(fixed_boundary=True)
+    fbZ2 = FixBoundaryZ(fixed_boundary=True)
+    for obj in (fbR1, fbR2, fbZ1, fbZ2):
+        obj.build(eq)
+
+    arg = fbR1.args[0]
+    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
+
+    arg = fbR2.args[0]
+    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
+
+    arg = fbZ1.args[0]
+    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
+
+    arg = fbZ2.args[0]
+    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
+
+    fbR1 = FixBoundaryR(fixed_boundary=False, eq=eq)
+    fbZ1 = FixBoundaryZ(fixed_boundary=False, eq=eq)
+    fbR2 = FixBoundaryR(fixed_boundary=True, eq=eq)
+    fbZ2 = FixBoundaryZ(fixed_boundary=True, eq=eq)
+
+    arg = fbR1.args[0]
+    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
+
+    arg = fbR2.args[0]
+    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
+
+    arg = fbZ1.args[0]
+    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
+
+    arg = fbZ2.args[0]
+    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
+    assert np.max(np.abs(A)) == 1
+    assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)

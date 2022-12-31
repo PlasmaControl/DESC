@@ -3,12 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import (
-    compute_boozer_coordinates,
-    compute_quasisymmetry_error,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -115,13 +111,13 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(
-            *self._data_keys,
+            self._data_keys,
             eq=eq,
             grid=self.grid,
             M_booz=self.M_booz,
-            N_booz=self.N_booz
+            N_booz=self.N_booz,
         )
 
         timer.stop("Precomputing transforms")
@@ -185,10 +181,11 @@ class QuasisymmetryBoozer(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_boozer_coordinates(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         b_mn = data["|B|_mn"]
         b_mn = b_mn[self._idx]
@@ -306,8 +303,8 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -351,11 +348,11 @@ class QuasisymmetryTwoTerm(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_quasisymmetry_error(
-            params,
-            self._transforms,
-            self._profiles,
-            helicity=self._helicity,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = data["f_C"] * self.grid.weights
 
@@ -461,8 +458,8 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -508,10 +505,11 @@ class QuasisymmetryTripleProduct(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_quasisymmetry_error(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = data["f_T"] * self.grid.weights
 

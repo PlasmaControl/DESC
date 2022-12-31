@@ -472,10 +472,8 @@ class LinearGrid(Grid):
             if endpoint and t.size > 1:
                 # increase node weight to account for duplicate node
                 dt *= t.size / (t.size - 1)
-                # reduce endpoint duplicate node weight
-                # equivalent effect done by _scale_weights()
-                # dt[0] /= 2
-                # dt[-1] /= 2
+                # scale_weights() will reduce endpoint (dt[0] and dt[-1])
+                # duplicate node weight
         else:
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
@@ -491,9 +489,8 @@ class LinearGrid(Grid):
                 if endpoint:
                     # The cyclic distance algorithm above correctly weights
                     # the duplicate node spacing at theta = 0 and 2pi.
-                    # However, _scale_weights() is not aware of this, so we multiply
-                    # by 2 to counteract the reduction that will be done by
-                    # _scale_weights()
+                    # However, scale_weights() is not aware of this, so we multiply
+                    # by 2 to counteract the reduction that will be done there.
                     dt[0] *= 2
                     dt[-1] *= 2
             else:
@@ -513,10 +510,8 @@ class LinearGrid(Grid):
             if endpoint and z.size > 1:
                 # increase node weight to account for duplicate node
                 dz *= z.size / (z.size - 1)
-                # reduce endpoint duplicate node weight
-                # equivalent effect done by _scale_weights()
-                # dz[0] /= 2
-                # dz[-1] /= 2
+                # scale_weights() will reduce endpoint (dz[0] and dz[-1])
+                # duplicate node weight
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
@@ -534,8 +529,7 @@ class LinearGrid(Grid):
                     # The cyclic distance algorithm above correctly weights
                     # the duplicate node spacing at zeta = 0 and 2pi / NFP.
                     # However, _scale_weights() is not aware of this, so we multiply
-                    # by 2 to counteract the reduction that will be done by
-                    # _scale_weights()
+                    # by 2 to counteract the reduction that will be done there.
                     dz[0] *= 2
                     dz[-1] *= 2
             else:

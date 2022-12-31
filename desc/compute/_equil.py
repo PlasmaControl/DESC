@@ -4,118 +4,441 @@ from scipy.constants import mu_0
 
 from desc.backend import jnp
 
-from ._core import (
-    compute_contravariant_metric_coefficients,
-    compute_geometry,
-    compute_pressure,
+from .data_index import register_compute_fun
+from .utils import dot
+
+
+@register_compute_fun(
+    name="J^rho",
+    label="J^{\\rho}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant radial component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
 )
-from ._field import (
-    compute_contravariant_current_density,
-    compute_magnetic_field_magnitude,
-)
-from .utils import has_dependencies
-
-
-def compute_force_error(params, transforms, profiles, data=None, **kwargs):
-    """Compute force error components."""
-    data = compute_pressure(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_contravariant_current_density(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_contravariant_metric_coefficients(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_geometry(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    if has_dependencies("F_rho", params, transforms, profiles, data):
-        data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
-            data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
-        )
-    if has_dependencies("F_theta", params, transforms, profiles, data):
-        data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
-    if has_dependencies("F_zeta", params, transforms, profiles, data):
-        data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
-    if has_dependencies("F_beta", params, transforms, profiles, data):
-        data["F_beta"] = data["sqrt(g)"] * data["J^rho"]
-    if has_dependencies("F", params, transforms, profiles, data):
-        data["F"] = (
-            data["F_rho"] * data["e^rho"].T
-            + data["F_theta"] * data["e^theta"].T
-            + data["F_zeta"] * data["e^zeta"].T
-        ).T
-    if has_dependencies("|F|", params, transforms, profiles, data):
-        data["|F|"] = jnp.sqrt(
-            data["F_rho"] ** 2 * data["g^rr"]
-            + data["F_theta"] ** 2 * data["g^tt"]
-            + data["F_zeta"] ** 2 * data["g^zz"]
-            + 2 * data["F_rho"] * data["F_theta"] * data["g^rt"]
-            + 2 * data["F_rho"] * data["F_zeta"] * data["g^rz"]
-            + 2 * data["F_theta"] * data["F_zeta"] * data["g^tz"]
-        )
-    if has_dependencies("div(J_perp)", params, transforms, profiles, data):
-        data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
-
-    if has_dependencies("|beta|", params, transforms, profiles, data):
-        data["|beta|"] = jnp.sqrt(
-            data["B^zeta"] ** 2 * data["g^tt"]
-            + data["B^theta"] ** 2 * data["g^zz"]
-            - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
-        )
-    if has_dependencies("<|F|>_vol", params, transforms, profiles, data):
-        data["<|F|>_vol"] = (
-            jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
-            / data["V"]
-        )
-
+def _J_sup_rho(params, transforms, profiles, data, **kwargs):
+    data["J^rho"] = (data["B_zeta_t"] - data["B_theta_z"]) / (mu_0 * data["sqrt(g)"])
     return data
 
 
-def compute_energy(params, transforms, profiles, data=None, **kwargs):
-    """Compute MHD energy. W = integral( B^2 / (2*mu0) + p / (gamma - 1) ) dV  (J)."""
-    data = compute_pressure(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_magnetic_field_magnitude(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
+@register_compute_fun(
+    name="J^theta",
+    label="J^{\\theta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "B_rho_z", "B_zeta_r"],
+)
+def _J_sup_theta(params, transforms, profiles, data, **kwargs):
+    data["J^theta"] = (data["B_rho_z"] - data["B_zeta_r"]) / (mu_0 * data["sqrt(g)"])
+    return data
 
-    if has_dependencies("W_B", params, transforms, profiles, data):
-        data["W_B"] = jnp.sum(
-            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-        ) / (2 * mu_0)
-    if has_dependencies("W_p", params, transforms, profiles, data):
-        data["W_p"] = jnp.sum(
-            data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-        ) / (kwargs.get("gamma", 0) - 1)
-    if has_dependencies("W", params, transforms, profiles, data):
-        data["W"] = data["W_B"] + data["W_p"]
 
+@register_compute_fun(
+    name="J^zeta",
+    label="J^{\\zeta}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Contravariant toroidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "B_theta_r", "B_rho_t"],
+)
+def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
+    data["J^zeta"] = (data["B_theta_r"] - data["B_rho_t"]) / (mu_0 * data["sqrt(g)"])
+    return data
+
+
+@register_compute_fun(
+    name="J",
+    label="\\mathbf{J}",
+    units="A \\cdot m^{-2}",
+    units_long="Amperes / square meter",
+    description="Plasma current density",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^rho", "J^theta", "J^zeta", "e_rho", "e_theta", "e_zeta"],
+)
+def _J(params, transforms, profiles, data, **kwargs):
+    data["J"] = (
+        data["J^rho"] * data["e_rho"].T
+        + data["J^theta"] * data["e_theta"].T
+        + data["J^zeta"] * data["e_zeta"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="J_R",
+    label="J_{R}",
+    units="A \\cdot m^{-2}",
+    units_long="Amperes / square meter",
+    description="Radial componenet of plasma current density in lab frame",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J"],
+)
+def _J_R(params, transforms, profiles, data, **kwargs):
+    data["J_R"] = data["J"][:, 0]
+    return data
+
+
+@register_compute_fun(
+    name="J_phi",
+    label="J_{\\phi}",
+    units="A \\cdot m^{-2}",
+    units_long="Amperes / square meter",
+    description="Toroidal componenet of plasma current density in lab frame",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J"],
+)
+def _J_phi(params, transforms, profiles, data, **kwargs):
+    data["J_phi"] = data["J"][:, 1]
+    return data
+
+
+@register_compute_fun(
+    name="J_Z",
+    label="J_{Z}",
+    units="A \\cdot m^{-2}",
+    units_long="Amperes / square meter",
+    description="Vertical componenet of plasma current density in lab frame",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J"],
+)
+def _J_Z(params, transforms, profiles, data, **kwargs):
+    data["J_Z"] = data["J"][:, 2]
+    return data
+
+
+@register_compute_fun(
+    name="|J|",
+    label="|\\mathbf{J}|",
+    units="A \\cdot m^{-2}",
+    units_long="Amperes / square meter",
+    description="Magnitue of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J"],
+)
+def _Jmag(params, transforms, profiles, data, **kwargs):
+    data["|J|"] = jnp.linalg.norm(data["J"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="J*B",
+    label="\\mathbf{J} \\cdot \\mathbf{B}",
+    units="N / m^{3}",
+    units_long="Newtons / cubic meter",
+    description="Bootstrap current (note units are not Amperes)",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "B"],
+)
+def _J_dot_B(params, transforms, profiles, data, **kwargs):
+    data["J*B"] = dot(data["J"], data["B"])
+    return data
+
+
+@register_compute_fun(
+    name="J_parallel",
+    label="\\mathbf{J} \\cdot \\mathbf{b}",
+    units="A \\cdot m^{-2}",
+    units_long="Amperes / square meter",
+    description="Plasma current density parallel to magnetic field",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J*B", "|B|"],
+)
+def _J_parallel(params, transforms, profiles, data, **kwargs):
+    data["J_parallel"] = data["J*B"] / data["|B|"]
+    return data
+
+
+@register_compute_fun(
+    name="div(J_perp)",
+    label="\\nabla \\cdot \\mathbf{J}_{\\perp}",
+    units="A \\cdot m^{-3}",
+    units_long="Amperes / cubic meter",
+    description="Divergence of plasma current density perpendicular to magnetic field",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J^rho", "p_r", "|B|"],
+)
+def _div_J_perp(params, transforms, profiles, data, **kwargs):
+    data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
+    return data
+
+
+@register_compute_fun(
+    name="F_rho",
+    label="F_{\\rho}",
+    units="N \\cdot m^{-2}",
+    units_long="Newtons / square meter",
+    description="Covariant radial component of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["p_r", "sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
+)
+def _F_rho(params, transforms, profiles, data, **kwargs):
+    data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
+        data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="F_theta",
+    label="F_{\\theta}",
+    units="N \\cdot m^{-2}",
+    units_long="Newtons / square meter",
+    description="Covariant poloidal component of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "B^zeta", "J^rho"],
+)
+def _F_theta(params, transforms, profiles, data, **kwargs):
+    data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+    return data
+
+
+@register_compute_fun(
+    name="F_zeta",
+    label="F_{\\zeta}",
+    units="N \\cdot m^{-2}",
+    units_long="Newtons / square meter",
+    description="Covariant toroidal component of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "B^theta", "J^rho"],
+)
+def _F_zeta(params, transforms, profiles, data, **kwargs):
+    data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    return data
+
+
+@register_compute_fun(
+    name="F_helical",
+    label="F_{helical}",
+    units="N \\cdot m^{-2}",
+    units_long="Newtons / square meter",
+    description="Covariant helical component of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)", "J^rho"],
+)
+def _F_helical(params, transforms, profiles, data, **kwargs):
+    data["F_helical"] = data["sqrt(g)"] * data["J^rho"]
+    return data
+
+
+@register_compute_fun(
+    name="F",
+    label="\\mathbf{J} \\times \\mathbf{B} - \\nabla p",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Force balance error",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["F_rho", "F_theta", "F_zeta", "e^rho", "e^theta", "e^zeta"],
+)
+def _F(params, transforms, profiles, data, **kwargs):
+    data["F"] = (
+        data["F_rho"] * data["e^rho"].T
+        + data["F_theta"] * data["e^theta"].T
+        + data["F_zeta"] * data["e^zeta"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="|F|",
+    label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Magnitude of force balance error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["F"],
+)
+def _Fmag(params, transforms, profiles, data, **kwargs):
+    data["|F|"] = jnp.linalg.norm(data["F"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="<|F|>_vol",
+    label="<|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|>_{vol}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons / cubic meter",
+    description="Volume average of magnitude of force balance error",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["|F|", "sqrt(g)", "V"],
+)
+def _Fmag_vol(params, transforms, profiles, data, **kwargs):
+    data["<|F|>_vol"] = (
+        jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
+        / data["V"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|e^helical|",
+    label="|B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta|",
+    units="T \\cdot m^{-2}",
+    units_long="Tesla / square meter",
+    description="Magnitude of helical basis vector",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^theta", "B^zeta", "g^tt", "g^zz", "g^tz"],
+)
+def _helical_mag(params, transforms, profiles, data, **kwargs):
+    data["|e^helical|"] = jnp.sqrt(
+        data["B^zeta"] ** 2 * data["g^tt"]
+        + data["B^theta"] ** 2 * data["g^zz"]
+        - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="W_B",
+    label="W_B",
+    units="J",
+    units_long="Joules",
+    description="Plasma magnetic energy",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|B|", "sqrt(g)"],
+)
+def _W_B(params, transforms, profiles, data, **kwargs):
+    data["W_B"] = jnp.sum(
+        data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+    ) / (2 * mu_0)
+    return data
+
+
+@register_compute_fun(
+    name="W_p",
+    label="W_p",
+    units="J",
+    units_long="Joules",
+    description="Plasma thermodynamic energy",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["p", "sqrt(g)"],
+    gamma="gamma",
+)
+def _W_p(params, transforms, profiles, data, **kwargs):
+    data["W_p"] = jnp.sum(
+        data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+    ) / (kwargs.get("gamma", 0) - 1)
+    return data
+
+
+@register_compute_fun(
+    name="W",
+    label="W",
+    units="J",
+    units_long="Joules",
+    description="Plasma total energy",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_B", "W_p"],
+)
+def _W(params, transforms, profiles, data, **kwargs):
+    data["W"] = data["W_B"] + data["W_p"]
+    return data
+
+
+@register_compute_fun(
+    name="<beta>_vol",
+    label="\\langle \\beta \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Normalized plasma pressure",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_p", "W_B"],
+)
+def _beta_vol(params, transforms, profiles, data, **kwargs):
+    data["<beta>_vol"] = data["W_p"] / data["W_B"]
     return data

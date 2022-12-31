@@ -360,7 +360,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
 )
 def _e_helical(params, transforms, profiles, data, **kwargs):
     data["e^helical"] = (
-        data["B^theta"] * data["e^theta"].T + data["B^zeta"] * data["e^zeta"].T
+        data["B^theta"] * data["e^zeta"].T + data["B^zeta"] * data["e^theta"].T
     ).T
     return data
 
@@ -379,7 +379,7 @@ def _e_helical(params, transforms, profiles, data, **kwargs):
     data=["e^helical"],
 )
 def _helical_mag(params, transforms, profiles, data, **kwargs):
-    data["|e^helical|"] = jnp.linalg.norm(data["e^helical"])
+    data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
     return data
 
 

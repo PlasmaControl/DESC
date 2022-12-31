@@ -209,9 +209,9 @@ Name,Label,Units,Description,Module
 ``curvature_K``,:math:`K`,meters squared,Gaussian curvature of flux surfaces,``desc.compute._geometry``
 ``curvature_H``,:math:`H`,meters,Mean curvature of flux surfaces,``desc.compute._geometry``
 ``sqrt(g)``,:math:`\sqrt{g}`,cubic meters,Jacobian determinant,``desc.compute._metric``
-``|e_theta x e_zeta|``,:math:`|e_{\theta} \times e_{\zeta}|`,square meters,2D jacobian determinant for constant rho surface,``desc.compute._metric``
-``|e_zeta x e_rho|``,:math:`|e_{\zeta} \times e_{\rho}|`,square meters,2D jacobian determinant for constant theta surface,``desc.compute._metric``
-``|e_rho x e_theta|``,:math:`|e_{\rho} \times e_{\theta}|`,square meters,2D jacobian determinant for constant zeta surface,``desc.compute._metric``
+``|e_theta x e_zeta|``,:math:`|e_{\theta} \times e_{\zeta}|`,square meters,2D Jacobian determinant for constant rho surface,``desc.compute._metric``
+``|e_zeta x e_rho|``,:math:`|e_{\zeta} \times e_{\rho}|`,square meters,2D Jacobian determinant for constant theta surface,``desc.compute._metric``
+``|e_rho x e_theta|``,:math:`|e_{\rho} \times e_{\theta}|`,square meters,2D Jacobian determinant for constant zeta surface,``desc.compute._metric``
 ``sqrt(g)_r``,:math:`\partial_{\rho} \sqrt{g}`,cubic meters,"Jacobian determinant, derivative wrt radial coordinate",``desc.compute._metric``
 ``sqrt(g)_t``,:math:`\partial_{\theta} \sqrt{g}`,cubic meters,"Jacobian determinant, derivative wrt poloidal angle",``desc.compute._metric``
 ``sqrt(g)_z``,:math:`\partial_{\zeta} \sqrt{g}`,cubic meters,"Jacobian determinant, derivative wrt toroidal angle",``desc.compute._metric``

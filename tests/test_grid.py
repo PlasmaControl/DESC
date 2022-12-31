@@ -64,9 +64,11 @@ class TestGrid:
         ).T
 
         np.testing.assert_allclose(g.nodes, nodes)
-        # spacing.prod == weights for linear grids (not true for concentric)
-        np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
         np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
+        # spacing.prod == weights for linear grids
+        # this is not true for concentric or any grid with duplicates
+        if not endpoint:
+            np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
 
     @pytest.mark.unit
     def test_linear_grid_spacing(self):
@@ -97,6 +99,7 @@ class TestGrid:
             np.testing.assert_allclose(grid1.spacing, grid2.spacing)
 
         test(endpoint=False)
+        test(endpoint=True)
         test(axis=False)
         test(axis=True)
 
@@ -105,15 +108,63 @@ class TestGrid:
         """Test that 2 node grids assign equal spacing to nodes."""
         node_count = 2
         NFP = 7  # any integer > 1 is good candidate for test
-        endpoint = False  # TODO: fix endpoint = True issue later
-        lg = LinearGrid(
-            theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
-            zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
+
+        def test(endpoint):
+            lg = LinearGrid(
+                theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
+                zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
+                NFP=NFP,
+                endpoint=endpoint,
+            )
+            # when endpoint is true, rho nodes spacing should be scaled down
+            # so that theta / zeta surface integrals weigh duplicate nodes less
+            spacing = np.tile(
+                [1 / 2 if endpoint else 1, np.pi, np.pi], (node_count**2, 1)
+            )
+            np.testing.assert_allclose(lg.spacing, spacing)
+
+        test(endpoint=False)
+        test(endpoint=True)
+
+    @pytest.mark.unit
+    def test_duplicate_node_endpoint_spacing(self):
+        """Test surface differential element weight on grid with endpoint=True."""
+        nrho = 4
+        ntheta = 5
+        nzeta = 7
+        NFP = 3
+        endpoint = True
+        grid1 = LinearGrid(
+            rho=nrho, theta=ntheta, zeta=nzeta, NFP=NFP, endpoint=endpoint
+        )
+        grid2 = LinearGrid(
+            rho=np.linspace(1, 0, nrho)[::-1],
+            theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
+            zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
             NFP=NFP,
             endpoint=endpoint,
         )
-        spacing = np.tile([1, np.pi, np.pi], (node_count * node_count, 1))
-        np.testing.assert_allclose(lg.spacing, spacing)
+        for g in grid1, grid2:
+            surface_area = compress(g, surface_integrals(g, surface_label="rho"), "rho")
+            np.testing.assert_allclose(4 * np.pi**2, surface_area)
+
+            surface_area = compress(
+                g, surface_integrals(g, surface_label="theta"), "theta"
+            )
+            np.testing.assert_allclose(2 * np.pi, surface_area[1:-1])
+            if ntheta > 1:
+                # theta=0 and theta=2pi surface should have half weight
+                np.testing.assert_allclose(np.pi, surface_area[0])
+                np.testing.assert_allclose(np.pi, surface_area[-1])
+
+            surface_area = compress(
+                g, surface_integrals(g, surface_label="zeta"), "zeta"
+            )
+            np.testing.assert_allclose(2 * np.pi, surface_area[1:-1])
+            if nzeta > 1:
+                # zeta=0 and zeta=2pi/NFP surface should have half weight
+                np.testing.assert_allclose(np.pi, surface_area[0])
+                np.testing.assert_allclose(np.pi, surface_area[-1])
 
     @pytest.mark.unit
     def test_concentric_grid(self):

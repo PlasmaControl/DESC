@@ -11,6 +11,7 @@ from desc.objectives import (
     FixCurrent,
     FixIota,
     FixLambdaGauge,
+    FixPressure,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -106,7 +107,7 @@ def test_constrain_bdry_with_only_one_mode():
 @pytest.mark.unit
 def test_constrain_asserts():
     """Test error checking for incompatible constraints."""
-    eqi = Equilibrium(iota=PowerSeriesProfile(0, 0))
+    eqi = Equilibrium(iota=PowerSeriesProfile(0, 0), pressure=PowerSeriesProfile(0, 0))
     eqc = Equilibrium(current=PowerSeriesProfile(0))
     # nonexistent toroidal current can't be constrained
     with pytest.raises(RuntimeError):
@@ -117,6 +118,8 @@ def test_constrain_asserts():
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
         eqi.solve(constraints=(FixCurrent(), FixIota()))
+    with pytest.raises(ValueError):
+        eqi.solve(constraints=(FixPressure(target=2), FixPressure(target=1)))
 
 
 @pytest.mark.unit

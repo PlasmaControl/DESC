@@ -4081,3 +4081,31 @@ data_index["<J dot B> Redl"] = {
         ],
     },
 }
+data_index["vol avg |B|"] = {
+    "label": "vol avg |B|",
+    "units": "T",
+    "units_long": "Tesla",
+    "description": "Volume-averaged (root-mean-square) |B|",
+    "fun": "compute_avg_B",
+    "dim": 0,
+    "dependencies": {
+        "params": [],
+        "transforms": {"grid": []},
+        "profiles": [],
+        "data": ["|B|", "sqrt(g)", "V"],
+    },
+}
+data_index["vol avg beta"] = {
+    "label": "vol avg beta",
+    "units": "dimensionless",
+    "units_long": "dimensionless",
+    "description": "Volume average beta",
+    "fun": "compute_avg_beta",
+    "dim": 0,
+    "dependencies": {
+        "params": [],
+        "transforms": {"grid": []},
+        "profiles": [],
+        "data": ["p", "sqrt(g)", "V", "vol avg |B|"],
+    },
+}

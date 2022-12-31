@@ -8,7 +8,7 @@ from scipy.io import netcdf_file
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -537,6 +537,27 @@ def test_J_dot_B():
 
     # Drop first point since desc gives NaN:
     np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
+
+
+@pytest.mark.unit
+def test_vol_avg_B_beta():
+    """Compare volavgB and betatotal to vmec."""
+    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
+    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+
+    fid = netcdf_file(wout_file, mmap=False)
+    volavgB = fid.variables["volavgB"][()]
+    betatotal = fid.variables["betatotal"][()]
+    fid.close()
+
+    eq = EquilibriaFamily.load(desc_file)[-1]
+
+    grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+    data = eq.compute("vol avg beta", grid=grid)
+
+    np.testing.assert_allclose(volavgB, data["vol avg |B|"], rtol=1e-7)
+    np.testing.assert_allclose(betatotal, data["vol avg beta"], rtol=1e-5)
+
 
 @pytest.mark.unit
 def test_compute_everything():

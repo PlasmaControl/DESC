@@ -51,6 +51,8 @@ from ._field import (
     compute_magnetic_field_magnitude,
     compute_magnetic_pressure_gradient,
     compute_magnetic_tension,
+    compute_avg_B,
+    compute_avg_beta,
 )
 from ._qs import compute_boozer_coordinates, compute_quasisymmetry_error
 from ._stability import compute_magnetic_well, compute_mercier_stability

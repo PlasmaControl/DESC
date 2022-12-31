@@ -7,8 +7,10 @@ from desc.backend import jnp
 from ._core import (
     compute_contravariant_metric_coefficients,
     compute_covariant_metric_coefficients,
+    compute_geometry,
     compute_jacobian,
     compute_lambda,
+    compute_pressure,
     compute_rotational_transform,
     compute_toroidal_flux,
 )
@@ -805,5 +807,65 @@ def compute_contravariant_current_density(
             J_dot_B,
             sqrt_g=data["sqrt(g)"],
         )
+
+    return data
+
+
+def compute_avg_B(params, transforms, profiles, data=None, **kwargs):
+    """Compute volume-averaged |B|."""
+    data = compute_geometry(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_magnetic_field_magnitude(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    if has_dependencies("vol avg |B|", params, transforms, profiles, data):
+        data["vol avg |B|"] = jnp.sqrt(
+            jnp.sum(
+                data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+            )
+            / data["V"]
+        )
+
+    return data
+
+
+def compute_avg_beta(params, transforms, profiles, data=None, **kwargs):
+    """Compute volume-averaged beta."""
+    data = compute_pressure(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_geometry(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    data = compute_avg_B(
+        params,
+        transforms,
+        profiles,
+        data=data,
+        **kwargs,
+    )
+    if has_dependencies("vol avg beta", params, transforms, profiles, data):
+        vol_avg_p = (
+            jnp.sum(data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
+            / data["V"]
+        )
+        data["vol avg beta"] = 2 * mu_0 * vol_avg_p / (data["vol avg |B|"] ** 2)
 
     return data

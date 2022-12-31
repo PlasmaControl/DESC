@@ -326,7 +326,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|F|>_vol",
-    label="\\langla |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
+    label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
     units="N \\cdot m^{-3}",
     units_long="Newtons / cubic meter",
     description="Volume average of magnitude of force balance error",
@@ -360,7 +360,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
 )
 def _e_helical(params, transforms, profiles, data, **kwargs):
     data["e^helical"] = (
-        data["B^theta"] * data["e^zeta"].T + data["B^zeta"] * data["e^theta"].T
+        data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T
     return data
 

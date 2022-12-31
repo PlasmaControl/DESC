@@ -11,7 +11,7 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
-from desc.compute.utils import compress, get_profiles, get_transforms
+from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -916,7 +916,7 @@ class _Configuration(IOAble, ABC):
 
     def compute(
         self,
-        *names,
+        names,
         grid=None,
         params=None,
         transforms=None,
@@ -928,8 +928,8 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        names : str
-            Names of the quantity(s) to compute.
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
         params : dict of ndarray
@@ -954,22 +954,14 @@ class _Configuration(IOAble, ABC):
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         if params is None:
-            params = {
-                "R_lmn": self.R_lmn,
-                "Z_lmn": self.Z_lmn,
-                "L_lmn": self.L_lmn,
-                "p_l": self.p_l,
-                "i_l": self.i_l,
-                "c_l": self.c_l,
-                "Psi": self.Psi,
-            }
+            params = get_params(names, eq=self)
         if profiles is None:
-            profiles = get_profiles(*names, eq=self, grid=grid)
+            profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
-            transforms = get_transforms(*names, eq=self, grid=grid, **kwargs)
+            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
 
         data = compute_fun(
-            *names,
+            names,
             params=params,
             transforms=transforms,
             profiles=profiles,
@@ -1036,8 +1028,8 @@ class _Configuration(IOAble, ABC):
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-        Does so by checking coordianate jacobian (sqrt(g)) sign.
-        If coordinate jacobian switches sign somewhere in the volume, this
+        Does so by checking coordianate Jacobian (sqrt(g)) sign.
+        If coordinate Jacobian switches sign somewhere in the volume, this
         indicates that it is zero at some point, meaning surfaces are touching and
         the equilibrium is not nested.
 
@@ -1047,7 +1039,7 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         grid  :  Grid, optional
-            Grid on which to evaluate the coordinate jacobian and check for the sign.
+            Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
             spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn

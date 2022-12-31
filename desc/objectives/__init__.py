@@ -14,7 +14,7 @@ from ._generic import (
     RotationalTransform,
     ToroidalCurrent,
 )
-from ._geometry import AspectRatio, Volume
+from ._geometry import AspectRatio, Volume, MinorRadius, VolAvgB
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective

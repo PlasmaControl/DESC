@@ -532,3 +532,13 @@ class TestTransform:
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_empty_grid(self):
+        """Make sure we can build transforms with empty grids."""
+        grid = Grid(nodes=np.empty((0, 3)))
+        basis = FourierZernikeBasis(6, 0, 0)
+        _ = Transform(grid, basis)
+
+        basis = FourierZernikeBasis(6, 6, 6)
+        _ = Transform(grid, basis)

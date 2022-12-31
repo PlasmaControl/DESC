@@ -439,7 +439,7 @@ class Equilibrium(_Configuration, IOAble):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the jacobian or hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int
@@ -556,7 +556,7 @@ class Equilibrium(_Configuration, IOAble):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the jacobian or hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
         verbose : int

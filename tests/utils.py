@@ -167,11 +167,12 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     Rr1 = coords["Rr_desc"]
     Zr1 = coords["Zr_desc"]
     Rv1 = coords["Rv_desc"]
-    Zv1 = coords["Zv_desc"][::signgs]
+    Zv1 = coords["Zv_desc"]
     Rr2 = coords["Rr_vmec"]
     Zr2 = coords["Zr_vmec"]
+    # need to reverse the order of these due to different sign conventions for theta
     Rv2 = coords["Rv_vmec"][::signgs]
-    Zv2 = coords["Zv_vmec"]
+    Zv2 = coords["Zv_vmec"][::signgs]
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta
 

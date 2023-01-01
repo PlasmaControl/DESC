@@ -12,12 +12,12 @@ from desc.objectives import (
     FixCurrent,
     FixIota,
     ForceBalance,
+    ForceBalanceGalerkin,
     HelicalForceBalance,
     ObjectiveFunction,
     RadialForceBalance,
+    SpectralCondensation,
     WrappedEquilibriumObjective,
-    ForceBalanceGalerkin,
-    SpectralCondensation
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer

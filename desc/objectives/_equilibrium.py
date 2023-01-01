@@ -18,6 +18,7 @@ from desc.utils import Timer
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
+
 class ForceBalance(_Objective):
     """Radial and helical MHD force balance.
 
@@ -537,7 +538,7 @@ class ForceBalanceGalerkin(_Objective):
         Name of the objective function.
 
     """
- 
+
     _scalar = False
     _linear = False
     _units = "(N)"
@@ -625,8 +626,8 @@ class ForceBalanceGalerkin(_Objective):
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
- 
         """Compute MHD force balance errors.
+
         Parameters
         ----------
         R_lmn : ndarray
@@ -643,7 +644,7 @@ class ForceBalanceGalerkin(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
- 
+
         Returns
         -------
         f : ndarray
@@ -675,9 +676,8 @@ class ForceBalanceGalerkin(_Objective):
         fb_proj = self._transforms["Z"].project(fb)
 
         f = jnp.concatenate([fr_proj, fb_proj])
-        
-        return self._shift_scale(f)
 
+        return self._shift_scale(f)
 
 
 class Energy(_Objective):

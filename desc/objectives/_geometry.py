@@ -1,9 +1,9 @@
 """Objectives for targeting geometrical quantities."""
 
+from desc.backend import jnp
 from desc.compute import compute_geometry, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
-from desc.backend import jnp
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -264,7 +264,7 @@ class SpectralCondensation(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(m^2)"
     _print_value_fmt = "Spectral width: {:10.3e} "
@@ -307,8 +307,8 @@ class SpectralCondensation(_Objective):
             self.grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
- 
-        self._dim_f = 1
+
+        self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
         self._data_keys = ["V"]
 
         timer = Timer()
@@ -325,7 +325,7 @@ class SpectralCondensation(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["A"]        
+            self._normalization = scales["A"]
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, **kwargs):
@@ -344,13 +344,11 @@ class SpectralCondensation(_Objective):
             spectral width, dimensionless.
 
         """
-        R_weights = jnp.square(jnp.arange(len(R_lmn)))
-        Z_weights = jnp.square(jnp.arange(len(Z_lmn)))
-        L_weights = jnp.square(jnp.arange(len(L_lmn)))
-        
-        R_width = jnp.dot(jnp.abs(R_lmn),R_weights)
-        Z_width = jnp.dot(jnp.abs(Z_lmn),Z_weights)
-        L_width = jnp.dot(jnp.abs(L_lmn),L_weights)
-        I = R_width + Z_width + L_width
+        R_weights = jnp.square(self._transforms["R"]._basis.modes[:, 1])
+        Z_weights = jnp.square(self._transforms["Z"]._basis.modes[:, 1])
+
+        R_width = R_weights * R_lmn
+        Z_width = Z_weights * Z_lmn
+        I = jnp.concatenate([R_width, Z_width])
 
         return self._shift_scale(jnp.atleast_1d(I))

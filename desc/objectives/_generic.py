@@ -1,12 +1,8 @@
 """Generic objectives that don't belong anywhere else."""
 
-import desc.compute as compute_funs
 from desc.backend import jnp
-from desc.compute import (
-    compute_boozer_magnetic_field,
-    compute_rotational_transform,
-    data_index,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import data_index
 from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -91,7 +87,6 @@ class GenericObjective(_Objective):
             self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
         self._dim_f = self.grid.num_nodes
-        self.fun = getattr(compute_funs, data_index[self.f]["fun"])
         self._args = get_params(self.f)
         self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
@@ -111,7 +106,12 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        data = self.fun(params, self._transforms, self._profiles)
+        data = compute_fun(
+            self.f,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
         f = data[self.f] * self.grid.weights
         return self._shift_scale(f)
 
@@ -199,8 +199,8 @@ class ToroidalCurrent(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -244,10 +244,11 @@ class ToroidalCurrent(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_boozer_magnetic_field(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         I = compress(self.grid, data["current"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
@@ -337,8 +338,8 @@ class RotationalTransform(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -377,10 +378,11 @@ class RotationalTransform(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_rotational_transform(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         iota = compress(self.grid, data["iota"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")

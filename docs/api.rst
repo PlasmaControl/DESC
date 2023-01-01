@@ -177,7 +177,6 @@ Plotting
     desc.plotting.plot_comparison
     desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
-    desc.plotting.plot_tsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
     desc.plotting.plot_qs_error

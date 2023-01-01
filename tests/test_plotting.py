@@ -62,7 +62,7 @@ def test_1d_p(SOLOVEV):
 
 @pytest.mark.unit
 def test_1d_fsa_consistency():
-    """Test that plot_1d uses 2d grid to compute quantities requiring surface averages."""
+    """Test that plot_1d uses 2d grid to compute quantities with surface averages."""
     eq = get("W7-X")
 
     def test(name, with_sqrt_g=True, grid=None):

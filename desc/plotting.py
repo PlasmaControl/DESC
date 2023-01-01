@@ -1050,7 +1050,7 @@ def plot_fsa(
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     assert (
         len(kwargs) == 0
-    ), f"plot_surface_averages got unexpected keyword argument: {kwargs.keys()}"
+    ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)

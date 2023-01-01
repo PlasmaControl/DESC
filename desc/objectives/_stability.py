@@ -3,12 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import (
-    compute_magnetic_well,
-    compute_mercier_stability,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -106,8 +102,8 @@ class MercierStability(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -154,14 +150,42 @@ class MercierStability(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_mercier_stability(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = compress(self.grid, data["D_Mercier"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + "(normalized)"
+            )
 
 
 class MagneticWell(_Objective):
@@ -254,8 +278,8 @@ class MagneticWell(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -298,11 +322,22 @@ class MagneticWell(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_magnetic_well(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = compress(self.grid, data["magnetic well"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)

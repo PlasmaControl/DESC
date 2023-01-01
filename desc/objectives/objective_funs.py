@@ -27,7 +27,7 @@ class ObjectiveFunction(IOAble):
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
-        use less memory. Note that the "blocked" hessian will only be block diagonal.
+        use less memory. Note that the "blocked" Hessian will only be block diagonal.
     verbose : int, optional
         Level of output.
 
@@ -489,7 +489,12 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
+        # if args is already set don't overwrite it
+        self._args = getattr(
+            self,
+            "_args",
+            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
+        )
         if eq is not None:
             self.build(eq)
 

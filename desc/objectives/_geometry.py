@@ -1,6 +1,7 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.compute import compute_geometry, compute_avg_B, get_profiles, get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
 
@@ -86,8 +87,8 @@ class Volume(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -119,10 +120,11 @@ class Volume(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        data = compute_geometry(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         return self._shift_scale(data["V"])
 
@@ -206,8 +208,8 @@ class AspectRatio(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -235,10 +237,11 @@ class AspectRatio(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        data = compute_geometry(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         return self._shift_scale(data["R0/a"])
 
@@ -322,8 +325,8 @@ class MinorRadius(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -351,10 +354,11 @@ class MinorRadius(_Objective):
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
         }
-        data = compute_geometry(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         return self._shift_scale(data["a"])
 
@@ -432,14 +436,14 @@ class VolAvgB(_Objective):
             )
 
         self._dim_f = 1
-        self._data_keys = ["vol avg |B|"]
+        self._data_keys = ["<|B|>_rms"]
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -471,9 +475,10 @@ class VolAvgB(_Objective):
             "c_l": c_l,
             "Psi": Psi,
         }
-        data = compute_avg_B(
-            params,
-            self._transforms,
-            self._profiles,
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
-        return self._shift_scale(data["vol avg |B|"])
+        return self._shift_scale(data["<|B|>_rms"])

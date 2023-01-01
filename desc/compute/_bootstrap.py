@@ -6,11 +6,7 @@ from scipy.constants import elementary_charge
 
 from ..backend import jnp, fori_loop
 from ..profiles import Profile, PowerSeriesProfile
-from ._field import (
-    compute_boozer_magnetic_field,
-    compute_jacobian,
-    compute_magnetic_field_magnitude,
-)
+from .data_index import register_compute_fun
 from .utils import (
     compress,
     expand,
@@ -464,13 +460,20 @@ def j_dot_B_Redl(
     return jdotB_data
 
 
-def compute_J_dot_B_Redl(
-    params,
-    transforms,
-    profiles,
-    data=None,
-    **kwargs,
-):
+@register_compute_fun(
+    name="<J*B> Redl",
+    label="\\langle\\mathbf{J}\\cdot\\mathbf{B}\\rangle_{Redl}",
+    units="T A m^{-2}",
+    units_long="Tesla Ampere / meter^2",
+    description="Bootstrap current profile, Redl model for quasisymmetry",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["|B|", "sqrt(g)", "G", "I", "iota"],
+)
+def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """
     Compute the geometric quantities needed for the Redl bootstrap
     formula using the global Bmax and Bmin on each surface.
@@ -484,27 +487,7 @@ def compute_J_dot_B_Redl(
     method. However, the approach here may over-estimate ``epsilon``.
     """
     grid = transforms["grid"]
-    data = compute_magnetic_field_magnitude(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_jacobian(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    data = compute_boozer_magnetic_field(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
+
     # Note that geom_data contains info only as a function of rho, not
     # theta or zeta, i.e. on the compressed grid. In contrast, data
     # contains quantities on a 3D grid even for quantities that are
@@ -534,5 +517,5 @@ def compute_J_dot_B_Redl(
         helicity_N,
         plot=False,
     )
-    data["<J dot B> Redl"] = expand(grid, j_dot_B_data["jdotB"])
+    data["<J*B> Redl"] = expand(grid, j_dot_B_data["jdotB"])
     return data

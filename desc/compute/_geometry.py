@@ -14,7 +14,7 @@ from .utils import cross, dot, surface_integrals
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["sqrt(g)"],
 )
 def _V(params, transforms, profiles, data, **kwargs):
@@ -32,7 +32,7 @@ def _V(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["e_theta", "e_zeta", "Z"],
 )
 def _V_of_r(params, transforms, profiles, data, **kwargs):
@@ -56,7 +56,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["sqrt(g)"],
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
@@ -76,7 +76,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["sqrt(g)_r", "sqrt(g)"],
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
@@ -96,7 +96,7 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["sqrt(g)", "R"],
 )
 def _A(params, transforms, profiles, data, **kwargs):
@@ -120,7 +120,7 @@ def _A(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["|e_theta x e_zeta|"],
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
@@ -138,7 +138,7 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["V", "A"],
 )
 def _R0(params, transforms, profiles, data, **kwargs):
@@ -156,7 +156,7 @@ def _R0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["A"],
 )
 def _a(params, transforms, profiles, data, **kwargs):
@@ -174,7 +174,7 @@ def _a(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["R0", "a"],
 )
 def _R0_over_a(params, transforms, profiles, data, **kwargs):
@@ -192,7 +192,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["e^rho"],
 )
 def _n_rho(params, transforms, profiles, data, **kwargs):
@@ -210,7 +210,7 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["n_rho", "e_theta_t"],
 )
 def _L_sff(params, transforms, profiles, data, **kwargs):
@@ -228,7 +228,7 @@ def _L_sff(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["n_rho", "e_theta_z"],
 )
 def _M_sff(params, transforms, profiles, data, **kwargs):
@@ -246,7 +246,7 @@ def _M_sff(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["n_rho", "e_zeta_z"],
 )
 def _N_sff(params, transforms, profiles, data, **kwargs):
@@ -264,7 +264,7 @@ def _N_sff(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
 )
 def _curvature_k1(params, transforms, profiles, data, **kwargs):
@@ -296,7 +296,7 @@ def _curvature_k1(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
 )
 def _curvature_k2(params, transforms, profiles, data, **kwargs):
@@ -328,7 +328,7 @@ def _curvature_k2(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["curvature_k1", "curvature_k2"],
 )
 def _curvature_K(params, transforms, profiles, data, **kwargs):
@@ -346,7 +346,7 @@ def _curvature_K(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["curvature_k1", "curvature_k2"],
 )
 def _curvature_H(params, transforms, profiles, data, **kwargs):

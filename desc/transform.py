@@ -148,7 +148,8 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for fft method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "fft"
+            self._method = "direct1"
+            return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
@@ -286,7 +287,7 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for direct2 method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "direct2"
+            self._method = "direct1"
             return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)

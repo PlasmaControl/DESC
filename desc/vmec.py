@@ -327,7 +327,7 @@ class VMECIO:
         ]
 
         signgs = file.createVariable("signgs", np.int32)
-        signgs.long_name = "sign of coordinate system jacobian"
+        signgs.long_name = "sign of coordinate system Jacobian"
         signgs[:] = sign(
             eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
         )

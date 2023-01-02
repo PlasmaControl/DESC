@@ -18,7 +18,7 @@ from .utils import dot, surface_averages, surface_integrals
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "sqrt(g)"],
 )
 def _B0(params, transforms, profiles, data, **kwargs):
@@ -36,7 +36,7 @@ def _B0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["0"],
 )
 def _B_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -54,7 +54,7 @@ def _B_sup_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "iota", "lambda_z"],
 )
 def _B_sup_theta(params, transforms, profiles, data, **kwargs):
@@ -72,7 +72,7 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "lambda_t"],
 )
 def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
@@ -90,7 +90,7 @@ def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B^theta", "e_theta", "B^zeta", "e_zeta"],
 )
 def _B(params, transforms, profiles, data, **kwargs):
@@ -110,7 +110,7 @@ def _B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B"],
 )
 def _B_R(params, transforms, profiles, data, **kwargs):
@@ -128,7 +128,7 @@ def _B_R(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B"],
 )
 def _B_phi(params, transforms, profiles, data, **kwargs):
@@ -146,7 +146,7 @@ def _B_phi(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B"],
 )
 def _B_Z(params, transforms, profiles, data, **kwargs):
@@ -164,7 +164,7 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "psi_rr", "sqrt(g)", "sqrt(g)_r"],
 )
 def _B0_r(params, transforms, profiles, data, **kwargs):
@@ -186,7 +186,7 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0_r", "iota", "lambda_z", "B0", "iota_r", "lambda_rz"],
 )
 def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
@@ -207,7 +207,7 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0_r", "lambda_t", "B0", "lambda_rt"],
 )
 def _B_sup_zeta_r(params, transforms, profiles, data, **kwargs):
@@ -227,7 +227,7 @@ def _B_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta_r",
         "B^theta",
@@ -259,7 +259,7 @@ def _B_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "sqrt(g)_t", "sqrt(g)"],
 )
 def _B0_t(params, transforms, profiles, data, **kwargs):
@@ -278,7 +278,7 @@ def _B0_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_t", "iota", "lambda_z", "lambda_tz"],
 )
 def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
@@ -300,7 +300,7 @@ def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_t", "lambda_t", "lambda_tt"],
 )
 def _B_sup_zeta_t(params, transforms, profiles, data, **kwargs):
@@ -320,7 +320,7 @@ def _B_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta_t",
         "B^theta",
@@ -352,7 +352,7 @@ def _B_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_z"],
 )
 def _B0_z(params, transforms, profiles, data, **kwargs):
@@ -371,7 +371,7 @@ def _B0_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_z", "iota", "lambda_z", "lambda_zz"],
 )
 def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
@@ -393,7 +393,7 @@ def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_z", "lambda_t", "lambda_tz"],
 )
 def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
@@ -413,7 +413,7 @@ def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta_z",
         "B^theta",
@@ -446,7 +446,7 @@ def _B_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_t", "sqrt(g)_tt"],
 )
 def _B0_tt(params, transforms, profiles, data, **kwargs):
@@ -469,7 +469,7 @@ def _B0_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_t", "B0_tt", "iota", "lambda_z", "lambda_tz", "lambda_ttz"],
 )
 def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
@@ -492,7 +492,7 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_t", "B0_tt", "lambda_t", "lambda_tt", "lambda_ttt"],
 )
 def _B_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
@@ -553,7 +553,7 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_z", "sqrt(g)_zz"],
 )
 def _B0_zz(params, transforms, profiles, data, **kwargs):
@@ -576,7 +576,7 @@ def _B0_zz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_z", "B0_zz", "iota", "lambda_z", "lambda_zz", "lambda_zzz"],
 )
 def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
@@ -599,7 +599,7 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B0", "B0_z", "B0_zz", "lambda_t", "lambda_tz", "lambda_tzz"],
 )
 def _B_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
@@ -661,7 +661,7 @@ def _B_zz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_t", "sqrt(g)_z", "sqrt(g)_tz"],
 )
 def _B0_tz(params, transforms, profiles, data, **kwargs):
@@ -687,7 +687,7 @@ def _B0_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B0",
         "B0_t",
@@ -721,7 +721,7 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B0",
         "B0_t",
@@ -797,7 +797,7 @@ def _B_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "e_rho"],
 )
 def _B_sub_rho(params, transforms, profiles, data, **kwargs):
@@ -815,7 +815,7 @@ def _B_sub_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "e_theta"],
 )
 def _B_sub_theta(params, transforms, profiles, data, **kwargs):
@@ -833,7 +833,7 @@ def _B_sub_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "e_zeta"],
 )
 def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
@@ -852,7 +852,7 @@ def _B_sub_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_r", "e_rho", "e_rho_r"],
 )
 def _B_sub_rho_r(params, transforms, profiles, data, **kwargs):
@@ -871,7 +871,7 @@ def _B_sub_rho_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_r", "e_theta", "e_theta_r"],
 )
 def _B_sub_theta_r(params, transforms, profiles, data, **kwargs):
@@ -892,7 +892,7 @@ def _B_sub_theta_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_r", "e_zeta", "e_zeta_r"],
 )
 def _B_sub_zeta_r(params, transforms, profiles, data, **kwargs):
@@ -913,7 +913,7 @@ def _B_sub_zeta_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_t", "e_rho", "e_rho_t"],
 )
 def _B_sub_rho_t(params, transforms, profiles, data, **kwargs):
@@ -932,7 +932,7 @@ def _B_sub_rho_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_t", "e_theta", "e_theta_t"],
 )
 def _B_sub_theta_t(params, transforms, profiles, data, **kwargs):
@@ -953,7 +953,7 @@ def _B_sub_theta_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_t", "e_zeta", "e_zeta_t"],
 )
 def _B_sub_zeta_t(params, transforms, profiles, data, **kwargs):
@@ -974,7 +974,7 @@ def _B_sub_zeta_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_z", "e_rho", "e_rho_z"],
 )
 def _B_sub_rho_z(params, transforms, profiles, data, **kwargs):
@@ -993,7 +993,7 @@ def _B_sub_rho_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_z", "e_theta", "e_theta_z"],
 )
 def _B_sub_theta_z(params, transforms, profiles, data, **kwargs):
@@ -1014,7 +1014,7 @@ def _B_sub_theta_z(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B", "B_z", "e_zeta", "e_zeta_z"],
 )
 def _B_sub_zeta_z(params, transforms, profiles, data, **kwargs):
@@ -1244,7 +1244,7 @@ def _B_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B"],
 )
 def _B_mag2(params, transforms, profiles, data, **kwargs):
@@ -1262,7 +1262,7 @@ def _B_mag2(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["|B|^2"],
 )
 def _B_mag(params, transforms, profiles, data, **kwargs):
@@ -1313,7 +1313,7 @@ def _B_mag_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1346,7 +1346,7 @@ def _B_mag_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1421,7 +1421,7 @@ def _B_mag_rr(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1461,7 +1461,7 @@ def _B_mag_tt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1552,7 +1552,7 @@ def _B_mag_rt(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1649,7 +1649,7 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="",
+    coordinates="",
     data=["sqrt(g)", "|B|", "V"],
 )
 def _B_vol(params, transforms, profiles, data, **kwargs):
@@ -1669,7 +1669,7 @@ def _B_vol(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["sqrt(g)", "|B|", "V_r(r)"],
 )
 def _B_fsa(params, transforms, profiles, data, **kwargs):
@@ -1692,7 +1692,7 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=["sqrt(g)", "|B|^2", "V_r(r)"],
 )
 def _B2_fsa(params, transforms, profiles, data, **kwargs):
@@ -1715,7 +1715,7 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    function_of="r",
+    coordinates="r",
     data=[
         "sqrt(g)",
         "sqrt(g)_r",
@@ -1749,7 +1749,7 @@ def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1781,7 +1781,7 @@ def _gradB2_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1813,7 +1813,7 @@ def _gradB2_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -1845,7 +1845,7 @@ def _gradB2_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "grad(|B|^2)_rho",
         "grad(|B|^2)_theta",
@@ -1874,7 +1874,7 @@ def _gradB2(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["grad(|B|^2)"],
 )
 def _gradB2mag(params, transforms, profiles, data, **kwargs):
@@ -1894,7 +1894,7 @@ def _gradB2mag(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
 )
 def _curl_B_x_B_rho(params, transforms, profiles, data, **kwargs):
@@ -1916,7 +1916,7 @@ def _curl_B_x_B_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B^zeta", "J^rho"],
 )
 def _curl_B_x_B_theta(params, transforms, profiles, data, **kwargs):
@@ -1934,7 +1934,7 @@ def _curl_B_x_B_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["sqrt(g)", "B^theta", "J^rho"],
 )
 def _curl_B_x_B_zeta(params, transforms, profiles, data, **kwargs):
@@ -1952,7 +1952,7 @@ def _curl_B_x_B_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "(curl(B)xB)_rho",
         "(curl(B)xB)_theta",
@@ -1981,7 +1981,7 @@ def _curl_B_x_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["curl(B)xB", "grad(|B|^2)"],
 )
 def _B_dot_grad_B(params, transforms, profiles, data, **kwargs):
@@ -1999,7 +1999,7 @@ def _B_dot_grad_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["(B*grad)B", "e_rho"],
 )
 def _B_dot_grad_B_rho(params, transforms, profiles, data, **kwargs):
@@ -2017,7 +2017,7 @@ def _B_dot_grad_B_rho(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["(B*grad)B", "e_theta"],
 )
 def _B_dot_grad_B_theta(params, transforms, profiles, data, **kwargs):
@@ -2035,7 +2035,7 @@ def _B_dot_grad_B_theta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["(B*grad)B", "e_zeta"],
 )
 def _B_dot_grad_B_zeta(params, transforms, profiles, data, **kwargs):
@@ -2053,7 +2053,7 @@ def _B_dot_grad_B_zeta(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["(B*grad)B"],
 )
 def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
@@ -2071,7 +2071,7 @@ def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=["B^theta", "B^zeta", "|B|_t", "|B|_z"],
 )
 def _B_dot_gradB(params, transforms, profiles, data, **kwargs):
@@ -2092,7 +2092,7 @@ def _B_dot_gradB(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",
@@ -2124,7 +2124,7 @@ def _B_dot_gradB_t(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    function_of="rtz",
+    coordinates="rtz",
     data=[
         "B^theta",
         "B^zeta",

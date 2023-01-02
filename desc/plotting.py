@@ -933,7 +933,7 @@ def plot_section(eq, name, grid=None, log=False, norm_F=False, ax=None, **kwargs
         if eq.N == 0:
             nzeta = int(kwargs.pop("nzeta", 1))
         else:
-            nzeta = int(kwargs.pop("nzeta", 6))
+            nzeta = int(kwargs.pop("nzeta", 4))
         nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
@@ -1348,7 +1348,7 @@ def plot_comparison(
         if N == 0:
             zeta = np.array([0])
         else:
-            zeta = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
+            zeta = np.linspace(0, 2 * np.pi / nfp, 4, endpoint=False)
     else:
         zeta = np.atleast_1d(zeta)
     nzeta = len(zeta)

@@ -38,6 +38,7 @@ from desc.plotting import plot_grid, plot_boozer_modes, plot_boozer_surface, plo
 eq_init = desc.io.load('/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5')[-1]
 eq_init.change_resolution(M=6,L=6,M_grid=12,L_grid=12)
 #optimizer = Optimizer("lsq-exact")
+#eq_init = desc.io.load('/scratch/gpfs/pk2354/DESC/examples/VMEC/OPT2_output.h5')
 optimizer = Optimizer("stochastic")
 idx_Rcc = eq_init.surface.R_basis.get_idx(M=1, N=0)
 #idx_Rss = eq_init.surface.R_basis.get_idx(M=-2, N=0)
@@ -51,7 +52,7 @@ Z_modes = np.delete(eq_init.surface.Z_basis.modes, [idx_Zsc], axis=0)
 # constraints
 constraints = (
     ForceBalance(),  # enforce JxB-grad(p)=0 during optimization
-    FixBoundaryR(modes=R_modes),  # fix specified R boundary modes
+    FixBoundaryR(),  # fix specified R boundary modes
     FixBoundaryZ(modes=Z_modes),  # fix specified Z boundary modes
     FixPressure(),  # fix pressure profile
     FixIota(),  # fix rotational transform profile
@@ -73,7 +74,7 @@ eq_qs_T_unc, result_T_unc = eq_init.optimize(
     ftol=1e-2,  # stopping tolerance on the function value
     xtol=1e-6,  # stopping tolerance on the step size
     gtol=1e-6,  # stopping tolerance on the gradient
-    maxiter=20,  # maximum number of iterations
+    maxiter=1,  # maximum number of iterations
     options={
         #"initial_trust_radius":0.1,
         "perturb_options": {"order": 2, "verbose": 0},  # use 2nd-order perturbations

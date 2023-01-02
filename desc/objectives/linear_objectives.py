@@ -90,7 +90,7 @@ class FixBoundaryR(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.R_basis.modes
             idx = np.arange(eq.surface.R_basis.num_modes)
-            #modes_idx = idx
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -232,7 +232,7 @@ class FixBoundaryZ(_Objective):
         elif self._modes is True:  # all modes
             modes = eq.surface.Z_basis.modes
             idx = np.arange(eq.surface.Z_basis.num_modes)
-            #modes_idx = idx
+            modes_idx = idx
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {

@@ -15,10 +15,20 @@ from .tr_subproblems import (
     update_tr_radius,
 )
 from scipy.optimize import OptimizeResult
-
+import multiprocess as mp
+#from pathos.multiprocessing import Pool
 
 def calc_grad(fun,x,dx):
+    #print("x + dx is " + str(x+dx))
+    #print("type of x+dx is " + str(type(x+dx)))
+    #mp.set_start_method("spawn")
+    #ctx = mp.get_context("spawn")
+    #args = [([x+dx]),([x-dx])]
+    #print(mp.get_start_method())
+    #with mp.Pool(2) as pool:
+    #    out = pool.starmap(fun,args)
     return (fun(x+dx) - fun(x-dx))/np.linalg.norm(dx)
+    #return (out[0] - out[1])/np.linalg.norm(dx)
 
 def stoch(
     fun,

@@ -308,8 +308,12 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Starting optimization")
         timer.start("Solution time")
+        
 
         def compute_wrapped(x_reduced):
+            print("x_reduced is " + str(x_reduced))
+            #objective.build(eq, verbose=verbose,use_jit=False)
+
             x = recover(x_reduced)
             f = objective.compute(x)
             if self.method in Optimizer._scalar_methods:

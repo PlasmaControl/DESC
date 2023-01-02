@@ -61,6 +61,25 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="psi_rrr",
+    label="\\partial_{\\rho\\rho\\rho} \\psi = \\partial_{\\rho\\rho\\rho} \\Psi / "
+    + "(2 \\pi)",
+    units="Wb",
+    units_long="Webers",
+    description="Toroidal flux, third radial derivative",
+    dim=1,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["0"],
+)
+def _psi_rrr(params, transforms, profiles, data, **kwargs):
+    data["psi_rrr"] = data["0"]
+    return data
+
+
+@register_compute_fun(
     name="grad(psi)",
     label="\\nabla\\psi",
     units="Wb / m",
@@ -339,6 +358,35 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
         data["iota_r"] = (
             current_term_r + num_avg_r - data["iota"] * den_avg_r
         ) / den_avg
+    return data
+
+
+@register_compute_fun(
+    name="iota_rr",
+    label="\\partial_{\\rho\\rho} \\iota",
+    units="~",
+    units_long="None",
+    description="Rotational transform (normalized by 2pi), second radial derivative",
+    dim=1,
+    params=["i_l", "c_l"],
+    transforms={"grid": []},
+    profiles=["iota", "current"],
+    coordinates="r",
+    data=["0"],
+)
+def _iota_rr(params, transforms, profiles, data, **kwargs):
+    # The rotational transform is computed from the toroidal current profile using
+    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
+    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
+    # with an additional term to account for finite net toroidal currents. Note that
+    # the flux surface average integrals in their formula should not be weighted by a
+    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
+    # these averages will not be canceled out.
+    if profiles["iota"] is not None:
+        data["iota_rr"] = profiles["iota"].compute(params["i_l"], dr=2)
+    elif profiles["current"] is not None:
+        # FIXME: implement correct formula!
+        data["iota_rr"] = data["0"]
     return data
 
 

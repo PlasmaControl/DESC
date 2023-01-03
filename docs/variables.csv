@@ -109,14 +109,13 @@ Name,Label,Units,Description,Module
 ``|J|``,:math:`|\mathbf{J}|`,Amperes / square meter,Magnitue of plasma current density,``desc.compute._equil``
 ``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current (note units are not Amperes),``desc.compute._equil``
 ``J_parallel``,:math:`\mathbf{J} \cdot \hat{\mathbf{b}}`,Amperes / square meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
-``div(J_perp)``,:math:`\nabla \cdot \mathbf{J}_{\perp}`,Amperes / cubic meter,Divergence of plasma current density perpendicular to magnetic field,``desc.compute._equil``
 ``F_rho``,:math:`F_{\rho}`,Newtons / square meter,Covariant radial component of force balance error,``desc.compute._equil``
 ``F_theta``,:math:`F_{\theta}`,Newtons / square meter,Covariant poloidal component of force balance error,``desc.compute._equil``
 ``F_zeta``,:math:`F_{\zeta}`,Newtons / square meter,Covariant toroidal component of force balance error,``desc.compute._equil``
 ``F_helical``,:math:`F_{helical}`,Newtons / square meter,Covariant helical component of force balance error,``desc.compute._equil``
 ``F``,:math:`\mathbf{J} \times \mathbf{B} - \nabla p`,Newtons / cubic meter,Force balance error,``desc.compute._equil``
 ``|F|``,:math:`|\mathbf{J} \times \mathbf{B} - \nabla p|`,Newtons / cubic meter,Magnitude of force balance error,``desc.compute._equil``
-``<|F|>_vol``,:math:`\langla |\mathbf{J} \times \mathbf{B} - \nabla p| \rangle_{vol}`,Newtons / cubic meter,Volume average of magnitude of force balance error,``desc.compute._equil``
+``<|F|>_vol``,:math:`\langle |\mathbf{J} \times \mathbf{B} - \nabla p| \rangle_{vol}`,Newtons / cubic meter,Volume average of magnitude of force balance error,``desc.compute._equil``
 ``e^helical``,:math:`B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta`,Tesla / square meter,Helical basis vector,``desc.compute._equil``
 ``|e^helical|``,:math:`|B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta|`,Tesla / square meter,Magnitude of helical basis vector,``desc.compute._equil``
 ``W_B``,:math:`W_B`,Joules,Plasma magnetic energy,``desc.compute._equil``

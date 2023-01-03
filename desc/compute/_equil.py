@@ -193,24 +193,6 @@ def _J_parallel(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="div(J_perp)",
-    label="\\nabla \\cdot \\mathbf{J}_{\\perp}",
-    units="A \\cdot m^{-3}",
-    units_long="Amperes / cubic meter",
-    description="Divergence of plasma current density perpendicular to magnetic field",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["J^rho", "p_r", "|B|"],
-)
-def _div_J_perp(params, transforms, profiles, data, **kwargs):
-    data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
-    return data
-
-
-@register_compute_fun(
     name="F_rho",
     label="F_{\\rho}",
     units="N \\cdot m^{-2}",

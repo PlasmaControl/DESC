@@ -129,27 +129,15 @@ class TestGrid:
     @pytest.mark.unit
     def test_duplicate_node_endpoint_spacing(self):
         """Test surface differential element weight on grid with endpoint=True."""
-        nrho = 4
-        ntheta = 5
-        nzeta = 7
-        NFP = 3
-        endpoint = True
-        grid1 = LinearGrid(
-            rho=nrho, theta=ntheta, zeta=nzeta, NFP=NFP, endpoint=endpoint
-        )
-        grid2 = LinearGrid(
-            rho=np.linspace(1, 0, nrho)[::-1],
-            theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
-            zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
-            NFP=NFP,
-            endpoint=endpoint,
-        )
-        for g in grid1, grid2:
-            surface_area = compress(g, surface_integrals(g, surface_label="rho"), "rho")
+
+        def test(grid):
+            surface_area = compress(
+                grid, surface_integrals(grid, surface_label="rho"), "rho"
+            )
             np.testing.assert_allclose(4 * np.pi**2, surface_area)
 
             surface_area = compress(
-                g, surface_integrals(g, surface_label="theta"), "theta"
+                grid, surface_integrals(grid, surface_label="theta"), "theta"
             )
             np.testing.assert_allclose(2 * np.pi, surface_area[1:-1])
             if ntheta > 1:
@@ -158,13 +146,29 @@ class TestGrid:
                 np.testing.assert_allclose(np.pi, surface_area[-1])
 
             surface_area = compress(
-                g, surface_integrals(g, surface_label="zeta"), "zeta"
+                grid, surface_integrals(grid, surface_label="zeta"), "zeta"
             )
             np.testing.assert_allclose(2 * np.pi, surface_area[1:-1])
             if nzeta > 1:
                 # zeta=0 and zeta=2pi/NFP surface should have half weight
                 np.testing.assert_allclose(np.pi, surface_area[0])
                 np.testing.assert_allclose(np.pi, surface_area[-1])
+
+        nrho = 4
+        ntheta = 5
+        nzeta = 7
+        NFP = 3
+        endpoint = True
+        test(LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, NFP=NFP, endpoint=endpoint))
+        test(
+            LinearGrid(
+                rho=np.linspace(1, 0, nrho)[::-1],
+                theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
+                zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
+                NFP=NFP,
+                endpoint=endpoint,
+            )
+        )
 
     @pytest.mark.unit
     def test_concentric_grid(self):

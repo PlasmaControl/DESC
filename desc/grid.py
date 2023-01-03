@@ -148,18 +148,24 @@ class Grid(IOAble):
         temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         self._weights = temp_spacing.prod(axis=1)
 
-        # Spacing is rescaled below. Note this doesn't work in full generality.
-        # (Duplicate nodes should typically be deleted rather than rescaled).
-
         # Spacing is the differential element used for integration over surfaces.
         # For this, 2 columns of the matrix are used.
+        # Spacing is rescaled below to get the correct double product for each pair
+        # of columns in grid.spacing.
         # The reduction of weight on duplicate nodes should be accounted for
         # by the 2 columns of spacing which span the surface.
-        # Note we rescale 3 columns by the factor that 'should' rescale 2 columns,
-        # so the grid spacing is valid for integrals over all surface labels.
         self._spacing /= duplicates ** (1 / 2)
-        # Multiply by duplicates^(1/6) to account for the extra division by
-        # duplicates^(1/2) in one of the columns above. 1/2 = (1/6)^(3 columns).
+        # Note we rescale 3 columns by the factor that 'should' rescale 2 columns,
+        # so grid.spacing is valid for integrals over all surface labels.
+        # Because a surface integral always ignores 1 column, with this approach,
+        # duplicates nodes are scaled down properly regardless of which two columns
+        # span the surface.
+
+        # The following operation is not a general solution to return the weight
+        # removed from the duplicate nodes back to the unique nodes.
+        # For this reason, duplicates should typically be deleted rather that rescaled.
+        # Note we multiply each column by duplicates^(1/6) to account for the extra
+        # division by duplicates^(1/2) in one of the columns above.
         self._spacing *= (
             4 * np.pi**2 / (self.spacing * duplicates ** (1 / 6)).prod(axis=1).sum()
         ) ** (1 / 3)

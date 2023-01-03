@@ -66,7 +66,7 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
     + "(2 \\pi)",
     units="Wb",
     units_long="Webers",
-    description="Toroidal flux, third radial derivative",
+    description="Toroidal flux (normalized by 2pi), third radial derivative",
     dim=1,
     params=["Psi"],
     transforms={},

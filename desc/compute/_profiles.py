@@ -499,6 +499,25 @@ def _I_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="I_rr",
+    label="\\partial_{\\rho\\rho} I",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Boozer toroidal current enclosed by flux surfaces, second derivative "
+    + "wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B_theta_rr"],
+)
+def _I_rr(params, transforms, profiles, data, **kwargs):
+    data["I_rr"] = surface_averages(transforms["grid"], data["B_theta_rr"])
+    return data
+
+
+@register_compute_fun(
     name="G",
     label="G",
     units="T \\cdot m",
@@ -536,6 +555,25 @@ def _G_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="G_rr",
+    label="\\partial_{\\rho\\rho} G",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Boozer poloidal current enclosed by flux surfaces, second derivative "
+    + "wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B_zeta_rr"],
+)
+def _G_rr(params, transforms, profiles, data, **kwargs):
+    data["G_rr"] = surface_averages(transforms["grid"], data["B_zeta_rr"])
+    return data
+
+
+@register_compute_fun(
     name="current",
     label="\\frac{2\\pi}{\\mu_0} I",
     units="A",
@@ -569,4 +607,23 @@ def _current(params, transforms, profiles, data, **kwargs):
 )
 def _current_r(params, transforms, profiles, data, **kwargs):
     data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
+    return data
+
+
+@register_compute_fun(
+    name="current_rr",
+    label="\\frac{2\\pi}{\\mu_0} \\partial_{\\rho\\rho} I",
+    units="A",
+    units_long="Amperes",
+    description="Net toroidal current enclosed by flux surfaces, second derivative "
+    + "wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["I_rr"],
+)
+def _current_rr(params, transforms, profiles, data, **kwargs):
+    data["current_rr"] = 2 * jnp.pi / mu_0 * data["I_rr"]
     return data

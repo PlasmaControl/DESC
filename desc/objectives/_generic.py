@@ -92,13 +92,13 @@ class GenericObjective(_Objective):
         self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, **params):
+    def compute(self, *args, **kwargs):
         """Compute the quantity.
 
         Parameters
         ----------
-        args : list of ndarray
-            Any of the arguments given in `arg_order`.
+        args : ndarray
+            Parameters given by self.args.
 
         Returns
         -------
@@ -106,6 +106,7 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self.f,
             params=params,
@@ -193,6 +194,7 @@ class ToroidalCurrent(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["current"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -212,7 +214,7 @@ class ToroidalCurrent(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute toroidal current.
 
         Parameters
@@ -236,14 +238,7 @@ class ToroidalCurrent(_Objective):
             Toroidal current (A) through specified surfaces.
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -332,6 +327,7 @@ class RotationalTransform(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["iota"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -347,7 +343,7 @@ class RotationalTransform(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute rotational transform profile errors.
 
         Parameters
@@ -370,14 +366,7 @@ class RotationalTransform(_Objective):
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,

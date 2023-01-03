@@ -331,11 +331,6 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             * profiles["current"].compute(params["c_l"], dr=0)
             / data["psi_r"]
         )
-        num = (
-            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-        ) / data["sqrt(g)"]
-        den = data["g_tt"] / data["sqrt(g)"]
-        den_avg = surface_averages(transforms["grid"], den)
         current_term_r = (
             mu_0
             / (2 * jnp.pi)
@@ -343,16 +338,18 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             / data["psi_r"]
             - current_term * data["psi_rr"] / data["psi_r"]
         )
+        num = (
+            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+        ) / data["sqrt(g)"]
         num_r = (
             data["lambda_rz"] * data["g_tt"]
             + data["lambda_z"] * data["g_tt_r"]
             - data["lambda_rt"] * data["g_tz"]
             - (1 + data["lambda_t"]) * data["g_tz_r"]
         ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
-        den_r = (
-            data["g_tt_r"] / data["sqrt(g)"]
-            - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
-        )
+        den = data["g_tt"] / data["sqrt(g)"]
+        den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
+        den_avg = surface_averages(transforms["grid"], den)
         num_avg_r = surface_averages(transforms["grid"], num_r)
         den_avg_r = surface_averages(transforms["grid"], den_r)
         data["iota_r"] = (
@@ -372,7 +369,30 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["iota", "current"],
     coordinates="r",
-    data=["0"],
+    data=[
+        "iota",
+        "iota_r",
+        "psi_r",
+        "psi_rr",
+        "psi_rrr",
+        "lambda_t",
+        "lambda_rt",
+        "lambda_z",
+        "lambda_rz",
+        "lambda_rt",
+        "lambda_rrt",
+        "lambda_rz",
+        "lambda_rrz",
+        "g_tt",
+        "g_tt_r",
+        "g_tt_rr",
+        "g_tz",
+        "g_tz_r",
+        "g_tz_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
 )
 def _iota_rr(params, transforms, profiles, data, **kwargs):
     # The rotational transform is computed from the toroidal current profile using
@@ -385,8 +405,58 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     if profiles["iota"] is not None:
         data["iota_rr"] = profiles["iota"].compute(params["i_l"], dr=2)
     elif profiles["current"] is not None:
-        # FIXME: implement correct formula!
-        data["iota_rr"] = data["0"]
+        current_term = (
+            mu_0
+            / (2 * jnp.pi)
+            * profiles["current"].compute(params["c_l"], dr=0)
+            / data["psi_r"]
+        )
+        current_term_r = (
+            mu_0
+            / (2 * jnp.pi)
+            * profiles["current"].compute(params["c_l"], dr=1)
+            / data["psi_r"]
+            - current_term * data["psi_rr"] / data["psi_r"]
+        )
+        current_term_rr = (
+            mu_0 / (2 * jnp.pi) * profiles["current"].compute(params["c_l"], dr=2)
+            - 2 * current_term_r * data["psi_rr"]
+            - current_term * data["psi_rrr"]
+        ) / data["psi_r"]
+        num = (
+            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+        ) / data["sqrt(g)"]
+        num_r = (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+        ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
+        num_rr = (
+            data["lambda_rrz"] * data["g_tt"]
+            + 2 * data["lambda_rz"] * data["g_tt_r"]
+            + data["lambda_z"] * data["g_tt_rr"]
+            - data["lambda_rrt"] * data["g_tz"]
+            - 2 * data["lambda_rt"] * data["g_tz_r"]
+            - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            - 2 * num_r * data["sqrt(g)_r"]
+            - num * data["sqrt(g)_rr"]
+        ) / data["sqrt(g)"]
+        den = data["g_tt"] / data["sqrt(g)"]
+        den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
+        den_rr = (
+            data["g_tt_rr"] - 2 * den_r * data["sqrt(g)_r"] - den * data["sqrt(g)_rr"]
+        ) / data["sqrt(g)"]
+        den_avg = surface_averages(transforms["grid"], den)
+        den_avg_r = surface_averages(transforms["grid"], den_r)
+        den_avg_rr = surface_averages(transforms["grid"], den_rr)
+        num_avg_rr = surface_averages(transforms["grid"], num_rr)
+        data["iota_rr"] = (
+            current_term_rr
+            + num_avg_rr
+            - 2 * data["iota_r"] * den_avg_r
+            - data["iota"] * den_avg_rr
+        ) / den_avg
     return data
 
 

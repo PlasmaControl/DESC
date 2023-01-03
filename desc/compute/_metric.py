@@ -533,6 +533,51 @@ def _g_sub_tz_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="g_tt_rr",
+    label="\\partial_{\\rho\\rho} g_{\\theta\\theta}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Poloidal/Poloidal element of covariant metric tensor, second "
+    + "derivative wrt rho",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_r", "e_theta_rr"],
+)
+def _g_sub_tt_rr(params, transforms, profiles, data, **kwargs):
+    data["g_tt_rr"] = 2 * (
+        dot(data["e_theta_r"], data["e_theta_r"])
+        + dot(data["e_theta"], data["e_theta_rr"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g_tz_rr",
+    label="\\partial_{\\rho\\rho} g_{\\theta\\zeta}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Poloidal/Toroidal element of covariant metric tensor, second "
+    + "derivative wrt rho",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "e_theta_rr", "e_zeta_rr"],
+)
+def _g_sub_tz_rr(params, transforms, profiles, data, **kwargs):
+    data["g_tz_rr"] = (
+        dot(data["e_theta_rr"], data["e_zeta"])
+        + 2 * dot(data["e_theta_r"], data["e_zeta_r"])
+        + dot(data["e_theta"], data["e_zeta_rr"])
+    )
+    return data
+
+
+@register_compute_fun(
     name="g^rr",
     label="g^{\\rho\\rho}",
     units="m^{-2}",

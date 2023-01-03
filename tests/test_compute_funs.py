@@ -100,63 +100,124 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
     # partial derivatives wrt rho
-    num_rho = 75
+    rtol = 1e-3
+    atol = 1e-3
+    num_rho = 100
     grid = LinearGrid(rho=num_rho, NFP=eq.NFP)
     drho = grid.nodes[1, 0]
     data = eq.compute(
         [
             "B^theta",
-            "B^zeta",
-            "B_theta",
-            "B_zeta",
             "B^theta_r",
+            "B^theta_rr",
+            "B^zeta",
             "B^zeta_r",
-            "B_theta_r",
-            "B_zeta_r",
+            "B^zeta_rr",
             "B_rho",
             "B_rho_r",
+            "B_rho_rr",
+            "B_theta",
+            "B_theta_r",
+            "B_theta_rr",
+            "B_zeta",
+            "B_zeta_r",
+            "B_zeta_rr",
+            "|B|",
+            "|B|_r",
+            "|B|_rr",
         ],
         grid=grid,
     )
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
+    B_sup_theta_rr = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / drho**2
     B_sup_zeta_r = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / drho
+    B_sup_zeta_rr = np.convolve(data["B^zeta"], FD_COEF_2_4, "same") / drho**2
     B_sub_rho_r = np.convolve(data["B_rho"], FD_COEF_1_4, "same") / drho
+    B_sub_rho_rr = np.convolve(data["B_rho"], FD_COEF_2_4, "same") / drho**2
     B_sub_theta_r = np.convolve(data["B_theta"], FD_COEF_1_4, "same") / drho
+    B_sub_theta_rr = np.convolve(data["B_theta"], FD_COEF_2_4, "same") / drho**2
     B_sub_zeta_r = np.convolve(data["B_zeta"], FD_COEF_1_4, "same") / drho
+    B_sub_zeta_rr = np.convolve(data["B_zeta"], FD_COEF_2_4, "same") / drho**2
+    B_r = np.convolve(data["|B|"], FD_COEF_1_4, "same") / drho
+    B_rr = np.convolve(data["|B|"], FD_COEF_2_4, "same") / drho**2
 
     np.testing.assert_allclose(
         data["B^theta_r"][3:-2],
         B_sup_theta_r[3:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.nanmean(np.abs(data["B^theta_r"])),
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^theta_r"])),
+    )
+    np.testing.assert_allclose(
+        data["B^theta_rr"][3:-2],
+        B_sup_theta_rr[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^theta_rr"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_r"][3:-2],
         B_sup_zeta_r[3:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.nanmean(np.abs(data["B^zeta_r"])),
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^zeta_r"])),
+    )
+    np.testing.assert_allclose(
+        data["B^zeta_rr"][3:-2],
+        B_sup_zeta_rr[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^zeta_rr"])),
     )
     np.testing.assert_allclose(
         data["B_rho_r"][3:-2],
         B_sub_rho_r[3:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.nanmean(np.abs(data["B_rho_r"])),
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_rho_r"])),
+    )
+    np.testing.assert_allclose(
+        data["B_rho_rr"][3:-2],
+        B_sub_rho_rr[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_rho_rr"])),
     )
     np.testing.assert_allclose(
         data["B_theta_r"][3:-2],
         B_sub_theta_r[3:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.nanmean(np.abs(data["B_theta_r"])),
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_theta_r"])),
+    )
+    np.testing.assert_allclose(
+        data["B_theta_rr"][3:-2],
+        B_sub_theta_rr[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_theta_rr"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_r"][3:-2],
         B_sub_zeta_r[3:-2],
-        rtol=1e-3,
-        atol=1e-3 * np.nanmean(np.abs(data["B_zeta_r"])),
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_zeta_r"])),
+    )
+    np.testing.assert_allclose(
+        data["B_zeta_rr"][3:-2],
+        B_sub_zeta_rr[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_zeta_rr"])),
+    )
+    np.testing.assert_allclose(
+        data["|B|_r"][3:-2],
+        B_r[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["|B|_r"])),
+    )
+    np.testing.assert_allclose(
+        data["|B|_rr"][3:-2],
+        B_rr[3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["|B|_rr"])),
     )
 
     # partial derivatives wrt theta
+    rtol = 3e-3
+    atol = 3e-3
     num_theta = 120
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
     dtheta = grid.nodes[1, 1]
@@ -200,77 +261,79 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_t"][2:-2],
         B_sup_theta_t[2:-2],
-        rtol=2e-3,
-        atol=3e-3 * np.mean(np.abs(data["B^theta_t"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^theta_t"])),
     )
     np.testing.assert_allclose(
         data["B^theta_tt"][2:-2],
         B_sup_theta_tt[2:-2],
-        rtol=2e-4,
-        atol=2e-2 * np.mean(np.abs(data["B^theta_tt"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^theta_tt"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_t"][2:-2],
         B_sup_zeta_t[2:-2],
-        rtol=3e-3,
-        atol=3e-3 * np.mean(np.abs(data["B^zeta_t"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^zeta_t"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_tt"][2:-2],
         B_sup_zeta_tt[2:-2],
-        rtol=6e-3,
-        atol=6e-3 * np.mean(np.abs(data["B^zeta_tt"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^zeta_tt"])),
     )
     np.testing.assert_allclose(
         data["B_rho_t"][2:-2],
         B_sub_rho_t[2:-2],
-        rtol=1e-2,
-        atol=1e-3 * np.mean(np.abs(data["B_rho_t"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_rho_t"])),
     )
     np.testing.assert_allclose(
         data["B_rho_tt"][2:-2],
         B_sub_rho_tt[2:-2],
-        rtol=1e-3,
-        atol=6e-3 * np.mean(np.abs(data["B_rho_tt"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_rho_tt"])),
     )
     np.testing.assert_allclose(
         data["B_theta_t"][2:-2],
         B_sub_theta_t[2:-2],
-        rtol=1e-3,
-        atol=5e-3 * np.mean(np.abs(data["B_theta_t"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_theta_t"])),
     )
     np.testing.assert_allclose(
         data["B_theta_tt"][2:-2],
         B_sub_theta_tt[2:-2],
-        rtol=1e-3,
-        atol=5e-3 * np.mean(np.abs(data["B_theta_tt"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_theta_tt"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_t"][2:-2],
         B_sub_zeta_t[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["B_zeta_t"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_zeta_t"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_tt"][2:-2],
         B_sub_zeta_tt[2:-2],
-        rtol=5e-3,
-        atol=4e-3 * np.mean(np.abs(data["B_zeta_tt"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_zeta_tt"])),
     )
     np.testing.assert_allclose(
         data["|B|_t"][2:-2],
         B_t[2:-2],
-        rtol=1e-2,
-        atol=1e-3 * np.mean(np.abs(data["|B|_t"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["|B|_t"])),
     )
     np.testing.assert_allclose(
         data["|B|_tt"][2:-2],
         B_tt[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["|B|_tt"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["|B|_tt"])),
     )
 
     # partial derivatives wrt zeta
+    rtol = 1e-4
+    atol = 1e-4
     num_zeta = 120
     grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
     dzeta = grid.nodes[1, 2]
@@ -314,88 +377,214 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_z"][2:-2],
         B_sup_theta_z[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B^theta_z"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^theta_z"])),
     )
     np.testing.assert_allclose(
         data["B^theta_zz"][2:-2],
         B_sup_theta_zz[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B^theta_zz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^theta_zz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_z"][2:-2],
         B_sup_zeta_z[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B^zeta_z"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^zeta_z"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_zz"][2:-2],
         B_sup_zeta_zz[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B^zeta_zz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^zeta_zz"])),
     )
     np.testing.assert_allclose(
         data["B_rho_z"][2:-2],
         B_sub_rho_z[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B_rho_z"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_rho_z"])),
     )
     np.testing.assert_allclose(
         data["B_rho_zz"][2:-2],
         B_sub_rho_zz[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B_rho_zz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_rho_zz"])),
     )
     np.testing.assert_allclose(
         data["B_theta_z"][2:-2],
         B_sub_theta_z[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B_theta_z"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_theta_z"])),
     )
     np.testing.assert_allclose(
         data["B_theta_zz"][2:-2],
         B_sub_theta_zz[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B_theta_zz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_theta_zz"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_z"][2:-2],
         B_sub_zeta_z[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B_zeta_z"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_zeta_z"])),
     )
     np.testing.assert_allclose(
         data["B_zeta_zz"][2:-2],
         B_sub_zeta_zz[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["B_zeta_zz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_zeta_zz"])),
     )
     np.testing.assert_allclose(
         data["|B|_z"][2:-2],
         B_z[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["|B|_z"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["|B|_z"])),
     )
     np.testing.assert_allclose(
         data["|B|_zz"][2:-2],
         B_zz[2:-2],
-        rtol=1e-4,
-        atol=1e-4 * np.mean(np.abs(data["|B|_zz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["|B|_zz"])),
+    )
+
+    # mixed derivatives wrt rho & theta
+    rtol = 1e-2
+    atol = 1e-2
+    num_rho = 150
+    num_theta = 180
+    grid = LinearGrid(NFP=eq.NFP, rho=num_rho, theta=num_theta)
+    drho = grid.nodes[:, 0].reshape((num_rho, num_theta))[1, 0]
+    dtheta = grid.nodes[:, 1].reshape((num_rho, num_theta))[0, 1]
+    data = eq.compute(
+        [
+            "B^theta",
+            "B^theta_rt",
+            "B^zeta",
+            "B^zeta_rt",
+            "B_rho",
+            "B_rho_rt",
+            "B_theta",
+            "B_theta_rt",
+            "B_zeta",
+            "B_zeta_rt",
+            "|B|",
+            "|B|_rt",
+        ],
+        grid=grid,
+    )
+
+    B_sup_theta = data["B^theta"].reshape((num_rho, num_theta))
+    B_sup_zeta = data["B^zeta"].reshape((num_rho, num_theta))
+    B_sub_rho = data["B_rho"].reshape((num_rho, num_theta))
+    B_sub_theta = data["B_theta"].reshape((num_rho, num_theta))
+    B_sub_zeta = data["B_zeta"].reshape((num_rho, num_theta))
+    B = data["|B|"].reshape((num_rho, num_theta))
+
+    B_sup_theta_rt = convolve2d(
+        B_sup_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dtheta)
+    B_sup_zeta_rt = convolve2d(
+        B_sup_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dtheta)
+    B_sub_rho_rt = convolve2d(
+        B_sub_rho,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dtheta)
+    B_sub_theta_rt = convolve2d(
+        B_sub_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dtheta)
+    B_sub_zeta_rt = convolve2d(
+        B_sub_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dtheta)
+    B_rt = convolve2d(
+        B,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dtheta)
+
+    np.testing.assert_allclose(
+        data["B^theta_rt"].reshape((num_rho, num_theta))[3:-2, 2:-2],
+        B_sup_theta_rt[3:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^theta_rt"])),
+    )
+    np.testing.assert_allclose(
+        data["B^zeta_rt"].reshape((num_rho, num_theta))[3:-2, 2:-2],
+        B_sup_zeta_rt[3:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^zeta_rt"])),
+    )
+    np.testing.assert_allclose(
+        data["B_rho_rt"].reshape((num_rho, num_theta))[3:-2, 2:-2],
+        B_sub_rho_rt[3:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_rho_rt"])),
+    )
+    np.testing.assert_allclose(
+        data["B_theta_rt"].reshape((num_rho, num_theta))[3:-2, 2:-2],
+        B_sub_theta_rt[3:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_theta_rt"])),
+    )
+    np.testing.assert_allclose(
+        data["B_zeta_rt"].reshape((num_rho, num_theta))[3:-2, 2:-2],
+        B_sub_zeta_rt[3:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_zeta_rt"])),
+    )
+    np.testing.assert_allclose(
+        data["|B|_rt"].reshape((num_rho, num_theta))[3:-2, 2:-2],
+        B_rt[3:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["|B|_rt"])),
     )
 
     # mixed derivatives wrt theta & zeta
+    rtol = 1e-2
+    atol = 1e-2
     num_theta = 180
     num_zeta = 180
     grid = LinearGrid(NFP=eq.NFP, theta=num_theta, zeta=num_zeta)
     dtheta = grid.nodes[:, 1].reshape((num_zeta, num_theta))[0, 1]
     dzeta = grid.nodes[:, 2].reshape((num_zeta, num_theta))[1, 0]
     data = eq.compute(
-        ["B^theta", "B^zeta", "B^theta_tz", "B^zeta_tz", "|B|", "|B|_tz"], grid=grid
+        [
+            "B^theta",
+            "B^theta_tz",
+            "B^zeta",
+            "B^zeta_tz",
+            "B_rho",
+            "B_rho_tz",
+            "B_theta",
+            "B_theta_tz",
+            "B_zeta",
+            "B_zeta_tz",
+            "|B|",
+            "|B|_tz",
+        ],
+        grid=grid,
     )
 
     B_sup_theta = data["B^theta"].reshape((num_zeta, num_theta))
     B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_theta))
+    B_sub_rho = data["B_rho"].reshape((num_zeta, num_theta))
+    B_sub_theta = data["B_theta"].reshape((num_zeta, num_theta))
+    B_sub_zeta = data["B_zeta"].reshape((num_zeta, num_theta))
     B = data["|B|"].reshape((num_zeta, num_theta))
 
     B_sup_theta_tz = convolve2d(
@@ -410,6 +599,24 @@ def test_magnetic_field_derivatives(DummyStellarator):
         mode="same",
         boundary="wrap",
     ) / (dtheta * dzeta)
+    B_sub_rho_tz = convolve2d(
+        B_sub_rho,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_sub_theta_tz = convolve2d(
+        B_sub_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
+    B_sub_zeta_tz = convolve2d(
+        B_sub_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (dtheta * dzeta)
     B_tz = convolve2d(
         B,
         FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
@@ -420,20 +627,145 @@ def test_magnetic_field_derivatives(DummyStellarator):
     np.testing.assert_allclose(
         data["B^theta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
         B_sup_theta_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^theta_tz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^theta_tz"])),
     )
     np.testing.assert_allclose(
         data["B^zeta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
         B_sup_zeta_tz[2:-2, 2:-2],
-        rtol=2e-2,
-        atol=1e-2 * np.mean(np.abs(data["B^zeta_tz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B^zeta_tz"])),
+    )
+    np.testing.assert_allclose(
+        data["B_rho_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
+        B_sub_rho_tz[2:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_rho_tz"])),
+    )
+    np.testing.assert_allclose(
+        data["B_theta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
+        B_sub_theta_tz[2:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_theta_tz"])),
+    )
+    np.testing.assert_allclose(
+        data["B_zeta_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
+        B_sub_zeta_tz[2:-2, 2:-2],
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["B_zeta_tz"])),
     )
     np.testing.assert_allclose(
         data["|B|_tz"].reshape((num_zeta, num_theta))[2:-2, 2:-2],
         B_tz[2:-2, 2:-2],
-        rtol=1e-2,
-        atol=1e-2 * np.mean(np.abs(data["|B|_tz"])),
+        rtol=rtol,
+        atol=atol * np.mean(np.abs(data["|B|_tz"])),
+    )
+
+    # mixed derivatives wrt rho & zeta
+    rtol = 1e-2
+    atol = 1e-2
+    num_rho = 150
+    num_zeta = 180
+    grid = LinearGrid(NFP=eq.NFP, rho=num_rho, zeta=num_zeta)
+    drho = grid.nodes[:, 0].reshape((num_zeta, num_rho))[0, 1]
+    dzeta = grid.nodes[:, 2].reshape((num_zeta, num_rho))[1, 0]
+    data = eq.compute(
+        [
+            "B^theta",
+            "B^theta_rz",
+            "B^zeta",
+            "B^zeta_rz",
+            "B_rho",
+            "B_rho_rz",
+            "B_theta",
+            "B_theta_rz",
+            "B_zeta",
+            "B_zeta_rz",
+            "|B|",
+            "|B|_rz",
+        ],
+        grid=grid,
+    )
+
+    B_sup_theta = data["B^theta"].reshape((num_zeta, num_rho))
+    B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_rho))
+    B_sub_rho = data["B_rho"].reshape((num_zeta, num_rho))
+    B_sub_theta = data["B_theta"].reshape((num_zeta, num_rho))
+    B_sub_zeta = data["B_zeta"].reshape((num_zeta, num_rho))
+    B = data["|B|"].reshape((num_zeta, num_rho))
+
+    B_sup_theta_rz = convolve2d(
+        B_sup_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dzeta)
+    B_sup_zeta_rz = convolve2d(
+        B_sup_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dzeta)
+    B_sub_rho_rz = convolve2d(
+        B_sub_rho,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dzeta)
+    B_sub_theta_rz = convolve2d(
+        B_sub_theta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dzeta)
+    B_sub_zeta_rz = convolve2d(
+        B_sub_zeta,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dzeta)
+    B_rz = convolve2d(
+        B,
+        FD_COEF_1_4[:, np.newaxis] * FD_COEF_1_4[np.newaxis, :],
+        mode="same",
+        boundary="wrap",
+    ) / (drho * dzeta)
+
+    np.testing.assert_allclose(
+        data["B^theta_rz"].reshape((num_zeta, num_rho))[2:-2, 3:-2],
+        B_sup_theta_rz[2:-2, 3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^theta_rz"])),
+    )
+    np.testing.assert_allclose(
+        data["B^zeta_rz"].reshape((num_zeta, num_rho))[2:-2, 3:-2],
+        B_sup_zeta_rz[2:-2, 3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B^zeta_rz"])),
+    )
+    np.testing.assert_allclose(
+        data["B_rho_rz"].reshape((num_zeta, num_rho))[2:-2, 3:-2],
+        B_sub_rho_rz[2:-2, 3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_rho_rz"])),
+    )
+    np.testing.assert_allclose(
+        data["B_theta_rz"].reshape((num_zeta, num_rho))[2:-2, 3:-2],
+        B_sub_theta_rz[2:-2, 3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_theta_rz"])),
+    )
+    np.testing.assert_allclose(
+        data["B_zeta_rz"].reshape((num_zeta, num_rho))[2:-2, 3:-2],
+        B_sub_zeta_rz[2:-2, 3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["B_zeta_rz"])),
+    )
+    np.testing.assert_allclose(
+        data["|B|_rz"].reshape((num_zeta, num_rho))[2:-2, 3:-2],
+        B_rz[2:-2, 3:-2],
+        rtol=rtol,
+        atol=atol * np.nanmean(np.abs(data["|B|_rz"])),
     )
 
 

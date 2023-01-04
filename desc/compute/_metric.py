@@ -264,8 +264,8 @@ def _sqrtg_zz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho\\theta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, second derivative wrt radial coordinate and "
-    + "poloidal angle",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "radial coordinate and poloidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -348,8 +348,8 @@ def _sqrtg_tz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho\\zeta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, second derivative wrt radial coordinate and "
-    + "toroidal angle",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "radial coordinate and toroidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -371,11 +371,6 @@ def _sqrtg_tz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
-    data["sqrt(g)_r"] = (
-        dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta"]))
-        + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta"]))
-        + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_r"]))
-    )
     data["sqrt(g)_rz"] = (
         dot(data["e_rho_rz"], cross(data["e_theta"], data["e_zeta"]))
         + dot(data["e_rho_r"], cross(data["e_theta_z"], data["e_zeta"]))

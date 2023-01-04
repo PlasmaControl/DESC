@@ -148,7 +148,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         ],
         grid=grid,
     )
-    # B_r, B_rr
+
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
     B_sup_theta_rr = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / drho**2
     B_sup_zeta_r = np.convolve(data["B^zeta"], FD_COEF_1_4, "same") / drho
@@ -161,7 +161,6 @@ def test_magnetic_field_derivatives(DummyStellarator):
     B_sub_zeta_rr = np.convolve(data["B_zeta"], FD_COEF_2_4, "same") / drho**2
     Bmag_r = np.convolve(data["|B|"], FD_COEF_1_4, "same") / drho
     Bmag_rr = np.convolve(data["|B|"], FD_COEF_2_4, "same") / drho**2
-
     B_r = np.apply_along_axis(my_convolve, 0, data["B"], FD_COEF_1_4) / drho
     B_rr = np.apply_along_axis(my_convolve, 0, data["B"], FD_COEF_2_4) / drho**2
 
@@ -751,6 +750,7 @@ def test_magnetic_field_derivatives(DummyStellarator):
         rtol=rtol,
         atol=atol * np.nanmean(np.abs(data["B_tz"])),
     )
+
     # mixed derivatives wrt rho & zeta
     rtol = 1e-2
     atol = 1e-2

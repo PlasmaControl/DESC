@@ -96,6 +96,6 @@ class TestConstrainCurrent:
                 np.testing.assert_allclose(data["iota_rr"], benchmark_data["iota_rr"])
 
         for e in ("quadrature", "concentric", "linear"):
-            # works with any stellarators in desc/examples that fix iota
+            # works with any stellarators in desc/examples with fixed iota profiles
             test(DSHAPE, e)
             test(HELIOTRON_vac, e)

@@ -9,7 +9,7 @@ from .utils import cross, dot
     label="\\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant",
+    description="Jacobian determinant of flux coordinate system",
     dim=1,
     params=[],
     transforms={},
@@ -87,7 +87,8 @@ def _e_rho_x_e_theta(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, derivative wrt radial coordinate",
+    description="Jacobian determinant of flux coordinate system, derivative wrt "
+    + "radial coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -109,7 +110,8 @@ def _sqrtg_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, derivative wrt poloidal angle",
+    description="Jacobian determinant of flux coordinate system, derivative wrt "
+    + "poloidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -131,7 +133,8 @@ def _sqrtg_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, derivative wrt toroidal angle",
+    description="Jacobian determinant of flux coordinate system, derivative wrt "
+    + "toroidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -153,7 +156,8 @@ def _sqrtg_z(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho\\rho} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, second derivative wrt radial coordinate",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "radial coordinate",
     dim=1,
     params=[],
     transforms={},
@@ -188,7 +192,8 @@ def _sqrtg_rr(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta\\theta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, second derivative wrt poloidal angle",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "poloidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -223,7 +228,8 @@ def _sqrtg_tt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta\\zeta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, second derivative wrt toroidal angle",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "toroidal angle",
     dim=1,
     params=[],
     transforms={},
@@ -300,8 +306,8 @@ def _sqrtg_rt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta\\zeta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
-    description="Jacobian determinant, second derivative wrt poloidal and "
-    + "toroidal angles",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "poloidal and toroidal angles",
     dim=1,
     params=[],
     transforms={},

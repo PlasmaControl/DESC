@@ -226,7 +226,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+    data=[],
 )
 def _B_modes(params, transforms, profiles, data, **kwargs):
     data["B modes"] = transforms["B"].basis.modes
@@ -260,8 +260,7 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     helicity="helicity",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
-    M = kwargs.get("helicity", (1, 0))[0]
-    N = kwargs.get("helicity", (1, 0))[1]
+    M, N = kwargs.get("helicity", (1, 0))
     data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]

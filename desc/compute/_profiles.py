@@ -11,7 +11,7 @@ from .utils import dot, surface_averages
     label="\\psi = \\Psi / (2 \\pi)",
     units="Wb",
     units_long="Webers",
-    description="Toroidal flux",
+    description="Toroidal flux (normalized by 2pi)",
     dim=1,
     params=["Psi"],
     transforms={},
@@ -29,7 +29,7 @@ def _psi(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} \\psi = \\partial_{\\rho} \\Psi / (2 \\pi)",
     units="Wb",
     units_long="Webers",
-    description="Toroidal flux, first radial derivative",
+    description="Toroidal flux (normalized by 2pi), first radial derivative",
     dim=1,
     params=["Psi"],
     transforms={},
@@ -38,7 +38,7 @@ def _psi(params, transforms, profiles, data, **kwargs):
     data=["rho"],
 )
 def _psi_r(params, transforms, profiles, data, **kwargs):
-    data["psi_r"] = 2 * params["Psi"] * data["rho"] / (2 * jnp.pi)
+    data["psi_r"] = params["Psi"] * data["rho"] / jnp.pi
     return data
 
 
@@ -47,7 +47,7 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho\\rho} \\psi = \\partial_{\\rho\\rho} \\Psi / (2 \\pi)",
     units="Wb",
     units_long="Webers",
-    description="Toroidal flux, second radial derivative",
+    description="Toroidal flux (normalized by 2pi), second radial derivative",
     dim=1,
     params=["Psi"],
     transforms={},
@@ -56,7 +56,7 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
     data=["rho"],
 )
 def _psi_rr(params, transforms, profiles, data, **kwargs):
-    data["psi_rr"] = 2 * params["Psi"] * jnp.ones_like(data["rho"]) / (2 * jnp.pi)
+    data["psi_rr"] = params["Psi"] * jnp.ones_like(data["rho"]) / jnp.pi
     return data
 
 
@@ -84,7 +84,7 @@ def _psi_rrr(params, transforms, profiles, data, **kwargs):
     label="\\nabla\\psi",
     units="Wb / m",
     units_long="Webers per meter",
-    description="Toroidal flux gradient",
+    description="Toroidal flux gradient (normalized by 2pi)",
     dim=3,
     params=[],
     transforms={},
@@ -102,7 +102,7 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     label="|\\nabla\\psi|^{2}",
     units="(Wb / m)^{2}",
     units_long="Webers squared per square meter",
-    description="Toroidal flux gradient magnitude squared",
+    description="Toroidal flux gradient (normalized by 2pi) magnitude squared",
     dim=1,
     params=[],
     transforms={},
@@ -120,7 +120,7 @@ def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
     label="|\\nabla\\psi|",
     units="Wb / m",
     units_long="Webers per meter",
-    description="Toroidal flux gradient magnitude",
+    description="Toroidal flux gradient (normalized by 2pi) magnitude",
     dim=1,
     params=[],
     transforms={},
@@ -225,7 +225,7 @@ def _gradp_mag(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|grad(p)|>_vol",
-    label="<|\\nabla p|>_{vol}",
+    label="\\langle |\\nabla p| \\rangle_{vol}",
     units="N \\cdot m^{-3}",
     units_long="Newtons per cubic meter",
     description="Volume average of magnitude of pressure gradient",
@@ -466,7 +466,8 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     label="I",
     units="T \\cdot m",
     units_long="Tesla * meters",
-    description="Boozer toroidal current enclosed by flux surfaces",
+    description="Covariant poloidal component of magnetic field in Boozer coordinates "
+    + "(proportional to toroidal current)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -484,8 +485,8 @@ def _I(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} I",
     units="T \\cdot m",
     units_long="Tesla * meters",
-    description="Boozer toroidal current enclosed by flux surfaces, derivative "
-    + "wrt radial coordinate",
+    description="Covariant poloidal component of magnetic field in Boozer coordinates "
+    + "(proportional to toroidal current), derivative wrt radial coordinate",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -522,7 +523,8 @@ def _I_rr(params, transforms, profiles, data, **kwargs):
     label="G",
     units="T \\cdot m",
     units_long="Tesla * meters",
-    description="Boozer poloidal current enclosed by flux surfaces",
+    description="Covariant toroidal component of magnetic field in Boozer coordinates "
+    + "(proportional to poloidal current)",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -540,8 +542,8 @@ def _G(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} G",
     units="T \\cdot m",
     units_long="Tesla * meters",
-    description="Boozer poloidal current enclosed by flux surfaces, derivative "
-    + "wrt radial coordinate",
+    description="Covariant toroidal component of magnetic field in Boozer coordinates "
+    + "(proportional to poloidal current), derivative wrt radial coordinate",
     dim=1,
     params=[],
     transforms={"grid": []},

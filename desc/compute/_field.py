@@ -10,9 +10,9 @@ from .utils import dot, surface_averages, surface_integrals
 
 @register_compute_fun(
     name="B0",
-    label="\\psi' / \\sqrt{g}",
+    label="\\partial_{\\rho} \\psi / \\sqrt{g}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -30,7 +30,7 @@ def _B0(params, transforms, profiles, data, **kwargs):
     name="B^rho",
     label="B^{\\rho}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant radial component of magnetic field",
     dim=1,
     params=[],
@@ -48,7 +48,7 @@ def _B_sup_rho(params, transforms, profiles, data, **kwargs):
     name="B^theta",
     label="B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field",
     dim=1,
     params=[],
@@ -66,7 +66,7 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
     name="B^zeta",
     label="B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field",
     dim=1,
     params=[],
@@ -156,9 +156,10 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_r",
-    label="\\psi'' / \\sqrt{g} - \\psi' \\partial_{\\rho} \\sqrt{g} / g",
+    label="\\partial_{\\rho \\rho} \\psi / \\sqrt{g} - \\partial_{\\rho} \\psi "
+    + "\\partial_{\\rho} \\sqrt{g} / g",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -179,7 +180,7 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     name="B^theta_r",
     label="\\partial_{\\rho} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field, derivative wrt "
     + "radial coordinate",
     dim=1,
@@ -200,7 +201,7 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     name="B^zeta_r",
     label="\\partial_{\\rho} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field, derivative wrt "
     + "radial coordinate",
     dim=1,
@@ -251,9 +252,9 @@ def _B_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_t",
-    label="-\\psi' \\partial_{\\theta} \\sqrt{g} / g",
+    label="-\\partial_{\\rho} \\psi \\partial_{\\theta} \\sqrt{g} / g",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -271,7 +272,7 @@ def _B0_t(params, transforms, profiles, data, **kwargs):
     name="B^theta_t",
     label="\\partial_{\\theta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field, derivative wrt "
     + "poloidal angle",
     dim=1,
@@ -293,7 +294,7 @@ def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
     name="B^zeta_t",
     label="\\partial_{\\theta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field, derivative wrt "
     + "poloidal angle",
     dim=1,
@@ -344,9 +345,9 @@ def _B_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_z",
-    label="-\\psi' \\partial_{\\zeta} \\sqrt{g} / g",
+    label="-\\partial_{\\rho} \\psi \\partial_{\\zeta} \\sqrt{g} / g",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -364,7 +365,7 @@ def _B0_z(params, transforms, profiles, data, **kwargs):
     name="B^theta_z",
     label="\\partial_{\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field, derivative wrt "
     + "toroidal angle",
     dim=1,
@@ -386,7 +387,7 @@ def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
     name="B^zeta_z",
     label="\\partial_{\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field, derivative wrt "
     + "toroidal angle",
     dim=1,
@@ -556,10 +557,10 @@ def _B_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_tt",
-    label="-\\psi' \\partial_{\\theta\\theta} \\sqrt{g} / g + "
-    + "2 \\psi' (\\partial_{\\theta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
+    label="-\\partial_{\\rho} \\psi \\partial_{\\theta\\theta} \\sqrt{g} / g + "
+    + "2 \\partial_{\\rho} \\psi (\\partial_{\\theta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -581,7 +582,7 @@ def _B0_tt(params, transforms, profiles, data, **kwargs):
     name="B^theta_tt",
     label="\\partial_{\\theta\\theta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field, second "
     + "derivative wrt poloidal angle",
     dim=1,
@@ -604,7 +605,7 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     name="B^zeta_tt",
     label="\\partial_{\\theta\\theta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field, second "
     + "derivative wrt poloidal angle",
     dim=1,
@@ -663,10 +664,10 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_zz",
-    label="-\\psi' \\partial_{\\zeta\\zeta} \\sqrt{g} / g + "
-    + "2 \\psi' (\\partial_{\\zeta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
+    label="-\\partial_{\\rho} \\psi \\partial_{\\zeta\\zeta} \\sqrt{g} / g + "
+    + "2 \\partial_{\\rho} \\psi (\\partial_{\\zeta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -688,7 +689,7 @@ def _B0_zz(params, transforms, profiles, data, **kwargs):
     name="B^theta_zz",
     label="\\partial_{\\zeta\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field, second "
     + "derivative wrt toroidal angle",
     dim=1,
@@ -711,7 +712,7 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     name="B^zeta_zz",
     label="\\partial_{\\zeta\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field, second "
     + "derivative wrt toroidal angle",
     dim=1,
@@ -911,11 +912,11 @@ def _B_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_tz",
-    label="-\\psi' \\partial_{\\theta\\zeta} \\sqrt{g} / g + "
-    + "2 \\psi' \\partial_{\\theta} \\sqrt{g} \\partial_{\\zeta} \\sqrt{g} / "
-    + "(\\sqrt{g})^{3}",
+    label="-\\partial_{\\rho} \\psi \\partial_{\\theta\\zeta} \\sqrt{g} / g + "
+    + "2 \\partial_{\\rho} \\psi \\partial_{\\theta} \\sqrt{g} \\partial_{\\zeta} "
+    + "\\sqrt{g} / (\\sqrt{g})^{3}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="",
     dim=1,
     params=[],
@@ -940,7 +941,7 @@ def _B0_tz(params, transforms, profiles, data, **kwargs):
     name="B^theta_tz",
     label="\\partial_{\\theta\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant poloidal component of magnetic field, second "
     + "derivative wrt poloidal and toroidal angles",
     dim=1,
@@ -974,7 +975,7 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     name="B^zeta_tz",
     label="\\partial_{\\theta\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
+    units_long="Tesla / meter",
     description="Contravariant toroidal component of magnetic field, second "
     + "derivative wrt poloidal and toroidal angles",
     dim=1,
@@ -2262,7 +2263,7 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
 )
 def _B_vol(params, transforms, profiles, data, **kwargs):
     data["<|B|>_vol"] = (
-        jnp.sum(transforms["grid"].weights * data["sqrt(g)"] * data["|B|"]) / data["V"]
+        jnp.sum(data["|B|"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
     )
     return data
 

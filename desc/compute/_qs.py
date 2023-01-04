@@ -59,16 +59,17 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
 )
 def _w_mn(params, transforms, profiles, data, **kwargs):
     w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
+    Bm = transforms["B"].basis.modes[:, 1]
+    Bn = transforms["B"].basis.modes[:, 2]
+    wm = transforms["w"].basis.modes[:, 1]
+    wn = transforms["w"].basis.modes[:, 2]
     NFP = transforms["w"].basis.NFP
-    for k, (l, m, n) in enumerate(transforms["w"].basis.modes):
-        if m != 0:
-            idx = transforms["B"].basis.get_idx(M=-m, N=n)
-            w_mn = put(w_mn, k, (sign(n) * data["B_theta_mn"][idx] / jnp.abs(m))[0])
-        elif n != 0:
-            idx = transforms["B"].basis.get_idx(M=m, N=-n)
-            w_mn = put(
-                w_mn, k, (sign(m) * data["B_zeta_mn"][idx] / jnp.abs(NFP * n))[0]
-            )
+    ib, iw = jnp.where((Bm[:, None] == -wm) * (Bn[:, None] == wn) * (wm != 0))
+    jb, jw = jnp.where(
+        (Bm[:, None] == wm) * (Bn[:, None] == -wn) * (wm == 0) * (wn != 0)
+    )
+    w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
+    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
     data["w_mn"] = w_mn
     return data
 

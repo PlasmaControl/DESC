@@ -13,7 +13,7 @@ from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp1d
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.utils import copy_coeffs
+from desc.utils import combination_permutation, copy_coeffs, multinomial_coefficients
 
 
 class Profile(IOAble, ABC):
@@ -545,10 +545,20 @@ class ProductProfile(Profile):
             values of the profile or its derivative at the points specified.
 
         """
+        if dt > 0 or dz > 0:
+            raise NotImplementedError(
+                "Poloidal and toroidal derivatives of ProductProfiles have not "
+                + "been implemented yet"
+            )
         params = self._parse_params(params)
-        f = 1
-        for i, profile in enumerate(self._profiles):
-            f *= profile.compute(params[i], grid, dr, dt, dz)
+        f = 0
+        derivs = combination_permutation(len(self._profiles), dr)
+        coeffs = multinomial_coefficients(len(self._profiles), dr)
+        for j, drj in enumerate(derivs):
+            fi = 1
+            for i, profile in enumerate(self._profiles):
+                fi *= profile.compute(params[i], grid, drj[i], 0, 0)
+            f += coeffs[j] * fi
         return f
 
     def __repr__(self):

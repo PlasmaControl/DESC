@@ -886,10 +886,15 @@ class _Configuration(IOAble, ABC):
     @property
     def p_l(self):
         """ndarray: Coefficients of pressure profile."""
-        return self.pressure.params
+        return np.empty(0) if self.pressure is None else self.pressure.params
 
     @p_l.setter
     def p_l(self, p_l):
+        if self.pressure is None:
+            raise ValueError(
+                "Attempt to set pressure on an equilibrium "
+                + "with fixed kinetic profiles"
+            )
         self.pressure.params = p_l
 
     @property
@@ -992,7 +997,7 @@ class _Configuration(IOAble, ABC):
     @property
     def atomic_number(self):
         """Profile: Effective atomic number (Z_eff) profile."""
-        return self._ion_temperature
+        return self._atomic_number
 
     @atomic_number.setter
     def atomic_number(self, new):

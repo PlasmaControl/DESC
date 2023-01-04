@@ -5,6 +5,7 @@ import pytest
 from scipy.constants import elementary_charge
 
 from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
 from desc.io import InputReader
 from desc.objectives import (
     ForceBalance,
@@ -285,7 +286,7 @@ class TestProfiles:
         print("pressure params:", pressure.params)
 
         LM_resolution = 6
-        eq = Equilibrium(
+        eq1 = Equilibrium(
             pressure=pressure,
             iota=PowerSeriesProfile([1.61]),
             Psi=np.pi,  # so B ~ 1 T
@@ -298,8 +299,54 @@ class TestProfiles:
             N_grid=0,
             sym=True,
         )
-        eq.solve(
+        eq1.solve(
             constraints=get_fixed_boundary_constraints(),
             objective=ObjectiveFunction(objectives=ForceBalance()),
             maxiter=2,
         )
+
+    def test_kinetic_pressure(self):
+        """Test that both ways of computing pressure are equivalent."""
+        ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(2.0e3 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        pressure = elementary_charge * (ne * Te + ne * Ti)
+        print("pressure params:", pressure.params)
+
+        LM_resolution = 6
+        eq1 = Equilibrium(
+            pressure=pressure,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq2 = Equilibrium(
+            electron_temperature=Te,
+            electron_density=ne,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        grid = LinearGrid(L=20)
+        data1 = eq1.compute(["p", "p_r"], grid=grid)
+        data2 = eq2.compute(["p", "p_r"], grid=grid)
+
+        assert np.all(np.isnan(data1["ne"]))
+        assert np.all(np.isnan(data1["Te"]))
+        assert np.all(data2["Te"] == data2["Ti"])
+        np.testing.assert_allclose(data1["p"], data2["p"])
+        np.testing.assert_allclose(data1["p_r"], data2["p_r"])

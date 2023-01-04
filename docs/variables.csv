@@ -259,6 +259,9 @@ Name,Label,Units,Description,Module
 ``B_theta_mn``,":math:`B_{\theta, m, n}`",Tesla * meters,Fourier coefficients for covariant poloidal component of magnetic field,``desc.compute._qs``
 ``B_zeta_mn``,":math:`B_{\zeta, m, n}`",Tesla * meters,Fourier coefficients for covariant toroidal component of magnetic field,``desc.compute._qs``
 ``w_mn``,":math:`w_{m,n}`",Tesla * meters,RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``
+``w``,:math:`w`,Tesla * meters,Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``
+``w_t``,:math:`\partial_{\theta} w`,Tesla * meters,"Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates', poloidal derivative",``desc.compute._qs``
+``w_z``,:math:`\partial_{\zeta} w`,Tesla * meters,"Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates', toroidal derivative",``desc.compute._qs``
 ``nu``,:math:`\nu = \zeta_{B} - \zeta`,radians,Boozer toroidal stream function,``desc.compute._qs``
 ``nu_t``,:math:`\partial_{\theta} \nu`,radians,"Boozer toroidal stream function, derivative wrt poloidal angle",``desc.compute._qs``
 ``nu_z``,:math:`\partial_{\zeta} \nu`,radians,"Boozer toroidal stream function, derivative wrt toroidal angle",``desc.compute._qs``

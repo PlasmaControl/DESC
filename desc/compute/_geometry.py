@@ -184,7 +184,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="n_rho",
-    label="n_{rho}",
+    label="\\hat{\\mathbf{n}}_{\\rho}",
     units="~",
     units_long="None",
     description="Unit normal vector to constant rho surface",

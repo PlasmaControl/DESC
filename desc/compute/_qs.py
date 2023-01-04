@@ -1,5 +1,7 @@
 """Compute functions for quasisymmetry objectives."""
 
+import numpy as np
+
 from desc.backend import jnp, put, sign
 
 from .data_index import register_compute_fun
@@ -64,8 +66,11 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     wm = transforms["w"].basis.modes[:, 1]
     wn = transforms["w"].basis.modes[:, 2]
     NFP = transforms["w"].basis.NFP
-    ib, iw = jnp.where((Bm[:, None] == -wm) * (Bn[:, None] == wn) * (wm != 0))
-    jb, jw = jnp.where(
+    # indices of matching modes in w and B bases
+    # need to use np instead of jnp here as jnp.where doesn't work under jit
+    # even if the args are static
+    ib, iw = np.where((Bm[:, None] == -wm) * (Bn[:, None] == wn) * (wm != 0))
+    jb, jw = np.where(
         (Bm[:, None] == wm) * (Bn[:, None] == -wn) * (wm == 0) * (wn != 0)
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))

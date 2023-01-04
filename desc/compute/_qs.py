@@ -46,13 +46,13 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="w_mn",
     label="w_{m,n}",
-    units="T \\cdot m}",
+    units="T \\cdot m",
     units_long="Tesla * meters",
     description="RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to "
     + "Boozer Coordinates'",
     dim=1,
     params=[],
-    transforms={"w": [[0, 0, 0]]},
+    transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["B_theta_mn", "B_zeta_mn"],
@@ -75,6 +75,63 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="w",
+    label="w",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
+    + "'Transformation from VMEC to Boozer Coordinates'",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_mn"],
+)
+def _w(params, transforms, profiles, data, **kwargs):
+    data["w"] = transforms["w"].transform(data["w_mn"])
+    return data
+
+
+@register_compute_fun(
+    name="w_t",
+    label="\\partial_{\\theta} w",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
+    + "'Transformation from VMEC to Boozer Coordinates', poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 1, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_mn"],
+)
+def _w_t(params, transforms, profiles, data, **kwargs):
+    data["w_t"] = transforms["w"].transform(data["w_mn"], dt=1)
+    return data
+
+
+@register_compute_fun(
+    name="w_z",
+    label="\\partial_{\\zeta} w",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
+    + "'Transformation from VMEC to Boozer Coordinates', toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 0, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_mn"],
+)
+def _w_z(params, transforms, profiles, data, **kwargs):
+    data["w_z"] = transforms["w"].transform(data["w_mn"], dz=1)
+    return data
+
+
+@register_compute_fun(
     name="nu",
     label="\\nu = \\zeta_{B} - \\zeta",
     units="rad",
@@ -82,15 +139,14 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     description="Boozer toroidal stream function",
     dim=1,
     params=[],
-    transforms={"w": [[0, 0, 0]]},
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_mn", "G", "I", "iota", "lambda"],
+    data=["w", "G", "I", "iota", "lambda"],
 )
 def _nu(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    w = transforms["w"].transform(data["w_mn"])
-    data["nu"] = (w - data["I"] * data["lambda"]) / GI
+    data["nu"] = (data["w"] - data["I"] * data["lambda"]) / GI
     return data
 
 
@@ -102,15 +158,14 @@ def _nu(params, transforms, profiles, data, **kwargs):
     description="Boozer toroidal stream function, derivative wrt poloidal angle",
     dim=1,
     params=[],
-    transforms={"w": [[0, 1, 0]]},
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_mn", "G", "I", "iota", "lambda_t"],
+    data=["w_t", "G", "I", "iota", "lambda_t"],
 )
 def _nu_t(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    w_t = transforms["w"].transform(data["w_mn"], dr=0, dt=1, dz=0)
-    data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI
+    data["nu_t"] = (data["w_t"] - data["I"] * data["lambda_t"]) / GI
     return data
 
 
@@ -122,15 +177,14 @@ def _nu_t(params, transforms, profiles, data, **kwargs):
     description="Boozer toroidal stream function, derivative wrt toroidal angle",
     dim=1,
     params=[],
-    transforms={"w": [[0, 0, 1]]},
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_mn", "G", "I", "iota", "lambda_z"],
+    data=["w_z", "G", "I", "iota", "lambda_z"],
 )
 def _nu_z(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    w_z = transforms["w"].transform(data["w_mn"], dr=0, dt=0, dz=1)
-    data["nu_z"] = (w_z - data["I"] * data["lambda_z"]) / GI
+    data["nu_z"] = (data["w_z"] - data["I"] * data["lambda_z"]) / GI
     return data
 
 

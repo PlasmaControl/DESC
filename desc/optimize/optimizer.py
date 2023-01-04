@@ -157,7 +157,7 @@ class Optimizer(IOAble):
         gtol=None,
         x_scale="auto",
         maxiter=None,
-        verbose=0,
+        verbose=1,
         options={},
     ):
         """Optimize an objective function.
@@ -195,8 +195,8 @@ class Optimizer(IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         verbose : integer, optional
             * 0  : work silently.
-            * 1-2 : display a termination report.
-            * 3 : display progress during iterations
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
         maxiter : int, optional
             Maximum number of iterations. Defaults to 100.
         options : dict, optional
@@ -222,10 +222,7 @@ class Optimizer(IOAble):
         if verbose == 2:
             set_console_logging(console_log_level="DEBUG")
 
-
         timer = Timer()
-        # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
-        disp = verbose - 1 if verbose > 1 else verbose
 
         if (
             self.method in Optimizer._desc_methods
@@ -290,9 +287,9 @@ class Optimizer(IOAble):
             options,
         )
 
-        if verbose > 0:
-            print("Number of parameters: {}".format(x0_reduced.size))
-            print("Number of objectives: {}".format(objective.dim_f))
+        
+        logging.info("Number of parameters: {}".format(x0_reduced.size))
+        logging.info("Number of objectives: {}".format(objective.dim_f))
 
         logging.info("Starting optimization")
         timer.start("Solution time")
@@ -357,7 +354,7 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=disp,
+                verbose=verbose,
                 callback=None,
                 options=options,
             )
@@ -374,7 +371,7 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=disp,
+                verbose=verbose,
                 callback=None,
                 options=options,
             )
@@ -391,7 +388,7 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=disp,
+                verbose=verbose,
                 callback=None,
                 options=options,
             )

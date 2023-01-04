@@ -144,7 +144,7 @@ class QuasisymmetryBoozer(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute quasi-symmetry Boozer harmonics error.
@@ -307,7 +307,7 @@ class QuasisymmetryTwoTerm(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute quasi-symmetry two-term errors.
@@ -460,7 +460,7 @@ class QuasisymmetryTripleProduct(_Objective):
                 scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
             )
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute quasi-symmetry triple product errors.

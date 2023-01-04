@@ -14,8 +14,8 @@ from termcolor import colored
 
 from desc import set_device
 
-from desc import set_logfile_logging
-from desc import set_console_logging
+from utils import _set_logfile_logging
+from utils import _set_console_logging
 
 class InputReader:
     """Reads command line arguments and parses input files.
@@ -123,16 +123,16 @@ class InputReader:
         if args.verbose == 0:
             pass
         if args.verbose == 1:
-            set_console_logging("INFO", "stdout")
+            _set_console_logging("INFO", "stdout")
         if args.verbose == 2:
-            set_console_logging("DEBUG", "stdout")
+            _set_console_logging("DEBUG", "stdout")
 
         if args.logging == 0:
             pass
         if args.logging == 1:
-            set_logfile_logging("INFO", "desc.log")
+            _set_logfile_logging("INFO", "desc.log")
         if args.logging == 2:
-            set_logfile_logging("DEBUG", "desc.log")
+            _set_logfile_logging("DEBUG", "desc.log")
 
         return args
 

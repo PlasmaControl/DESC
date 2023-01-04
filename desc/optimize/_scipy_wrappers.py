@@ -2,6 +2,7 @@
 
 import numpy as np
 import scipy.optimize
+import logging
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
@@ -41,9 +42,9 @@ def _optimize_scipy_minimize(
         a step of a given size along any of the scaled variables has a similar effect
         on the cost function.
     verbose : int
-        * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 0 : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -129,10 +130,10 @@ def _optimize_scipy_minimize(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
-            print_iteration_nonlinear(
-                len(allx), len(func_allx), f1, df, dx_norm, g_norm
-            )
+        print_iteration_nonlinear(
+            len(allx), len(func_allx), f1, df, dx_norm, g_norm
+        )
+
         success[0], message[0] = check_termination(
             df,
             f1,
@@ -193,17 +194,16 @@ def _optimize_scipy_minimize(
             message=message,
             allx=allx,
         )
-    if verbose > 0:
-        if result["success"]:
-            print(result["message"])
-        else:
-            print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-        print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Gradient evaluations: {:d}".format(result["ngev"]))
-        print("         Hessian evaluations: {:d}".format(result["nhev"]))
+    if result["success"]:
+        logging.info(result["message"])
+    else:
+        logging.info("Warning: " + result["message"])
+        logging.info("         Current function value: {:.3e}".format(result["fun"]))
+        logging.info("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        prilogging.infont("         Iterations: {:d}".format(result["nit"]))
+        logging.info("         Function evaluations: {:d}".format(result["nfev"]))
+        logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
+        logging.info("         Hessian evaluations: {:d}".format(result["nhev"]))
 
     return result
 
@@ -232,9 +232,9 @@ def _optimize_scipy_least_squares(
         on the cost function. If set to ‘jac’, the scale is iteratively updated using
         the inverse norms of the columns of the Jacobian matrix.
     verbose : int
-        * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 0 : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -302,10 +302,10 @@ def _optimize_scipy_least_squares(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
-            print_iteration_nonlinear(
-                len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
-            )
+        print_iteration_nonlinear(
+            len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
+        )
+
         success[0], message[0] = check_termination(
             df,
             c1,
@@ -371,15 +371,14 @@ def _optimize_scipy_least_squares(
             allx=jac_allx,
         )
 
-    if verbose > 0:
-        if result["success"]:
-            print(result["message"])
-        else:
-            print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["cost"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-        print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Jacobian evaluations: {:d}".format(result["njev"]))
+    if result["success"]:
+        logging.info(result["message"])
+    else:
+        logging.info("Warning: " + result["message"])
+        logging.info("         Current function value: {:.3e}".format(result["cost"]))
+        logging.info("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        logging.info("         Iterations: {:d}".format(result["nit"]))
+        logging.info("         Function evaluations: {:d}".format(result["nfev"]))
+        logging.info("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     return result

@@ -378,17 +378,16 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         nit=iteration,
         message=message,
     )
-    if verbose > 0:
-        if result["success"]:
-            print(result["message"])
-        else:
-            print("Warning: " + result["message"])
-        print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-        print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Gradient evaluations: {:d}".format(result["ngev"]))
-        print("         Hessian evaluations: {:d}".format(result["nhev"]))
+    if result["success"]:
+        logging.DEBUG(result["message"])
+    else:
+        logging.DEBUG("Warning: " + result["message"])
+    logging.DEBUG("         Current function value: {:.3e}".format(result["fun"]))
+    logging.DEBUG("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+    logging.DEBUG("         Iterations: {:d}".format(result["nit"]))
+    logging.DEBUG("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.DEBUG("         Gradient evaluations: {:d}".format(result["ngev"]))
+    logging.DEBUG("         Hessian evaluations: {:d}".format(result["nhev"]))
     if return_all:
         result["allx"] = allx
     if return_tr:

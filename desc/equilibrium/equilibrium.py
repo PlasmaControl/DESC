@@ -24,6 +24,8 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.transform import Transform
 from desc.utils import Timer
+from desc.utils import _set_console_logging
+
 
 from .configuration import _Configuration
 
@@ -393,7 +395,7 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
-        verbose=0,
+        verbose=1,
         copy=False,
     ):
         """Solve to find the equilibrium configuration.
@@ -421,9 +423,10 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
-        verbose : int
-            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
-            with DEBUG level timing and iteration data.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -473,11 +476,11 @@ class Equilibrium(_Configuration, IOAble):
             )
 
         if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
+            _set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            set_console_logging(console_log_level="INFO")
+            _set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+            _set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(
             eq,
@@ -576,11 +579,11 @@ class Equilibrium(_Configuration, IOAble):
             eq = self
 
         if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
+            _set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            set_console_logging(console_log_level="INFO")
+            _set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+            _set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(
             eq,

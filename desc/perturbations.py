@@ -424,7 +424,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Relative cutoff for small singular values in pseudo-inverse.
         Default is np.finfo(A.dtype).eps*max(A.shape) where A is the Jacobian matrix.
     verbose : int
-        Level of output.
+        Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
+        with DEBUG level timing and iteration data.
     copy : bool
         Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 

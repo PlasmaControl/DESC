@@ -8,6 +8,7 @@ from desc.utils import Timer
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
+import logging
 
 class Volume(_Objective):
     """Plasma volume.
@@ -94,7 +95,7 @@ class Volume(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -207,7 +208,7 @@ class AspectRatio(_Objective):
         timer.stop("Precomputing transforms")
         timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute aspect ratio.

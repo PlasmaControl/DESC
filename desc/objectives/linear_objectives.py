@@ -153,7 +153,7 @@ class FixBoundaryR(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
@@ -298,7 +298,7 @@ class FixBoundaryZ(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
@@ -443,7 +443,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, L_lmn, **kwargs):
         """Compute lambda gauge symmetry errors.
@@ -564,7 +564,7 @@ class _FixProfile(_Objective, ABC):
         if None in self.target or self.target.size != self.dim_f:
             self.target = self._profile.params[self._idx]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
 
 class FixPressure(_FixProfile):
@@ -643,7 +643,7 @@ class FixPressure(_FixProfile):
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["p"]
-        super().build(eq, profile, use_jit, verbose)
+        super().build(eq, profile, use_jit)
 
     def compute(self, p_l, **kwargs):
         """Compute fixed pressure profile errors.
@@ -853,7 +853,7 @@ class FixCurrent(_FixProfile):
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"]
-        super().build(eq, profile, use_jit, verbose)
+        super().build(eq, profile, use_jit)
 
     def compute(self, c_l, **kwargs):
         """Compute fixed current errors.
@@ -945,7 +945,7 @@ class FixPsi(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["Psi"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.

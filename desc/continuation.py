@@ -1,6 +1,7 @@
 """Functions for solving for equilibria with multigrid continuation method."""
 
 import copy
+import logging
 
 import numpy as np
 
@@ -46,11 +47,10 @@ def solve_continuation_automatic(  # noqa: C901
         for given optimizer.
     nfev : int
         maximum number of function evaluations in each equilibrium subproblem.
-    verbose : integer
-        * 0: no output
-        * 1: summary of each iteration
-        * 2: as above plus timing information
-        * 3: as above plus detailed solver output
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
     **kwargs : control continuation step sizes
@@ -183,18 +183,17 @@ def solve_continuation_automatic(  # noqa: C901
                 deltas["dZb"] *= bdry_step
             bdry_ratio += bdry_step
 
-        if verbose:
-            _print_iteration_summary(
-                ii,
-                nn,
-                eqi,
-                bdry_ratio,
-                pres_ratio,
-                curr_ratio,
-                pert_order,
-                objective_i,
-                optimizer,
-            )
+        _print_iteration_summary(
+            ii,
+            nn,
+            eqi,
+            bdry_ratio,
+            pres_ratio,
+            curr_ratio,
+            pert_order,
+            objective_i,
+            optimizer,
+        )
 
         if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
             constraints_i = get_fixed_boundary_constraints(
@@ -202,8 +201,7 @@ def solve_continuation_automatic(  # noqa: C901
             )
             objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
-            if verbose > 0:
-                print("Perturbing equilibrium")
+            logging.info("Perturbing equilibrium")
             eqi.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
@@ -232,12 +230,10 @@ def solve_continuation_automatic(  # noqa: C901
         eqfam.append(eqi)
 
         if checkpoint_path is not None:
-            if verbose > 0:
-                print("Saving latest iteration")
+            logging.info("Saving latest iteration")
             eqfam.save(checkpoint_path)
         timer.stop("Iteration {} total".format(ii + 1))
-        if verbose > 1:
-            timer.disp("Iteration {} total".format(ii + 1))
+        timer.disp("Iteration {} total".format(ii + 1))
         ii += 1
 
     eq.R_lmn = eqi.R_lmn
@@ -245,17 +241,13 @@ def solve_continuation_automatic(  # noqa: C901
     eq.L_lmn = eqi.L_lmn
     eqfam[-1] = eq
     timer.stop("Total time")
-    if verbose > 0:
-        print("====================")
-        print("Done")
-    if verbose > 1:
-        timer.disp("Total time")
+    logging.info"====================")
+    logging.info("Done")
+    timer.disp("Total time")
     if checkpoint_path is not None:
-        if verbose > 0:
-            print("Output written to {}".format(checkpoint_path))
+        logging.info("Output written to {}".format(checkpoint_path))
         eqfam.save(checkpoint_path)
-    if verbose:
-        print("====================")
+    logging.info("====================")
 
     return eqfam
 
@@ -295,11 +287,10 @@ def solve_continuation(  # noqa: C901
         for given optimizer.
     nfev : int or array-like of int
         maximum number of function evaluations in each equilibrium subproblem.
-    verbose : integer
-        * 0: no output
-        * 1: summary of each iteration
-        * 2: as above plus timing information
-        * 3: as above plus detailed solver output
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
     checkpoint_path : str or path-like
         file to save checkpoint data (Default value = None)
 
@@ -331,19 +322,18 @@ def solve_continuation(  # noqa: C901
     while ii < nn and not stop:
         timer.start("Iteration {} total".format(ii + 1))
         eqi = eqfam[ii]
-        if verbose:
-            _print_iteration_summary(
-                ii,
-                nn,
-                eqi,
-                _get_ratio(eqi.surface, eqfam[-1].surface),
-                _get_ratio(eqi.pressure, eqfam[-1].pressure),
-                _get_ratio(eqi.current, eqfam[-1].current),
-                pert_order[ii],
-                objective_i,
-                optimizer,
-            )
-            deltas = {}
+        _print_iteration_summary(
+            ii,
+            nn,
+            eqi,
+            _get_ratio(eqi.surface, eqfam[-1].surface),
+            _get_ratio(eqi.pressure, eqfam[-1].pressure),
+            _get_ratio(eqi.current, eqfam[-1].current),
+            pert_order[ii],
+            objective_i,
+            optimizer,
+        )
+        deltas = {}
 
         if ii > 0:
             eqi.set_initial_guess(eqfam[ii - 1])
@@ -372,8 +362,7 @@ def solve_continuation(  # noqa: C901
                 )
 
         if len(deltas) > 0:
-            if verbose > 0:
-                print("Perturbing equilibrium")
+            logging.info("Perturbing equilibrium")
             # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
             eqp.change_resolution(**eqi.resolution)
@@ -410,26 +399,20 @@ def solve_continuation(  # noqa: C901
             stop = True
 
         if checkpoint_path is not None:
-            if verbose > 0:
-                print("Saving latest iteration")
+            logging.info("Saving latest iteration")
             eqfam.save(checkpoint_path)
         timer.stop("Iteration {} total".format(ii + 1))
-        if verbose > 1:
-            timer.disp("Iteration {} total".format(ii + 1))
+        timer.disp("Iteration {} total".format(ii + 1))
         ii += 1
 
     timer.stop("Total time")
-    if verbose > 0:
-        print("====================")
-        print("Done")
-    if verbose > 1:
-        timer.disp("Total time")
+    logging.info("====================")
+    logging.info("Done")
+    timer.disp("Total time")
     if checkpoint_path is not None:
-        if verbose > 0:
-            print("Output written to {}".format(checkpoint_path))
+        logging.info("Output written to {}".format(checkpoint_path))
         eqfam.save(checkpoint_path)
-    if verbose:
-        print("====================")
+    logging.info("====================")
     return eqfam
 
 
@@ -464,23 +447,23 @@ def _print_iteration_summary(
     optimizer,
     **kwargs,
 ):
-    print("================")
-    print("Step {}/{}".format(ii + 1, nn))
-    print("================")
+    logging.debug("================")
+    logging.debug("Step {}/{}".format(ii + 1, nn))
+    logging.debug("================")
     eq.resolution_summary()
-    print("Boundary ratio = {}".format(bdry_ratio))
-    print("Pressure ratio = {}".format(pres_ratio))
+    logging.debug("Boundary ratio = {}".format(bdry_ratio))
+    logging.debug("Pressure ratio = {}".format(pres_ratio))
     if eq.current is not None:
-        print("Current ratio = {}".format(curr_ratio))
-    print("Perturbation Order = {}".format(pert_order))
-    print(
+        logging.debug("Current ratio = {}".format(curr_ratio))
+    logging.debug("Perturbation Order = {}".format(pert_order))
+    logging.debug(
         "Objective: {}".format(
             objective if isinstance(objective, str) else objective.objectives[0].name
         )
     )
-    print(
+    logging.debug(
         "Optimizer: {}".format(
             optimizer if isinstance(optimizer, str) else optimizer.method
         )
     )
-    print("================")
+    logging.debug("================")

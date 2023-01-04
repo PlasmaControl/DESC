@@ -134,7 +134,7 @@ class ForceBalance(_Objective):
             # local quantity, want to divide by number of nodes
             self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute MHD force balance errors.
@@ -296,7 +296,7 @@ class RadialForceBalance(_Objective):
             # local quantity, want to divide by number of nodes
             self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute radial MHD force balance errors.
@@ -455,7 +455,7 @@ class HelicalForceBalance(_Objective):
             # local quantity, want to divide by number of nodes
             self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute helical MHD force balance errors.
@@ -626,7 +626,7 @@ class Energy(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["W"]
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute MHD energy.
@@ -790,7 +790,7 @@ class CurrentDensity(_Objective):
             # local quantity, want to divide by number of nodes
             self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current density.

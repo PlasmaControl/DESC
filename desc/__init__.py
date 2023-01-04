@@ -119,10 +119,10 @@ logging.getLogger().addHandler( logging.NullHandler())
 # have a logger automatically set up to save crash data- can be turned 
 # off with a call to set_logfile_logging(log_activated = False)
 
-def stop_logfile_logging():
-
+def _stop_logfile_logging():
     """Quickly stops logging to specified file if it is being handled by a
-    rotating file handler.
+    rotating file handler.   Non-global version of the stop_logfile_logging
+    function from __init__.py for internal use.
 
     Returns
     -------
@@ -138,9 +138,10 @@ def stop_logfile_logging():
     return False
 
 
-def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
+def _set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
 
-    """Quickly adds a logfile handler to the root logger.
+    """Quickly adds a logfile handler to the root logger.  Non-global version 
+    of the set_logfile_logging function from __init__.py for internal use.
     
     Arguments allow basic configuration of the logger, but this is not meant to
     be a replacement for setting up logging when using DESC in the context of a
@@ -200,8 +201,9 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
     return True
 
 
-def set_console_logging(console_log_level = "INFO", console_log_output = "stdout"):
-    """Quickly adds console handlers to python's root logger.
+def _set_console_logging(console_log_level = "INFO", console_log_output = "stdout"):
+    """Quickly adds console handlers to python's root logger.  Non-global version 
+    of the set_console_logging function from __init__.py for internal use.
 
     Arguments allow basic configuration of the logger, but this is not meant to
     be a replacement for setting up logging when using DESC in the context of a
@@ -259,6 +261,6 @@ def set_console_logging(console_log_level = "INFO", console_log_output = "stdout
 
     return True
 
-set_logfile_logging()
+_set_logfile_logging()
 
 del RotatingFileHandler

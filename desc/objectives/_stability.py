@@ -110,7 +110,7 @@ class MercierStability(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = 1 / scales["Psi"] ** 2 / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute the Mercier stability criterion.
@@ -163,22 +163,22 @@ class MercierStability(_Objective):
             self.compute(*args, **kwargs)
             / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         )
-        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        logging.info("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
 
         if self._normalize:
-            print(
+            logging.info(
                 "Maximum "
                 + self._print_value_fmt.format(jnp.max(x / self.normalization))
                 + "(normalized)"
             )
-            print(
+            logging.info(
                 "Minimum "
                 + self._print_value_fmt.format(jnp.min(x / self.normalization))
                 + "(normalized)"
             )
-            print(
+            logging.info(
                 "Average "
                 + self._print_value_fmt.format(jnp.mean(x / self.normalization))
                 + "(normalized)"
@@ -278,7 +278,7 @@ class MagneticWell(_Objective):
         timer.stop("Precomputing transforms")
         timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
         """Compute a magnetic well parameter.
@@ -331,6 +331,6 @@ class MagneticWell(_Objective):
             self.compute(*args, **kwargs)
             / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         )
-        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        logging.info("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)

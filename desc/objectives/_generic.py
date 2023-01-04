@@ -89,7 +89,7 @@ class GenericObjective(_Objective):
         self._args = get_params(self.f)
         self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, **params):
         """Compute the quantity.
@@ -205,7 +205,7 @@ class ToroidalCurrent(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute toroidal current.
@@ -303,7 +303,7 @@ class RotationalTransform(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=True):
         """Build constant arrays.
 
         Parameters
@@ -312,8 +312,7 @@ class RotationalTransform(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
+
         """
         if self.grid is None:
             self.grid = LinearGrid(
@@ -329,18 +328,16 @@ class RotationalTransform(_Objective):
         self._data_keys = ["iota"]
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+        super().build(eq=eq, use_jit=use_jit)
 
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
         """Compute rotational transform profile errors.

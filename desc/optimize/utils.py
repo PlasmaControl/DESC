@@ -173,7 +173,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
 
 def print_header_nonlinear():
     """Print a pretty header."""
-    logging.debug(
+    logging.info(
         "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
             "Iteration",
             "Total nfev",

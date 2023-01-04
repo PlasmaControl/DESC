@@ -29,8 +29,6 @@ class ObjectiveFunction(IOAble):
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
         use less memory. Note that the "blocked" Hessian will only be block diagonal.
-    verbose : int, optional
-        Level of output.
 
     """
 
@@ -611,9 +609,9 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._print_value_fmt.format(jnp.linalg.norm(x)) + self._units)
+        logging.info(self._print_value_fmt.format(jnp.linalg.norm(x)) + self._units)
         if self._normalize:
-            print(
+            logging.info(
                 self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization))
                 + "(normalized)"
             )

@@ -134,7 +134,9 @@ class Transform(IOAble):
                     "red",
                 )
             )
-
+        # always include the 0,0,0 derivative
+        if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
+            derivatives = np.concatenate([derivatives, np.array([[0, 0, 0]])])
         return derivatives
 
     def _sort_derivatives(self):

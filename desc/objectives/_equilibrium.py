@@ -6,7 +6,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.utils import Timer
 
@@ -119,6 +119,7 @@ class ForceBalance(_Objective):
             "F_helical",
             "|e^helical|",
         ]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -139,7 +140,7 @@ class ForceBalance(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute MHD force balance errors.
 
         Parameters
@@ -165,15 +166,7 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -286,6 +279,7 @@ class RadialForceBalance(_Objective):
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -306,7 +300,7 @@ class RadialForceBalance(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute radial MHD force balance errors.
 
         Parameters
@@ -332,15 +326,7 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -449,6 +435,7 @@ class HelicalForceBalance(_Objective):
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -469,7 +456,7 @@ class HelicalForceBalance(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute helical MHD force balance errors.
 
         Parameters
@@ -495,15 +482,7 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -800,6 +779,7 @@ class Energy(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["W"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -819,7 +799,7 @@ class Energy(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute MHD energy.
 
         Parameters
@@ -845,15 +825,7 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -967,6 +939,7 @@ class CurrentDensity(_Objective):
 
         self._dim_f = 3 * self.grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -987,7 +960,7 @@ class CurrentDensity(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute toroidal current density.
 
         Parameters
@@ -1011,14 +984,7 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,

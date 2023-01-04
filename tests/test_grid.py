@@ -127,8 +127,8 @@ class TestGrid:
         test(endpoint=True)
 
     @pytest.mark.unit
-    def test_duplicate_node_endpoint_spacing(self):
-        """Test surface differential element weight on grid with endpoint=True."""
+    def test_duplicate_node_areas(self):
+        """Test surface areas on grids with a duplicate node from endpoint=True."""
 
         def test(grid):
             surface_area = compress(
@@ -166,6 +166,76 @@ class TestGrid:
                 theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
                 zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
                 NFP=NFP,
+                endpoint=endpoint,
+            )
+        )
+
+    @pytest.mark.unit
+    def test_duplicate_node_spacing(self):
+        """Test surface differential element weight on grid with endpoint=True."""
+        nrho = 1
+        ntheta = 8  # unique theta count
+        nzeta = 13  # unique zeta count
+        NFP = 3
+        axis = True
+        endpoint = True
+
+        def test(grid):
+            is_theta_dupe = endpoint & (grid.nodes[:, 1] % (2 * np.pi) == 0)
+            is_zeta_dupe = endpoint & (grid.nodes[:, 2] % (2 * np.pi / NFP) == 0)
+
+            def test_surface(actual_ds, desired_ds):
+                for index, ds in enumerate(actual_ds):
+                    if is_theta_dupe[index] and is_zeta_dupe[index]:
+                        # the grid has 4 of these nodes
+                        np.testing.assert_allclose(ds, desired_ds / 4)
+                    elif is_theta_dupe[index] or is_zeta_dupe[index]:
+                        # the grid has 2 of these nodes
+                        np.testing.assert_allclose(ds, desired_ds / 2)
+                    else:
+                        # unique node
+                        np.testing.assert_allclose(ds, desired_ds)
+
+            # rho surface
+            test_surface(
+                grid.spacing[:, 1:].prod(axis=1),
+                (2 * np.pi / ntheta) * (2 * np.pi / nzeta),
+            )
+            # theta surface
+            test_surface(
+                grid.spacing[:, [0, 2]].prod(axis=1),
+                (1 / nrho) * (2 * np.pi / nzeta),
+            )
+            # zeta surface
+            test_surface(
+                grid.spacing[:, :2].prod(axis=1),
+                (1 / nrho) * (2 * np.pi / ntheta),
+            )
+
+        test(
+            LinearGrid(
+                rho=nrho,
+                theta=ntheta + endpoint,
+                zeta=nzeta + endpoint,
+                NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
+            )
+        )
+        # The test below might fail for theta and zeta surfaces only if nrho > 1.
+        # This is unrelated to how duplicate node spacing is handled.
+        # The cause is because grid construction does not always
+        # compute drho as constant (even when the rho nodes are linearly spaced),
+        # and this test assumes drho to be a constant for grids without duplicates.
+        test(
+            LinearGrid(
+                rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
+                theta=np.linspace(0, 2 * np.pi, ntheta + endpoint, endpoint=endpoint),
+                zeta=np.linspace(
+                    0, 2 * np.pi / NFP, nzeta + endpoint, endpoint=endpoint
+                ),
+                NFP=NFP,
+                axis=axis,
                 endpoint=endpoint,
             )
         )

@@ -27,7 +27,7 @@ class ObjectiveFunction(IOAble):
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
-        use less memory. Note that the "blocked" hessian will only be block diagonal.
+        use less memory. Note that the "blocked" Hessian will only be block diagonal.
     verbose : int, optional
         Level of output.
 
@@ -492,7 +492,12 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
+        # if args is already set don't overwrite it
+        self._args = getattr(
+            self,
+            "_args",
+            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
+        )
         if eq is not None:
             self.build(eq)
 
@@ -646,13 +651,31 @@ class _Objective(IOAble, ABC):
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
         target = (
-            self.target * self.normalization if self._normalize_target else self.target
+            self.target / self.normalization if self._normalize_target else self.target
         )
-        return x / self.weight * self.normalization + target
+        return (x / self.weight + target) * self.normalization
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
         return tuple(getattr(eq, arg) for arg in self.args)
+
+    def _parse_args(self, *args, **kwargs):
+        assert (len(args) == 0) or (len(kwargs) == 0), (
+            "compute should be called with either positional or keyword arguments,"
+            + " not both"
+        )
+        if len(args):
+            assert len(args) == len(
+                self.args
+            ), f"compute expected {len(self.args)} arguments, got {len(args)}"
+            params = {key: val for key, val in zip(self.args, args)}
+        else:
+            assert all([arg in kwargs for arg in self.args]), (
+                "compute missing required keyword arguments "
+                + f"{set(self.args).difference(kwargs.keys())}"
+            )
+            params = kwargs
+        return params
 
     @property
     def target(self):

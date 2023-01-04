@@ -21,6 +21,7 @@ from desc.plotting import (
     plot_basis,
     plot_boozer_modes,
     plot_boozer_surface,
+    plot_boundaries,
     plot_boundary,
     plot_coefficients,
     plot_coils,
@@ -54,7 +55,8 @@ def test_kwarg_warning(DummyStellarator):
 def test_1d_p(SOLOVEV):
     """Test plotting 1d pressure profile."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "p", figsize=(4, 4))
+    fig, ax, data = plot_1d(eq, "p", figsize=(4, 4), return_data=True)
+    assert "p" in data.keys()
     return fig
 
 
@@ -64,7 +66,8 @@ def test_1d_p(SOLOVEV):
 def test_1d_dpdr(DSHAPE_current):
     """Test plotting 1d pressure derivative."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "p_r", figsize=(4, 4))
+    fig, ax, data = plot_1d(eq, "p_r", figsize=(4, 4), return_data=True)
+    assert "p_r" in data.keys()
     return fig
 
 
@@ -75,7 +78,9 @@ def test_1d_iota(DSHAPE_current):
     """Test plotting 1d rotational transform."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=0.0)
-    fig, ax = plot_1d(eq, "iota", grid=grid, figsize=(4, 4))
+    fig, ax, data = plot_1d(eq, "iota", grid=grid, figsize=(4, 4), return_data=True)
+    assert "theta" in data.keys()
+    assert "iota" in data.keys()
     return fig
 
 
@@ -85,7 +90,9 @@ def test_1d_iota(DSHAPE_current):
 def test_1d_iota_radial(DSHAPE_current):
     """Test plotting 1d rotational transform."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "iota", figsize=(4, 4))
+    fig, ax, data = plot_1d(eq, "iota", figsize=(4, 4), return_data=True)
+    assert "rho" in data.keys()
+    assert "iota" in data.keys()
     return fig
 
 
@@ -95,8 +102,10 @@ def test_1d_iota_radial(DSHAPE_current):
 def test_1d_logpsi(DSHAPE_current):
     """Test plotting 1d flux funciton with log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_1d(eq, "psi", log=True, figsize=(4, 4))
+    fig, ax, data = plot_1d(eq, "psi", log=True, figsize=(4, 4), return_data=True)
     ax.set_ylim([1e-5, 1e0])
+    assert "rho" in data.keys()
+    assert "psi" in data.keys()
     return fig
 
 
@@ -107,7 +116,10 @@ def test_2d_logF(DSHAPE_current):
     """Test plotting 2d force error with log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
-    fig, ax = plot_2d(eq, "|F|", log=True, grid=grid, figsize=(4, 4))
+    fig, ax, data = plot_2d(
+        eq, "|F|", log=True, grid=grid, figsize=(4, 4), return_data=True
+    )
+    assert "|F|" in data.keys()
     return fig
 
 
@@ -118,7 +130,11 @@ def test_2d_g_tz(DSHAPE_current):
     """Test plotting 2d metric coefficients vs theta/zeta."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=0.5, theta=100, zeta=100)
-    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4), return_data=True)
+    assert "theta" in data.keys()
+    assert "zeta" in data.keys()
+
+    assert "sqrt(g)" in data.keys()
     return fig
 
 
@@ -129,7 +145,11 @@ def test_2d_g_rz(DSHAPE_current):
     """Test plotting 2d metric coefficients vs rho/zeta."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     grid = LinearGrid(rho=100, theta=0.0, zeta=100)
-    fig, ax = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "sqrt(g)", grid=grid, figsize=(4, 4), return_data=True)
+    assert "rho" in data.keys()
+    assert "zeta" in data.keys()
+    assert "sqrt(g)" in data.keys()
+
     return fig
 
 
@@ -139,7 +159,9 @@ def test_2d_g_rz(DSHAPE_current):
 def test_2d_lambda(DSHAPE_current):
     """Test plotting lambda on 2d grid."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "lambda", figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "lambda", figsize=(4, 4), return_data=True)
+    assert "lambda" in data.keys()
+
     return fig
 
 
@@ -149,7 +171,13 @@ def test_2d_lambda(DSHAPE_current):
 def test_3d_B(DSHAPE_current):
     """Test 3d plot of toroidal field."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_3d(eq, "B^zeta")
+    fig, ax, data = plot_3d(eq, "B^zeta", return_data=True)
+    assert "X" in data.keys()
+    assert "Y" in data.keys()
+    assert "Z" in data.keys()
+
+    assert "B^zeta" in data.keys()
+
     return fig
 
 
@@ -203,7 +231,12 @@ def test_3d_rt(DSHAPE_current):
 def test_fsa_I(DSHAPE_current):
     """Test plotting of flux surface average toroidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_fsa(eq, "B_theta")
+    fig, ax, data = plot_fsa(eq, "B_theta", return_data=True)
+    assert "rho" in data.keys()
+    assert "<B_theta>_fsa" in data.keys()
+    assert "normalization" in data.keys()
+    assert data["normalization"] == 1
+
     return fig
 
 
@@ -235,7 +268,13 @@ def test_fsa_F_normalized(DSHAPE_current):
 def test_section_J(DSHAPE_current):
     """Test plotting poincare section of radial current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_section(eq, "J^rho")
+    fig, ax, data = plot_section(eq, "J^rho", return_data=True)
+    assert "R" in data.keys()
+    assert "Z" in data.keys()
+    assert "J^rho" in data.keys()
+    assert "normalization" in data.keys()
+    assert data["normalization"] == 1
+
     return fig
 
 
@@ -296,7 +335,15 @@ def test_section_logF(DSHAPE_current):
 def test_plot_surfaces(DSHAPE_current):
     """Test plotting flux surfaces."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_surfaces(eq)
+    fig, ax, data = plot_surfaces(eq, return_data=True)
+    for string in [
+        "rho_R_coords",
+        "rho_Z_coords",
+        "vartheta_R_coords",
+        "vartheta_Z_coords",
+    ]:
+        assert string in data.keys()
+
     return fig
 
 
@@ -307,7 +354,10 @@ def test_plot_surfaces(DSHAPE_current):
 def test_plot_surfaces_no_theta(DSHAPE_current):
     """Test plotting flux surfaces without theta contours."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_surfaces(eq, theta=False)
+    fig, ax, data = plot_surfaces(eq, theta=False, return_data=True)
+    for string in ["rho_R_coords", "rho_Z_coords"]:
+        assert string in data.keys()
+
     return fig
 
 
@@ -316,7 +366,26 @@ def test_plot_surfaces_no_theta(DSHAPE_current):
 def test_plot_boundary():
     """Test plotting boundary."""
     eq = get("W7-X")
-    fig, ax = plot_boundary(eq, plot_axis=True)
+    fig, ax, data = plot_boundary(eq, plot_axis=True, return_data=True)
+    assert "R" in data.keys()
+    assert "Z" in data.keys()
+
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_boundaries():
+    """Test plotting boundaries."""
+    eq1 = get("SOLOVEV")
+    eq2 = get("DSHAPE")
+    eq3 = get("W7-X")
+    fig, ax, data = plot_boundaries((eq1, eq2, eq3), return_data=True)
+    assert "R" in data.keys()
+    assert "Z" in data.keys()
+    assert len(data["R"]) == 3
+    assert len(data["Z"]) == 3
+
     return fig
 
 
@@ -327,7 +396,16 @@ def test_plot_boundary():
 def test_plot_comparison(DSHAPE_current):
     """Test plotting comparison of flux surfaces."""
     eqf = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))
-    fig, ax = plot_comparison(eqf)
+    fig, ax, data = plot_comparison(eqf, return_data=True)
+    for string in [
+        "rho_R_coords",
+        "rho_Z_coords",
+        "vartheta_R_coords",
+        "vartheta_Z_coords",
+    ]:
+        assert string in data.keys()
+        assert len(data[string]) == len(eqf)
+
     return fig
 
 
@@ -348,7 +426,13 @@ def test_plot_comparison_no_theta(DSHAPE_current):
 def test_plot_con_basis(DSHAPE_current):
     """Test 2d plot of R component of e^rho."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "e^rho", component="R", figsize=(4, 4))
+    fig, ax, data = plot_2d(
+        eq, "e^rho", component="R", figsize=(4, 4), return_data=True
+    )
+    for string in ["e^rho", "normalization", "theta", "zeta"]:
+        assert string in data.keys()
+    assert data["normalization"] == 1
+
     return fig
 
 
@@ -358,7 +442,7 @@ def test_plot_con_basis(DSHAPE_current):
 def test_plot_cov_basis(DSHAPE_current):
     """Test 2d plot of norm of e_rho."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "e_rho", figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "e_rho", figsize=(4, 4), return_data=True)
     return fig
 
 
@@ -368,7 +452,7 @@ def test_plot_cov_basis(DSHAPE_current):
 def test_plot_magnetic_tension(DSHAPE_current):
     """Test 2d plot of magnetic tension."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|(B*grad)B|", figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "|(B*grad)B|", figsize=(4, 4), return_data=True)
     return fig
 
 
@@ -378,7 +462,7 @@ def test_plot_magnetic_tension(DSHAPE_current):
 def test_plot_magnetic_pressure(DSHAPE_current):
     """Test 2d plot of magnetic pressure."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|grad(|B|^2)|/2mu0", figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "|grad(|B|^2)|/2mu0", figsize=(4, 4), return_data=True)
     return fig
 
 
@@ -388,7 +472,7 @@ def test_plot_magnetic_pressure(DSHAPE_current):
 def test_plot_gradpsi(DSHAPE_current):
     """Test 2d plot of norm of grad(rho)."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|grad(rho)|", figsize=(4, 4))
+    fig, ax, data = plot_2d(eq, "|grad(rho)|", figsize=(4, 4), return_data=True)
     return fig
 
 
@@ -399,7 +483,11 @@ def test_plot_normF_2d(DSHAPE_current):
     """Test 2d plot of normalized force."""
     grid = LinearGrid(rho=np.array(0.8), M=20, N=2)
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_2d(eq, "|F|", norm_F=True, figsize=(4, 4), grid=grid)
+    fig, ax, data = plot_2d(
+        eq, "|F|", norm_F=True, figsize=(4, 4), return_data=True, grid=grid
+    )
+    for string in ["|F|", "theta", "zeta"]:
+        assert string in data.keys()
     return fig
 
 
@@ -440,7 +528,9 @@ class TestPlotGrid:
     def test_plot_grid_linear(self):
         """Test plotting linear grid."""
         grid = LinearGrid(rho=10, theta=10, zeta=1)
-        fig, ax = plot_grid(grid)
+        fig, ax, data = plot_grid(grid, return_data=True)
+        for string in ["theta", "rho"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -492,7 +582,9 @@ class TestPlotBasis:
     def test_plot_basis_powerseries(self):
         """Test plotting power series basis."""
         basis = PowerSeries(L=6)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "rho", "l"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -500,7 +592,9 @@ class TestPlotBasis:
     def test_plot_basis_fourierseries(self):
         """Test plotting fourier series basis."""
         basis = FourierSeries(N=3)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "n", "zeta"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -509,7 +603,9 @@ class TestPlotBasis:
     def test_plot_basis_doublefourierseries(self):
         """Test plotting double fourier series basis."""
         basis = DoubleFourierSeries(M=3, N=2)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "n", "zeta", "m", "theta"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -518,7 +614,9 @@ class TestPlotBasis:
     def test_plot_basis_fourierzernike(self):
         """Test plotting fourier-zernike basis."""
         basis = FourierZernikeBasis(L=8, M=3, N=2)
-        fig, ax = plot_basis(basis)
+        fig, ax, data = plot_basis(basis, return_data=True)
+        for string in ["amplitude", "l", "rho", "m", "theta"]:
+            assert string in data.keys()
         return fig
 
 
@@ -542,7 +640,11 @@ class TestPlotFieldLines:
     def test_plot_field_line(self, DSHAPE_current):
         """Test plotting single field line over 1 transit."""
         eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, _ = plot_field_lines_sfl(eq, rho=1, seed_thetas=0, phi_end=2 * np.pi)
+        fig, ax, data = plot_field_lines_sfl(
+            eq, rho=1, seed_thetas=0, phi_end=2 * np.pi, return_data=True
+        )
+        for string in ["R", "Z", "phi", "seed_thetas"]:
+            assert string in data.keys()
         return fig
 
     @pytest.mark.unit
@@ -552,7 +654,7 @@ class TestPlotFieldLines:
     def test_plot_field_lines(self, DSHAPE_current):
         """Test plotting multiple field lines over 1 transit."""
         eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        fig, ax, _ = plot_field_lines_sfl(
+        fig, ax = plot_field_lines_sfl(
             eq, rho=1, seed_thetas=np.linspace(0, 2 * np.pi, 4), phi_end=2 * np.pi
         )
         return fig
@@ -564,8 +666,10 @@ class TestPlotFieldLines:
 def test_plot_boozer_modes(DSHAPE_current):
     """Test plotting boozer spectrum."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_boozer_modes(eq)
+    fig, ax, data = plot_boozer_modes(eq, return_data=True)
     ax.set_ylim([1e-12, 1e0])
+    for string in ["B_mn", "B_modes", "rho"]:
+        assert string in data.keys()
     return fig
 
 
@@ -575,7 +679,13 @@ def test_plot_boozer_modes(DSHAPE_current):
 def test_plot_boozer_surface(DSHAPE_current):
     """Test plotting B in boozer coordinates."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_boozer_surface(eq, figsize=(4, 4))
+    fig, ax, data = plot_boozer_surface(eq, figsize=(4, 4), return_data=True, fill=True)
+    for string in [
+        "|B|",
+        "theta_Boozer",
+        "zeta_Boozer",
+    ]:
+        assert string in data.keys()
     return fig
 
 
@@ -585,7 +695,9 @@ def test_plot_boozer_surface(DSHAPE_current):
 def test_plot_qs_error(DSHAPE_current):
     """Test plotting qs error metrics."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_qs_error(eq, helicity=(0, 0), log=False)
+    fig, ax, data = plot_qs_error(eq, helicity=(0, 0), log=False, return_data=True)
+    for string in ["rho", "f_T", "f_B", "f_C"]:
+        assert string in data.keys()
     return fig
 
 
@@ -601,6 +713,16 @@ def test_plot_coils():
     coils = CoilSet.linspaced_angular(coil, I, [0, 0, 1], np.pi / NFP, N // NFP // 2)
     coils.grid = 100
     coils2 = CoilSet.from_symmetry(coils, NFP, True)
-    fig, ax = plot_coils(coils2)
+    fig, ax, data = plot_coils(coils2, return_data=True)
 
+    def flatten_coils(coilset):
+        if hasattr(coilset, "__len__"):
+            return [a for i in coilset for a in flatten_coils(i)]
+        else:
+            return [coilset]
+
+    coil_list = flatten_coils(coils2)
+    for string in ["X", "Y", "Z"]:
+        assert string in data.keys()
+        assert len(data[string]) == len(coil_list)
     return fig

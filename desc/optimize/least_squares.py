@@ -45,7 +45,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     x0 : array-like
         initial guess
     jac : callable:
-        function to compute jacobian matrix of fun
+        function to compute Jacobian matrix of fun
     args : tuple
         additional arguments passed to fun, grad, and jac
     x_scale : array_like or ``'jac'``, optional
@@ -56,7 +56,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'jac'``, the scale is iteratively updated using the
-        inverse norms of the columns of the jacobian matrix.
+        inverse norms of the columns of the Jacobian matrix.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function. Default
         is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
@@ -378,6 +378,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["cost"]))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))

@@ -317,6 +317,8 @@ class MinorRadius(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["a"]
+        self._args = get_params(self._data_keys)
+
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -331,7 +333,7 @@ class MinorRadius(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute minor radius.
 
         Parameters
@@ -347,10 +349,7 @@ class MinorRadius(_Objective):
             Minor radius
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -434,6 +433,8 @@ class VolAvgB(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["<|B|>_rms"]
+        self._args = get_params(self._data_keys)
+
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -448,7 +449,7 @@ class VolAvgB(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute minor radius.
 
         Parameters
@@ -464,14 +465,7 @@ class VolAvgB(_Objective):
             vol avg |B|
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,

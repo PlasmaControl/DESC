@@ -5,6 +5,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import (
+    get_params,
     get_profiles,
     get_transforms,
 )
@@ -146,6 +147,7 @@ class BootstrapRedlConsistency(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl", "rho"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -161,7 +163,7 @@ class BootstrapRedlConsistency(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute the bootstrap current self-consistency objective.
 
         Parameters
@@ -185,25 +187,20 @@ class BootstrapRedlConsistency(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
+        params = self._parse_args(*args, **kwargs)
+        extra_kwargs = {
+            "ne": self.ne,
+            "Te": self.Te,
+            "Ti": self.Ti,
+            "Zeff": self.Zeff,
+            "helicity_N": self.helicity_N,
         }
-        kwargs["ne"] = self.ne
-        kwargs["Te"] = self.Te
-        kwargs["Ti"] = self.Ti
-        kwargs["Zeff"] = self.Zeff
-        kwargs["helicity_N"] = self.helicity_N
         data = compute_fun(
             self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
-            **kwargs,
+            **extra_kwargs,
         )
 
         fourpi2 = 4 * jnp.pi * jnp.pi

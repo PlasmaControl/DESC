@@ -40,6 +40,7 @@ from . import (
 )
 from .data_index import data_index
 from .utils import (
+    arg_order,
     compute,
     get_data_deps,
     get_derivs,
@@ -47,9 +48,6 @@ from .utils import (
     get_profiles,
     get_transforms,
 )
-
-# defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
 
 
 # rather than having to recursively compute the full dependencies every time we

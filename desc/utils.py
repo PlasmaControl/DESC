@@ -297,7 +297,7 @@ def isalmostequal(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     """
     x = np.asarray(x)
-    if x.ndim == 0:
+    if x.ndim == 0 or x.size == 0:
         return True
     if axis is None or x.ndim == 1:
         x = x.flatten()
@@ -348,7 +348,7 @@ def islinspaced(x, axis=-1, rtol=1e-6, atol=1e-12):
 
     """
     x = np.asarray(x)
-    if x.ndim == 0:
+    if x.ndim == 0 or x.size == 0:
         return True
     if axis is None or x.ndim == 1:
         x = x.flatten()

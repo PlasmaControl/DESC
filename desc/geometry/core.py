@@ -115,7 +115,17 @@ class Surface(IOAble, ABC):
         return self._sym
 
     def _compute_orientation(self):
-        """Handedness of coordinate system."""
+        """Handedness of coordinate system.
+
+        Returns
+        -------
+        orientation : float
+            +1 for right handed coordinate system (theta increasing CW),
+            -1 for left handed coordinates (theta increasing CCW),
+            or 0 for a singular coordinate system (no volume)
+        """
+        R0 = self.R_lmn[self.R_basis.get_idx(0, 0, 0, False)]
+        R0 = R0 if R0.size > 0 else 0
         Rsin = self.R_lmn[self.R_basis.get_idx(0, -1, 0, False)]
         Rsin = Rsin if Rsin.size > 0 else 0
         Rcos = self.R_lmn[self.R_basis.get_idx(0, 1, 0, False)]
@@ -124,7 +134,9 @@ class Surface(IOAble, ABC):
         Zsin = Zsin if Zsin.size > 0 else 0
         Zcos = self.Z_lmn[self.Z_basis.get_idx(0, 1, 0, False)]
         Zcos = Zcos if Zcos.size > 0 else 0
-        return _compute_orientation(Rsin, Rcos, Zsin, Zcos)
+        out = np.sign((R0 + Rcos) * (Rsin * Zcos - Rcos * Zsin))
+        assert (out == -1) or (out == 0) or (out == 1)
+        return out
 
     def _flip_orientation(self):
         """Flip the orientation of theta."""
@@ -197,118 +209,3 @@ class Surface(IOAble, ABC):
             + str(hex(id(self)))
             + " (name={}, grid={})".format(self.name, self.grid)
         )
-
-
-def _compute_orientation(Rsin, Rcos, Zsin, Zcos):
-    """Compute sign of jacobian based on signs of m= +/-1 modes.
-
-    Parameters
-    ----------
-    Rsin : float
-        R(m=-1)
-    Rcos : float
-        R(m=+1)
-    Zsin : float
-        Z(m=-1)
-    Zcos : float
-        Z(m=+1)
-
-    Returns
-    -------
-    orientation : float
-        +1 for right handed coordinate system (theta increasing CW),
-        -1 for left handed coordinates (theta increasing CCW),
-        or 0 for a singular coordinate system (no volume)
-    """
-    _orientation_mat = np.array(
-        [
-            [-1.0, -1.0, -1.0, -1.0, -1.0],
-            [-1.0, -1.0, -1.0, 0.0, -1.0],
-            [-1.0, -1.0, -1.0, 1.0, -1.0],
-            [-1.0, -1.0, 0.0, -1.0, 1.0],
-            [-1.0, -1.0, 0.0, 0.0, -1.0],
-            [-1.0, -1.0, 0.0, 1.0, -1.0],
-            [-1.0, -1.0, 1.0, -1.0, 1.0],
-            [-1.0, -1.0, 1.0, 0.0, 1.0],
-            [-1.0, -1.0, 1.0, 1.0, -1.0],
-            [-1.0, 0.0, -1.0, -1.0, 1.0],
-            [-1.0, 0.0, -1.0, 0.0, 0.0],
-            [-1.0, 0.0, -1.0, 1.0, -1.0],
-            [-1.0, 0.0, 0.0, -1.0, 1.0],
-            [-1.0, 0.0, 0.0, 0.0, 0.0],
-            [-1.0, 0.0, 0.0, 1.0, -1.0],
-            [-1.0, 0.0, 1.0, -1.0, 1.0],
-            [-1.0, 0.0, 1.0, 0.0, 0.0],
-            [-1.0, 0.0, 1.0, 1.0, -1.0],
-            [-1.0, 1.0, -1.0, -1.0, 1.0],
-            [-1.0, 1.0, -1.0, 0.0, 1.0],
-            [-1.0, 1.0, -1.0, 1.0, 1.0],
-            [-1.0, 1.0, 0.0, -1.0, 1.0],
-            [-1.0, 1.0, 0.0, 0.0, 1.0],
-            [-1.0, 1.0, 0.0, 1.0, -1.0],
-            [-1.0, 1.0, 1.0, -1.0, 1.0],
-            [-1.0, 1.0, 1.0, 0.0, -1.0],
-            [-1.0, 1.0, 1.0, 1.0, -1.0],
-            [0.0, -1.0, -1.0, -1.0, -1.0],
-            [0.0, -1.0, -1.0, 0.0, -1.0],
-            [0.0, -1.0, -1.0, 1.0, -1.0],
-            [0.0, -1.0, 0.0, -1.0, -1.0],
-            [0.0, -1.0, 0.0, 0.0, -1.0],
-            [0.0, -1.0, 0.0, 1.0, -1.0],
-            [0.0, -1.0, 1.0, -1.0, 1.0],
-            [0.0, -1.0, 1.0, 0.0, 1.0],
-            [0.0, -1.0, 1.0, 1.0, 1.0],
-            [0.0, 0.0, -1.0, -1.0, -1.0],
-            [0.0, 0.0, -1.0, 0.0, 0.0],
-            [0.0, 0.0, -1.0, 1.0, 1.0],
-            [0.0, 0.0, 0.0, -1.0, -1.0],
-            [0.0, 0.0, 0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0, 1.0, 1.0],
-            [0.0, 0.0, 1.0, -1.0, -1.0],
-            [0.0, 0.0, 1.0, 0.0, 0.0],
-            [0.0, 0.0, 1.0, 1.0, 1.0],
-            [0.0, 1.0, -1.0, -1.0, 1.0],
-            [0.0, 1.0, -1.0, 0.0, 1.0],
-            [0.0, 1.0, -1.0, 1.0, 1.0],
-            [0.0, 1.0, 0.0, -1.0, 1.0],
-            [0.0, 1.0, 0.0, 0.0, 1.0],
-            [0.0, 1.0, 0.0, 1.0, 1.0],
-            [0.0, 1.0, 1.0, -1.0, -1.0],
-            [0.0, 1.0, 1.0, 0.0, -1.0],
-            [0.0, 1.0, 1.0, 1.0, -1.0],
-            [1.0, -1.0, -1.0, -1.0, -1.0],
-            [1.0, -1.0, -1.0, 0.0, -1.0],
-            [1.0, -1.0, -1.0, 1.0, -1.0],
-            [1.0, -1.0, 0.0, -1.0, -1.0],
-            [1.0, -1.0, 0.0, 0.0, -1.0],
-            [1.0, -1.0, 0.0, 1.0, 1.0],
-            [1.0, -1.0, 1.0, -1.0, -1.0],
-            [1.0, -1.0, 1.0, 0.0, 1.0],
-            [1.0, -1.0, 1.0, 1.0, 1.0],
-            [1.0, 0.0, -1.0, -1.0, -1.0],
-            [1.0, 0.0, -1.0, 0.0, 0.0],
-            [1.0, 0.0, -1.0, 1.0, 1.0],
-            [1.0, 0.0, 0.0, -1.0, -1.0],
-            [1.0, 0.0, 0.0, 0.0, 0.0],
-            [1.0, 0.0, 0.0, 1.0, 1.0],
-            [1.0, 0.0, 1.0, -1.0, -1.0],
-            [1.0, 0.0, 1.0, 0.0, 0.0],
-            [1.0, 0.0, 1.0, 1.0, 1.0],
-            [1.0, 1.0, -1.0, -1.0, 1.0],
-            [1.0, 1.0, -1.0, 0.0, 1.0],
-            [1.0, 1.0, -1.0, 1.0, 1.0],
-            [1.0, 1.0, 0.0, -1.0, -1.0],
-            [1.0, 1.0, 0.0, 0.0, 1.0],
-            [1.0, 1.0, 0.0, 1.0, 1.0],
-            [1.0, 1.0, 1.0, -1.0, -1.0],
-            [1.0, 1.0, 1.0, 0.0, -1.0],
-            [1.0, 1.0, 1.0, 1.0, 1.0],
-        ]
-    )
-
-    idx = np.where(
-        (np.sign([Rsin, Rcos, Zsin, Zcos]) == _orientation_mat[:, :-1]).all(axis=1)
-    )
-    out = _orientation_mat[idx, -1].squeeze().astype(int)
-    assert (out == -1) or (out == 0) or (out == 1)
-    return out

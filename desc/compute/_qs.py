@@ -44,8 +44,8 @@ def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="w_mn",
-    label="w_{m,n}",
+    name="w_Boozer_mn",
+    label="w_{Boozer,m,n}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to "
@@ -70,13 +70,13 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
     w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
-    data["w_mn"] = w_mn
+    data["w_Boozer_mn"] = w_mn
     return data
 
 
 @register_compute_fun(
-    name="w",
-    label="w",
+    name="w_Boozer",
+    label="w_{Boozer}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -86,16 +86,16 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["w_mn"],
+    data=["w_Boozer_mn"],
 )
 def _w(params, transforms, profiles, data, **kwargs):
-    data["w"] = transforms["w"].transform(data["w_mn"])
+    data["w_Boozer"] = transforms["w"].transform(data["w_Boozer_mn"])
     return data
 
 
 @register_compute_fun(
-    name="w_t",
-    label="\\partial_{\\theta} w",
+    name="w_Boozer_t",
+    label="\\partial_{\\theta} w_{Boozer}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -105,16 +105,16 @@ def _w(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 1, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["w_mn"],
+    data=["w_Boozer_mn"],
 )
 def _w_t(params, transforms, profiles, data, **kwargs):
-    data["w_t"] = transforms["w"].transform(data["w_mn"], dt=1)
+    data["w_Boozer_t"] = transforms["w"].transform(data["w_Boozer_mn"], dt=1)
     return data
 
 
 @register_compute_fun(
-    name="w_z",
-    label="\\partial_{\\zeta} w",
+    name="w_Boozer_z",
+    label="\\partial_{\\zeta} w_{Boozer}",
     units="T \\cdot m",
     units_long="Tesla * meters",
     description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
@@ -124,10 +124,10 @@ def _w_t(params, transforms, profiles, data, **kwargs):
     transforms={"w": [[0, 0, 1]]},
     profiles=[],
     coordinates="rtz",
-    data=["w_mn"],
+    data=["w_Boozer_mn"],
 )
 def _w_z(params, transforms, profiles, data, **kwargs):
-    data["w_z"] = transforms["w"].transform(data["w_mn"], dz=1)
+    data["w_Boozer_z"] = transforms["w"].transform(data["w_Boozer_mn"], dz=1)
     return data
 
 
@@ -142,11 +142,11 @@ def _w_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w", "G", "I", "iota", "lambda"],
+    data=["w_Boozer", "G", "I", "iota", "lambda"],
 )
 def _nu(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu"] = (data["w"] - data["I"] * data["lambda"]) / GI
+    data["nu"] = (data["w_Boozer"] - data["I"] * data["lambda"]) / GI
     return data
 
 
@@ -161,11 +161,11 @@ def _nu(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_t", "G", "I", "iota", "lambda_t"],
+    data=["w_Boozer_t", "G", "I", "iota", "lambda_t"],
 )
 def _nu_t(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu_t"] = (data["w_t"] - data["I"] * data["lambda_t"]) / GI
+    data["nu_t"] = (data["w_Boozer_t"] - data["I"] * data["lambda_t"]) / GI
     return data
 
 
@@ -180,11 +180,11 @@ def _nu_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["w_z", "G", "I", "iota", "lambda_z"],
+    data=["w_Boozer_z", "G", "I", "iota", "lambda_z"],
 )
 def _nu_z(params, transforms, profiles, data, **kwargs):
     GI = data["G"] + data["iota"] * data["I"]
-    data["nu_z"] = (data["w_z"] - data["I"] * data["lambda_z"]) / GI
+    data["nu_z"] = (data["w_Boozer_z"] - data["I"] * data["lambda_z"]) / GI
     return data
 
 

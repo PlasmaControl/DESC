@@ -134,7 +134,17 @@ class FixBoundaryR(_Objective):
                         "yellow",
                     )
                 )
+
         self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
 
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -288,6 +298,15 @@ class FixBoundaryZ(_Objective):
                 )
 
         self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
 
         if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))

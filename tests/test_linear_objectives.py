@@ -3,10 +3,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+import desc.examples
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
-from desc.io import load
 from desc.objectives import (
     AspectRatio,
     FixBoundaryR,
@@ -192,7 +192,7 @@ def test_correct_indexing_passed_modes():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
     n = 1
 
-    eq = load(".//tests//inputs//precise_QH_step0.h5")[0]
+    eq = desc.examples.get("W7-X")
 
     grid = LinearGrid(
         M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
@@ -240,7 +240,7 @@ def test_correct_indexing_passed_modes():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=2e-15)
     assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=1e-15)
     assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
     assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
@@ -252,7 +252,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
     n = 1
 
-    eq = load(".//tests//inputs//precise_QH_step0.h5")[0]
+    eq = desc.examples.get("W7-X")
 
     grid = LinearGrid(
         M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
@@ -313,7 +313,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=1e-15)
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=2e-15)
     assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=1e-15)
     assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
     assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
@@ -333,3 +333,21 @@ def test_FixBoundary_with_single_weight():
     FixR.build(eq)
     np.testing.assert_array_equal(FixR.weight.size, 1)
     np.testing.assert_array_equal(FixR.weight, w)
+
+
+@pytest.mark.unit
+def test_FixBoundary_passed_target_no_passed_modes_error():
+    """Test Fixing boundary with only a single, passed weight."""
+    eq = Equilibrium()
+    FixZ = FixBoundaryZ(modes=True, fixed_boundary=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixZ = FixBoundaryZ(modes=False, fixed_boundary=False, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixR = FixBoundaryR(modes=True, fixed_boundary=False, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+    FixR = FixBoundaryR(modes=False, fixed_boundary=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)

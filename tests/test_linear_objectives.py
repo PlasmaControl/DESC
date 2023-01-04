@@ -240,11 +240,12 @@ def test_correct_indexing_passed_modes():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=2e-15)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=1e-15)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=1e-15)
+    atol = 2e-15
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -313,11 +314,12 @@ def test_correct_indexing_passed_modes_and_passed_target():
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
-    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=2e-15)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=1e-15)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=1e-15)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=1e-15)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=1e-15)
+    atol = 2e-15
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit

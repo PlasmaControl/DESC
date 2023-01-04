@@ -11,6 +11,13 @@ from desc.grid import ConcentricGrid
 
 from .data_index import data_index
 
+# defines the order in which objective arguments get concatenated into the state vector
+arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
+
+
+def _sort_args(args):
+    return [arg for arg in arg_order if arg in args]
+
 
 def compute(names, params, transforms, profiles, data=None, **kwargs):
     """Compute the quantity given by name on grid.
@@ -221,7 +228,7 @@ def get_params(keys, eq=None, **kwargs):
     params = []
     for key in deps:
         params += data_index[key]["dependencies"]["params"]
-    params = sorted(list(set(params)))
+    params = _sort_args(list(set(params)))
     if eq is None:
         return params
     params = {name: np.atleast_1d(getattr(eq, name)).copy() for name in params}

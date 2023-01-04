@@ -19,10 +19,13 @@ class _ExactValueProfile:
 
     def compute(self, params, dr, *args, **kwargs):
         if dr == 0:
+            # returns the surface average of B_theta in amperes
             return self.eq.compute("current", grid=self.grid)["current"]
         if dr == 1:
+            # returns the surface average of B_theta_r in amperes
             return self.eq.compute("current_r", grid=self.grid)["current_r"]
         if dr == 2:
+            # returns the surface average of B_theta_rr in amperes
             return self.eq.compute("current_rr", grid=self.grid)["current_rr"]
 
 
@@ -31,14 +34,15 @@ class TestConstrainCurrent:
 
     @pytest.mark.unit
     @pytest.mark.solve
-    def test_compute_rotational_transform(self, DSHAPE_current, HELIOTRON_vac):
+    def test_compute_rotational_transform(self, DSHAPE, HELIOTRON_vac):
         """Test that compute functions recover iota and radial derivatives.
 
         When the current is fixed to the current computed on an equilibrium
         solved with iota fixed.
 
         This tests that rotational transform computations from fixed-current profiles
-        are correct, among other things.
+        are correct, among other things. For example, this test will fail if
+        the compute functions for iota from a current profile are incorrect.
         """
 
         def test(stellarator, grid_type):
@@ -59,12 +63,17 @@ class TestConstrainCurrent:
             }
             transforms = get_transforms("iota_rr", eq=eq, grid=grid)
             profiles = {"iota": None, "current": _ExactValueProfile(eq, grid)}
+            # compute rotational transform from the above current profile, which
+            # is monkey patched to return a surface average of B_theta in amps
             data = compute_fun(
                 ["iota", "iota_r", "iota_rr"],
                 params=params,
                 transforms=transforms,
                 profiles=profiles,
             )
+            # compute rotational transform using the equilibrium's default
+            # profile (directly from the power series which defines iota
+            # if the equilibrium fixes iota)
             benchmark_data = eq.compute("iota_rr", grid=grid)
 
             if grid_type == "linear":
@@ -87,6 +96,6 @@ class TestConstrainCurrent:
                 np.testing.assert_allclose(data["iota_rr"], benchmark_data["iota_rr"])
 
         for e in ("quadrature", "concentric", "linear"):
-            # works with any stellarators in desc/examples
-            test(DSHAPE_current, e)
+            # works with any stellarators in desc/examples that fix iota
+            test(DSHAPE, e)
             test(HELIOTRON_vac, e)

@@ -255,7 +255,7 @@ def _B_r(params, transforms, profiles, data, **kwargs):
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
     description="",
-    dim=3,
+    dim=1,
     params=[],
     transforms={},
     profiles=[],

@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -105,6 +105,7 @@ class QuasisymmetryBoozer(_Objective):
                 M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
             )
         self._data_keys = ["|B|_mn"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -149,7 +150,7 @@ class QuasisymmetryBoozer(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute quasi-symmetry Boozer harmonics error.
 
         Parameters
@@ -173,14 +174,7 @@ class QuasisymmetryBoozer(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -297,6 +291,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["f_C"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -316,7 +311,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute quasi-symmetry two-term errors.
 
         Parameters
@@ -340,14 +335,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Quasi-symmetry flux function error at each node (T^3).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -452,6 +440,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["f_T"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
@@ -473,7 +462,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute quasi-symmetry triple product errors.
 
         Parameters
@@ -497,14 +486,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Quasi-symmetry flux function error at each node (T^4/m^2).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,

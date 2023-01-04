@@ -176,7 +176,7 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="J_parallel",
-    label="\\mathbf{J} \\cdot \\mathbf{b}",
+    label="\\mathbf{J} \\cdot \\hat{\\mathbf{b}}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
     description="Plasma current density parallel to magnetic field",
@@ -189,24 +189,6 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
 )
 def _J_parallel(params, transforms, profiles, data, **kwargs):
     data["J_parallel"] = data["J*B"] / data["|B|"]
-    return data
-
-
-@register_compute_fun(
-    name="div(J_perp)",
-    label="\\nabla \\cdot \\mathbf{J}_{\\perp}",
-    units="A \\cdot m^{-3}",
-    units_long="Amperes / cubic meter",
-    description="Divergence of plasma current density perpendicular to magnetic field",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["J^rho", "p_r", "|B|"],
-)
-def _div_J_perp(params, transforms, profiles, data, **kwargs):
-    data["div(J_perp)"] = (mu_0 * data["J^rho"] * data["p_r"]) / data["|B|"] ** 2
     return data
 
 
@@ -326,7 +308,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|F|>_vol",
-    label="<|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|>_{vol}",
+    label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
     units="N \\cdot m^{-3}",
     units_long="Newtons / cubic meter",
     description="Volume average of magnitude of force balance error",
@@ -346,6 +328,26 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^helical",
+    label="B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta",
+    units="T \\cdot m^{-2}",
+    units_long="Tesla / square meter",
+    description="Helical basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
+)
+def _e_helical(params, transforms, profiles, data, **kwargs):
+    data["e^helical"] = (
+        data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="|e^helical|",
     label="|B^{\\theta} \\nabla \\zeta - B^{\\zeta} \\nabla \\theta|",
     units="T \\cdot m^{-2}",
@@ -356,14 +358,10 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B^theta", "B^zeta", "g^tt", "g^zz", "g^tz"],
+    data=["e^helical"],
 )
 def _helical_mag(params, transforms, profiles, data, **kwargs):
-    data["|e^helical|"] = jnp.sqrt(
-        data["B^zeta"] ** 2 * data["g^tt"]
-        + data["B^theta"] ** 2 * data["g^zz"]
-        - 2 * data["B^theta"] * data["B^zeta"] * data["g^tz"]
-    )
+    data["|e^helical|"] = jnp.linalg.norm(data["e^helical"], axis=-1)
     return data
 
 

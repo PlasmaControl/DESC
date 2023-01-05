@@ -1,5 +1,6 @@
 """Objectives related to the bootstrap current profile."""
 
+import warnings
 import numpy as np
 
 from desc.backend import jnp
@@ -155,6 +156,22 @@ class BootstrapRedlConsistency(_Objective):
         self._dim_f = self.grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl", "rho"]
         self._args = get_params(self._data_keys)
+
+        # Try to catch cases in which density or temperatures are specified in the wrong units.
+        # Densities should be ~ 10^20, temperatures are ~ 10^3.
+        rho = eq.compute("rho", grid=self.grid)["rho"]
+        if jnp.any(self.Te(rho) > 50e3):
+            warnings.warn("Te is surprisingly high. It should have units of eV")
+        if jnp.any(self.Ti(rho) > 50e3):
+            warnings.warn("Ti is surprisingly high. It should have units of eV")
+        # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower bounds:
+        rho = rho[rho < 0.85]
+        if jnp.any(self.ne(rho) < 1e17):
+            warnings.warn("ne is surprisingly low. It should have units 1/meters^3")
+        if jnp.any(self.Te(rho) < 30):
+            warnings.warn("Te is surprisingly low. It should have units of eV")
+        if jnp.any(self.Ti(rho) < 30):
+            warnings.warn("Ti is surprisingly low. It should have units of eV")
 
         timer = Timer()
         if verbose > 0:

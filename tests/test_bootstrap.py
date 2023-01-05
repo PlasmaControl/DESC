@@ -327,7 +327,7 @@ class TestBootstrapCompute:
             L31 * p / pe * (ni_rho * d_Ti_d_s_J) / p
             + L34 * alpha * (1 - Rpe) / Rpe * (d_Ti_d_s_J / Ti_J)
         )
-        jdotB_pass2 = (
+        J_dot_B_pass2 = (
             -G
             * pe
             * (
@@ -347,31 +347,35 @@ class TestBootstrapCompute:
             "f_t": f_t,
             "psi_edge": psi_edge,
         }
-        jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
+        J_dot_B_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
-        np.testing.assert_allclose(jdotB_data["nu_e_star"], nu_e, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["nu_i_star"], nu_i, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["X31"], X31, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["L31"], L31, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["X32e"], X32e, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["F32ee"], F32ee, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["X32ei"], X32ei, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["F32ei"], F32ei, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["L32"], L32, atol=atol, rtol=rtol)
-        np.testing.assert_allclose(jdotB_data["alpha"], alpha, atol=atol, rtol=rtol)
         np.testing.assert_allclose(
-            jdotB_data["dTeds_term"], dTeds_term, atol=atol, rtol=rtol
+            J_dot_B_data["nu_e_star"], nu_e, atol=atol, rtol=rtol
         )
         np.testing.assert_allclose(
-            jdotB_data["dTids_term"], dTids_term, atol=atol, rtol=rtol
+            J_dot_B_data["nu_i_star"], nu_i, atol=atol, rtol=rtol
+        )
+        np.testing.assert_allclose(J_dot_B_data["X31"], X31, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["L31"], L31, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["X32e"], X32e, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["F32ee"], F32ee, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["X32ei"], X32ei, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["F32ei"], F32ei, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["L32"], L32, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(J_dot_B_data["alpha"], alpha, atol=atol, rtol=rtol)
+        np.testing.assert_allclose(
+            J_dot_B_data["dTeds_term"], dTeds_term, atol=atol, rtol=rtol
         )
         np.testing.assert_allclose(
-            jdotB_data["dnds_term"], dnds_term, atol=atol, rtol=rtol
+            J_dot_B_data["dTids_term"], dTids_term, atol=atol, rtol=rtol
         )
         np.testing.assert_allclose(
-            jdotB_data["jdotB"], jdotB_pass2, atol=atol, rtol=rtol
+            J_dot_B_data["dnds_term"], dnds_term, atol=atol, rtol=rtol
+        )
+        np.testing.assert_allclose(
+            J_dot_B_data["<J*B>"], J_dot_B_pass2, atol=atol, rtol=rtol
         )
 
     @pytest.mark.unit
@@ -432,7 +436,7 @@ class TestBootstrapCompute:
                 "f_t": f_t,
                 "psi_edge": psi_edge,
             }
-            jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
+            J_dot_B_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
 
             # Change False to True in the next line to plot the data for debugging.
             if False:
@@ -446,20 +450,20 @@ class TestBootstrapCompute:
                 xlim = [-0.05, 1.05]
 
                 plt.subplot(nrows, ncols, 1)
-                plt.semilogy(f_t, jdotB_data["nu_e_star"], label=r"$\nu_{e*}$")
-                plt.semilogy(f_t, jdotB_data["nu_i_star"], label=r"$\nu_{i*}$")
+                plt.semilogy(f_t, J_dot_B_data["nu_e_star"], label=r"$\nu_{e*}$")
+                plt.semilogy(f_t, J_dot_B_data["nu_i_star"], label=r"$\nu_{i*}$")
                 plt.xlabel("f_t")
                 plt.legend(loc=0, fontsize=8)
 
                 plt.subplot(nrows, ncols, 2)
-                plt.plot(f_t, jdotB_data["L31"], "g")
+                plt.plot(f_t, J_dot_B_data["L31"], "g")
                 plt.title("L31")
                 plt.xlabel("f_t")
                 plt.xlim(xlim)
                 plt.ylim(-0.05, 1.05)
 
                 plt.subplot(nrows, ncols, 3)
-                plt.plot(f_t, jdotB_data["L32"], "g")
+                plt.plot(f_t, J_dot_B_data["L32"], "g")
                 plt.title("L32")
                 plt.xlabel("f_t")
                 plt.xlim(xlim)
@@ -469,7 +473,7 @@ class TestBootstrapCompute:
                     plt.ylim(-0.2, 0.05)
 
                 plt.subplot(nrows, ncols, 4)
-                plt.plot(f_t, jdotB_data["alpha"], "g")
+                plt.plot(f_t, J_dot_B_data["alpha"], "g")
                 plt.title("alpha")
                 plt.xlabel("f_t")
                 plt.xlim(xlim)
@@ -479,25 +483,25 @@ class TestBootstrapCompute:
                 plt.show()
 
             # Make sure L31, L32, and alpha are within the right range:
-            np.testing.assert_array_less(jdotB_data["L31"], 1.05)
-            np.testing.assert_array_less(0, jdotB_data["L31"])
-            np.testing.assert_array_less(jdotB_data["L32"], 0.01)
-            np.testing.assert_array_less(-0.25, jdotB_data["L32"])
-            np.testing.assert_array_less(jdotB_data["alpha"], 0.05)
-            np.testing.assert_array_less(-1.2, jdotB_data["alpha"])
+            np.testing.assert_array_less(J_dot_B_data["L31"], 1.05)
+            np.testing.assert_array_less(0, J_dot_B_data["L31"])
+            np.testing.assert_array_less(J_dot_B_data["L32"], 0.01)
+            np.testing.assert_array_less(-0.25, J_dot_B_data["L32"])
+            np.testing.assert_array_less(J_dot_B_data["alpha"], 0.05)
+            np.testing.assert_array_less(-1.2, J_dot_B_data["alpha"])
             if Zeff > 1:
-                np.testing.assert_array_less(-1.0, jdotB_data["alpha"])
-            assert jdotB_data["L31"][0] < 0.1
-            assert jdotB_data["L31"][-1] > 0.9
-            assert jdotB_data["L32"][0] > -0.05
-            assert jdotB_data["L32"][-1] > -0.05
+                np.testing.assert_array_less(-1.0, J_dot_B_data["alpha"])
+            assert J_dot_B_data["L31"][0] < 0.1
+            assert J_dot_B_data["L31"][-1] > 0.9
+            assert J_dot_B_data["L32"][0] > -0.05
+            assert J_dot_B_data["L32"][-1] > -0.05
             if Zeff == 0:
-                assert np.min(jdotB_data["L32"]) < -0.2
-                assert jdotB_data["alpha"][0] < -1.05
+                assert np.min(J_dot_B_data["L32"]) < -0.2
+                assert J_dot_B_data["alpha"][0] < -1.05
             else:
-                assert np.min(jdotB_data["L32"]) < -0.13
-                assert jdotB_data["alpha"][0] < -0.9
-            assert jdotB_data["alpha"][-1] > -0.1
+                assert np.min(J_dot_B_data["L32"]) < -0.13
+                assert J_dot_B_data["alpha"][0] < -0.9
+            assert J_dot_B_data["alpha"][-1] > -0.1
 
     @pytest.mark.unit
     def test_Redl_figures_4_5(self):
@@ -566,15 +570,15 @@ class TestBootstrapCompute:
                     "f_t": f_t,
                     "psi_edge": psi_edge,
                 }
-                jdotB_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
+                J_dot_B_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
 
-                L31s[j_nu_star, :] = jdotB_data["L31"]
-                L32s[j_nu_star, :] = jdotB_data["L32"]
-                alphas[j_nu_star, :] = jdotB_data["alpha"]
-                nu_e_stars[j_nu_star, :] = jdotB_data["nu_e_star"]
-                nu_i_stars[j_nu_star, :] = jdotB_data["nu_i_star"]
-                # np.testing.assert_allclose(jdotB_data["nu_e_star"], target_nu_e_star)
-                # np.testing.assert_allclose(jdotB_data["nu_i_star"], target_nu_i_star)
+                L31s[j_nu_star, :] = J_dot_B_data["L31"]
+                L32s[j_nu_star, :] = J_dot_B_data["L32"]
+                alphas[j_nu_star, :] = J_dot_B_data["alpha"]
+                nu_e_stars[j_nu_star, :] = J_dot_B_data["nu_e_star"]
+                nu_i_stars[j_nu_star, :] = J_dot_B_data["nu_i_star"]
+                # np.testing.assert_allclose(J_dot_B_data["nu_e_star"], target_nu_e_star)
+                # np.testing.assert_allclose(J_dot_B_data["nu_i_star"], target_nu_i_star)
 
             # Change False to True in the next line to plot the data for debugging.
             if False:

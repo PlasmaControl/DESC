@@ -187,7 +187,7 @@ def j_dot_B_Redl(
 
     Returns
     -------
-    jdotB_data : dict
+    J_dot_B_data : dict
         Dictionary containing the computed data listed above.
     """
     rho = geom_data["rho"]
@@ -216,16 +216,6 @@ def j_dot_B_Redl(
     d_Te_d_s = Te(rho, dr=1) / (2 * rho)
     d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
 
-    # Profiles may go to 0 at rho=1, so exclude the last few grid points:
-    # These if statements are incompatible with jit:
-    """
-    if jnp.any(ne_rho[:-2] < 1e17):
-        warnings.warn("ne is surprisingly low. It should have units 1/meters^3")
-    if jnp.any(Te_rho[:-2] < 50):
-        warnings.warn("Te is surprisingly low. It should have units of eV")
-    if jnp.any(Ti_rho[:-2] < 50):
-        warnings.warn("Ti is surprisingly low. It should have units of eV")
-    """
     # Eq (18d)-(18e) in Sauter.
     # Check that we do not need to convert units of n or T!
     ln_Lambda_e = 31.3 - jnp.log(jnp.sqrt(ne_rho) / Te_rho)
@@ -378,9 +368,9 @@ def j_dot_B_Redl(
         * (d_Ti_d_s / Ti_rho)
         / (psi_edge * (iota - helicity_N))
     )
-    jdotB = dnds_term + dTeds_term + dTids_term
+    J_dot_B = dnds_term + dTeds_term + dTids_term
 
-    # Store all results in the jdotB_data dictionary:
+    # Store all results in the J_dot_B_data dictionary:
     nu_e_star = nu_e
     nu_i_star = nu_i
     variables = [
@@ -410,11 +400,11 @@ def j_dot_B_Redl(
         "dnds_term",
         "dTeds_term",
         "dTids_term",
-        "jdotB",
     ]
-    jdotB_data = geom_data.copy()
+    J_dot_B_data = geom_data.copy()
     for v in variables:
-        jdotB_data[v] = eval(v)
+        J_dot_B_data[v] = eval(v)
+    J_dot_B_data["<J*B>"] = J_dot_B
 
     if plot:
         import matplotlib.pyplot as plt
@@ -448,17 +438,17 @@ def j_dot_B_Redl(
             "L31",
             "L32",
             "alpha",
-            "jdotB",
+            "<J*B>",
         ]
         for j, variable in enumerate(variables):
             plt.subplot(nrows, ncols, j + 1)
-            plt.plot(rho, jdotB_data[variable])
+            plt.plot(rho, J_dot_B_data[variable])
             plt.title(variable)
             plt.xlabel(r"$\rho$")
         plt.tight_layout()
         plt.show()
 
-    return jdotB_data
+    return J_dot_B_data
 
 
 @register_compute_fun(
@@ -519,5 +509,5 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         helicity_N,
         plot=False,
     )
-    data["<J*B> Redl"] = expand(grid, j_dot_B_data["jdotB"])
+    data["<J*B> Redl"] = expand(grid, j_dot_B_data["<J*B>"])
     return data

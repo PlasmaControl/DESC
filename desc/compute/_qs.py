@@ -1,132 +1,356 @@
 """Compute functions for quasisymmetry objectives."""
 
+import numpy as np
+
 from desc.backend import jnp, put, sign
 
-from ._field import (
-    compute_B_dot_gradB,
-    compute_boozer_magnetic_field,
-    compute_covariant_magnetic_field,
-    compute_magnetic_field_magnitude,
+from .data_index import register_compute_fun
+
+
+@register_compute_fun(
+    name="B_theta_mn",
+    label="B_{\\theta, m, n}",
+    units="T \\cdot m}",
+    units_long="Tesla * meters",
+    description="Fourier coefficients for covariant poloidal component of "
+    + "magnetic field",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_theta"],
 )
-from .utils import has_dependencies
-
-
-def compute_boozer_coordinates(params, transforms, profiles, data=None, **kwargs):
-    """Compute Boozer coordinates.
-
-    Assumes transform grids are uniform spacing on single flux surface without symmetry.
-    """
-    data = compute_magnetic_field_magnitude(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-    # TODO: can remove this call if compute_|B| changed to use B_covariant
-    data = compute_covariant_magnetic_field(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
-
-    # covariant Boozer components: I = B_theta, G = B_zeta (in Boozer coordinates)
-    if "B" in transforms:
-        idx0 = transforms["B"].basis.get_idx(M=0, N=0)
-        B_theta_mn = transforms["B"].fit(data["B_theta"])
-        B_zeta_mn = transforms["B"].fit(data["B_zeta"])
-        data["I"] = B_theta_mn[idx0]
-        data["G"] = B_zeta_mn[idx0]
-
-    # w (RHS of eq 10 in Hirshman 1995 "Transformation from VMEC to Boozer Coordinates")
-    if "w" in transforms:
-        w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
-        NFP = transforms["w"].basis.NFP
-        for k, (l, m, n) in enumerate(transforms["w"].basis.modes):
-            if m != 0:
-                idx = transforms["B"].basis.get_idx(M=-m, N=n)
-                w_mn = put(w_mn, k, (sign(n) * B_theta_mn[idx] / jnp.abs(m))[0])
-            elif n != 0:
-                idx = transforms["B"].basis.get_idx(M=m, N=-n)
-                w_mn = put(w_mn, k, (sign(m) * B_zeta_mn[idx] / jnp.abs(NFP * n))[0])
-
-    # nu = zeta_Boozer - zeta   # noqa: E800
-    GI = data["G"] + data["iota"] * data["I"]
-    if has_dependencies("nu", params, transforms, profiles, data):
-        w = transforms["w"].transform(w_mn)
-        data["nu"] = (w - data["I"] * data["lambda"]) / GI
-    if has_dependencies("nu_t", params, transforms, profiles, data):
-        w_t = transforms["w"].transform(w_mn, dr=0, dt=1, dz=0)
-        data["nu_t"] = (w_t - data["I"] * data["lambda_t"]) / GI
-    if has_dependencies("nu_z", params, transforms, profiles, data):
-        w_z = transforms["w"].transform(w_mn, dr=0, dt=0, dz=1)
-        data["nu_z"] = (w_z - data["I"] * data["lambda_z"]) / GI
-
-    # Boozer angles
-    if has_dependencies("theta_B", params, transforms, profiles, data):
-        data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
-    if has_dependencies("zeta_B", params, transforms, profiles, data):
-        data["zeta_B"] = data["zeta"] + data["nu"]
-
-    # Jacobian of Boozer coordinates wrt (theta,zeta) coordinates
-    if has_dependencies("sqrt(g)_B", params, transforms, profiles, data):
-        data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
-            data["iota"] - data["lambda_z"]
-        ) * data["nu_t"]
-
-    # Riemann sum integration
-    if has_dependencies("|B|_mn", params, transforms, profiles, data):
-        nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
-        norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
-        data["|B|_mn"] = (
-            norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-            * jnp.matmul(
-                transforms["B"].basis.evaluate(nodes).T, data["sqrt(g)_B"] * data["|B|"]
-            )
-            / transforms["B"].grid.num_nodes
-        )
-    if has_dependencies("B modes", params, transforms, profiles, data):
-        data["B modes"] = transforms["B"].basis.modes
-
+def _B_theta_mn(params, transforms, profiles, data, **kwargs):
+    data["B_theta_mn"] = transforms["B"].fit(data["B_theta"])
     return data
 
 
-def compute_quasisymmetry_error(params, transforms, profiles, data=None, **kwargs):
-    """Compute quasi-symmetry triple product and two-term errors.
+@register_compute_fun(
+    name="B_zeta_mn",
+    label="B_{\\zeta, m, n}",
+    units="T \\cdot m}",
+    units_long="Tesla * meters",
+    description="Fourier coefficients for covariant toroidal component of "
+    + "magnetic field",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_zeta"],
+)
+def _B_zeta_mn(params, transforms, profiles, data, **kwargs):
+    data["B_zeta_mn"] = transforms["B"].fit(data["B_zeta"])
+    return data
 
-    f_C computation assumes transform grids are a single flux surface.
-    """
-    data = compute_B_dot_gradB(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
+
+@register_compute_fun(
+    name="w_Boozer_mn",
+    label="w_{Boozer,m,n}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to "
+    + "Boozer Coordinates'",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 0, 0]], "B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_theta_mn", "B_zeta_mn"],
+)
+def _w_mn(params, transforms, profiles, data, **kwargs):
+    w_mn = jnp.zeros((transforms["w"].basis.num_modes,))
+    Bm = transforms["B"].basis.modes[:, 1]
+    Bn = transforms["B"].basis.modes[:, 2]
+    wm = transforms["w"].basis.modes[:, 1]
+    wn = transforms["w"].basis.modes[:, 2]
+    NFP = transforms["w"].basis.NFP
+    # indices of matching modes in w and B bases
+    # need to use np instead of jnp here as jnp.where doesn't work under jit
+    # even if the args are static
+    ib, iw = np.where((Bm[:, None] == -wm) * (Bn[:, None] == wn) * (wm != 0))
+    jb, jw = np.where(
+        (Bm[:, None] == wm) * (Bn[:, None] == -wn) * (wm == 0) * (wn != 0)
     )
-    data = compute_boozer_magnetic_field(
-        params,
-        transforms,
-        profiles,
-        data=data,
-        **kwargs,
-    )
+    w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
+    w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))
+    data["w_Boozer_mn"] = w_mn
+    return data
 
-    M = kwargs.get("helicity", (1, 0))[0]
-    N = kwargs.get("helicity", (1, 0))[1]
 
-    # QS two-term (T^3)
-    if has_dependencies("f_C", params, transforms, profiles, data):
-        data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
-            data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
-        ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
+@register_compute_fun(
+    name="w_Boozer",
+    label="w_{Boozer}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
+    + "'Transformation from VMEC to Boozer Coordinates'",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_Boozer_mn"],
+)
+def _w(params, transforms, profiles, data, **kwargs):
+    data["w_Boozer"] = transforms["w"].transform(data["w_Boozer_mn"])
+    return data
 
-    # QS triple product (T^4/m^2)
-    if has_dependencies("f_T", params, transforms, profiles, data):
-        data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
-            data["|B|_t"] * data["(B*grad(|B|))_z"]
-            - data["|B|_z"] * data["(B*grad(|B|))_t"]
+
+@register_compute_fun(
+    name="w_Boozer_t",
+    label="\\partial_{\\theta} w_{Boozer}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
+    + "'Transformation from VMEC to Boozer Coordinates', poloidal derivative",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 1, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_Boozer_mn"],
+)
+def _w_t(params, transforms, profiles, data, **kwargs):
+    data["w_Boozer_t"] = transforms["w"].transform(data["w_Boozer_mn"], dt=1)
+    return data
+
+
+@register_compute_fun(
+    name="w_Boozer_z",
+    label="\\partial_{\\zeta} w_{Boozer}",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 "
+    + "'Transformation from VMEC to Boozer Coordinates', toroidal derivative",
+    dim=1,
+    params=[],
+    transforms={"w": [[0, 0, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_Boozer_mn"],
+)
+def _w_z(params, transforms, profiles, data, **kwargs):
+    data["w_Boozer_z"] = transforms["w"].transform(data["w_Boozer_mn"], dz=1)
+    return data
+
+
+@register_compute_fun(
+    name="nu",
+    label="\\nu = \\zeta_{B} - \\zeta",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal stream function",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_Boozer", "G", "I", "iota", "lambda"],
+)
+def _nu(params, transforms, profiles, data, **kwargs):
+    GI = data["G"] + data["iota"] * data["I"]
+    data["nu"] = (data["w_Boozer"] - data["I"] * data["lambda"]) / GI
+    return data
+
+
+@register_compute_fun(
+    name="nu_t",
+    label="\\partial_{\\theta} \\nu",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal stream function, derivative wrt poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_Boozer_t", "G", "I", "iota", "lambda_t"],
+)
+def _nu_t(params, transforms, profiles, data, **kwargs):
+    GI = data["G"] + data["iota"] * data["I"]
+    data["nu_t"] = (data["w_Boozer_t"] - data["I"] * data["lambda_t"]) / GI
+    return data
+
+
+@register_compute_fun(
+    name="nu_z",
+    label="\\partial_{\\zeta} \\nu",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal stream function, derivative wrt toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["w_Boozer_z", "G", "I", "iota", "lambda_z"],
+)
+def _nu_z(params, transforms, profiles, data, **kwargs):
+    GI = data["G"] + data["iota"] * data["I"]
+    data["nu_z"] = (data["w_Boozer_z"] - data["I"] * data["lambda_z"]) / GI
+    return data
+
+
+@register_compute_fun(
+    name="theta_B",
+    label="\\theta_{B}",
+    units="rad",
+    units_long="radians",
+    description="Boozer poloidal angular coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta", "lambda", "iota", "nu"],
+)
+def _theta_B(params, transforms, profiles, data, **kwargs):
+    data["theta_B"] = data["theta"] + data["lambda"] + data["iota"] * data["nu"]
+    return data
+
+
+@register_compute_fun(
+    name="zeta_B",
+    label="\\zeta_{B}",
+    units="rad",
+    units_long="radians",
+    description="Boozer toroidal angular coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["zeta", "nu"],
+)
+def _zeta_B(params, transforms, profiles, data, **kwargs):
+    data["zeta_B"] = data["zeta"] + data["nu"]
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_B",
+    label="\\sqrt{g}_{B}",
+    units="~",
+    units_long="None",
+    description="Jacobian determinant of Boozer coordinates",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_t", "lambda_z", "nu_t", "nu_z", "iota"],
+)
+def _sqrtg_B(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_B"] = (1 + data["lambda_t"]) * (1 + data["nu_z"]) + (
+        data["iota"] - data["lambda_z"]
+    ) * data["nu_t"]
+    return data
+
+
+@register_compute_fun(
+    name="|B|_mn",
+    label="B_{mn}^{Boozer}",
+    units="T",
+    units_long="Tesla",
+    description="Boozer harmonics of magnetic field",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["sqrt(g)_B", "|B|", "rho", "theta_B", "zeta_B"],
+)
+def _B_mn(params, transforms, profiles, data, **kwargs):
+    nodes = jnp.array([data["rho"], data["theta_B"], data["zeta_B"]]).T
+    norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
+    data["|B|_mn"] = (
+        norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
+        * jnp.matmul(
+            transforms["B"].basis.evaluate(nodes).T, data["sqrt(g)_B"] * data["|B|"]
         )
+        / transforms["B"].grid.num_nodes
+    )
+    return data
 
+
+@register_compute_fun(
+    name="B modes",
+    label="Boozer modes",
+    units="~",
+    units_long="None",
+    description="Boozer harmonics",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _B_modes(params, transforms, profiles, data, **kwargs):
+    data["B modes"] = transforms["B"].basis.modes
+    return data
+
+
+@register_compute_fun(
+    name="f_C",
+    label="(\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B - "
+    + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",
+    units="T^{3}",
+    units_long="Tesla cubed",
+    description="Two-term quasisymmetry metric",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "iota",
+        "psi_r",
+        "sqrt(g)",
+        "B_theta",
+        "B_zeta",
+        "|B|_t",
+        "|B|_z",
+        "G",
+        "I",
+        "B*grad(|B|)",
+    ],
+    helicity="helicity",
+)
+def _f_C(params, transforms, profiles, data, **kwargs):
+    M, N = kwargs.get("helicity", (1, 0))
+    data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
+        data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
+    ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
+    return data
+
+
+@register_compute_fun(
+    name="f_T",
+    label="\\nabla \\psi \\times \\nabla B \\cdot \\nabla "
+    + "(\\mathbf{B} \\cdot \\nabla B)",
+    units="T^{4} \\cdot m^{-2}",
+    units_long="Tesla quarted / square meters",
+    description="Triple product quasisymmetry metric",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "psi_r",
+        "sqrt(g)",
+        "|B|_t",
+        "|B|_z",
+        "(B*grad(|B|))_t",
+        "(B*grad(|B|))_z",
+    ],
+)
+def _f_T(params, transforms, profiles, data, **kwargs):
+    data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
+        data["|B|_t"] * data["(B*grad(|B|))_z"]
+        - data["|B|_z"] * data["(B*grad(|B|))_t"]
+    )
     return data

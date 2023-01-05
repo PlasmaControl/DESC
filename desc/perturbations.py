@@ -750,7 +750,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
             )
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value.size:
+            if value.size:
                 setattr(eq_new, key, value)
 
     predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)

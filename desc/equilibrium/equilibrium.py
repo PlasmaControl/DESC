@@ -619,7 +619,7 @@ class Equilibrium(_Configuration, IOAble):
         eq.solved = result["success"]
         return eq, result
 
-    def _optimize(
+    def _optimize(  # noqa: C901
         self,
         objective,
         constraint=None,
@@ -778,7 +778,9 @@ class Equilibrium(_Configuration, IOAble):
             return eq
         else:
             for attr in self._io_attrs_:
-                setattr(self, attr, getattr(eq, attr))
+                val = getattr(eq, attr[1:])
+                if val.size:
+                    setattr(self, attr[1:], val)
             return self
 
     def perturb(

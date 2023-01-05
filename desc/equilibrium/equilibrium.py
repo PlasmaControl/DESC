@@ -463,7 +463,8 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and self.iota is not None
+                iota=objective != "vacuum" and self.iota is not None,
+                kinetic=self.electron_temperature is not None,
             )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
@@ -580,7 +581,10 @@ class Equilibrium(_Configuration, IOAble):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
+            constraints = get_fixed_boundary_constraints(
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
             constraints = (ForceBalance(), *constraints)
 
         if copy:
@@ -828,7 +832,10 @@ class Equilibrium(_Configuration, IOAble):
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
+            constraints = get_fixed_boundary_constraints(
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
 
         if not objective.built:
             objective.build(self, verbose=verbose)

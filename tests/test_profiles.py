@@ -300,10 +300,34 @@ class TestProfiles:
             sym=True,
         )
         eq1.solve(
-            constraints=get_fixed_boundary_constraints(),
+            constraints=get_fixed_boundary_constraints(kinetic=False),
             objective=ObjectiveFunction(objectives=ForceBalance()),
-            maxiter=2,
+            maxiter=5,
         )
+        eq2 = Equilibrium(
+            electron_temperature=Te,
+            electron_density=ne,
+            atomic_number=1,
+            ion_temperature=Ti,
+            iota=PowerSeriesProfile([1.61]),
+            Psi=np.pi,  # so B ~ 1 T
+            NFP=1,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq2.solve(
+            constraints=get_fixed_boundary_constraints(kinetic=True),
+            objective=ObjectiveFunction(objectives=ForceBalance()),
+            maxiter=5,
+        )
+        np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=1e-14)
+        np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=1e-14)
+        np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=1e-14)
 
     def test_kinetic_pressure(self):
         """Test that both ways of computing pressure are equivalent."""

@@ -14,9 +14,13 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixPressure,
@@ -25,7 +29,9 @@ from .linear_objectives import (
 from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
+def get_fixed_boundary_constraints(
+    profiles=True, iota=True, kinetic=False, normalize=True
+):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -34,6 +40,8 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to add constraints to fix kinetic profiles or pressure
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -54,7 +62,17 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
         FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (FixPressure(normalize=normalize, normalize_target=normalize),)
+        if kinetic:
+            constraints += (
+                FixElectronDensity(normalize=normalize, normalize_target=normalize),
+                FixElectronTemperature(normalize=normalize, normalize_target=normalize),
+                FixIonTemperature(normalize=normalize, normalize_target=normalize),
+                FixAtomicNumber(normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixPressure(normalize=normalize, normalize_target=normalize),
+            )
 
         if iota:
             constraints += (FixIota(normalize=normalize, normalize_target=normalize),)

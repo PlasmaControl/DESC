@@ -132,7 +132,8 @@ def solve_continuation_automatic(  # noqa: C901
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and eq.iota is not None
+        iota=objective != "vacuum" and eq.iota is not None,
+        kinetic=eq.electron_temperature is not None,
     )
     objective_i = get_equilibrium_objective(objective)
 
@@ -198,7 +199,8 @@ def solve_continuation_automatic(  # noqa: C901
 
         if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
             constraints_i = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and eq.iota is not None
+                iota=objective != "vacuum" and eq.iota is not None,
+                kinetic=eq.electron_temperature is not None,
             )
             objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
@@ -322,7 +324,8 @@ def solve_continuation(  # noqa: C901
         optimizer = Optimizer(optimizer)
     objective_i = get_equilibrium_objective(objective)
     constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and eqfam[0].iota is not None
+        iota=objective != "vacuum" and eqfam[0].iota is not None,
+        kinetic=eqfam[0].electron_temperature is not None,
     )
 
     ii = 0
@@ -368,7 +371,8 @@ def solve_continuation(  # noqa: C901
             if eqfam[ii - 1].resolution != eqi.resolution:
                 objective_i = get_equilibrium_objective(objective)
                 constraints_i = get_fixed_boundary_constraints(
-                    iota=objective != "vacuum" and eqfam[ii].iota is not None
+                    iota=objective != "vacuum" and eqfam[ii].iota is not None,
+                    kinetic=eqfam[ii].electron_temperature is not None,
                 )
 
         if len(deltas) > 0:

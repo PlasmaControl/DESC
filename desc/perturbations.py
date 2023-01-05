@@ -530,7 +530,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         print("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
-    constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
+    constraints = get_fixed_boundary_constraints(
+        iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
+    )
     for constraint in constraints:
         if not constraint.built:
             constraint.build(eq, verbose=verbose)

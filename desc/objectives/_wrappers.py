@@ -136,7 +136,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._constraints, self._full_args)
+        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
 
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:

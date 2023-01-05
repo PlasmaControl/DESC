@@ -680,7 +680,7 @@ class TestBootstrapCompute:
         Ti = Te
         s_surfaces = np.linspace(0.01, 0.99, 99)
         rho = np.sqrt(s_surfaces)
-        helicity_N = 0
+        helicity = (1, 0)
         filename = ".//tests//inputs//circular_model_tokamak_output.h5"
         eq = desc.io.load(filename)[-1]
         J_dot_B_sfincs = np.array(
@@ -791,7 +791,7 @@ class TestBootstrapCompute:
         data = eq.compute(
             "<J*B> Redl",
             grid=grid,
-            helicity_N=helicity_N,
+            helicity=helicity,
             ne=ne,
             Te=Te,
             Ti=Ti,
@@ -832,7 +832,7 @@ class TestBootstrapCompute:
         Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         Zeff = 1
-        helicity_N = 0
+        helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
         s_surfaces = np.linspace(0.025, 0.975, 39)
@@ -885,7 +885,7 @@ class TestBootstrapCompute:
         data = eq.compute(
             "<J*B> Redl",
             grid=grid,
-            helicity_N=helicity_N,
+            helicity=helicity,
             ne=ne,
             Te=Te,
             Ti=Ti,
@@ -928,7 +928,7 @@ class TestBootstrapCompute:
         Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         Zeff = 1
-        helicity_N = -4
+        helicity = (1, -4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
         s_surfaces = np.linspace(0.025, 0.975, 39)
@@ -981,7 +981,7 @@ class TestBootstrapCompute:
         data = eq.compute(
             "<J*B> Redl",
             grid=grid,
-            helicity_N=helicity_N,
+            helicity=helicity,
             ne=ne,
             Te=Te,
             Ti=Ti,
@@ -1021,7 +1021,7 @@ class TestBootstrapObjectives:
         Te = PowerSeriesProfile(8e3 * np.array([1, -0.9]), modes=[0, 2])
         Ti = PowerSeriesProfile(9e3 * np.array([1, -0.9]), modes=[0, 2])
         Zeff = PowerSeriesProfile(np.array([1.2, 0.2]), modes=[0, 2])
-        helicity_N = -4
+        helicity = (1, -4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
 
@@ -1036,7 +1036,7 @@ class TestBootstrapObjectives:
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(
                     grid=grid,
-                    helicity_N=helicity_N,
+                    helicity=helicity,
                     ne=ne,
                     Te=Te,
                     Ti=Ti,
@@ -1081,7 +1081,7 @@ class TestBootstrapObjectives:
         Te = PowerSeriesProfile(1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
         Ti = PowerSeriesProfile(1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
         Zeff = 1.4
-        helicity_N = 0
+        helicity = (1, 0)
         filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
         eq = desc.io.load(filename)[-1]
 
@@ -1097,7 +1097,7 @@ class TestBootstrapObjectives:
                 Te=Te,
                 Ti=Ti,
                 Zeff=Zeff,
-                helicity_N=helicity_N,
+                helicity=helicity,
             )
             data = eq.compute("rho", data=data, grid=grid)
             import matplotlib.pyplot as plt
@@ -1120,11 +1120,12 @@ class TestBootstrapObjectives:
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(
                     grid=grid,
-                    helicity_N=helicity_N,
+                    helicity=helicity,
                     ne=ne,
                     Te=Te,
                     Ti=Ti,
                     Zeff=Zeff,
+                    rho_exponent=1,
                 ),
                 eq,
             )
@@ -1135,14 +1136,14 @@ class TestBootstrapObjectives:
 
         # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
         grid_types = [LinearGrid, QuadratureGrid]
-        kwargs = [{"axis": False}, {}]
+        kwargss = [{"axis": False}, {}]
 
         # Loop over grid resolutions:
         Ls = [10, 20, 10, 10]
         Ms = [10, 10, 20, 10]
         Ns = [0, 0, 0, 2]
 
-        for grid_type, kwargs in zip(grid_types, kwargs):
+        for grid_type, kwargs in zip(grid_types, kwargss):
             for L, M, N in zip(Ls, Ms, Ns):
                 results.append(test(grid_type, kwargs, L, M, N))
 
@@ -1160,7 +1161,7 @@ class TestBootstrapObjectives:
         Te = PowerSeriesProfile(T0 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         Zeff = 1
-        helicity_N = 0
+        helicity = (1, 0)
         pressure = PowerSeriesProfile(
             2 * ne0 * T0 * elementary_charge * np.array([1, -1, 0, 0, 0, -1, 1]),
             modes=[0, 2, 4, 6, 8, 10, 12],
@@ -1230,7 +1231,7 @@ class TestBootstrapObjectives:
         objective = ObjectiveFunction(
             BootstrapRedlConsistency(
                 grid=grid,
-                helicity_N=helicity_N,
+                helicity=helicity,
                 ne=ne,
                 Te=Te,
                 Ti=Ti,
@@ -1257,7 +1258,7 @@ class TestBootstrapObjectives:
             Te=Te,
             Ti=Ti,
             Zeff=Zeff,
-            helicity_N=helicity_N,
+            helicity=helicity,
             data=data,
         )
         # Innermost point has larger error, probably since iota -> 0 there, so drop it:

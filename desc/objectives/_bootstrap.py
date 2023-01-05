@@ -49,8 +49,9 @@ class BootstrapRedlConsistency(_Objective):
 
     Parameters
     ----------
-    helicity_N : int
-        Toroidal mode number of quasisymmetry, used for evaluating the Redl bootstrap current
+    helicity : 2-element tuple
+        First entry must be 1. Second entry is the toroidal mode number of quasisymmetry,
+        used for evaluating the Redl bootstrap current
         formula. Set to 0 for axisymmetry or quasi-axisymmetry; set to +/- NFP for
         quasi-helical symmetry.
     ne : Profile
@@ -93,12 +94,12 @@ class BootstrapRedlConsistency(_Objective):
 
     def __init__(
         self,
-        helicity_N=0,
+        helicity=(1, 0),
         ne=None,
         Te=None,
         Ti=None,
         Zeff=1,
-        rho_exponent=1,
+        rho_exponent=0,
         eq=None,
         target=0,
         weight=1,
@@ -107,7 +108,10 @@ class BootstrapRedlConsistency(_Objective):
         grid=None,
         name="Bootstrap current self-consistency (Redl)",
     ):
-        self.helicity_N = helicity_N
+        assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
+        assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
+
+        self.helicity = helicity
         self.ne = ne
         self.Te = Te
         self.Ti = Ti
@@ -145,6 +149,9 @@ class BootstrapRedlConsistency(_Objective):
                 rho=np.linspace(1 / 5, 1, 5),
             )
 
+        assert (
+            self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP
+        ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
         self._dim_f = self.grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl", "rho"]
         self._args = get_params(self._data_keys)
@@ -193,7 +200,7 @@ class BootstrapRedlConsistency(_Objective):
             "Te": self.Te,
             "Ti": self.Ti,
             "Zeff": self.Zeff,
-            "helicity_N": self.helicity_N,
+            "helicity": self.helicity,
         }
         data = compute_fun(
             self._data_keys,

@@ -179,7 +179,8 @@ def j_dot_B_Redl(
     Zeff: A :obj:`~Profile` object with the profile of the average
         impurity charge :math:`Z_{eff}`. Or, a single number can be provided if this profile is
         constant. Or, if ``None``, Zeff = 1 will be used.
-    helicity_N: 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
+    helicity_N : int
+        Set to 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
         This quantity is used to apply the quasisymmetry isomorphism to map the collisionality
         and bootstrap current from the tokamak expressions to quasi-helical symmetry.
     plot: Whether to make a plot of many of the quantities computed.
@@ -506,7 +507,8 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     Te = kwargs.get("Te", PowerSeriesProfile([1e3]))
     Ti = kwargs.get("Ti", PowerSeriesProfile([1e3]))
     Zeff = kwargs.get("Zeff", 1.0)
-    helicity_N = kwargs.get("helicity_N", 0)
+    helicity = kwargs.get("helicity", (1, 0))
+    helicity_N = helicity[1]
 
     j_dot_B_data = j_dot_B_Redl(
         geom_data,

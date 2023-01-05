@@ -300,7 +300,7 @@ def _p(params, transforms, profiles, data, **kwargs):
         data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
     else:
         data["p"] = elementary_charge * (
-            data["ne"] * data["Te"] + data["Ti"] * data["ne"] * data["Zeff"]
+            data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
         )
     return data
 
@@ -325,9 +325,9 @@ def _p_r(params, transforms, profiles, data, **kwargs):
         data["p_r"] = elementary_charge * (
             data["ne_r"] * data["Te"]
             + data["ne"] * data["Te_r"]
-            + data["Ti_r"] * data["ne"] * data["Zeff"]
-            + data["Ti"] * data["ne_r"] * data["Zeff"]
-            + data["Ti"] * data["ne"] * data["Zeff_r"]
+            + data["Ti_r"] * data["ne"] / data["Zeff"]
+            + data["Ti"] * data["ne_r"] / data["Zeff"]
+            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff_r"] ** 2
         )
     return data
 

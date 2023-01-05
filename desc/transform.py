@@ -605,7 +605,7 @@ class Transform(IOAble):
 
         if self.method == "direct1":
             A = self.matrices["direct1"][0][0][0]
-            return jnp.matmul(A.T, y) if A != {} else np.zeros(self.basis.num_modes)
+            return jnp.matmul(A.T, y)
 
         elif self.method == "direct2":
             A = self.matrices["fft"][0][0]

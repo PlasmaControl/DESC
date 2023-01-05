@@ -1156,8 +1156,11 @@ class TestBootstrapObjectives:
 
     @pytest.mark.unit
     @pytest.mark.slow
-    def test_bootstrap_consistency(self):
-        """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape."""
+    def test_bootstrap_consistency_iota(self):
+        """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
+
+        This version of the test covers an equilibrium with an iota profile.
+        """
 
         ne0 = 4.0e20
         T0 = 12.0e3
@@ -1212,8 +1215,8 @@ class TestBootstrapObjectives:
             objective=ObjectiveFunction(objectives=ForceBalance()),
         )
 
-        eq.save("test_bootstrap_consistency_initial.h5")
-        # eq = desc.io.load("test_bootstrap_consistency_initial.h5")
+        eq.save("test_bootstrap_consistency_iota_initial.h5")
+        # eq = desc.io.load("test_bootstrap_consistency_iota_initial.h5")
 
         # Done establishing the initial condition. Now set up the optimization.
 
@@ -1250,7 +1253,7 @@ class TestBootstrapObjectives:
             ftol=1e-6,
         )
 
-        eq.save("test_bootstrap_consistency_final.h5")
+        eq.save("test_bootstrap_consistency_iota_final.h5")
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
@@ -1265,9 +1268,132 @@ class TestBootstrapObjectives:
             helicity=helicity,
             data=data,
         )
-        # Innermost point has larger error, probably since iota -> 0 there, so drop it:
-        J_dot_B_MHD = compress(grid, data["<J*B>"])[1:]
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])[1:]
+        J_dot_B_MHD = compress(grid, data["<J*B>"])
+        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+
+        assert np.max(J_dot_B_MHD) < 4e5
+        assert np.max(J_dot_B_MHD) > 0
+        assert np.min(J_dot_B_MHD) < -5.1e6
+        assert np.min(J_dot_B_MHD) > -5.4e6
+        np.testing.assert_allclose(J_dot_B_MHD, J_dot_B_Redl, atol=5e5)
+
+    @pytest.mark.unit
+    @pytest.mark.slow
+    def test_bootstrap_consistency_current(self):
+        """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
+
+        This version of the test covers the case of an equilibrium with a current profile.
+        """
+
+        ne0 = 4.0e20
+        T0 = 12.0e3
+        ne = PowerSeriesProfile(ne0 * np.array([1, -1]), modes=[0, 10])
+        Te = PowerSeriesProfile(T0 * np.array([1, -1]), modes=[0, 2])
+        Ti = Te
+        Zeff = 1
+        helicity = (1, 0)
+        pressure = PowerSeriesProfile(
+            2 * ne0 * T0 * elementary_charge * np.array([1, -1, 0, 0, 0, -1, 1]),
+            modes=[0, 2, 4, 6, 8, 10, 12],
+        )
+        B0 = 5.0  # Mean |B|
+        LM_resolution = 8
+
+        current = PowerSeriesProfile([0, -1.2e7], modes=[0, 2], sym=False)
+
+        # Set initial condition:
+        Rmajor = 6.0
+        aminor = 2.0
+        NFP = 1
+        surface = FourierRZToroidalSurface(
+            R_lmn=np.array([Rmajor, aminor]),
+            modes_R=[[0, 0], [1, 0]],
+            Z_lmn=np.array([aminor]),
+            modes_Z=[[-1, 0]],
+            NFP=NFP,
+        )
+
+        eq = Equilibrium(
+            surface=surface,
+            pressure=pressure,
+            current=current,
+            Psi=B0 * np.pi * (aminor**2),
+            NFP=NFP,
+            L=LM_resolution,
+            M=LM_resolution,
+            N=0,
+            L_grid=2 * LM_resolution,
+            M_grid=2 * LM_resolution,
+            N_grid=0,
+            sym=True,
+        )
+        eq.current.change_resolution(16)
+
+        eq.solve(
+            verbose=3,
+            ftol=1e-8,
+            constraints=get_fixed_boundary_constraints(iota=False),
+            optimizer=Optimizer("lsq-exact"),
+            objective=ObjectiveFunction(objectives=ForceBalance()),
+        )
+
+        eq.save("test_bootstrap_consistency_current_initial.h5")
+        # eq = desc.io.load("test_bootstrap_consistency_current_initial.h5")
+
+        # Done establishing the initial condition. Now set up the optimization.
+
+        constraints = (
+            ForceBalance(),
+            FixBoundaryR(),
+            FixBoundaryZ(),
+            FixPressure(),
+            FixCurrent(indices=[0]),
+            FixPsi(),
+        )
+
+        # grid for bootstrap consistency objective:
+        grid = QuadratureGrid(
+            L=16,
+            M=eq.M * 2,
+            N=eq.N * 2,
+            NFP=eq.NFP,
+        )
+        objective = ObjectiveFunction(
+            BootstrapRedlConsistency(
+                grid=grid,
+                helicity=helicity,
+                ne=ne,
+                Te=Te,
+                Ti=Ti,
+                Zeff=Zeff,
+            )
+        )
+        eq, result = eq.optimize(
+            verbose=3,
+            objective=objective,
+            constraints=constraints,
+            optimizer=Optimizer("scipy-trf"),
+            ftol=1e-6,
+            gtol=0,  # Critical to set gtol=0 when optimizing current profile!
+        )
+
+        eq.save("test_bootstrap_consistency_current_final.h5")
+
+        scalar_objective = objective.compute_scalar(objective.x(eq))
+        assert scalar_objective < 3e-5
+        data = eq.compute("<J*B>", grid=grid)
+        data = eq.compute(
+            "<J*B> Redl",
+            grid=grid,
+            ne=ne,
+            Te=Te,
+            Ti=Ti,
+            Zeff=Zeff,
+            helicity=helicity,
+            data=data,
+        )
+        J_dot_B_MHD = compress(grid, data["<J*B>"])
+        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0

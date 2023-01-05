@@ -27,7 +27,7 @@ class ObjectiveFunction(IOAble):
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
-        use less memory. Note that the "blocked" hessian will only be block diagonal.
+        use less memory. Note that the "blocked" Hessian will only be block diagonal.
     verbose : int, optional
         Level of output.
 
@@ -636,6 +636,24 @@ class _Objective(IOAble, ABC):
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
         return tuple(getattr(eq, arg) for arg in self.args)
+
+    def _parse_args(self, *args, **kwargs):
+        assert (len(args) == 0) or (len(kwargs) == 0), (
+            "compute should be called with either positional or keyword arguments,"
+            + " not both"
+        )
+        if len(args):
+            assert len(args) == len(
+                self.args
+            ), f"compute expected {len(self.args)} arguments, got {len(args)}"
+            params = {key: val for key, val in zip(self.args, args)}
+        else:
+            assert all([arg in kwargs for arg in self.args]), (
+                "compute missing required keyword arguments "
+                + f"{set(self.args).difference(kwargs.keys())}"
+            )
+            params = kwargs
+        return params
 
     @property
     def target(self):

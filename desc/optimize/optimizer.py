@@ -33,7 +33,7 @@ class Optimizer(IOAble):
     Offers all the ``scipy.optimize.least_squares`` routines  and several of the most
     useful ``scipy.optimize.minimize`` routines.
     Also offers several custom routines specifically designed for DESC, both scalar and
-    least squares routines with and without jacobian/hessian information.
+    least squares routines with and without Jacobian/Hessian information.
 
     Parameters
     ----------
@@ -188,7 +188,7 @@ class Optimizer(IOAble):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the jacobian or hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix.
         verbose : integer, optional
             * 0  : work silently.
             * 1-2 : display a termination report.

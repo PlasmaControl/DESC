@@ -229,7 +229,7 @@ STATUS_MESSAGES = {
     "gtol": "`gtol` condition satisfied.",
     "max_nfev": "Maximum number of function evaluations has been exceeded.",
     "max_ngev": "Maximum number of gradient evaluations has been exceeded.",
-    "max_nhev": "Maximum number of jacobian/hessian evaluations has been exceeded.",
+    "max_nhev": "Maximum number of Jacobian/Hessian evaluations has been exceeded.",
     "maxiter": "Maximum number of iterations has been exceeded.",
     "pr_loss": "Desired error not necessarily achieved due to precision loss.",
     "nan": "NaN result encountered.",

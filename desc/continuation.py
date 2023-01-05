@@ -69,6 +69,11 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
+    if eq.electron_temperature is not None:
+        raise NotImplementedError(
+            "Continuation method with kinetic profiles is not currently supported"
+        )
+
     timer = Timer()
     timer.start("Total time")
 
@@ -111,22 +116,21 @@ def solve_continuation_automatic(  # noqa: C901
     pres_vac.params *= 0 if pres_step else 1
 
     eqi = Equilibrium(
-        eq.Psi,
-        eq.NFP,
-        Li,
-        Mi,
-        Ni,
-        L_gridi,
-        M_gridi,
-        N_gridi,
-        eq.node_pattern,
-        pres_vac.copy(),
-        copy.copy(eq.iota),  # have to use copy.copy here since may be None
-        copy.copy(eq.current),
-        surf_axisym.copy(),
-        None,
-        eq.sym,
-        spectral_indexing,
+        Psi=eq.Psi,
+        NFP=eq.NFP,
+        L=Li,
+        M=Mi,
+        N=Ni,
+        L_grid=L_gridi,
+        M_grid=M_gridi,
+        N_grid=N_gridi,
+        node_pattern=eq.node_pattern,
+        pressure=pres_vac.copy(),
+        iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
+        current=copy.copy(eq.current),
+        surface=surf_axisym.copy(),
+        sym=eq.sym,
+        spectral_indexing=spectral_indexing,
     )
 
     if not isinstance(optimizer, Optimizer):
@@ -312,6 +316,11 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
+    if not all([eq.electron_temperature is None for eq in eqfam]):
+        raise NotImplementedError(
+            "Continuation method with kinetic profiles is not currently supported"
+        )
+
     timer = Timer()
     timer.start("Total time")
     pert_order, ftol, xtol, gtol, nfev, _ = np.broadcast_arrays(

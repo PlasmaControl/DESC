@@ -510,7 +510,7 @@ class Equilibrium(_Configuration, IOAble):
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value[-1].size:
+            if value[-1].size:
                 setattr(eq, key, value[-1])
 
         if verbose > 0:
@@ -606,7 +606,7 @@ class Equilibrium(_Configuration, IOAble):
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value[-1].size:
+            if value[-1].size:
                 setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")

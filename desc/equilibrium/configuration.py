@@ -361,7 +361,7 @@ class _Configuration(IOAble, ABC):
         def parse_profile(prof, name="", **kwargs):
             if isinstance(prof, Profile):
                 return prof
-            if np.isscalar(prof) or (
+            if isinstance(prof, numbers.Number) or (
                 isinstance(prof, (np.ndarray, jnp.ndarray)) and prof.ndim == 1
             ):
                 return PowerSeriesProfile(params=prof, name=name, **kwargs)

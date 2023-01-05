@@ -1092,10 +1092,8 @@ class TestBootstrapObjectives:
         # Set to True to plot the profiles of <J*B>
         if False:
             grid = LinearGrid(L=eq.L, M=eq.M, N=0, axis=False)
-            data = eq.compute("<J*B>", grid=grid)
             data = eq.compute(
-                "<J*B> Redl",
-                data=data,
+                ["<J*B>", "<J*B> Redl", "rho"],
                 grid=grid,
                 ne=ne,
                 Te=Te,
@@ -1103,7 +1101,6 @@ class TestBootstrapObjectives:
                 Zeff=Zeff,
                 helicity=helicity,
             )
-            data = eq.compute("rho", data=data, grid=grid)
             import matplotlib.pyplot as plt
 
             plt.plot(data["rho"], data["<J*B>"], label="MHD")
@@ -1257,16 +1254,14 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute("<J*B>", grid=grid)
         data = eq.compute(
-            "<J*B> Redl",
+            ["<J*B>", "<J*B> Redl"],
             grid=grid,
             ne=ne,
             Te=Te,
             Ti=Ti,
             Zeff=Zeff,
             helicity=helicity,
-            data=data,
         )
         J_dot_B_MHD = compress(grid, data["<J*B>"])
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
@@ -1327,7 +1322,8 @@ class TestBootstrapObjectives:
             N_grid=0,
             sym=True,
         )
-        eq.current.change_resolution(16)
+        current_L = 16
+        eq.current.change_resolution(current_L)
 
         eq.solve(
             verbose=3,
@@ -1353,7 +1349,7 @@ class TestBootstrapObjectives:
 
         # grid for bootstrap consistency objective:
         grid = QuadratureGrid(
-            L=16,
+            L=current_L * 2,
             M=eq.M * 2,
             N=eq.N * 2,
             NFP=eq.NFP,
@@ -1381,16 +1377,14 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute("<J*B>", grid=grid)
         data = eq.compute(
-            "<J*B> Redl",
+            ["<J*B>", "<J*B> Redl"],
             grid=grid,
             ne=ne,
             Te=Te,
             Ti=Ti,
             Zeff=Zeff,
             helicity=helicity,
-            data=data,
         )
         J_dot_B_MHD = compress(grid, data["<J*B>"])
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])

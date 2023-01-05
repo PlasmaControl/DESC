@@ -778,9 +778,8 @@ class Equilibrium(_Configuration, IOAble):
             return eq
         else:
             for attr in self._io_attrs_:
-                val = getattr(eq, attr[1:])
-                if val.size:
-                    setattr(self, attr[1:], val)
+                val = getattr(eq, attr)
+                setattr(self, attr, val)
             return self
 
     def perturb(

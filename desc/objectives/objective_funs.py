@@ -635,25 +635,45 @@ class _Objective(IOAble, ABC):
         target = (
             self.target / self.normalization if self._normalize_target else self.target
         )
+        x_norm = x = jnp.atleast_1d(x) / self.normalization
         if isinstance(target, tuple) and len(target) == 2:
             return (
                 jnp.where(
-                    (jnp.atleast_1d(x) / self.normalization >= min(target))
-                    and (jnp.atleast_1d(x) / self.normalization <= max(target)),
-                    0,
-                    jnp.atleast_1d(x) / self.normalization - target,
+                    jnp.logical_and(x_norm >= min(target), x_norm <= max(target)),
+                    jnp.zeros_like(x_norm),
+                    jnp.where(
+                        jnp.abs(x_norm - min(target)) < jnp.abs(x_norm - max(target)),
+                        x_norm - min(target),
+                        x_norm - max(target),
+                    ),
                 )
                 * self.weight
             )
         else:
-            return (jnp.atleast_1d(x) / self.normalization - target) * self.weight
+            return (x_norm - target) * self.weight
 
-    def _unshift_unscale(self, x):
+    def _unshift_unscale(self, f):
         """Undo target and weighting."""
         target = (
             self.target / self.normalization if self._normalize_target else self.target
         )
-        return (x / self.weight + target) * self.normalization
+        f_unweighted = f / self.weight
+        # TODO: add test for this
+        if isinstance(target, tuple) and len(target) == 2:
+            return (
+                jnp.where(
+                    f_unweighted == 0,
+                    sum(target) / 2,  # return average of bounds
+                    jnp.where(
+                        f_unweighted < 0,
+                        f_unweighted + min(target),
+                        f_unweighted + max(target),
+                    ),
+                )
+                * self.normalization
+            )
+        else:
+            return (f_unweighted + target) * self.normalization
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""

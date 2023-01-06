@@ -207,7 +207,7 @@ def test_1d_optimization_bounds():
     with pytest.warns(UserWarning):
         eq.optimize(objective, constraints, options=options)
 
-    np.testing.assert_allclose(eq.compute("V")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.6)
 
 
 @pytest.mark.regression

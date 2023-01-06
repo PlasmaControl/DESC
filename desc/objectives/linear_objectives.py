@@ -649,6 +649,11 @@ class FixPressure(_FixProfile):
             Level of output.
 
         """
+        if eq.pressure is None:
+            raise RuntimeError(
+                "Attempting to fix pressure on an equilibrium with no "
+                + "pressure profile assigned"
+            )
         profile = eq.pressure
         if self._normalize:
             scales = compute_scaling_factors(eq)

@@ -274,6 +274,7 @@ class TestProfiles:
         np.testing.assert_allclose(mp(x), 0)
         np.testing.assert_allclose(zp(x), 0)
 
+    @pytest.mark.unit
     def test_solve_with_combined(self):
         """Make sure combined profiles work correctly for solving equilibrium.
 
@@ -329,6 +330,7 @@ class TestProfiles:
         np.testing.assert_allclose(eq1.Z_lmn, eq2.Z_lmn, atol=1e-14)
         np.testing.assert_allclose(eq1.L_lmn, eq2.L_lmn, atol=1e-14)
 
+    @pytest.mark.unit
     def test_kinetic_pressure(self):
         """Test that both ways of computing pressure are equivalent."""
         ne = PowerSeriesProfile(3.0e19 * np.array([1, -1]), modes=[0, 10])

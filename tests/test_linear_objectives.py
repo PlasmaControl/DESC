@@ -6,11 +6,16 @@ import pytest
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.objectives import (
+    FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixPressure,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -180,3 +185,29 @@ def test_build_init():
     A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
+
+
+@pytest.mark.unit
+def test_kinetic_constraints():
+    """Make sure errors are raised when trying to constrain nonexistent profiles."""
+    eqp = Equilibrium(L=3, M=3, N=3, pressure=np.array([1, 0, -1]))
+    eqk = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        electron_temperature=np.array([1, 0, -1]),
+        electron_density=np.array([2, 0, -2]),
+    )
+    pcon = (FixPressure(),)
+    kcon = (
+        FixAtomicNumber(),
+        FixElectronDensity(),
+        FixElectronTemperature(),
+        FixIonTemperature(),
+    )
+    for con in pcon:
+        with pytest.raises(RuntimeError):
+            con.build(eqk)
+    for con in kcon:
+        with pytest.raises(RuntimeError):
+            con.build(eqp)

@@ -258,7 +258,10 @@ Name,Label,Units,Description,Module
 ``current_r``,:math:`\frac{2\pi}{\mu_0} \partial_{\rho} I`,Amperes,"Net toroidal current enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._profiles``
 ``B_theta_mn``,":math:`B_{\theta, m, n}`",Tesla * meters,Fourier coefficients for covariant poloidal component of magnetic field,``desc.compute._qs``
 ``B_zeta_mn``,":math:`B_{\zeta, m, n}`",Tesla * meters,Fourier coefficients for covariant toroidal component of magnetic field,``desc.compute._qs``
-``w_mn``,":math:`w_{m,n}`",Tesla * meters,RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``
+``w_Boozer_mn``,":math:`w_{Boozer,m,n}`",Tesla * meters,RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``
+``w_Boozer``,:math:`w_{Boozer}`,Tesla * meters,Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``
+``w_Boozer_t``,:math:`\partial_{\theta} w_{Boozer}`,Tesla * meters,"Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates', poloidal derivative",``desc.compute._qs``
+``w_Boozer_z``,:math:`\partial_{\zeta} w_{Boozer}`,Tesla * meters,"Inverse Fourier transform of RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates', toroidal derivative",``desc.compute._qs``
 ``nu``,:math:`\nu = \zeta_{B} - \zeta`,radians,Boozer toroidal stream function,``desc.compute._qs``
 ``nu_t``,:math:`\partial_{\theta} \nu`,radians,"Boozer toroidal stream function, derivative wrt poloidal angle",``desc.compute._qs``
 ``nu_z``,:math:`\partial_{\zeta} \nu`,radians,"Boozer toroidal stream function, derivative wrt toroidal angle",``desc.compute._qs``

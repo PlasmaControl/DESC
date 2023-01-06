@@ -327,7 +327,7 @@ def _p_r(params, transforms, profiles, data, **kwargs):
             + data["ne"] * data["Te_r"]
             + data["Ti_r"] * data["ne"] / data["Zeff"]
             + data["Ti"] * data["ne_r"] / data["Zeff"]
-            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff_r"] ** 2
+            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff"] ** 2
         )
     return data
 

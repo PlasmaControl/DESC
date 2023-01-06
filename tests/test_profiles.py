@@ -373,6 +373,13 @@ class TestProfiles:
 
         assert np.all(np.isnan(data1["ne"]))
         assert np.all(np.isnan(data1["Te"]))
+        assert np.all(np.isnan(data1["Ti"]))
+        assert np.all(np.isnan(data1["Zeff"]))
+        assert np.all(np.isnan(data1["ne_r"]))
+        assert np.all(np.isnan(data1["Te_r"]))
+        assert np.all(np.isnan(data1["Ti_r"]))
+        assert np.all(np.isnan(data1["Zeff_r"]))
         assert np.all(data2["Te"] == data2["Ti"])
+        assert np.all(data2["Te_r"] == data2["Ti_r"])
         np.testing.assert_allclose(data1["p"], data2["p"])
         np.testing.assert_allclose(data1["p_r"], data2["p_r"])

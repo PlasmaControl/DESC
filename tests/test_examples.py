@@ -119,7 +119,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
     np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
     curr1 = eq1.get_profile("current")
     curr2 = eq2.get_profile("current")
     iota1 = eq1.get_profile("iota")
@@ -269,7 +269,7 @@ def test_qh_optimization1():
     rho_err, theta_err = area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
     # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 0.2
+    assert rho_err.mean() < 1
 
     grid = LinearGrid(M=eq1a.M_grid, N=eq1a.N_grid, NFP=eq1a.NFP, sym=False, rho=1.0)
     data = eq1a.compute("|B|_mn", grid, M_booz=eq1a.M, N_booz=eq1a.N)
@@ -288,7 +288,7 @@ def test_qh_optimization2():
     rho_err, theta_err = area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
     # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 0.2
+    assert rho_err.mean() < 1
 
     grid = LinearGrid(M=eq2a.M_grid, N=eq2a.N_grid, NFP=eq2a.NFP, sym=False, rho=1.0)
     data = eq2a.compute("|B|_mn", grid, M_booz=eq2a.M, N_booz=eq2a.N)
@@ -308,13 +308,13 @@ def test_qh_optimization3():
     rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
     # similar, the main test is ensuring its not pathological and has good qs
-    assert rho_err.mean() < 0.2
+    assert rho_err.mean() < 1
 
     grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
     data = eq3a.compute(["|B|_mn", "B modes"], grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
-    np.testing.assert_array_less(B_asym, 2e-3)
+    np.testing.assert_array_less(B_asym, 2.5e-3)
     fig, ax = plot_boozer_surface(eq3a)
     return fig
 

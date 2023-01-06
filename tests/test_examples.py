@@ -261,7 +261,6 @@ def run_qh_step(n, eq):
 
 @pytest.mark.regression
 @pytest.mark.solve
-@pytest.mark.xfail
 def test_qh_optimization1():
     """Tests precise QH optimization, step 1."""
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
@@ -281,7 +280,6 @@ def test_qh_optimization1():
 
 @pytest.mark.regression
 @pytest.mark.solve
-@pytest.mark.xfail
 def test_qh_optimization2():
     """Tests precise QH optimization, step 2."""
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
@@ -302,7 +300,6 @@ def test_qh_optimization2():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)
-@pytest.mark.xfail
 def test_qh_optimization3():
     """Tests precise QH optimization, step 3."""
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")

@@ -341,6 +341,7 @@ class QuasisymmetryTwoTerm(_Objective):
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
+            helicity=self.helicity,
         )
         f = data["f_C"] * self.grid.weights
 

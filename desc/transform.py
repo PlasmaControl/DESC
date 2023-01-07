@@ -134,7 +134,9 @@ class Transform(IOAble):
                     "red",
                 )
             )
-
+        # always include the 0,0,0 derivative
+        if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
+            derivatives = np.concatenate([derivatives, np.array([[0, 0, 0]])])
         return derivatives
 
     def _sort_derivatives(self):
@@ -148,7 +150,8 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for fft method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "fft"
+            self._method = "direct1"
+            return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
@@ -286,7 +289,7 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for direct2 method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "direct2"
+            self._method = "direct1"
             return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)

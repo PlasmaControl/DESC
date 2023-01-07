@@ -51,6 +51,12 @@ class FixBoundaryR(_Objective):
     name : str
         Name of the objective function.
 
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
     """
 
     _scalar = False
@@ -75,6 +81,7 @@ class FixBoundaryR(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
+        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -83,8 +90,6 @@ class FixBoundaryR(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
-        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -116,6 +121,11 @@ class FixBoundaryR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.surface.R_basis.modes
+            # and eq.surface.R_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.surface.R_basis.modes[idx, :])
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -126,6 +136,15 @@ class FixBoundaryR(_Objective):
                 )
 
         self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
 
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -142,14 +161,8 @@ class FixBoundaryR(_Objective):
         else:  # Rb_lmn -> Rb optimization space
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
-
         # use surface parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = eq.surface.R_lmn[idx]
 
         if self._normalize:
@@ -203,6 +216,12 @@ class FixBoundaryZ(_Objective):
     name : str
         Name of the objective function.
 
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
     """
 
     _scalar = False
@@ -227,6 +246,7 @@ class FixBoundaryZ(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
+        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -235,8 +255,6 @@ class FixBoundaryZ(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
-        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -268,6 +286,11 @@ class FixBoundaryZ(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.surface.Z_basis.modes
+            # and eq.surface.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.surface.Z_basis.modes[idx, :])
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -278,6 +301,15 @@ class FixBoundaryZ(_Objective):
                 )
 
         self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
 
         if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
@@ -293,14 +325,8 @@ class FixBoundaryZ(_Objective):
         else:  # Zb_lmn -> Zb optimization space
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
-
         # use surface parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = eq.surface.Z_lmn[idx]
 
         if self._normalize:
@@ -516,16 +542,11 @@ class FixLambdaZero(_Objective):
             Level of output.
 
         """
-        modes = eq.L_basis.modes
         idx = np.arange(eq.L_basis.num_modes)
         modes_idx = idx
         self._idx = idx
 
         self._dim_f = modes_idx.size
-        # use given targets and weights if specified
-
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
 
         # use axis parameters as target if needed
         self.target = np.zeros_like(modes_idx)
@@ -587,11 +608,20 @@ class FixAxisR(_Objective):
         target=None,
         weight=1,
         modes=True,
+        normalize=False,
+        normalize_target=False,
         name="axis R",
     ):
 
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
         self._print_value_fmt = "R axis error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -626,6 +656,11 @@ class FixAxisR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.axis.R_basis.modes
+            # and eq.axis.R_n,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.axis.R_basis.modes[idx, :])
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -634,10 +669,17 @@ class FixAxisR(_Objective):
                         "yellow",
                     )
                 )
-
-        ns = np.unique(eq.R_basis.modes[:, 2])
-        self._A = np.zeros((len(ns), R_basis.num_modes))
-        self._dim_f = len(ns)
+        # hm, if we ...
+        # TODO: check for all bdryR things if work when False is passed in
+        # bc empty array indexed will lead to an error
+        if modes.size > 0:
+            ns = modes[:, 2]
+        else:
+            ns = np.array([[]], dtype=int)
+        # we need A to be M x N where N is number of modes in R_basis (done)
+        # and M is the number of modes in the axis (that we are fixing)
+        self._A = np.zeros((ns.size, R_basis.num_modes))
+        self._dim_f = ns.size
 
         for i, (l, m, n) in enumerate(R_basis.modes):
             if m != 0:
@@ -649,18 +691,21 @@ class FixAxisR(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
-
         # use axis parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = np.zeros((len(ns),))
             for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Rn
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R axis modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target axis"
+                )
+            self.target = self.target[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -714,10 +759,19 @@ class FixAxisZ(_Objective):
         weight=1,
         modes=True,
         name="axis Z",
+        normalize=False,
+        normalize_target=False,
     ):
 
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
         self._print_value_fmt = "Z axis error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -752,6 +806,11 @@ class FixAxisZ(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
+            # rearrange modes to match order of eq.axis.Z_basis.modes
+            # and eq.axis.Z_n,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.axis.Z_basis.modes[idx, :])
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -761,9 +820,12 @@ class FixAxisZ(_Objective):
                     )
                 )
 
-        ns = np.unique(eq.Z_basis.modes[:, 2])
-        self._A = np.zeros((len(ns), Z_basis.num_modes))
-        self._dim_f = len(ns)
+        if modes.size > 0:
+            ns = modes[:, 2]
+        else:
+            ns = np.array([[]], dtype=int)
+        self._A = np.zeros((ns.size, Z_basis.num_modes))
+        self._dim_f = ns.size
 
         for i, (l, m, n) in enumerate(Z_basis.modes):
             if m != 0:
@@ -775,17 +837,21 @@ class FixAxisZ(_Objective):
                 j = np.argwhere(n == ns)
                 self._A[j, i] = -1
 
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
         # use axis parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = np.zeros((len(ns),))
             for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Zn
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z axis modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target axis"
+                )
+            self.target = self.target[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -807,6 +873,7 @@ class FixAxisZ(_Objective):
         return self._shift_scale(f)
 
 
+# TODO: add tests that build with FixModeR, similar to the target pass tests
 class FixModeR(_Objective):
     """Fixes Fourier-Zernike R coefficients.
 
@@ -840,10 +907,19 @@ class FixModeR(_Objective):
         weight=1,
         modes=False,
         name="Fix Mode R",
+        normalize=False,
+        normalize_target=False,
     ):
 
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
         self._print_value_fmt = "Fixed-R modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -890,15 +966,19 @@ class FixModeR(_Objective):
                 )
 
         self._dim_f = modes_idx.size
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
 
         # use axis parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = eq.R_lmn[self._idx]
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R fixed modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self.target[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -925,6 +1005,7 @@ class FixModeR(_Objective):
         return "R_lmn"
 
 
+# TODO: add test for this class
 class FixModeZ(_Objective):
     """Fixes Fourier-Zernike Z coefficients.
 
@@ -958,10 +1039,19 @@ class FixModeZ(_Objective):
         weight=1,
         modes=False,
         name="Fix Mode Z",
+        normalize=False,
+        normalize_target=False,
     ):
 
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
         self._print_value_fmt = "Fixed-Z modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1008,15 +1098,19 @@ class FixModeZ(_Objective):
                 )
 
         self._dim_f = modes_idx.size
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight[modes_idx]
 
         # use axis parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = eq.Z_lmn[self._idx]
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z fixed modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self.target[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1043,6 +1137,7 @@ class FixModeZ(_Objective):
         return "Z_lmn"
 
 
+# TODO: add test for this class
 class FixSumModesR(_Objective):
     """Fixes a linear sum of Fourier-Zernike R coefficients.
 
@@ -1084,11 +1179,20 @@ class FixSumModesR(_Objective):
         sum_weights=None,
         modes=False,
         name="Fix Sum Modes R",
+        normalize=False,
+        normalize_target=False,
     ):
 
         self._modes = modes
         self._sum_weights = sum_weights
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
         self._print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1124,6 +1228,12 @@ class FixSumModesR(_Objective):
                 return_indices=True,
             )
             self._idx = idx
+            # rearrange modes and weights to match order of eq.R_basis.modes
+            # and eq.R_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.R_basis.modes[idx, :])
+            self._sum_weights = self._sum_weights[idx]
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -1143,15 +1253,19 @@ class FixSumModesR(_Objective):
         for i, (l, m, n) in enumerate(modes):
             j = eq.R_basis.get_idx(L=l, M=m, N=n)
             self._A[0, j] = sum_weights[i]
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target  # target is a sum, so a single number
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight
 
         # use current sum as target if needed
-        if None in self.target:
+        if self.target is None:
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R modes sum without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self.target[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
         ################################################
@@ -1179,6 +1293,7 @@ class FixSumModesR(_Objective):
         return "R_lmn"
 
 
+# TODO: add test for this class
 class FixSumModesZ(_Objective):
     """Fixes a linear sum of Fourier-Zernike Z coefficients.
 
@@ -1220,11 +1335,20 @@ class FixSumModesZ(_Objective):
         sum_weights=None,
         modes=False,
         name="Fix Sum Modes Z",
+        normalize=False,
+        normalize_target=False,
     ):
 
         self._modes = modes
         self._sum_weights = sum_weights
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
         self._print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1260,6 +1384,12 @@ class FixSumModesZ(_Objective):
                 return_indices=True,
             )
             self._idx = idx
+            # rearrange modes and weights to match order of eq.Z_basis.modes
+            # and eq.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
+            self._sum_weights = self._sum_weights[idx]
+
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -1280,16 +1410,19 @@ class FixSumModesZ(_Objective):
         for i, (l, m, n) in enumerate(modes):
             j = eq.Z_basis.get_idx(L=l, M=m, N=n)
             self._A[0, j] = sum_weights[i]
-        # use given targets and weights if specified
-        if self.target.size == modes.shape[0] and None not in self.target:
-            self.target = self._target  # target is a sum, so a single number
-        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
-            self.weight = self._weight
 
         # use current sum as target if needed
-        if None in self.target:
+        if self.target is None:
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
-
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z modes sum without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self.target[modes_idx]
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
         ################################################
 
@@ -1399,24 +1532,14 @@ class _FixProfile(_Objective, ABC):
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
-            indices = np.array([[]], dtype=int)
-            idx = self._idx
         elif self._indices is True:  # all indices of Profile.params
             self._idx = np.arange(np.size(self._profile.params))
-            indices = self._idx
-            idx = self._idx
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
-            idx = self._idx
 
         self._dim_f = self._idx.size
-        # use given targets and weights if specified
-        if self.target.size == indices.shape[0]:
-            self.target = self._target[idx]
-        if self.weight.size == indices.shape[0]:
-            self.weight = self._weight[idx]
         # use profile parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
+        if self.target is None:
             self.target = self._profile.params[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
@@ -1802,7 +1925,7 @@ class FixPsi(_Objective):
         """
         self._dim_f = 1
 
-        if None in self.target:
+        if self.target is None:
             self.target = eq.Psi
 
         if self._normalize:

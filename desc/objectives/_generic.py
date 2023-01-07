@@ -1,12 +1,8 @@
 """Generic objectives that don't belong anywhere else."""
 
-import desc.compute as compute_funs
 from desc.backend import jnp
-from desc.compute import (
-    compute_boozer_magnetic_field,
-    compute_rotational_transform,
-    data_index,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import data_index
 from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -90,20 +86,24 @@ class GenericObjective(_Objective):
         if self.grid is None:
             self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-        self._dim_f = self.grid.num_nodes
-        self.fun = getattr(compute_funs, data_index[self.f]["fun"])
+        if data_index[self.f]["dim"] == 0:
+            self._dim_f = 1
+            self._scalar = True
+        else:
+            self._dim_f = self.grid.num_nodes * data_index[self.f]["dim"]
+            self._scalar = False
         self._args = get_params(self.f)
         self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, **params):
+    def compute(self, *args, **kwargs):
         """Compute the quantity.
 
         Parameters
         ----------
-        args : list of ndarray
-            Any of the arguments given in `arg_order`.
+        args : ndarray
+            Parameters given by self.args.
 
         Returns
         -------
@@ -111,8 +111,16 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        data = self.fun(params, self._transforms, self._profiles)
-        f = data[self.f] * self.grid.weights
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self.f,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        f = data[self.f]
+        if not self.scalar:
+            f = (f.T * self.grid.weights).flatten()
         return self._shift_scale(f)
 
 
@@ -193,14 +201,15 @@ class ToroidalCurrent(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["current"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -212,7 +221,7 @@ class ToroidalCurrent(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute toroidal current.
 
         Parameters
@@ -236,18 +245,12 @@ class ToroidalCurrent(_Objective):
             Toroidal current (A) through specified surfaces.
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
-        data = compute_boozer_magnetic_field(
-            params,
-            self._transforms,
-            self._profiles,
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         I = compress(self.grid, data["current"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
@@ -331,14 +334,15 @@ class RotationalTransform(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["iota"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -346,7 +350,7 @@ class RotationalTransform(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute rotational transform profile errors.
 
         Parameters
@@ -369,18 +373,12 @@ class RotationalTransform(_Objective):
         iota : ndarray
             rotational transform on specified flux surfaces.
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
-        data = compute_rotational_transform(
-            params,
-            self._transforms,
-            self._profiles,
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         iota = compress(self.grid, data["iota"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")

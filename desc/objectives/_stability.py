@@ -3,12 +3,8 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import (
-    compute_magnetic_well,
-    compute_mercier_stability,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -100,14 +96,15 @@ class MercierStability(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["D_Mercier"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -119,7 +116,7 @@ class MercierStability(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute the Mercier stability criterion.
 
         Parameters
@@ -145,23 +142,43 @@ class MercierStability(_Objective):
             Mercier stability criterion.
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
-        data = compute_mercier_stability(
-            params,
-            self._transforms,
-            self._profiles,
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = compress(self.grid, data["D_Mercier"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + "(normalized)"
+            )
 
 
 class MagneticWell(_Objective):
@@ -248,14 +265,15 @@ class MagneticWell(_Objective):
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["magnetic well"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -263,7 +281,7 @@ class MagneticWell(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute a magnetic well parameter.
 
         Parameters
@@ -289,20 +307,23 @@ class MagneticWell(_Objective):
             Magnetic well parameter.
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-            "L_lmn": L_lmn,
-            "p_l": p_l,
-            "i_l": i_l,
-            "c_l": c_l,
-            "Psi": Psi,
-        }
-        data = compute_magnetic_well(
-            params,
-            self._transforms,
-            self._profiles,
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
         f = compress(self.grid, data["magnetic well"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return self._shift_scale(f) * w
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        x = self._unshift_unscale(
+            self.compute(*args, **kwargs)
+            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        )
+        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)

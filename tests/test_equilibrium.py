@@ -83,7 +83,7 @@ def test_compute_flux_coords(DSHAPE_current):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("R", "Z", grid=Grid(nodes, sort=False))
+    coords = eq.compute(["R", "Z"], grid=Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
     flux_coords = eq.compute_flux_coords(real_coords)

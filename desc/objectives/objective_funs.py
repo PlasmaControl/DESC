@@ -447,12 +447,12 @@ class _Objective(IOAble, ABC):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray
+    target : float, ndarray, optional
         Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
+        If a tuple of two targets are given, these are used as lower and uppder bounds,
+        respectively. Objective values between the bounds will have 0 cost.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
     name : str
         Name of the objective function.
 
@@ -690,8 +690,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def target(self):
-        """float: Target value(s) of the objective."""
-        # TODO: update documentation
+        """target : float: Target value(s) of the objective."""
         return self._target
 
     @target.setter

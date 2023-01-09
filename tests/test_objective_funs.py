@@ -272,11 +272,11 @@ def test_target_bounds():
     """Test that tuple targets are in the format (lower bound, upper bound)."""
     eq = Equilibrium()
     with pytest.raises(AssertionError):
-        obj = GenericObjective("R", target=(1,), eq=eq)
+        _ = GenericObjective("R", target=(1,), eq=eq)
     with pytest.raises(AssertionError):
-        obj = GenericObjective("R", target=(1, 2, 3), eq=eq)
+        _ = GenericObjective("R", target=(1, 2, 3), eq=eq)
     with pytest.raises(ValueError):
-        obj = GenericObjective("R", target=(1, -1), eq=eq)
+        _ = GenericObjective("R", target=(1, -1), eq=eq)
 
 
 @pytest.mark.unit

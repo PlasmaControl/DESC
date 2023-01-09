@@ -697,7 +697,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def target(self):
-        """target : float: Target value(s) of the objective."""
+        """float: Target value(s) of the objective."""
         return self._target
 
     @target.setter

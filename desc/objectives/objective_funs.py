@@ -635,7 +635,7 @@ class _Objective(IOAble, ABC):
         target = (
             self.target / self.normalization if self._normalize_target else self.target
         )
-        x_norm = x = jnp.atleast_1d(x) / self.normalization
+        x_norm = jnp.atleast_1d(x) / self.normalization
         if isinstance(target, tuple) and len(target) == 2:
             return (
                 jnp.where(
@@ -658,7 +658,6 @@ class _Objective(IOAble, ABC):
             self.target / self.normalization if self._normalize_target else self.target
         )
         f_unweighted = f / self.weight
-        # TODO: add test for this
         if isinstance(target, tuple) and len(target) == 2:
             return (
                 jnp.where(

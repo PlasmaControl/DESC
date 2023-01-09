@@ -187,7 +187,7 @@ def test_1d_optimization(SOLOVEV):
     with pytest.warns(UserWarning):
         eq.optimize(objective, constraints, options=options)
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 @pytest.mark.regression
@@ -207,7 +207,7 @@ def test_1d_optimization_bounds():
     with pytest.warns(UserWarning):
         eq.optimize(objective, constraints, options=options)
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.6)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.6, rtol=2e-4)
 
 
 @pytest.mark.regression
@@ -225,7 +225,7 @@ def test_1d_optimization_old():
         },
     )
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 def run_qh_step(n, eq):

@@ -204,26 +204,38 @@ def factorize_linear_constraints(constraints, objective_args):
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
+    # check that all constraints are actually satisfiable
+    xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
+    for con in constraints:
+        arg = con.args[0]
+        if arg not in objective_args:
+            continue
+        res = con.compute(**xp_dict)
+        if not np.allclose(res, 0):
+            raise ValueError(
+                f"Incompatible constraints detected, cannot satisfy constraint {con}"
+            )
+
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
 
 
 def align_jacobian(Fx, objective_f, objective_g):
-    """Pad jacobian with zeros in the right places so that the arguments line up.
+    """Pad Jacobian with zeros in the right places so that the arguments line up.
 
     Parameters
     ----------
     Fx : ndarray
-        jacobian wrt args the objective_f takes
+        Jacobian wrt args the objective_f takes
     objective_f : ObjectiveFunction
         Objective corresponding to Fx
     objective_g : ObjectiveFunction
-        Other objective we want to align jacobian against
+        Other objective we want to align Jacobian against
 
     Returns
     -------
     A : ndarray
         Jacobian matrix, reordered and padded so that it broadcasts
-        correctly against the other jacobian
+        correctly against the other Jacobian
     """
     x_idx = objective_f.x_idx
     args = objective_f.args

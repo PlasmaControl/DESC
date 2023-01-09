@@ -1,8 +1,8 @@
 """Objectives for targeting geometrical quantities."""
 
-from desc.compute import compute_geometry, data_index
+from desc.compute import compute as compute_fun
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -82,18 +82,16 @@ class AspectRatio(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["R0/a"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -101,7 +99,7 @@ class AspectRatio(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute aspect ratio.
 
         Parameters
@@ -117,7 +115,13 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
         return self._shift_scale(data["R0/a"])
 
 
@@ -194,18 +198,16 @@ class Elongation(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["a_major/a_minor"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -213,7 +215,7 @@ class Elongation(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute elongation.
 
         Parameters
@@ -229,8 +231,14 @@ class Elongation(_Objective):
             Elongation, dimensionless.
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
-        return self._shift_scale(data["a/b"])
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        return self._shift_scale(data["a_major/a_minor"])
 
 
 class Volume(_Objective):
@@ -304,18 +312,16 @@ class Volume(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["V"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -327,7 +333,7 @@ class Volume(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute plasma volume.
 
         Parameters
@@ -343,5 +349,11 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
         return self._shift_scale(data["V"])

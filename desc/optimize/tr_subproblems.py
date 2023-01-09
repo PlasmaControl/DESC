@@ -75,7 +75,7 @@ def solve_trust_region_2d_subspace(g, H, trust_radius, initial_alpha=None, **kwa
     g : ndarray
         gradient of objective function
     H : ndarray
-        hessian of objective function
+        Hessian of objective function
     trust_radius : float
         We are allowed to wander only this far away from the origin.
     initial_alpha : float
@@ -251,7 +251,7 @@ def trust_region_step_exact_cho(
     g : ndarray
         gradient vector
     B : ndarray
-        Hessian or approximate hessian
+        Hessian or approximate Hessian
     trust_radius : float
         Radius of a trust region.
     initial_alpha : float, optional

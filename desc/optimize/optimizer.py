@@ -3,7 +3,6 @@
 import warnings
 
 import numpy as np
-import scipy.optimize
 from termcolor import colored
 
 from desc.backend import jnp
@@ -21,15 +20,11 @@ from desc.objectives import (
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
+from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
-from .utils import (
-    check_termination,
-    find_matching_inds,
-    print_header_nonlinear,
-    print_iteration_nonlinear,
-)
+from .utils import find_matching_inds
 
 
 class Optimizer(IOAble):
@@ -38,7 +33,7 @@ class Optimizer(IOAble):
     Offers all the ``scipy.optimize.least_squares`` routines  and several of the most
     useful ``scipy.optimize.minimize`` routines.
     Also offers several custom routines specifically designed for DESC, both scalar and
-    least squares routines with and without jacobian/hessian information.
+    least squares routines with and without Jacobian/Hessian information.
 
     Parameters
     ----------
@@ -147,15 +142,6 @@ class Optimizer(IOAble):
             )
         self._method = method
 
-    def _get_default_tols(self, ftol, xtol, gtol):
-        if xtol is None:
-            xtol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-4
-        if ftol is None:
-            ftol = 1e-6 if self.method in Optimizer._desc_stochastic_methods else 1e-2
-        if gtol is None:
-            gtol = 1e-6
-        return ftol, xtol, gtol
-
     # TODO: add copy argument and return the equilibrium?
     def optimize(  # noqa: C901 - FIXME: simplify this
         self,
@@ -202,13 +188,13 @@ class Optimizer(IOAble):
             be achieved by setting ``x_scale`` such that a step of a given size
             along any of the scaled variables has a similar effect on the cost
             function. If set to ``'auto'``, the scale is iteratively updated using the
-            inverse norms of the columns of the jacobian or hessian matrix.
+            inverse norms of the columns of the Jacobian or Hessian matrix.
         verbose : integer, optional
             * 0  : work silently.
             * 1-2 : display a termination report.
             * 3 : display progress during iterations
         maxiter : int, optional
-            Maximum number of iterations. Defaults to size(x)*100.
+            Maximum number of iterations. Defaults to 100.
         options : dict, optional
             Dictionary of optional keyword arguments to override default solver
             settings. See the code for more details.
@@ -227,7 +213,6 @@ class Optimizer(IOAble):
         timer = Timer()
         # scipy optimizers expect disp={0,1,2} while we use verbose={0,1,2,3}
         disp = verbose - 1 if verbose > 1 else verbose
-        ftol, xtol, gtol = self._get_default_tols(ftol, xtol, gtol)
 
         if (
             self.method in Optimizer._desc_methods
@@ -237,53 +222,15 @@ class Optimizer(IOAble):
                 options.setdefault("initial_trust_radius", 0.5)
                 options.setdefault("max_trust_radius", 1.0)
 
-        if not isinstance(constraints, tuple):
-            constraints = (constraints,)
-        linear_constraints = tuple(
-            constraint for constraint in constraints if constraint.linear
-        )
-        nonlinear_constraints = tuple(
-            constraint for constraint in constraints if not constraint.linear
-        )
-        if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
-            isinstance(lc, FixIota) for lc in linear_constraints
-        ):
-            raise ValueError(
-                "Toroidal current and rotational transform cannot be "
-                + "constrained simultaneously."
-            )
-
+        linear_constraints, nonlinear_constraints = _parse_constraints(constraints)
         # wrap nonlinear constraints if necessary
         wrapped = False
         if len(nonlinear_constraints) > 0 and (
             self.method not in Optimizer._constrained_methods
         ):
             wrapped = True
-            for constraint in nonlinear_constraints:
-                if not isinstance(
-                    constraint,
-                    (
-                        ForceBalance,
-                        RadialForceBalance,
-                        HelicalForceBalance,
-                        CurrentDensity,
-                    ),
-                ):
-                    raise ValueError(
-                        "optimizer method {} ".format(self.method)
-                        + "cannot handle general nonlinear constraint {}.".format(
-                            constraint
-                        )
-                    )
-            perturb_options = options.pop("perturb_options", {})
-            perturb_options.setdefault("verbose", 0)
-            solve_options = options.pop("solve_options", {})
-            solve_options.setdefault("verbose", 0)
-            objective = WrappedEquilibriumObjective(
-                objective,
-                eq_objective=ObjectiveFunction(nonlinear_constraints),
-                perturb_options=perturb_options,
-                solve_options=solve_options,
+            objective = _wrap_nonlinear_constraints(
+                objective, nonlinear_constraints, self.method, options
             )
 
         if not objective.built:
@@ -308,14 +255,29 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Factorizing linear constraints")
         timer.start("linear constraint factorize")
-        _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            linear_constraints, objective.args
-        )
+        (
+            compute_wrapped,
+            compute_scalar_wrapped,
+            grad_wrapped,
+            hess_wrapped,
+            jac_wrapped,
+            project,
+            recover,
+        ) = _wrap_objective_with_constraints(objective, linear_constraints, self.method)
         timer.stop("linear constraint factorize")
         if verbose > 1:
             timer.disp("linear constraint factorize")
 
         x0_reduced = project(objective.x(eq))
+
+        stoptol = _get_default_tols(
+            self.method,
+            ftol,
+            xtol,
+            gtol,
+            maxiter,
+            options,
+        )
 
         if verbose > 0:
             print("Number of parameters: {}".format(x0_reduced.size))
@@ -325,142 +287,41 @@ class Optimizer(IOAble):
             print("Starting optimization")
         timer.start("Solution time")
 
-        def compute_wrapped(x_reduced):
-            x = recover(x_reduced)
-            f = objective.compute(x)
-            if self.method in Optimizer._scalar_methods:
-                return f.squeeze()
-            else:
-                return jnp.atleast_1d(f)
-
-        def compute_scalar_wrapped(x_reduced):
-            x = recover(x_reduced)
-            return objective.compute_scalar(x)
-
-        def grad_wrapped(x_reduced):
-            x = recover(x_reduced)
-            df = objective.grad(x)
-            return df[unfixed_idx] @ Z
-
-        def hess_wrapped(x_reduced):
-            x = recover(x_reduced)
-            df = objective.hess(x)
-            return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
-
-        def jac_wrapped(x_reduced):
-            x = recover(x_reduced)
-            df = objective.jac(x)
-            return df[:, unfixed_idx] @ Z
-
         if self.method in Optimizer._scipy_scalar_methods:
 
-            allx = []
-            allf = []
-            msg = [""]
-
-            def callback(x_reduced):
-                x = recover(x_reduced)
-                if len(allx) > 0:
-                    dx = allx[-1] - x_reduced
-                    dx_norm = jnp.linalg.norm(dx)
-                    if dx_norm > 0:
-                        fx = objective.compute_scalar(x)
-                        df = allf[-1] - fx
-                        allx.append(x_reduced)
-                        allf.append(fx)
-                        x_norm = jnp.linalg.norm(x_reduced)
-                        if verbose > 2:
-                            print_iteration_nonlinear(
-                                len(allx), None, fx, df, dx_norm, None
-                            )
-                        success, message = check_termination(
-                            df,
-                            fx,
-                            dx_norm,
-                            x_norm,
-                            jnp.inf,
-                            1,
-                            ftol,
-                            xtol,
-                            0,
-                            len(allx),
-                            maxiter,
-                            0,
-                            jnp.inf,
-                            0,
-                            jnp.inf,
-                            0,
-                            jnp.inf,
-                        )
-                        if success:
-                            msg[0] = message
-                            raise StopIteration
-                else:
-                    dx = None
-                    df = None
-                    fx = objective.compute_scalar(x)
-                    allx.append(x_reduced)
-                    allf.append(fx)
-                    dx_norm = None
-                    x_norm = jnp.linalg.norm(x_reduced)
-                    if verbose > 2:
-                        print_iteration_nonlinear(
-                            len(allx), None, fx, df, dx_norm, None
-                        )
-
-            print_header_nonlinear()
-            try:
-                result = scipy.optimize.minimize(
-                    compute_scalar_wrapped,
-                    x0=x0_reduced,
-                    args=(),
-                    method=self.method[len("scipy-") :],
-                    jac=grad_wrapped,
-                    hess=hess_wrapped,
-                    tol=gtol,
-                    callback=callback,
-                    options={"maxiter": maxiter, "disp": disp, **options},
+            method = self.method[len("scipy-") :]
+            x_scale = 1 if x_scale == "auto" else x_scale
+            if isinstance(x_scale, str):
+                raise ValueError(
+                    f"Method {self.method} does not support x_scale type {x_scale}"
                 )
-                result["allx"] = allx
-            except StopIteration:
-                result = {
-                    "x": allx[-1],
-                    "allx": allx,
-                    "fun": allf[-1],
-                    "message": msg[0],
-                    "nit": len(allx),
-                    "success": True,
-                }
-                if verbose > 1:
-                    print(msg[0])
-                    print(
-                        "         Current function value: {:.3e}".format(result["fun"])
-                    )
-                    print("         Iterations: {:d}".format(result["nit"]))
+            result = _optimize_scipy_minimize(
+                compute_scalar_wrapped,
+                grad_wrapped,
+                hess_wrapped,
+                x0_reduced,
+                method,
+                x_scale,
+                verbose,
+                stoptol,
+                options,
+            )
 
         elif self.method in Optimizer._scipy_least_squares_methods:
 
-            allx = []
             x_scale = "jac" if x_scale == "auto" else x_scale
+            method = self.method[len("scipy-") :]
 
-            def jac(x_reduced):
-                allx.append(x_reduced)
-                return jac_wrapped(x_reduced)
-
-            result = scipy.optimize.least_squares(
+            result = _optimize_scipy_least_squares(
                 compute_wrapped,
-                x0=x0_reduced,
-                args=(),
-                jac=jac,
-                method=self.method[len("scipy-") :],
-                x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
-                max_nfev=maxiter,
-                verbose=disp,
+                jac_wrapped,
+                x0_reduced,
+                method,
+                x_scale,
+                verbose,
+                stoptol,
+                options,
             )
-            result["allx"] = allx
 
         elif self.method in Optimizer._desc_scalar_methods:
 
@@ -482,11 +343,11 @@ class Optimizer(IOAble):
                 args=(),
                 method=method,
                 x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
                 verbose=disp,
-                maxiter=maxiter,
                 callback=None,
                 options=options,
             )
@@ -499,11 +360,11 @@ class Optimizer(IOAble):
                 grad=grad_wrapped,
                 args=(),
                 method=self.method,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
                 verbose=disp,
-                maxiter=maxiter,
                 callback=None,
                 options=options,
             )
@@ -516,11 +377,11 @@ class Optimizer(IOAble):
                 jac=jac_wrapped,
                 args=(),
                 x_scale=x_scale,
-                ftol=ftol,
-                xtol=xtol,
-                gtol=gtol,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
                 verbose=disp,
-                maxiter=maxiter,
                 callback=None,
                 options=options,
             )
@@ -559,3 +420,138 @@ class Optimizer(IOAble):
             _ = result.pop(key, None)
 
         return result
+
+
+def _parse_constraints(constraints):
+    if not isinstance(constraints, tuple):
+        constraints = (constraints,)
+    linear_constraints = tuple(
+        constraint for constraint in constraints if constraint.linear
+    )
+    nonlinear_constraints = tuple(
+        constraint for constraint in constraints if not constraint.linear
+    )
+    if any(isinstance(lc, FixCurrent) for lc in linear_constraints) and any(
+        isinstance(lc, FixIota) for lc in linear_constraints
+    ):
+        raise ValueError(
+            "Toroidal current and rotational transform cannot be "
+            + "constrained simultaneously."
+        )
+    return linear_constraints, nonlinear_constraints
+
+
+def _wrap_objective_with_constraints(objective, linear_constraints, method):
+    """Factorize constraints and make new functions that project/recover + evaluate."""
+    _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        linear_constraints, objective.args
+    )
+
+    def compute_wrapped(x_reduced):
+        x = recover(x_reduced)
+        f = objective.compute(x)
+        if method in Optimizer._scalar_methods:
+            return f.squeeze()
+        else:
+            return jnp.atleast_1d(f)
+
+    def compute_scalar_wrapped(x_reduced):
+        x = recover(x_reduced)
+        return objective.compute_scalar(x)
+
+    def grad_wrapped(x_reduced):
+        x = recover(x_reduced)
+        df = objective.grad(x)
+        return df[unfixed_idx] @ Z
+
+    def hess_wrapped(x_reduced):
+        x = recover(x_reduced)
+        df = objective.hess(x)
+        return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
+
+    def jac_wrapped(x_reduced):
+        x = recover(x_reduced)
+        df = objective.jac(x)
+        return df[:, unfixed_idx] @ Z
+
+    return (
+        compute_wrapped,
+        compute_scalar_wrapped,
+        grad_wrapped,
+        hess_wrapped,
+        jac_wrapped,
+        project,
+        recover,
+    )
+
+
+def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, options):
+    """Use WrappedEquilibriumObjective to hanle nonlinear equilibrium constraints."""
+    for constraint in nonlinear_constraints:
+        if not isinstance(
+            constraint,
+            (
+                ForceBalance,
+                RadialForceBalance,
+                HelicalForceBalance,
+                CurrentDensity,
+            ),
+        ):
+            raise ValueError(
+                "optimizer method {} ".format(method)
+                + "cannot handle general nonlinear constraint {}.".format(constraint)
+            )
+    perturb_options = options.pop("perturb_options", {})
+    perturb_options.setdefault("verbose", 0)
+    solve_options = options.pop("solve_options", {})
+    solve_options.setdefault("verbose", 0)
+    objective = WrappedEquilibriumObjective(
+        objective,
+        eq_objective=ObjectiveFunction(nonlinear_constraints),
+        perturb_options=perturb_options,
+        solve_options=solve_options,
+    )
+    return objective
+
+
+def _get_default_tols(
+    method,
+    ftol=None,
+    xtol=None,
+    gtol=None,
+    maxiter=None,
+    options=None,
+):
+    """Parse and set defaults for stopping tolerances."""
+    if options is None:
+        options = {}
+    stoptol = {}
+    if xtol is not None:
+        stoptol["xtol"] = xtol
+    if ftol is not None:
+        stoptol["ftol"] = ftol
+    if gtol is not None:
+        stoptol["gtol"] = gtol
+    if maxiter is not None:
+        stoptol["maxiter"] = maxiter
+    stoptol.setdefault(
+        "xtol",
+        options.pop(
+            "xtol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-4
+        ),
+    )
+    stoptol.setdefault(
+        "ftol",
+        options.pop(
+            "ftol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-2
+        ),
+    )
+    stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
+    stoptol.setdefault("maxiter", options.pop("maxiter", 100))
+
+    stoptol["max_nfev"] = options.pop("max_nfev", np.inf)
+    stoptol["max_ngev"] = options.pop("max_ngev", np.inf)
+    stoptol["max_njev"] = options.pop("max_njev", np.inf)
+    stoptol["max_nhev"] = options.pop("max_nhev", np.inf)
+
+    return stoptol

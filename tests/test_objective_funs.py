@@ -22,6 +22,7 @@ from desc.objectives import (
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
+    RotationalTransform,
     ToroidalCurrent,
     Volume,
 )
@@ -115,13 +116,25 @@ class TestObjectiveFunction:
         test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_target_iota(self):
+        """Test calculation of iota profile."""
+
+        def test(eq):
+            obj = RotationalTransform(target=1, weight=2, eq=eq)
+            iota = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
+            np.testing.assert_allclose(iota, -2 / 3)
+
+        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
     def test_toroidal_current(self):
         """Test calculation of toroidal current."""
 
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
-            np.testing.assert_allclose(I, -2)
+            np.testing.assert_allclose(I, -2 / 3)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -255,3 +268,14 @@ def test_rejit():
     objective2.jit()
     assert objective2.compute(x)[0] == 2012.0
     np.testing.assert_allclose(objective2.jac(x), J / 3 * 2)
+
+
+@pytest.mark.unit
+def test_generic_compute():
+    """Test for gh issue #388."""
+    eq = Equilibrium()
+    obj = ObjectiveFunction(AspectRatio(target=2, weight=1), eq=eq)
+    a1 = obj.compute_scalar(obj.x(eq))
+    obj = ObjectiveFunction(GenericObjective("R0/a", target=2, weight=1), eq=eq)
+    a2 = obj.compute_scalar(obj.x(eq))
+    assert np.allclose(a1, a2)

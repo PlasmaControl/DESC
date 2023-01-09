@@ -40,6 +40,10 @@ class FourierRZToroidalSurface(Surface):
         default grid for computation
     name : str
         name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
@@ -65,13 +69,14 @@ class FourierRZToroidalSurface(Surface):
         rho=1,
         grid=None,
         name="",
+        check_orientation=True,
     ):
 
         if R_lmn is None:
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 0]])
         if Z_lmn is None:
-            Z_lmn = np.array([0, 1])
+            Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -111,6 +116,16 @@ class FourierRZToroidalSurface(Surface):
         self._NFP = NFP
         self._sym = sym
         self.rho = rho
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta."
+                + " To avoid this warning in the future, switch the sign of all"
+                + " modes with m<0"
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
         if grid is None:
             grid = LinearGrid(
                 M=2 * self.M,
@@ -306,9 +321,25 @@ class FourierRZToroidalSurface(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        rz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
+        E = jnp.sum(rt * rt, axis=-1)
+        F = jnp.sum(rt * rz, axis=-1)
+        G = jnp.sum(rz * rz, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        rtz = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1, dz=1)
+        rzz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rtt * n, axis=-1)
+        M = jnp.sum(rtz * n, axis=-1)
+        N = jnp.sum(rzz * n, axis=-1)
+        return L, M, N
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0, basis="rpz"
@@ -519,16 +550,16 @@ class FourierRZToroidalSurface(Surface):
                 -1 / 5,
                 a * epsilon,
                 (elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                (elongation - 1) * b / 2,
             ]
         )
         Z_lmn = np.array(
             [
-                (elongation + 1) * b / 2,
+                -(elongation + 1) * b / 2,
                 axis_Z,
-                b * epsilon,
+                -b * epsilon,
                 -(elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                (elongation - 1) * b / 2,
             ]
         )
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])
@@ -575,6 +606,10 @@ class ZernikeRZToroidalSection(Surface):
         default grid for computation
     name : str
         name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
@@ -600,12 +635,13 @@ class ZernikeRZToroidalSection(Surface):
         zeta=0.0,
         grid=None,
         name="",
+        check_orientation=True,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 1]])
         if Z_lmn is None:
-            Z_lmn = np.array([0, 1])
+            Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -653,6 +689,16 @@ class ZernikeRZToroidalSection(Surface):
         self._spectral_indexing = spectral_indexing
 
         self.zeta = zeta
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta."
+                + " To avoid this warning in the future, switch the sign of all"
+                + " modes with m<0"
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
         if grid is None:
             grid = LinearGrid(
                 L=self.L, M=2 * self.M, zeta=np.asarray(self.zeta), endpoint=True
@@ -825,9 +871,25 @@ class ZernikeRZToroidalSection(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1)
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        E = jnp.sum(rr * rr, axis=-1)
+        F = jnp.sum(rr * rt, axis=-1)
+        G = jnp.sum(rt * rt, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rrr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=2)
+        rrt = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1, dt=1)
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rrr * n, axis=-1)
+        M = jnp.sum(rrt * n, axis=-1)
+        N = jnp.sum(rtt * n, axis=-1)
+        return L, M, N
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0, basis="rpz"

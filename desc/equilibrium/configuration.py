@@ -4,16 +4,14 @@ import copy
 import numbers
 import warnings
 from abc import ABC
-from inspect import signature
 
 import numpy as np
 from termcolor import colored
 
-import desc.compute as compute_funs
 from desc.backend import jnp
-from desc.basis import DoubleFourierSeries, FourierZernikeBasis, fourier, zernike_radial
-from desc.compute import arg_order, data_index
-from desc.compute.utils import compress
+from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.compute import compute as compute_fun
+from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -23,7 +21,6 @@ from desc.geometry import (
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
 from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
-from desc.transform import Transform
 from desc.utils import copy_coeffs
 
 from .coords import compute_flux_coords, compute_theta_coords, is_nested, to_sfl
@@ -642,7 +639,7 @@ class _Configuration(IOAble, ABC):
         """
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        data = self.compute(name, grid, **kwargs)
+        data = self.compute(name, grid=grid, **kwargs)
         x = data[name]
         x = compress(grid, x, surface_label="rho")
         return SplineProfile(
@@ -917,15 +914,34 @@ class _Configuration(IOAble, ABC):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
 
-    def compute(self, name, grid=None, data=None, **kwargs):  # noqa: C901 - FIXME
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        profiles=None,
+        data=None,
+        **kwargs,
+    ):
         """Compute the quantity given by name on grid.
 
         Parameters
         ----------
-        name : str
-            Name of the quantity to compute.
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
         grid : Grid, optional
             Grid of coordinates to evaluate at. Defaults to the quadrature grid.
+        params : dict of ndarray
+            Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+            Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        profiles : dict of Profile
+            Profile objects for pressure, iota, current, etc. Defaults to attributes
+            of self
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
 
         Returns
         -------
@@ -933,72 +949,26 @@ class _Configuration(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        if name not in data_index:
-            raise ValueError("Unrecognized value '{}'.".format(name))
+        # TODO: default to returning just desired qty? options to return_all?
+        # TODO: use get_params method? need to break up compute functions first
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
-        M_booz = kwargs.pop("M_booz", 2 * self.M)
-        N_booz = kwargs.pop("N_booz", 2 * self.N)
-        if len(kwargs) > 0 and not set(kwargs.keys()).issubset(["helicity"]):
-            raise ValueError("Unrecognized argument(s).")
+        if params is None:
+            params = get_params(names, eq=self)
+        if profiles is None:
+            profiles = get_profiles(names, eq=self, grid=grid)
+        if transforms is None:
+            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
 
-        fun = getattr(compute_funs, data_index[name]["fun"])
-        sig = signature(fun)
-
-        inputs = {"data": data}
-        for arg in sig.parameters.keys():
-            if arg in arg_order:
-                inputs[arg] = getattr(self, arg)
-            elif arg == "grid":
-                inputs[arg] = grid
-            elif arg == "R_transform":
-                inputs[arg] = Transform(
-                    grid, self.R_basis, derivs=data_index[name]["R_derivs"]
-                )
-            elif arg == "Z_transform":
-                inputs[arg] = Transform(
-                    grid, self.Z_basis, derivs=data_index[name]["R_derivs"]
-                )
-            elif arg == "L_transform":
-                inputs[arg] = Transform(
-                    grid, self.L_basis, derivs=data_index[name]["L_derivs"]
-                )
-            elif arg == "B_transform":
-                inputs[arg] = Transform(
-                    grid,
-                    DoubleFourierSeries(
-                        M=M_booz, N=N_booz, sym=self.R_basis.sym, NFP=self.NFP
-                    ),
-                    derivs=0,
-                    build_pinv=True,
-                )
-            elif arg == "w_transform":
-                inputs[arg] = Transform(
-                    grid,
-                    DoubleFourierSeries(
-                        M=M_booz, N=N_booz, sym=self.Z_basis.sym, NFP=self.NFP
-                    ),
-                    derivs=1,
-                )
-            elif arg == "pressure":
-                inputs[arg] = self.pressure.copy()
-                inputs[arg].grid = grid
-            elif arg == "iota":
-                if self.iota is not None:
-                    inputs[arg] = self.iota.copy()
-                    inputs[arg].grid = grid
-                else:
-                    inputs[arg] = None
-            elif arg == "current":
-                if self.current is not None:
-                    inputs[arg] = self.current.copy()
-                    inputs[arg].grid = grid
-                else:
-                    inputs[arg] = None
-            elif arg == "grid":
-                inputs[arg] = grid
-
-        return fun(**inputs, **kwargs)
+        data = compute_fun(
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            **kwargs,
+        )
+        return data
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find geometric theta for given straight field line theta.
@@ -1058,8 +1028,8 @@ class _Configuration(IOAble, ABC):
     def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-        Does so by checking coordianate jacobian (sqrt(g)) sign.
-        If coordinate jacobian switches sign somewhere in the volume, this
+        Does so by checking coordianate Jacobian (sqrt(g)) sign.
+        If coordinate Jacobian switches sign somewhere in the volume, this
         indicates that it is zero at some point, meaning surfaces are touching and
         the equilibrium is not nested.
 
@@ -1069,7 +1039,7 @@ class _Configuration(IOAble, ABC):
         Parameters
         ----------
         grid  :  Grid, optional
-            Grid on which to evaluate the coordinate jacobian and check for the sign.
+            Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn : ndarray, optional
             spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn

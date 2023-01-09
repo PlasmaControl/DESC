@@ -48,8 +48,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     hess : callable or ``'bfgs'``, optional:
-        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
-        method will be used to approximate the hessian.
+        function to compute Hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
+        method will be used to approximate the Hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
     method : ``'dogleg'`` or ``'subspace'``
@@ -62,7 +62,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'hess'``, the scale is iteratively updated using the
-        inverse norms of the columns of the hessian matrix.
+        inverse norms of the columns of the Hessian matrix.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function. Default
         is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
@@ -389,6 +389,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))

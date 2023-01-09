@@ -369,8 +369,7 @@ class TestInitialGuess:
             ]
         )
         grid = ConcentricGrid(L=6, M=6, N=2, node_pattern="ocs")
-        coords = eq.compute("R", grid)
-        coords = eq.compute("lambda", grid, data=coords)
+        coords = eq.compute(["R", "Z", "lambda"], grid=grid)
         eq2 = Equilibrium(L=3, M=3, N=1)
         eq2.set_initial_guess(grid.nodes, coords["R"], coords["Z"], coords["lambda"])
         np.testing.assert_allclose(eq.R_lmn, eq2.R_lmn, atol=1e-8)
@@ -458,7 +457,7 @@ def test_magnetic_axis(HELIOTRON_vac):
     axis = eq.axis
     grid = LinearGrid(N=3 * eq.N_grid, NFP=eq.NFP, rho=np.array(0.0))
 
-    data = eq.compute("sqrt(g)", grid=grid)
+    data = eq.compute(["R", "Z"], grid=grid)
     coords = axis.compute_coordinates(grid=grid)
 
     np.testing.assert_allclose(coords[:, 0], data["R"])

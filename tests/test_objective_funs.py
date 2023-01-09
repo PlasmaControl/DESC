@@ -95,7 +95,7 @@ class TestObjectiveFunction:
         """Test calculation of elongation."""
 
         def test(eq):
-            obj = Elongation(eq=eq)
+            obj = Elongation(target=0, weight=1, eq=eq)
             f = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             f = obj.compute(*obj.xs(eq))

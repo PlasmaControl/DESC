@@ -161,7 +161,7 @@ class Elongation(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=1,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -275,7 +275,7 @@ class Volume(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=1,
         weight=1,
         normalize=True,
         normalize_target=True,

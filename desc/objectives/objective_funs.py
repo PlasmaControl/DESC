@@ -566,7 +566,14 @@ class _Objective(IOAble, ABC):
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""
-        if not isinstance(self.target, tuple):
+        if isinstance(self.target, tuple):
+            self._target = tuple([np.asarray(tar) for tar in self._target])
+            for tar in self.target:
+                if not is_broadcastable((self.dim_f,), tar.shape):
+                    raise ValueError("len(target) != dim_f")
+            if np.any(self.target[1] - self.target[0] < 0):
+                raise ValueError("tuple target must be: (lower bound, upper bound)")
+        else:
             self._target = np.asarray(self._target)
             if not is_broadcastable((self.dim_f,), self.target.shape):
                 raise ValueError("len(target) != dim_f")
@@ -631,12 +638,12 @@ class _Objective(IOAble, ABC):
         if isinstance(target, tuple) and len(target) == 2:
             return (
                 jnp.where(
-                    jnp.logical_and(x_norm >= min(target), x_norm <= max(target)),
+                    jnp.logical_and(x_norm >= target[0], x_norm <= target[1]),
                     jnp.zeros_like(x_norm),
                     jnp.where(
-                        jnp.abs(x_norm - min(target)) < jnp.abs(x_norm - max(target)),
-                        x_norm - min(target),
-                        x_norm - max(target),
+                        jnp.abs(x_norm - target[0]) < jnp.abs(x_norm - target[1]),
+                        x_norm - target[0],
+                        x_norm - target[1],
                     ),
                 )
                 * self.weight
@@ -657,8 +664,8 @@ class _Objective(IOAble, ABC):
                     sum(target) / 2,  # return average of bounds
                     jnp.where(
                         f_unweighted < 0,
-                        f_unweighted + min(target),
-                        f_unweighted + max(target),
+                        f_unweighted + target[0],
+                        f_unweighted + target[1],
                     ),
                 )
                 * self.normalization

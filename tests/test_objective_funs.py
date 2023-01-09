@@ -268,6 +268,18 @@ def test_generic_compute():
 
 
 @pytest.mark.unit
+def test_target_bounds():
+    """Test that tuple targets are in the format (lower bound, upper bound)."""
+    eq = Equilibrium()
+    with pytest.raises(AssertionError):
+        obj = GenericObjective("R", target=(1,), eq=eq)
+    with pytest.raises(AssertionError):
+        obj = GenericObjective("R", target=(1, 2, 3), eq=eq)
+    with pytest.raises(ValueError):
+        obj = GenericObjective("R", target=(1, -1), eq=eq)
+
+
+@pytest.mark.unit
 def test_shift_unshift_scale_unscale():
     """Test that shift/unshift and scale/unscale are inverse operations."""
     eq = Equilibrium()
@@ -285,7 +297,10 @@ def test_shift_unshift_scale_unscale():
 
     # test objective with a bounded target
     obj = ObjectiveFunction(
-        GenericObjective("R", target=(9.4 * w, 10.6 * w), weight=2, grid=grid), eq=eq
+        GenericObjective(
+            "R", target=(9.4 * w, np.ones_like(data) * 10.6 * w), weight=2, grid=grid
+        ),
+        eq=eq,
     )
     f_scaled = obj.compute(obj.x(eq))
     f_unscaled = obj.objectives[0]._unshift_unscale(f_scaled)

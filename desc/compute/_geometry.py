@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import cross, dot, surface_integrals
+from .utils import compress, cross, dot, surface_integrals
 
 
 @register_compute_fun(
@@ -179,6 +179,57 @@ def _a(params, transforms, profiles, data, **kwargs):
 )
 def _R0_over_a(params, transforms, profiles, data, **kwargs):
     data["R0/a"] = data["R0"] / data["a"]
+    return data
+
+
+@register_compute_fun(
+    name="a_major/a_minor",
+    label="a_{major} / a_{minor}",
+    units="~",
+    units_long="None",
+    description="Elongation",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["sqrt(g)", "g_tt"],
+)
+def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
+    P = compress(  # perimeter
+        transforms["grid"],
+        surface_integrals(
+            transforms["grid"],
+            jnp.sqrt(data["g_tt"]),
+            surface_label="zeta",
+            max_surface=True,
+        ),
+        surface_label="zeta",
+    )
+    A = compress(  # surface area
+        transforms["grid"],
+        surface_integrals(
+            transforms["grid"],
+            jnp.abs(data["sqrt(g)"] / data["R"]),
+            surface_label="zeta",
+        ),
+        surface_label="zeta",
+    )
+    # derived from Ramanujan approximation for the perimeter of an ellipse
+    a = (  # semi-major radius
+        jnp.sqrt(3)
+        * (
+            jnp.sqrt(8 * jnp.pi * A + P**2)
+            + jnp.sqrt(
+                2 * jnp.sqrt(3) * P * jnp.sqrt(8 * jnp.pi * A + P**2)
+                - 40 * jnp.pi * A
+                + 4 * P**2
+            )
+        )
+        + 3 * P
+    ) / (12 * jnp.pi)
+    b = A / (jnp.pi * a)  # semi-minor radius
+    data["a_major/a_minor"] = jnp.max(a / b)
     return data
 
 

@@ -187,7 +187,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     label="a_{major} / a_{minor}",
     units="~",
     units_long="None",
-    description="Elongation",
+    description="Maximum elongation",
     dim=0,
     params=[],
     transforms={"grid": []},

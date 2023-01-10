@@ -546,7 +546,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
         idx = np.nonzero(grid.nodes[:, 0] == max_rho)[0]
         q = q[idx]
         nodes = nodes[idx]
-        unique_idx = (unique_idx * nodes.size / grid.num_nodes).astype(int)
+        unique_idx = (unique_idx / grid.num_rho).astype(int)
         ds = ds[idx] / grid.spacing[idx, 0] / max_rho
 
     # Separate nodes into bins with boundaries at unique values of the surface label.

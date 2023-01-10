@@ -126,7 +126,7 @@ class AspectRatio(_Objective):
 
 
 class Elongation(_Objective):
-    """Elongation = semi-major radius / semi-minor radius.
+    """Elongation = semi-major radius / semi-minor radius. Max of all toroidal angles.
 
     Parameters
     ----------

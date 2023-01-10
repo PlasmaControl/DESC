@@ -10,9 +10,9 @@ from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
-    ptolemy_linear_transform,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
+    ptolemy_linear_transform,
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
@@ -39,9 +39,9 @@ class TestVMECIO:
         # a0 + a2*cos(t+z) + a3*cos(t-z)                                # noqa: E800
         #    = a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)
 
-        m_1_correct = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
-        n_1_correct = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
-        x_correct = np.array([[a3 - a2, a3, a1, -a0, a0, 0, a1, 0, a2 + a3]])
+        m_1_correct = np.array([-1,  0,  1, -1, 0, 1, -1, 0, 1])
+        n_1_correct = np.array([-1, -1, -1,  0, 0, 0,  1, 1, 1])
+        x_correct = np.array([[a3 - a2, -a0, a1, a3, a0, 0, a1, 0, a2 + a3]])
 
         m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
 

@@ -21,6 +21,8 @@ from desc.objectives import (
     FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesR,
+    FixSumModesZ,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
 )
@@ -359,6 +361,7 @@ def test_correct_indexing_passed_modes():
     assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
 
 
+# TODO: add FixSumModes to this
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_and_passed_target():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
@@ -434,8 +437,8 @@ def test_correct_indexing_passed_modes_and_passed_target():
 
 
 @pytest.mark.unit
-def test_correct_indexing_passed_modes_and_passed_target_axis():
-    """Test Indexing when passing in specified modes, related to gh issue #380."""
+def test_correct_indexing_passed_modes_axis():
+    """Test Indexing when passing in specified axis modes, related to gh issue #380."""
     n = 1
 
     eq = desc.examples.get("W7-X")
@@ -453,23 +456,131 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     )
     R_modes = np.vstack(
         (
-            [0, 0, 0],
             eq.axis.R_basis.modes[np.max(np.abs(eq.axis.R_basis.modes), 1) > n + 1, :],
+            [0, 0, 0],
         )
     )
+    R_modes = np.flip(R_modes, 0)
+
+    Z_modes = eq.axis.Z_basis.modes[np.max(np.abs(eq.axis.Z_basis.modes), 1) > n + 1, :]
+    Z_modes = np.flip(Z_modes, 0)
+
+    constraints = (
+        FixAxisR(modes=R_modes, normalize=False),
+        FixAxisZ(modes=Z_modes, normalize=False),
+        FixModeR(modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
+        FixModeZ(modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
+        FixSumModesR(modes=np.array([[3, 3, 3], [4, 4, 4]]), normalize=False),
+        FixSumModesZ(modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
+    )
+    for con in constraints:
+        con.build(eq, verbose=0)
+    objective.build(eq)
+    from desc.objectives.utils import factorize_linear_constraints
+
+    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        constraints,
+        objective.args,
+    )
+
+    from scipy.linalg import block_diag
+
+    from desc.compute import arg_order
+
+    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
+    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+
+    x1 = objective.x(eq)
+    x2 = recover(project(x1))
+
+    atol = 2e-15
+    assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+
+
+@pytest.mark.unit
+def test_correct_indexing_passed_modes_and_passed_target_axis():
+    """Test Indexing when passing in specified axis modes, related to gh issue #380."""
+    n = 1
+
+    eq = desc.examples.get("W7-X")
+
+    grid = LinearGrid(
+        M=eq.M, N=eq.N, NFP=eq.NFP, rho=np.array([0.6, 0.8, 1.0]), sym=True
+    )
+
+    objective = ObjectiveFunction(
+        (
+            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(target=8, weight=1e2),
+        ),
+        verbose=0,
+    )
+    R_modes = np.vstack(
+        (
+            eq.axis.R_basis.modes[np.max(np.abs(eq.axis.R_basis.modes), 1) > n + 1, :],
+            [0, 0, 0],
+        )
+    )
+    R_modes = np.flip(R_modes, 0)
     idxs = []
     for mode in R_modes:
         idxs.append(eq.axis.R_basis.get_idx(*mode))
     target_R = eq.axis.R_n[idxs]
 
     Z_modes = eq.axis.Z_basis.modes[np.max(np.abs(eq.axis.Z_basis.modes), 1) > n + 1, :]
+    Z_modes = np.flip(Z_modes, 0)
     idxs = []
     for mode in Z_modes:
         idxs.append(eq.axis.Z_basis.get_idx(*mode))
     target_Z = eq.axis.Z_n[idxs]
+
     constraints = (
         FixAxisR(modes=R_modes, normalize=False, target=target_R),
         FixAxisZ(modes=Z_modes, normalize=False, target=target_Z),
+        FixModeR(
+            modes=np.array([[1, 1, 1], [2, 2, 2]]),
+            target=np.array(
+                [
+                    eq.R_lmn[eq.R_basis.get_idx(*(1, 1, 1))],
+                    eq.R_lmn[eq.R_basis.get_idx(*(2, 2, 2))],
+                ]
+            ),
+            normalize=False,
+        ),
+        FixModeZ(
+            modes=np.array([[1, 1, -1], [2, 2, -2]]),
+            target=np.array(
+                [
+                    eq.Z_lmn[eq.Z_basis.get_idx(*(1, 1, -1))],
+                    eq.Z_lmn[eq.Z_basis.get_idx(*(2, 2, -2))],
+                ]
+            ),
+            normalize=False,
+        ),
+        FixSumModesR(
+            modes=np.array([[3, 3, 3], [4, 4, 4]]),
+            target=np.array(
+                [
+                    eq.R_lmn[eq.R_basis.get_idx(*(3, 3, 3))]
+                    + eq.R_lmn[eq.R_basis.get_idx(*(4, 4, 4))]
+                ]
+            ),
+            normalize=False,
+        ),
+        FixSumModesZ(
+            modes=np.array([[3, 3, -3], [4, 4, -4]]),
+            target=np.array(
+                [
+                    eq.Z_lmn[eq.Z_basis.get_idx(*(3, 3, -3))]
+                    + eq.Z_lmn[eq.Z_basis.get_idx(*(4, 4, -4))]
+                ]
+            ),
+            normalize=False,
+        ),
     )
     for con in constraints:
         con.build(eq, verbose=0)

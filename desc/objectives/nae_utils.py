@@ -736,8 +736,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     coeffs["Z_1_1_n"] = Z_1_1_n
     coeffs["Z_1_neg1_n"] = Z_1_neg1_n
 
-    ## figure out which sym each thing has, if they have a specific sym
-    # or wait... if stell sym we should be able to figure this out right?
+    # if stell sym we should be able to figure out the phi sym for each term
     # R cos terms need a cos phi basis
     # R sin terms need sin phi basis
     # Z cos terms need sin phi basis
@@ -751,7 +750,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     # TODO: generalize to non-stell-sym (add logic to check sym of desc eq,
     #  if NOT stell sym, then these are not stell sym, otherwise they
     # are stell sym)
-    # difference is just make the bases above have sym=False
+    # difference is just make the bases above all have sym=False
 
     R_2_0_n = Rtrans.fit(R_2_0)
     R_2_2_n = Rtrans.fit(R_2_2)

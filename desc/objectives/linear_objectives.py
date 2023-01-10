@@ -608,8 +608,8 @@ class FixAxisR(_Objective):
         target=None,
         weight=1,
         modes=True,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         name="axis R",
     ):
 
@@ -619,8 +619,8 @@ class FixAxisR(_Objective):
             target=target,
             weight=weight,
             name=name,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
         )
         self._print_value_fmt = "R axis error: {:10.3e} (m)"
 
@@ -759,8 +759,8 @@ class FixAxisZ(_Objective):
         weight=1,
         modes=True,
         name="axis Z",
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
     ):
 
         self._modes = modes
@@ -769,8 +769,8 @@ class FixAxisZ(_Objective):
             target=target,
             weight=weight,
             name=name,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
         )
         self._print_value_fmt = "Z axis error: {:10.3e} (m)"
 
@@ -907,8 +907,8 @@ class FixModeR(_Objective):
         weight=1,
         modes=False,
         name="Fix Mode R",
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
     ):
 
         self._modes = modes
@@ -917,8 +917,8 @@ class FixModeR(_Objective):
             target=target,
             weight=weight,
             name=name,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
         )
         self._print_value_fmt = "Fixed-R modes error: {:10.3e} (m)"
 
@@ -1039,8 +1039,8 @@ class FixModeZ(_Objective):
         weight=1,
         modes=False,
         name="Fix Mode Z",
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
     ):
 
         self._modes = modes
@@ -1049,8 +1049,8 @@ class FixModeZ(_Objective):
             target=target,
             weight=weight,
             name=name,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
         )
         self._print_value_fmt = "Fixed-Z modes error: {:10.3e} (m)"
 
@@ -1145,7 +1145,7 @@ class FixSumModesR(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : float, size-1 ndarray, optional
         Fourier-Zernike R coefficient target sum. If None,
          uses current sum of Equilibrium's R coefficients.
          len(target)=1
@@ -1179,8 +1179,8 @@ class FixSumModesR(_Objective):
         sum_weights=None,
         modes=False,
         name="Fix Sum Modes R",
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
     ):
 
         self._modes = modes
@@ -1190,8 +1190,8 @@ class FixSumModesR(_Objective):
             target=target,
             weight=weight,
             name=name,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
         )
         self._print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
 
@@ -1208,6 +1208,7 @@ class FixSumModesR(_Objective):
             Level of output.
 
         """
+        # FIXME: passing with False does no modes... why have this?
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -1232,7 +1233,9 @@ class FixSumModesR(_Objective):
             # and eq.R_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.R_basis.modes[idx, :])
-            self._sum_weights = self._sum_weights[idx]
+            if self._sum_weights is not None:
+                self._sum_weights = np.atleast_1d(self._sum_weights)
+                self._sum_weights = self._sum_weights[idx]
 
             if idx.size < modes.shape[0]:
                 warnings.warn(
@@ -1246,7 +1249,6 @@ class FixSumModesR(_Objective):
             sum_weights = np.ones(modes.shape[0])
         else:
             sum_weights = np.atleast_1d(self._sum_weights)
-
         self._dim_f = np.array([1])
 
         self._A = np.zeros((1, eq.R_basis.num_modes))
@@ -1257,15 +1259,6 @@ class FixSumModesR(_Objective):
         # use current sum as target if needed
         if self.target is None:
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
-        else:  # rearrange given target to match modes order
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for R modes sum without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target modes"
-                )
-            self.target = self.target[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
         ################################################
@@ -1335,8 +1328,8 @@ class FixSumModesZ(_Objective):
         sum_weights=None,
         modes=False,
         name="Fix Sum Modes Z",
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
     ):
 
         self._modes = modes
@@ -1346,8 +1339,8 @@ class FixSumModesZ(_Objective):
             target=target,
             weight=weight,
             name=name,
-            normalize=False,
-            normalize_target=False,
+            normalize=normalize,
+            normalize_target=normalize_target,
         )
         self._print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
 
@@ -1388,8 +1381,9 @@ class FixSumModesZ(_Objective):
             # and eq.Z_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
-            self._sum_weights = self._sum_weights[idx]
-
+            if self._sum_weights is not None:
+                self._sum_weights = np.atleast_1d(self._sum_weights)
+                self._sum_weights = self._sum_weights[idx]
             if idx.size < modes.shape[0]:
                 warnings.warn(
                     colored(
@@ -1398,12 +1392,10 @@ class FixSumModesZ(_Objective):
                         "yellow",
                     )
                 )
-
         if self._sum_weights is None:
             sum_weights = np.ones(modes.shape[0])
         else:
             sum_weights = np.atleast_1d(self._sum_weights)
-
         self._dim_f = np.array([1])
 
         self._A = np.zeros((1, eq.Z_basis.num_modes))
@@ -1414,15 +1406,7 @@ class FixSumModesZ(_Objective):
         # use current sum as target if needed
         if self.target is None:
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
-        else:  # rearrange given target to match modes order
-            if self._modes is True or self._modes is False:
-                raise RuntimeError(
-                    "Attempting to provide target for Z modes sum without "
-                    + "providing modes array!"
-                    + "You must pass in the modes corresponding to the"
-                    + "provided target modes"
-                )
-            self.target = self.target[modes_idx]
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
         ################################################
 

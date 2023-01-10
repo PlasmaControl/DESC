@@ -2,11 +2,12 @@
 
 import numpy as np
 
-from desc.backend import jnp
+from desc.backend import jnp, sign
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
+from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -63,6 +64,7 @@ class QuasisymmetryBoozer(_Objective):
         name="QS Boozer",
     ):
 
+        assert len(helicity) == 2
         self.grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
@@ -120,27 +122,25 @@ class QuasisymmetryBoozer(_Objective):
             M_booz=self.M_booz,
             N_booz=self.N_booz,
         )
+        self._matrix, self._modes = ptolemy_linear_transform(
+            self._transforms["B"].basis
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        M = self.helicity[0]
-        N = self.helicity[1] / eq.NFP
-        self._idx_00 = np.where(
-            (self._transforms["B"].basis.modes == [0, 0, 0]).all(axis=1)
-        )[0]
+        M = np.abs(self.helicity[0])
+        N = np.abs(self.helicity[1]) / eq.NFP * sign(np.prod(self.helicity))
+        self._idx = np.ones((self._modes.shape[0],), bool)
+        self._idx[0] = False  # m=0,n=0 mode
         if N == 0:
-            self._idx_MN = np.where(self._transforms["B"].basis.modes[:, 2] == 0)[0]
+            idx_MN = np.nonzero(self._modes[:, 2] == 0)[0]
         else:
-            self._idx_MN = np.where(
-                self._transforms["B"].basis.modes[:, 1]
-                / self._transforms["B"].basis.modes[:, 2]
-                == M / N
+            idx_MN = np.nonzero(
+                np.logical_and(self._modes[:, 1] == M, self._modes[:, 2] == N)
             )[0]
-        self._idx = np.ones((self._transforms["B"].basis.num_modes,), bool)
-        self._idx[self._idx_00] = False
-        self._idx[self._idx_MN] = False
+        self._idx[idx_MN] = False
 
         self._dim_f = np.sum(self._idx)
 
@@ -181,10 +181,10 @@ class QuasisymmetryBoozer(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        b_mn = data["|B|_mn"]
-        b_mn = b_mn[self._idx]
+        B_mn = self._matrix @ data["|B|_mn"]
+        B_mn = B_mn[self._idx]
 
-        return self._shift_scale(b_mn)
+        return self._shift_scale(B_mn)
 
     @property
     def helicity(self):

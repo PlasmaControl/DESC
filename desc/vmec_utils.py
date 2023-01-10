@@ -201,10 +201,10 @@ def ptolemy_linear_transform(basis):
     # indices of non-symmetric basis modes to delete
     if basis.sym == "cos":
         idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
-        matrix = np.delete(matrix, idx, axis=1)
+        matrix = np.delete(matrix[::2, :], idx, axis=1)
     elif basis.sym == "sin":
         idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
-        matrix = np.delete(matrix, idx, axis=1)
+        matrix = np.delete(matrix[1::2, :], idx, axis=1)
 
     return matrix, modes
 

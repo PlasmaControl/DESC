@@ -166,30 +166,46 @@ def ptolemy_linear_transform(basis):
 
     Returns
     -------
-    M : ndarray
+    matrix : ndarray
         Transform matrix such that M*a=b, where a are the double-Fourier coefficients
         and b are the double-angle coefficients.
-    modes : ndarray
-        [+/-1 (cos/sin), M, N]
+    modes : ndarray, shape(num_modes,3)
+        Modes of the double-angle basis. First column: +1/-1 for cos/sin term.
+        Second column: poloidal mode number m (range 0 to basis.M).
+        Third column: toroidal mode number n (range -basis.N to basis.N).
 
     """
-    # TODO: add symmetry option
-    mn = np.array([[m, n - basis.N] for m in range(basis.M + 1) for n in range(2 * basis.N + 1)])[basis.N + 1:, :]
-    matrix = np.zeros((basis.num_modes,))
-    matrix[int((basis.num_modes - 1) / 2)] = 1
+    mn = np.array(
+        [[m, n - basis.N] for m in range(basis.M + 1) for n in range(2 * basis.N + 1)]
+    )[basis.N + 1 :, :]
+    matrix = np.zeros((2 * mn.shape[0] + 1,))
+    matrix[mn.shape[0]] = 1  # cos(0*t-0*z) mode
     modes = np.array([[1, 0, 0]])
 
+    # build matrix from forward Ptolemy identity
     for i, (m, n) in enumerate(mn):
         temp = np.zeros((mn.shape[0],))
         temp[i] = 1
-        _, _, row = ptolemy_identity_fwd(mn[:, 0], mn[:, 1], temp, np.zeros_like(temp))
+        mm, nn, row = ptolemy_identity_fwd(
+            mn[:, 0], mn[:, 1], temp, np.zeros_like(temp)
+        )
         matrix = np.vstack((matrix, row))
         modes = np.vstack((modes, [-1, m, n]))
-        _, _, row = ptolemy_identity_fwd(mn[:, 0], mn[:, 1], np.zeros_like(temp), temp)
+        mm, nn, row = ptolemy_identity_fwd(
+            mn[:, 0], mn[:, 1], np.zeros_like(temp), temp
+        )
         matrix = np.vstack((matrix, row))
         modes = np.vstack((modes, [1, m, n]))
-
     matrix = (matrix.T / np.sum(np.abs(matrix), axis=1)).T
+
+    # indices of non-symmetric basis modes to delete
+    if basis.sym == "cos":
+        idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
+        matrix = np.delete(matrix, idx, axis=1)
+    elif basis.sym == "sin":
+        idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
+        matrix = np.delete(matrix, idx, axis=1)
+
     return matrix, modes
 
 

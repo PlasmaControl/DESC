@@ -44,6 +44,7 @@
    :caption: Developer guides
 
    compute
+   objectives
 
 .. toctree::
    :maxdepth: 1

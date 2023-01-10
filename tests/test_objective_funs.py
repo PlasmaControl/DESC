@@ -278,7 +278,7 @@ def test_target_profiles():
     np.testing.assert_allclose(
         obji.target, iota(obji.grid.nodes[obji.grid.unique_rho_idx])
     )
-    objc = RotationalTransform(target=current)
+    objc = ToroidalCurrent(target=current)
     objc.build(eqi)
     np.testing.assert_allclose(
         objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])

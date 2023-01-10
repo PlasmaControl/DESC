@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
-from desc.basis import FourierZernikeBasis
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.vmec import VMECIO
@@ -76,6 +76,20 @@ class TestVMECIO:
         np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
         np.testing.assert_allclose(s, s_correct, atol=1e-8)
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identities_inverse(self):
+        """Tests that forward and reverse Ptolemy's identities are inverses."""
+        basis = DoubleFourierSeries(4, 3, sym=False)
+        modes = basis.modes
+        x_correct = np.random.rand(basis.num_modes)
+
+        m1, n1, s, c = ptolemy_identity_rev(modes[:, 1], modes[:, 2], x_correct)
+        m0, n0, x = ptolemy_identity_fwd(m1, n1, s, c)
+
+        np.testing.assert_allclose(m0, modes[:, 1])
+        np.testing.assert_allclose(n0, modes[:, 2])
+        np.testing.assert_allclose(x, np.atleast_2d(x_correct))
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):

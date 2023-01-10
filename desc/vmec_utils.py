@@ -47,7 +47,7 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     N = int(np.max(np.abs(n_0)))
 
     mn_1 = np.array(
-        [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
+        [[m - M, n - N] for n in range(2 * N + 1) for m in range(2 * M + 1)]
     )
     m_1 = mn_1[:, 0]
     n_1 = mn_1[:, 1]

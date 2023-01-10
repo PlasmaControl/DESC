@@ -61,9 +61,11 @@ class ForceBalance(_Objective):
         normalize_target=True,
         grid=None,
         name="force",
+        equality=True,
     ):
 
         self.grid = grid
+        self.equality = equality
         super().__init__(
             eq=eq,
             target=target,

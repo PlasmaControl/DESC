@@ -202,9 +202,11 @@ def ptolemy_linear_transform(basis):
     if basis.sym == "cos":
         idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
         matrix = np.delete(matrix[::2, :], idx, axis=1)
+        modes = modes[::2, :]
     elif basis.sym == "sin":
         idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
         matrix = np.delete(matrix[1::2, :], idx, axis=1)
+        modes = modes[1::2, :]
 
     return matrix, modes
 

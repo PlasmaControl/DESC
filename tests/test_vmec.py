@@ -10,6 +10,7 @@ from desc.grid import LinearGrid
 from desc.vmec import VMECIO
 from desc.vmec_utils import (
     fourier_to_zernike,
+    ptolemy_linear_transform,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
     vmec_boundary_subspace,
@@ -90,6 +91,31 @@ class TestVMECIO:
         np.testing.assert_allclose(m0, modes[:, 1])
         np.testing.assert_allclose(n0, modes[:, 2])
         np.testing.assert_allclose(x, np.atleast_2d(x_correct))
+
+    @pytest.mark.unit
+    def test_ptolemy_linear_transform(self):
+        """Tests Ptolemy basis linear transformation utility function."""
+        basis = DoubleFourierSeries(M=4, N=3, sym=False)
+        matrix, modes = ptolemy_linear_transform(basis)
+
+        x_correct = np.random.rand(basis.num_modes)
+        x_transformed = matrix @ x_correct
+
+        x_sin = np.insert(x_transformed[1::2], 0, 0)
+        x_cos = x_transformed[::2]
+
+        m, n, s, c = ptolemy_identity_rev(
+            basis.modes[:, 1], basis.modes[:, 2], x_correct
+        )
+        np.testing.assert_allclose(modes[::2, 1], m)
+        np.testing.assert_allclose(modes[::2, 2], n)
+        np.testing.assert_allclose(np.atleast_2d(x_sin), s)
+        np.testing.assert_allclose(np.atleast_2d(x_cos), c)
+
+        _, _, x_original = ptolemy_identity_fwd(
+            modes[::2, 1], modes[::2, 2], x_sin, x_cos
+        )
+        np.testing.assert_allclose(x_original, np.atleast_2d(x_correct))
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):

@@ -157,6 +157,42 @@ def ptolemy_identity_rev(m_1, n_1, x):
     return m_0, n_0, s, c
 
 
+def ptolemy_linear_transform(basis):
+    """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
+
+    Parameters
+    ----------
+    basis : Basis
+
+    Returns
+    -------
+    M : ndarray
+        Transform matrix such that M*a=b, where a are the double-Fourier coefficients
+        and b are the double-angle coefficients.
+    modes : ndarray
+        [+/-1 (cos/sin), M, N]
+
+    """
+    # TODO: add symmetry option
+    mn = np.array([[m, n - basis.N] for m in range(basis.M + 1) for n in range(2 * basis.N + 1)])[basis.N + 1:, :]
+    matrix = np.zeros((basis.num_modes,))
+    matrix[int((basis.num_modes - 1) / 2)] = 1
+    modes = np.array([[1, 0, 0]])
+
+    for i, (m, n) in enumerate(mn):
+        temp = np.zeros((mn.shape[0],))
+        temp[i] = 1
+        _, _, row = ptolemy_identity_fwd(mn[:, 0], mn[:, 1], temp, np.zeros_like(temp))
+        matrix = np.vstack((matrix, row))
+        modes = np.vstack((modes, [-1, m, n]))
+        _, _, row = ptolemy_identity_fwd(mn[:, 0], mn[:, 1], np.zeros_like(temp), temp)
+        matrix = np.vstack((matrix, row))
+        modes = np.vstack((modes, [1, m, n]))
+
+    matrix = (matrix.T / np.sum(np.abs(matrix), axis=1)).T
+    return matrix, modes
+
+
 def fourier_to_zernike(m, n, x_mn, basis):
     """Convert from a double Fourier series to a Fourier-Zernike basis.
 

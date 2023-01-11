@@ -272,7 +272,7 @@ def test_qh_optimization1():
     assert rho_err.mean() < 1
 
     grid = LinearGrid(M=eq1a.M_grid, N=eq1a.N_grid, NFP=eq1a.NFP, sym=False, rho=1.0)
-    data = eq1a.compute("|B|_mn", grid, M_booz=eq1a.M, N_booz=eq1a.N)
+    data = eq1a.compute(["|B|_mn", "B modes"], grid, M_booz=eq1a.M, N_booz=eq1a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
     np.testing.assert_array_less(B_asym, 1e-1)
@@ -291,7 +291,7 @@ def test_qh_optimization2():
     assert rho_err.mean() < 1
 
     grid = LinearGrid(M=eq2a.M_grid, N=eq2a.N_grid, NFP=eq2a.NFP, sym=False, rho=1.0)
-    data = eq2a.compute("|B|_mn", grid, M_booz=eq2a.M, N_booz=eq2a.N)
+    data = eq2a.compute(["|B|_mn", "B modes"], grid, M_booz=eq2a.M, N_booz=eq2a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
     np.testing.assert_array_less(B_asym, 1e-2)

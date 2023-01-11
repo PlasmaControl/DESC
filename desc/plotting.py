@@ -2448,7 +2448,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ls = kwargs.pop("ls", ["-", "-", "-"])
     colors = kwargs.pop("colors", ["r", "b", "g"])
     markers = kwargs.pop("markers", ["o", "o", "o"])
-    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_B$"])
+    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
 
     data = eq.compute(["R0", "|B|"])
     R0 = data["R0"]

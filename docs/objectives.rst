@@ -82,6 +82,7 @@ A full example objective with comments describing key points is given below:
         ):
 
             # we don't have to do much here, mostly just call ``super().__init__()``
+            # to inherit common initialization logic from ``desc.objectives._Objective``
             self.grid = grid
             super().__init__(
                 eq=eq,
@@ -110,9 +111,13 @@ A full example objective with comments describing key points is given below:
                 self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
             # dim_f = size of the output vector returned by self.compute
-            # usually the same as self.grid.num_nodes, unless you're doing some downsampling
-            # or averaging etc.
-            self._dim_f = self.grid.num_nodes
+            # self.compute refers to the objective's own compute method
+            # Typically an objective returns the output of a quantity computed in
+            # ``desc.compute``, with some additional scale factor.
+            # In these cases dim_f should match the size of the quantity calculated in
+            # ``desc.compute`` (for example self.grid.num_nodes).
+            # If the objective does post-processing on the quantity, like downsampling or
+            # averaging, then dim_f should be changed accordingly.
             # What data from desc.compute is needed? Here we want the QS triple product.
             self._data_keys = ["f_T"]
             # what arguments should be passed to self.compute

@@ -720,8 +720,8 @@ def test_plot_boozer_surface(DSHAPE_current):
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_plot_qs_error():
     """Test plotting qs error metrics."""
-    eq = get("HELIOTRON")
-    fig, ax, data = plot_qs_error(eq, helicity=(1, 19), log=False, return_data=True)
+    eq = get("WISTELL-A")
+    fig, ax, data = plot_qs_error(eq, helicity=(1, eq.NFP), log=False, return_data=True)
     for string in ["rho", "f_T", "f_B", "f_C"]:
         assert string in data.keys()
         if string != "rho":

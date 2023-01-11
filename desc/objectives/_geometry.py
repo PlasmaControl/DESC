@@ -1,7 +1,7 @@
 """Objectives for targeting geometrical quantities."""
 
 from desc.compute import compute as compute_fun
-from desc.compute import get_profiles, get_transforms
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
 
@@ -80,6 +80,7 @@ class Volume(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["V"]
+        self._args = get_params(self._data_keys)
 
         timer = Timer()
         logging.info("Precomputing transforms")
@@ -97,7 +98,7 @@ class Volume(_Objective):
 
         super().build(eq=eq, use_jit=use_jit)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute plasma volume.
 
         Parameters
@@ -113,10 +114,7 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,
@@ -198,6 +196,8 @@ class AspectRatio(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
+        self._args = get_params(self._data_keys)
+
         timer = Timer()
         logging.info("Precomputing transforms")
         timer.start("Precomputing transforms")
@@ -210,7 +210,7 @@ class AspectRatio(_Objective):
 
         super().build(eq=eq, use_jit=use_jit)
 
-    def compute(self, R_lmn, Z_lmn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute aspect ratio.
 
         Parameters
@@ -226,10 +226,7 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        params = {
-            "R_lmn": R_lmn,
-            "Z_lmn": Z_lmn,
-        }
+        params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
             params=params,

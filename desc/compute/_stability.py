@@ -149,7 +149,8 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
     label="D_{Mercier}",
     units="Wb^{-2}",
     units_long="Inverse Webers squared",
-    description="Mercier stability criterion",
+    description="Mercier stability criterion (positive/negative value "
+    + "denotes stability/instability)",
     dim=1,
     params=[],
     transforms={},
@@ -171,7 +172,8 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
     label="Magnetic Well",
     units="~",
     units_long="None",
-    description="Magnetic well proxy for MHD stability",
+    description="Magnetic well proxy for MHD stability (positive/negative value "
+    + "denotes stability/instability)",
     dim=1,
     params=[],
     transforms={"grid": []},

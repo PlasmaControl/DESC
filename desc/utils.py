@@ -411,6 +411,7 @@ def svd_inv_null(A):
     return Ainv, Z
 
 
+<<<<<<< HEAD
 def stop_console_logging():
 
     """Quickly stops logging to console if it is being handled by a stream 
@@ -569,3 +570,24 @@ def set_console_logging(console_log_level = "INFO", console_log_output = "stdout
     logger.addHandler(console_handler)
 
     return True
+=======
+def is_broadcastable(shp1, shp2):
+    """Determine if 2 shapes will broadcast without error.
+
+    Parameters
+    ----------
+    shp1, shp2 : tuple of int
+        Shapes of the arrays to check.
+
+    Returns
+    -------
+    is_broadcastable : bool
+        Whether the arrays can be broadcast.
+    """
+    for a, b in zip(shp1[::-1], shp2[::-1]):
+        if a == 1 or b == 1 or a == b:
+            pass
+        else:
+            return False
+    return True
+>>>>>>> master

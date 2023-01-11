@@ -167,7 +167,7 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
         else:
             raise TypeError(
                 colored(
-                    "ax agument must be None or an axis instance or array of axes",
+                    "ax argument must be None or an axis instance or array of axes",
                     "red",
                 )
             )
@@ -453,8 +453,32 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         plot_1d(eq, 'p')
 
     """
+    # If the quantity is a flux surface function, call plot_fsa.
+    # This is done because the computation of some quantities relies on a
+    # surface average. Surface averages should be computed over a 2-D grid to
+    # sample the entire surface. Computing this on a 1-D grid would return a
+    # misleading plot.
+    default_L = 100
+    if data_index[name]["coordinates"] == "r":
+        if grid is None:
+            return plot_fsa(
+                eq,
+                name,
+                rho=default_L,
+                log=log,
+                ax=ax,
+                return_data=return_data,
+                **kwargs,
+            )
+        rho = grid.nodes[:, 0]
+        if not np.all(np.isclose(rho, rho[0])):
+            # rho nodes are not constant, so user must be plotting against rho
+            return plot_fsa(
+                eq, name, rho=rho, log=log, ax=ax, return_data=return_data, **kwargs
+            )
+
     if grid is None:
-        grid_kwargs = {"L": 100, "NFP": eq.NFP}
+        grid_kwargs = {"L": default_L, "NFP": eq.NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 1:
@@ -869,6 +893,7 @@ def plot_3d(
 def plot_fsa(
     eq,
     name,
+    with_sqrt_g=True,
     log=False,
     rho=20,
     M=None,
@@ -878,7 +903,7 @@ def plot_fsa(
     return_data=False,
     **kwargs,
 ):
-    """Plot flux surface averaged quantities.
+    """Plot flux surface averages of quantities.
 
     Parameters
     ----------
@@ -886,6 +911,16 @@ def plot_fsa(
         Object from which to plot.
     name : str
         Name of variable to plot.
+    with_sqrt_g : bool, optional
+        Whether to weight the surface average with sqrt(g), the 3-D Jacobian
+        determinant of flux coordinate system. Default is True.
+
+        The weighted surface average is also known as a flux surface average.
+        The unweighted surface average is also known as a theta average.
+
+        Note that this boolean has no effect for quantities which are defined
+        as surface functions because averaging such functions is the identity
+        operation.
     log : bool, optional
         Whether to use a log scale.
     rho : int or array-like
@@ -934,7 +969,7 @@ def plot_fsa(
         only returned if return_data=True
         plot_data keys:
             "rho"
-            "<name>_FSA" where name is the passed name of variable plotted
+            "<name>_fsa" where name is the passed name of variable plotted
             "normalization": normalization used in the plot,
                  if norm_F=False or F is not plotted, this is just equal to 1.
 
@@ -945,11 +980,15 @@ def plot_fsa(
     .. code-block:: python
 
         from desc.plotting import plot_fsa
-        fig, ax = plot_fsa(eq, "B_theta")
+        fig, ax = plot_fsa(eq, "B_theta", with_sqrt_g=False)
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.linspace(1 / rho, 1, rho)
+        if data_index[name]["coordinates"] == "r":
+            # OK to plot origin for most quantities denoted as functions of rho
+            rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
+        else:
+            rho = np.linspace(1 / rho, 1, rho)
     else:
         rho = np.atleast_1d(rho)
     if M is None:
@@ -962,9 +1001,31 @@ def plot_fsa(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
-    g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
-    values = compress(grid, surface_averages(grid, q=data, sqrt_g=g))
+    values, label = _compute(
+        eq, name, grid, kwargs.pop("component", None), reshape=False
+    )
+    label = label.split("~")
+    if data_index[name]["coordinates"] == "r":
+        # If the quantity is a surface function, averaging it again has no
+        # effect, regardless of whether sqrt(g) is used.
+        # So we avoid surface averaging it and forgo the <> around the label.
+        label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
+        plot_data_ylabel_key = f"{name}"
+    elif with_sqrt_g:
+        # flux surface average
+        label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+        values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
+        plot_data_ylabel_key = f"<{name}>_fsa"
+    else:
+        # theta average
+        label = (
+            r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
+        )
+        values = surface_averages(grid, q=values)
+        plot_data_ylabel_key = f"<{name}>_fsa"
+    values = compress(grid, values)
+
     if norm_F:
         assert name == "|F|", "Can only normalize |F|."
         if (
@@ -992,10 +1053,7 @@ def plot_fsa(
         len(kwargs) == 0
     ), f"plot_fsa got unexpected keyword argument: {kwargs.keys()}"
 
-    label = label.split("~")
-    label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
-    xlabel = _AXIS_LABELS_RTZ[0]
-    ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
     if norm_F:
         ax.set_ylabel(
@@ -1010,7 +1068,7 @@ def plot_fsa(
 
     plot_data = {}
     plot_data["rho"] = rho
-    plot_data[f"<{name}>_fsa"] = data
+    plot_data[plot_data_ylabel_key] = values
     if norm_F:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:

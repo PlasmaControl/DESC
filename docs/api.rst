@@ -110,6 +110,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.CurrentDensity
+    desc.objectives.Elongation
     desc.objectives.Energy
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ

@@ -139,13 +139,36 @@ class Grid(IOAble):
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
         )
-        self._spacing /= np.tile(np.atleast_2d(counts[inverse]).T, 3) ** (1 / 3)
-        # assign weights pretending _enforce_symmetry didn't change theta spacing
+        duplicates = np.tile(np.atleast_2d(counts[inverse]).T, 3)
         temp_spacing = np.copy(self.spacing)
+        temp_spacing /= duplicates ** (1 / 3)
+        # assign weights pretending _enforce_symmetry didn't change theta spacing
         temp_spacing[:, 1] /= dtheta_scale
+        # scale weights sum to full volume
         temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         self._weights = temp_spacing.prod(axis=1)
-        self._spacing *= (4 * np.pi**2 / self.spacing.prod(axis=1).sum()) ** (1 / 3)
+
+        # Spacing is the differential element used for integration over surfaces.
+        # For this, 2 columns of the matrix are used.
+        # Spacing is rescaled below to get the correct double product for each pair
+        # of columns in grid.spacing.
+        # The reduction of weight on duplicate nodes should be accounted for
+        # by the 2 columns of spacing which span the surface.
+        self._spacing /= duplicates ** (1 / 2)
+        # Note we rescale 3 columns by the factor that 'should' rescale 2 columns,
+        # so grid.spacing is valid for integrals over all surface labels.
+        # Because a surface integral always ignores 1 column, with this approach,
+        # duplicates nodes are scaled down properly regardless of which two columns
+        # span the surface.
+
+        # The following operation is not a general solution to return the weight
+        # removed from the duplicate nodes back to the unique nodes.
+        # For this reason, duplicates should typically be deleted rather that rescaled.
+        # Note we multiply each column by duplicates^(1/6) to account for the extra
+        # division by duplicates^(1/2) in one of the columns above.
+        self._spacing *= (
+            4 * np.pi**2 / (self.spacing * duplicates ** (1 / 6)).prod(axis=1).sum()
+        ) ** (1 / 3)
 
     def _create_nodes(self, nodes):
         """Allow for custom node creation.
@@ -452,7 +475,11 @@ class LinearGrid(Grid):
             if self.sym:
                 t += t[1] / 2
             dt = 2 * np.pi / t.size * np.ones_like(t)
-
+            if endpoint and t.size > 1:
+                # increase node weight to account for duplicate node
+                dt *= t.size / (t.size - 1)
+                # scale_weights() will reduce endpoint (dt[0] and dt[-1])
+                # duplicate node weight
         else:
             t = np.atleast_1d(theta)
             dt = np.zeros_like(t)
@@ -465,13 +492,20 @@ class LinearGrid(Grid):
                 dt /= 2
                 if t.size == 2:
                     dt[-1] = dt[0]
+                if endpoint:
+                    # The cyclic distance algorithm above correctly weights
+                    # the duplicate node spacing at theta = 0 and 2pi.
+                    # However, scale_weights() is not aware of this, so we multiply
+                    # by 2 to counteract the reduction that will be done there.
+                    dt[0] *= 2
+                    dt[-1] *= 2
             else:
                 dt = np.array([2 * np.pi])
 
         # zeta
         # note: dz spacing should not depend on NFP
         # spacing corresponds to a node's weight in an integral --
-        # such as integral = sum(dz * data["B"]) -- not the node's coordinates
+        # such as integral = sum(dt * dz * data["B"]) -- not the node's coordinates
         if self.N is not None:
             zeta = 2 * self.N + 1
         else:
@@ -479,6 +513,11 @@ class LinearGrid(Grid):
         if np.isscalar(zeta) and (int(zeta) == zeta) and zeta > 0:
             z = np.linspace(0, 2 * np.pi / self.NFP, int(zeta), endpoint=endpoint)
             dz = 2 * np.pi / z.size * np.ones_like(z)
+            if endpoint and z.size > 1:
+                # increase node weight to account for duplicate node
+                dz *= z.size / (z.size - 1)
+                # scale_weights() will reduce endpoint (dz[0] and dz[-1])
+                # duplicate node weight
         else:
             z = np.atleast_1d(zeta)
             dz = np.zeros_like(z)
@@ -492,6 +531,13 @@ class LinearGrid(Grid):
                 dz *= self.NFP
                 if z.size == 2:
                     dz[-1] = dz[0]
+                if endpoint:
+                    # The cyclic distance algorithm above correctly weights
+                    # the duplicate node spacing at zeta = 0 and 2pi / NFP.
+                    # However, _scale_weights() is not aware of this, so we multiply
+                    # by 2 to counteract the reduction that will be done there.
+                    dz[0] *= 2
+                    dz[-1] *= 2
             else:
                 dz = np.array([2 * np.pi])
 

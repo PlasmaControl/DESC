@@ -52,8 +52,8 @@ class GenericObjective(_Objective):
         eq=None,
         target=0,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="generic",
     ):

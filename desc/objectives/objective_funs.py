@@ -631,11 +631,15 @@ class _Objective(IOAble, ABC):
 
     def _shift_scale(self, x):
         """Apply target and weighting."""
-        target = (
-            self.target / self.normalization if self._normalize_target else self.target
-        )
+        if self._normalize_target:
+            if isinstance(self.target, tuple):
+                target = tuple([tar / self.normalization for tar in self.target])
+            else:
+                target = self.target / self.normalization
+        else:
+            target = self.target
         x_norm = jnp.atleast_1d(x) / self.normalization
-        if isinstance(target, tuple) and len(target) == 2:
+        if isinstance(target, tuple):
             return (
                 jnp.where(
                     jnp.logical_and(x_norm >= target[0], x_norm <= target[1]),
@@ -653,11 +657,15 @@ class _Objective(IOAble, ABC):
 
     def _unshift_unscale(self, f):
         """Undo target and weighting."""
-        target = (
-            self.target / self.normalization if self._normalize_target else self.target
-        )
+        if self._normalize_target:
+            if isinstance(self.target, tuple):
+                target = tuple([tar / self.normalization for tar in self.target])
+            else:
+                target = self.target / self.normalization
+        else:
+            target = self.target
         f_unweighted = f / self.weight
-        if isinstance(target, tuple) and len(target) == 2:
+        if isinstance(target, tuple):
             return (
                 jnp.where(
                     f_unweighted == 0,

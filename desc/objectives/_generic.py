@@ -5,6 +5,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
+from desc.profiles import Profile
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -131,9 +132,10 @@ class ToroidalCurrent(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : Profile, float, ndarray, optional
         Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f == grid.num_rho
+        If a Profile, target the values of that profile at nodes specified by grid.
+        If an array, len(target) must be equal to Objective.dim_f == grid.num_rho
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f == grid.num_rho
@@ -198,6 +200,9 @@ class ToroidalCurrent(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
+
+        if isinstance(self._target, Profile):
+            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["current"]
@@ -264,9 +269,10 @@ class RotationalTransform(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
+    target : Profile, float, ndarray, optional
         Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f == grid.num_rho
+        If a Profile, target the values of that profile at nodes specified by grid.
+        If an array, len(target) must be equal to Objective.dim_f == grid.num_rho
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f == grid.num_rho
@@ -331,6 +337,8 @@ class RotationalTransform(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
+        if isinstance(self._target, Profile):
+            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["iota"]

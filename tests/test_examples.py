@@ -130,11 +130,10 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option,
-    # Radial, HelicalForceBalance defaulted to cos, sin rotation, respectively
+    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
+    # defaulted to cos, sin rotation, respectively.
     # This test has been kept to increase code coverage.
 
     def test(iota=False):
@@ -171,6 +170,25 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
+def test_solve_target_bounds():
+    """Tests optimizing with target=(lower bound, upper bound)."""
+    # decrease resolution and double pressure so no longer in force balance
+    eq = desc.examples.get("DSHAPE")
+    eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
+    eq.p_l *= 2
+
+    # target force balance residuals with |F| <= 1e3 N
+    obj = ObjectiveFunction(
+        ForceBalance(normalize=False, normalize_target=False, target=(-1e3, 1e3)), eq=eq
+    )
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+
+    # check that all errors are nearly 0, since residual values are within target bounds
+    f = obj.compute(obj.x(eq))
+    np.testing.assert_allclose(f, 0, atol=1e-8)
+
+
+@pytest.mark.regression
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
     eq = desc.examples.get("SOLOVEV")
@@ -188,26 +206,6 @@ def test_1d_optimization(SOLOVEV):
         eq.optimize(objective, constraints, options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
-
-
-@pytest.mark.regression
-def test_1d_optimization_bounds():
-    """Tests 1D optimization for target aspect ratio within bounds."""
-    eq = desc.examples.get("SOLOVEV")
-    objective = ObjectiveFunction(AspectRatio(target=(2.4, 2.6)))
-    constraints = (
-        ForceBalance(),
-        FixBoundaryR(),
-        FixBoundaryZ(modes=eq.surface.Z_basis.modes[0:-1, :]),
-        FixPressure(),
-        FixIota(),
-        FixPsi(),
-    )
-    options = {"perturb_options": {"order": 1}}
-    with pytest.warns(UserWarning):
-        eq.optimize(objective, constraints, options=options)
-
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.6, rtol=2e-4)
 
 
 @pytest.mark.regression

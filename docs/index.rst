@@ -41,6 +41,13 @@
 
 .. toctree::
    :maxdepth: 1
+   :caption: Developer guides
+
+   compute
+   objectives
+
+.. toctree::
+   :maxdepth: 1
    :caption: Public API
 
    api

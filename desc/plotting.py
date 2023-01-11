@@ -2082,6 +2082,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     return fig, ax
 
 
+# FIXME: update this to use VMEC convention modes
 def plot_boozer_modes(
     eq,
     log=True,
@@ -2464,6 +2465,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         if fB:
             data = eq.compute(["|B|_mn", "B modes"], grid=grid, data=data)
             modes = data["B modes"]
+            # FIXME: update this logic
             idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
                 np.sum(data["|B|_mn"] ** 2)

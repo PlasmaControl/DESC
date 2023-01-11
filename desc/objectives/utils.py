@@ -229,7 +229,10 @@ def factorize_linear_constraints(constraints, objective_args):
         if arg not in objective_args:
             continue
         res = con.compute(**xp_dict)
-        if not np.allclose(res, 0):
+        x = xp_dict[arg]
+        # stuff like density is O(1e19) so need some adjustable tolerance here.
+        atol = max(1e-8, np.finfo(x).eps * np.linalg.norm(x) / x.size)
+        if not np.allclose(res, 0, atol=atol):
             raise ValueError(
                 f"Incompatible constraints detected, cannot satisfy constraint {con}"
             )

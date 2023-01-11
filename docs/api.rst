@@ -130,6 +130,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
+    desc.objectives.RotationalTransform
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

@@ -10,6 +10,7 @@ from scipy import integrate, interpolate, optimize
 
 from desc.backend import sign
 from desc.basis import DoubleFourierSeries
+from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
@@ -158,6 +159,8 @@ class VMECIO:
         # lambda
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
+
+        eq = ensure_positive_jacobian(eq)
 
         # apply boundary conditions
         constraints = (
@@ -327,8 +330,8 @@ class VMECIO:
         ]
 
         signgs = file.createVariable("signgs", np.int32)
-        signgs.long_name = "sign of coordinate system Jacobian"
-        signgs[:] = sign(
+        signgs.long_name = "sign of coordinate system jacobian"
+        signgs[:] = -sign(
             eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
         )
 
@@ -369,9 +372,12 @@ class VMECIO:
         ai[:] = np.zeros((file.dimensions["preset"].size,))
         if eq.iota is not None:
             # only using up to 10th order to avoid poor conditioning
-            ai[:11] = PowerSeriesProfile.from_values(
-                s_full, eq.iota(r_full), order=10, sym=False
-            ).params
+            ai[:11] = (
+                signgs[:]
+                * PowerSeriesProfile.from_values(
+                    s_full, eq.iota(r_full), order=10, sym=False
+                ).params
+            )
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"
@@ -401,20 +407,22 @@ class VMECIO:
         iotaf = file.createVariable("iotaf", np.float64, ("radius",))
         iotaf.long_name = "rotational transform on full mesh"
         if eq.iota is not None:
-            iotaf[:] = eq.iota(r_full)
+            iotaf[:] = signgs[:] * eq.iota(r_full)
         else:
             # value closest to axis will be nan
             grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
-            iotaf[:] = compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotaf[:] = signgs[:] * compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
         iotas[0] = 0
         if eq.iota is not None:
-            iotas[1:] = eq.iota(r_half)
+            iotas[1:] = signgs[:] * eq.iota(r_half)
         else:
             grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
-            iotas[1:] = compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotas[1:] = signgs[:] * compress(
+                grid, eq.compute("iota", grid=grid)["iota"]
+            )
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -545,7 +553,9 @@ class VMECIO:
             rmns = file.createVariable("rmns", np.float64, ("radius", "mn_mode"))
             rmns.long_name = "sin(m*t-n*p) component of cylindrical R, on full mesh"
             rmns.units = "m"
-        m, n, x_mn = zernike_to_fourier(eq.R_lmn, basis=eq.R_basis, rho=r_full)
+        r1 = np.ones_like(eq.R_lmn)
+        r1[eq.R_basis.modes[:, 1] < 0] *= -1
+        m, n, x_mn = zernike_to_fourier(r1 * eq.R_lmn, basis=eq.R_basis, rho=r_full)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         rmnc[:] = c
         if not eq.sym:
@@ -565,7 +575,9 @@ class VMECIO:
             zmnc = file.createVariable("zmnc", np.float64, ("radius", "mn_mode"))
             zmnc.long_name = "cos(m*t-n*p) component of cylindrical Z, on full mesh"
             zmnc.units = "m"
-        m, n, x_mn = zernike_to_fourier(eq.Z_lmn, basis=eq.Z_basis, rho=r_full)
+        z1 = np.ones_like(eq.Z_lmn)
+        z1[eq.Z_basis.modes[:, 1] < 0] *= -1
+        m, n, x_mn = zernike_to_fourier(z1 * eq.Z_lmn, basis=eq.Z_basis, rho=r_full)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         zmns[:] = s
         if not eq.sym:
@@ -585,7 +597,9 @@ class VMECIO:
             lmnc = file.createVariable("lmnc", np.float64, ("radius", "mn_mode"))
             lmnc.long_name = "cos(m*t-n*p) component of lambda, on half mesh"
             lmnc.units = "rad"
-        m, n, x_mn = zernike_to_fourier(eq.L_lmn, basis=eq.L_basis, rho=r_half)
+        l1 = np.ones_like(eq.L_lmn)
+        l1[eq.L_basis.modes[:, 1] >= 0] *= -1
+        m, n, x_mn = zernike_to_fourier(l1 * eq.L_lmn, basis=eq.L_basis, rho=r_half)
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         lmns[0, :] = 0
         lmns[1:, :] = s
@@ -672,10 +686,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         gmnc[0, :] = 0
-        gmnc[1:, :] = c
+        gmnc[1:, :] = c * signgs[:]
         if not eq.sym:
             gmns[0, :] = 0
-            gmns[1:, :] = s
+            gmns[1:, :] = s * signgs[:]
         timer.stop("Jacobian")
         if verbose > 1:
             timer.disp("Jacobian")
@@ -797,10 +811,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupvmnc[0, :] = 0
-        bsupvmnc[1:, :] = c * signgs[:]
+        bsupvmnc[1:, :] = c
         if not eq.sym:
             bsupvmns[0, :] = 0
-            bsupvmns[1:, :] = s * signgs[:]
+            bsupvmns[1:, :] = s
         timer.stop("B^zeta")
         if verbose > 1:
             timer.disp("B^zeta")
@@ -837,14 +851,16 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        bsubsmns[:, :] = s
-        bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
+        bsubsmns[:, :] = signgs[:] * s
+        bsubsmns[0, :] = signgs[
+            :
+        ] * (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            bsubsmnc[:, :] = c
-            bsubsmnc[0, :] = (
+            bsubsmnc[:, :] = signgs[:] * c
+            bsubsmnc[0, :] = signgs[:] * (
                 c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("B_psi")
@@ -929,10 +945,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubvmnc[0, :] = 0
-        bsubvmnc[1:, :] = c * signgs[:]
+        bsubvmnc[1:, :] = c
         if not eq.sym:
             bsubvmns[0, :] = 0
-            bsubvmns[1:, :] = s * signgs[:]
+            bsubvmns[1:, :] = s
         timer.stop("B_zeta")
         if verbose > 1:
             timer.disp("B_zeta")
@@ -959,7 +975,11 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (data_full_grid["J^theta"] * data_full_grid["sqrt(g)"])
+            (
+                data_full_grid["J^theta"]
+                * data_full_grid["sqrt(g)"]
+                / (2 * data_full_grid["rho"])
+            )
             .reshape(
                 (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
             )
@@ -1009,7 +1029,11 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (data_full_grid["J^zeta"] * data_full_grid["sqrt(g)"])
+            (
+                data_full_grid["J^zeta"]
+                * data_full_grid["sqrt(g)"]
+                / (2 * data_full_grid["rho"])
+            )
             .reshape(
                 (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
             )
@@ -1023,14 +1047,16 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        currvmnc[:, :] = c
-        currvmnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
+        currvmnc[:, :] = signgs[:] * c
+        currvmnc[0, :] = signgs[
+            :
+        ] * (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            currvmns[:, :] = s
-            currumns[0, :] = (
+            currvmns[:, :] = signgs[:] * s
+            currumns[0, :] = signgs[:] * (
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^zeta")
@@ -1184,6 +1210,7 @@ class VMECIO:
             "rmnc": file.variables["rmnc"][:],
             "zmns": file.variables["zmns"][:],
             "lmns": file.variables["lmns"][:],
+            "signgs": file.variables["signgs"][:],
         }
         try:
             vmec_data["rmns"] = file.variables["rmns"][:]

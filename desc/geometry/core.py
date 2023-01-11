@@ -1,8 +1,11 @@
+"""Base classes for curves and surfaces."""
+
 from abc import ABC, abstractmethod
 
 from desc.backend import jnp
 from desc.io import IOAble
-from .utils import rotation_matrix, reflection_matrix
+
+from .utils import reflection_matrix, rotation_matrix
 
 
 class Curve(IOAble, ABC):
@@ -27,7 +30,7 @@ class Curve(IOAble, ABC):
     @property
     @abstractmethod
     def grid(self):
-        """Grid for computation."""
+        """Grid: Nodes for computation."""
 
     @abstractmethod
     def compute_coordinates(self, params=None, grid=None, dt=0):
@@ -50,23 +53,23 @@ class Curve(IOAble, ABC):
         """Compute the length of the curve using specified nodes for quadrature."""
 
     def translate(self, displacement=[0, 0, 0]):
-        """Translate the curve by a rigid displacement in x, y, z"""
+        """Translate the curve by a rigid displacement in x, y, z."""
         self.shift += jnp.asarray(displacement)
 
     def rotate(self, axis=[0, 0, 1], angle=0):
-        """Rotate the curve by a fixed angle about axis in xyz coordinates"""
+        """Rotate the curve by a fixed angle about axis in xyz coordinates."""
         R = rotation_matrix(axis, angle)
         self.rotmat = R @ self.rotmat
         self.shift = self.shift @ R.T
 
     def flip(self, normal):
-        """Flip the curve about the plane with specified normal"""
+        """Flip the curve about the plane with specified normal."""
         F = reflection_matrix(normal)
         self.rotmat = F @ self.rotmat
         self.shift = self.shift @ F.T
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -82,7 +85,7 @@ class Surface(IOAble, ABC):
 
     @property
     def name(self):
-        """Name of the surface."""
+        """str: Name of the surface."""
         return self._name
 
     @name.setter
@@ -91,28 +94,28 @@ class Surface(IOAble, ABC):
 
     @property
     def L(self):
-        """maximum radial mode number"""
+        """int: Maximum radial mode number."""
         return self._L
 
     @property
     def M(self):
-        """maximum poloidal mode number"""
+        """int: Maximum poloidal mode number."""
         return self._M
 
     @property
     def N(self):
-        """maximum toroidal mode number"""
+        """int: Maximum toroidal mode number."""
         return self._N
 
     @property
     def sym(self):
-        """Stellarator symmetry."""
+        """bool: Whether or not the surface is stellarator symmetric."""
         return self._sym
 
     @property
     @abstractmethod
     def grid(self):
-        """Grid for computation."""
+        """Grid: Nodes for computation."""
 
     @abstractmethod
     def change_resolution(self, *args, **kwargs):
@@ -130,12 +133,41 @@ class Surface(IOAble, ABC):
     def compute_surface_area(self, params=None, grids=None):
         """Compute surface area via quadrature."""
 
-    @abstractmethod
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
+    def compute_curvature(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute gaussian and mean curvature.
+
+        Parameters
+        ----------
+        R_lmn, Z_lmn: array-like
+            fourier coefficients for R, Z. Defaults to self.R_lmn, self.Z_lmn
+        grid : Grid or array-like
+            toroidal coordinates to compute at. Defaults to self.grid
+            If an integer, assumes that many linearly spaced points in (0,2pi)
+
+        Returns
+        -------
+        K, H, k1, k2 : ndarray, shape(k,)
+            Gaussian, mean and 2 principle curvatures at points specified in grid.
+
+        """
+        # following notation from
+        # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+        E, F, G = self._compute_first_fundamental_form(R_lmn, Z_lmn, grid)
+        L, M, N = self._compute_second_fundamental_form(R_lmn, Z_lmn, grid)
+        # coeffs of quadratic eqn for determinant
+        a = E * G - F**2
+        b = F * M - L * G - E * N
+        c = L * N - M**2
+        r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+        k1 = jnp.maximum(r1, r2)
+        k2 = jnp.minimum(r1, r2)
+        K = k1 * k2
+        H = (k1 + k2) / 2
+        return K, H, k1, k2
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "

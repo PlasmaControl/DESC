@@ -1,24 +1,31 @@
+"""Tests for Surface classes."""
+
 import numpy as np
-import unittest
 import pytest
 
+import desc.examples
 from desc.geometry import FourierRZToroidalSurface, ZernikeRZToroidalSection
 from desc.grid import LinearGrid
-import desc.examples
 
 
-class TestFourierRZToroidalSurface(unittest.TestCase):
+class TestFourierRZToroidalSurface:
+    """Tests for FourierRZToroidalSurface class."""
+
+    @pytest.mark.unit
     def test_area(self):
+        """Test calculation of surface area."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(M=24, N=24)
         s.grid = grid
 
-        area = 4 * np.pi ** 2 * 10
+        area = 4 * np.pi**2 * 10
         np.testing.assert_allclose(s.compute_surface_area(), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=10), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=(10, 15)), area)
 
+    @pytest.mark.unit
     def test_normal(self):
+        """Test calculation of surface normal vector."""
         s = FourierRZToroidalSurface()
         grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
         s.grid = grid
@@ -30,7 +37,9 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N[0], [-1, 0, 0], atol=1e-12)
 
+    @pytest.mark.unit
     def test_misc(self):
+        """Test getting/setting attributes of surface."""
         c = FourierRZToroidalSurface()
         grid = LinearGrid(L=0, M=2, N=2)
         c.grid = grid
@@ -69,13 +78,15 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
         assert c.name in str(c)
         assert "FourierRZToroidalSurface" in str(c)
 
-        c.NFP = 3
+        with pytest.warns(UserWarning):
+            c.NFP = 3
         assert c.NFP == 3
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
 
+    @pytest.mark.unit
     def test_from_input_file(self):
-
+        """Test reading a surface from a vmec or desc input file."""
         vmec_path = ".//tests//inputs//input.DSHAPE"
         desc_path = ".//tests//inputs//DSHAPE"
         vmec_surf = FourierRZToroidalSurface.from_input_file(vmec_path)
@@ -99,26 +110,61 @@ class TestFourierRZToroidalSurface(unittest.TestCase):
             true_surf.Z_lmn, desc_surf.Z_lmn, atol=1e-10, rtol=1e-10
         )
 
+    def test_from_near_axis(self):
+        """Test constructing approximate QI surface from near axis parameters."""
+        surf = FourierRZToroidalSurface.from_near_axis(10, 4, 0.3, 0.2)
+        np.testing.assert_allclose(
+            surf.R_lmn,
+            np.array([-0.075, 0, 1, 0.125, 0, 0.0150853, -0.2, 0.075]),
+            rtol=1e-4,
+            atol=1e-6,
+        )
+        np.testing.assert_allclose(
+            surf.Z_lmn,
+            np.array([0.2, -0.075, 0, 0, 0.125, 0.00377133, -0.075]),
+            rtol=1e-4,
+            atol=1e-6,
+        )
 
-class TestZernikeRZToroidalSection(unittest.TestCase):
+    def test_curvature(self):
+        """Tests for gaussian, mean, principle curvatures."""
+        s = FourierRZToroidalSurface()
+        grid = LinearGrid(theta=np.pi / 2, zeta=np.pi)
+        s.grid = grid
+        K, H, k1, k2 = s.compute_curvature()
+        np.testing.assert_allclose(K, 0)
+        np.testing.assert_allclose(H, 1 / 2)
+        np.testing.assert_allclose(k1, 1)
+        np.testing.assert_allclose(k2, 0)
+
+
+class TestZernikeRZToroidalSection:
+    """Tests for ZerinkeRZTorioidalSection class."""
+
+    @pytest.mark.unit
     def test_area(self):
+        """Test calculation of surface area."""
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=10, M=10)
         s.grid = grid
 
-        area = np.pi * 1 ** 2
+        area = np.pi * 1**2
         np.testing.assert_allclose(s.compute_surface_area(), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=15), area)
         np.testing.assert_allclose(s.compute_surface_area(grid=(5, 5)), area)
 
+    @pytest.mark.unit
     def test_normal(self):
+        """Test calculation of surface normal vector."""
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(L=8, M=4, N=0)
         s.grid = grid
         N = s.compute_normal(basis="xyz")
         np.testing.assert_allclose(N, np.broadcast_to([0, 1, 0], N.shape), atol=1e-12)
 
+    @pytest.mark.unit
     def test_misc(self):
+        """Test getting/setting surface attributes."""
         c = ZernikeRZToroidalSection()
         grid = LinearGrid(L=2, M=2, N=0)
         c.grid = grid
@@ -154,3 +200,17 @@ class TestZernikeRZToroidalSection(unittest.TestCase):
             c.Z_lmn = s.Z_lmn
 
         assert c.sym
+
+    def test_curvature(self):
+        """Tests for gaussian, mean, principle curvatures.
+
+        (kind of pointless since its a flat surface so its always 0)
+        """
+        s = ZernikeRZToroidalSection()
+        grid = LinearGrid(theta=np.pi / 2, rho=0.5)
+        s.grid = grid
+        K, H, k1, k2 = s.compute_curvature()
+        np.testing.assert_allclose(K, 0)
+        np.testing.assert_allclose(H, 0)
+        np.testing.assert_allclose(k1, 0)
+        np.testing.assert_allclose(k2, 0)

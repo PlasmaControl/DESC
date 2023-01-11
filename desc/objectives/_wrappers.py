@@ -1,3 +1,5 @@
+"""Wrappers for doing STELLOPT/SIMSOPT like optimization."""
+
 import numpy as np
 import subprocess
 from scipy.interpolate import interp1d
@@ -5,44 +7,27 @@ import os
 import time
 from desc.backend import jnp,put
 from desc.compute import arg_order
+
+from ._equilibrium import CurrentDensity
+from .objective_funs import ObjectiveFunction, _Objective
 from .utils import (
+    align_jacobian,
+    factorize_linear_constraints,
     get_equilibrium_objective,
     get_fixed_boundary_constraints,
-    factorize_linear_constraints,
 )
-
 from desc.utils import Timer
-from desc.transform import Transform
-from .objective_funs import ObjectiveFunction, _Objective
-from ._equilibrium import CurrentDensity
-
-from desc.compute._core import (
-    compute_rotational_transform,
-    compute_toroidal_flux,    
-    compute_geometry,
-    compute_contravariant_metric_coefficients,
-    compute_lambda,
-    dot,
-    compute_pressure,
-    data_index,
-    compute_flux_coords
-)
-
-from desc.compute._field import (
-    compute_magnetic_field_magnitude,        
-    compute_covariant_magnetic_field
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
+from desc.compute.utils import dot
 
 from scipy.constants import mu_0, pi
-
 from desc.grid import LinearGrid, Grid, ConcentricGrid, QuadratureGrid
 from jax import core
 from jax.interpreters import ad, batching
 from desc.derivatives import FiniteDiffDerivative
 import netCDF4 as nc
-
 from shutil import copyfile
-#from desc.configuration import compute_theta_coords
 
 class WrappedEquilibriumObjective(ObjectiveFunction):
     """Evaluate an objective subject to equilibrium constraint.
@@ -55,8 +40,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Equilibrium objective to enforce.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
-    use_jit : bool, optional
-        Whether to just-in-time compile the objectives and derivatives.
     verbose : int, optional
         Level of output.
 
@@ -68,23 +51,23 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         eq_objective=None,
         linear_objective=None,
         eq=None,
-        use_jit=False,
         verbose=1,
         perturb_options={},
         solve_options={},
     ):
-
+        self._use_jit = False
         self._objective = objective
         self._eq_objective = eq_objective
         self._linear_objective = linear_objective
         self._perturb_options = perturb_options
         self._solve_options = solve_options
-        self._use_jit = use_jit
         self._built = False
+        # need compiled=True to avoid calling objective.compile which calls
+        # compute with all zeros, leading to error in perturb/resolve
         self._compiled = True
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
+            self.build(eq, verbose=verbose)
 
     # TODO: add timing and verbose statements
     def build(self, eq, use_jit=False, verbose=1):
@@ -96,6 +79,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+            Note: unused by this class, should pass to sub-objectives directly.
         verbose : int, optional
             Level of output.
 
@@ -104,19 +88,18 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         if self._eq_objective is None:
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
-            profiles=not isinstance(self._eq_objective.objectives[0], CurrentDensity),
-            iota=eq.iota is not None,
+            iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
+            and self._eq.iota is not None
         )
 
         if self._linear_objective is None:
             self._linear_objective = ObjectiveFunction(self._constraints)
-
-
         self._objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         self._eq_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
         self._linear_objective.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+
         for constraint in self._constraints:
-            constraint.build(self._eq, use_jit=self.use_jit, verbose=verbose)
+            constraint.build(self._eq, verbose=verbose)
         self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f
@@ -148,9 +131,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(
-            self._constraints, extra_args=self._eq_objective.args
-        )
+        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
 
         (
             xpl,
@@ -162,7 +143,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._projectl,
             self._recoverl,
         ) = factorize_linear_constraints(
-            self._linear_objective.objectives, extra_args=self._args
+            self._linear_objective.objectives, self._args
         )
         
 
@@ -170,14 +151,28 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         for arg in self.args:
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
+        self._allx = [self._x_old]
         self.history = {}
         for arg in self._full_args:
-            self.history[arg] = [np.atleast_1d(getattr(self._eq, arg))]
+            self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
 
-    def _update_equilibrium(self, x):
-        """Update the internal equilibrium with new boundary, profile etc."""
+    def _update_equilibrium(self, x, store=False):
+        """Update the internal equilibrium with new boundary, profile etc.
+
+        Parameters
+        ----------
+        x : ndarray
+            New values of optimization variables.
+        store : bool
+            Whether the new x should be stored in self.history
+
+        Notes
+        -----
+        After updating, if store=False, self._eq will revert back to the previous
+        solution when store was True
+        """
         if jnp.allclose(x, self._x_old, rtol=1e-14, atol=1e-14):
             pass
         else:
@@ -198,9 +193,20 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 constraints=self._constraints,
                 **self._solve_options
             )
+
+        xopt = self._objective.x(self._eq)
+        xeq = self._eq_objective.x(self._eq)
+        if store:
             self._x_old = x
+            self._allx.append(x)
             for arg in self._full_args:
-                self.history[arg].append(getattr(self._eq, arg))
+                self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
+        else:
+            for arg in self._full_args:
+                val = self.history[arg][-1].copy()
+                if val.size:
+                    setattr(self._eq, arg, val)
+        return xopt, xeq
 
     def compute(self, x):
         """Compute the objective function.
@@ -216,21 +222,41 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Objective function value(s).
 
         """
-        self._update_equilibrium(x)
-        x_obj = self._objective.x(self._eq)
-        return self._objective.compute(x_obj)
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute(xopt)
 
     def grad(self, x):
+        """Compute gradient of the sum of squares of residuals.
 
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        g : ndarray
+            gradient vector.
+        """
         f = jnp.atleast_1d(self.compute(x))
         J = self.jac(x)
         return f.T @ J
 
     def jac(self, x):
+        """Compute Jacobian of the vector objective function.
 
-        self._update_equilibrium(x)
-        
-        
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        xg, xf = self._update_equilibrium(x, store=True)
+
         # dx/dc
         x_idx = np.concatenate(
             [
@@ -251,29 +277,13 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             @ self._Ainv["Z_lmn"]
         )
         dxdc = np.hstack((dxdc, dxdZb))
-        
-                 
-        # state vectors
-        xf = self._eq_objective.x(self._eq)
-        xg = self._objective.x(self._eq)
 
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
-#        Gx = self._objective.jac(xg)
-        Fx = {
-            arg: Fx[:, self._eq_objective.x_idx[arg]] for arg in self._eq_objective.args
-        }
-#        Gx = {arg: Gx[:, self._objective.x_idx[arg]] for arg in self._objective.args}
-        for arg in self._eq_objective.args:
-            if arg not in Fx.keys():
-                Fx[arg] = jnp.zeros((self._eq_objective.dim_f, self.dimensions[arg]))
-#            if arg not in Gx.keys():
-#                Gx[arg] = jnp.zeros((self._objective.dim_f, self.dimensions[arg]))
-        Fx = jnp.hstack([Fx[arg] for arg in arg_order if arg in Fx])
-#        Gx = jnp.hstack([Gx[arg] for arg in arg_order if arg in Gx])
-        print("The shape of Fx is " + str(Fx.shape))
-        print("The shape of Z is " + str(self._Z.shape))
-        print("unfixed idx is " + str(self._unfixed_idx.shape))
+        #Gx = self._objective.jac(xg)
+        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
+        #Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
 #        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
 
@@ -284,8 +294,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 #        GxFx = Gx_reduced @ Fx_reduced_inv
 
 #        LHS  = GxFx @ Fc - Gc
-        print("The shape of dxdc is " + str(dxdc.shape))
-        print("unfixed idxl is " + str(self._unfixed_idxl))
         tang = jnp.array([])
         for i in range(len(dxdc)):
             ti = self._projectl(dxdc[i,:])
@@ -293,12 +301,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 print("ti is " + str(ti))
             tang = jnp.hstack([tang,ti])
         tang = jnp.atleast_2d(0.001*tang).T
-        #print("tangents are " + str(tang))
-       
 
         print("computing fx")
-        fx = self._objective.compute(xg)
-        args = (fx,)
         Gc = jnp.array([])
         for i in range(len(tang[0])):
             print("tangent is " + str(tang[:,i]))
@@ -316,89 +320,46 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
 
         I = jnp.eye(len(xg),len(self._Z))
-        #print("The shape of I is " + str(I.shape))
-        #print("The shape of Z is " + str(self._Z.shape))
-        #print("The shape of Fx_reduced_inv is " + str(Fx_reduced_inv.shape))
-        #print("The shape of Fc is " + str(Fc.shape))
-        #print("The shape of Fx is " + str(Fx.shape))
         t = I @ self._Z @ Fx_reduced_inv @ Fc
-        print("The shape of t is " + str(t.shape))
         
         num_singular_values = 9
-
-        tnorm = jnp.linalg.norm(t,axis=0)
-        #print("t is " + str(t))
-        #print("tnorm is " + str(tnorm))
-        #tnp = np.array(t)
-        #tnorm_np = np.array(tnorm)
-        #nonzero_col = tnorm_np > 0
-        #tnp[:,nonzero_col] /= tnorm_np[nonzero_col]
-        #t = jnp.array(tnp)
-        
-        #t = jnp.asarray(t).at([:,nonzero_col]).set(t[:,nonzero_col]/tnorm[nonzero_col])
-        
+        tnorm = jnp.linalg.norm(t,axis=0)        
 
         tU, tS, tV = jnp.linalg.svd(t)
-        #print("The singular values are of t are " + str(tS))
         tu1 = tU[:,:num_singular_values+1]
         tv1 = tV[:num_singular_values+1,:]
         ts1 = tS[:num_singular_values+1]
 
-        #print("The shape of tu1 is " + str(tu1.shape))
-        #print("The shape of tv1 is " + str(tv1.shape))
-        print("ts1 is " + str(ts1))
         GxFxFc = jnp.array([])
         gx_eval = 0
-        print("tu1 is " + str(tu1))
         for i in range(len(tu1[0])):
             GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(tu1[:,i],xg)])
             gx_eval = gx_eval + 1
         GxFxFc = GxFxFc @ jnp.diag(ts1) @ tv1
-        print("GxFxFc proj is " + str(self._projectl(GxFxFc)))
-        #GxFxFc = self._objective.jvp(tu1.T,xg)*ts1*tv1
-
-        #GxFxFc = jnp.array([])
-        #for i in range(len(t[0])):
-        #    GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(t[:,i],xg)])
-        #GxFxFc = self._objective.jvp(t,xg)
-
-#        num_singular_values = dxdc.shape[1]
-#        dxdc_norm = jnp.linalg.norm(dxdc,axis=0)
-#        dxdc_np = np.array(dxdc)
-#        dxdc_norm_np = np.array(dxdc_norm)
-#        nonzero_col = dxdc_norm_np > 0
-#        dxdc_np[:,nonzero_col] /= dxdc_norm_np[nonzero_col]
-#        dxdc = np.array(dxdc_np)
-#
-#        dxdc_U, dxdc_S, dxdc_V = jnp.linalg.svd(dxdc)
-#        #print("The singular values of dxdc are " + str(dxdc_S))
-#        dxdc_u1 = dxdc_U[:,:num_singular_values]
-#        dxdc_v1 = dxdc_V[:num_singular_values,:]
-#        dxdc_s1 = dxdc_S[:num_singular_values]
-#        Gc = jnp.array([])
-#        for i in range(len(dxdc_u1[0])):
-#            Gc = jnp.hstack([Gc,self._objective.jvp(dxdc_u1[:,i],xg)])
-#            gx_eval = gx_eval + 1
-#        Gc = Gc @ jnp.diag(dxdc_s1) @ dxdc_v1
-        #Gc = self._objective.jvp(dxdc_u1,xg)*dxdc_s1*dxdc_v1
-        
-
-
-        #Gc = jnp.array([])
-        #for i in range(len(dxdc[0])):
-        #    Gc = jnp.hstack([Gc,self._objective.jvp(dxdc[:,i],xg)])
-        #Gc = self._objective.jvp(dxdc,xg)
-
-        
-        #print("Gc is " + str(Gc))
-        print("GxFxFc is " + str(GxFxFc))
         LHS = jnp.atleast_2d(GxFxFc - Gc)
-        #print("The shape of LHS is " + str(LHS))
-        #LHS = jnp.atleast_2d(-Gc)
+       
+        #Gc = Gx @ dxdc
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        #LHS = Gx_reduced @ (Fx_reduced_inv @ Fc) - Gc
         return -LHS
 
     def hess(self, x):
+        """Compute Hessian of the sum of squares of residuals.
 
+        Uses the "small residual approximation" where the Hessian is replaced by
+        the square of the Jacobian: H = J.T @ J
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        H : ndarray
+            Hessian matrix.
+        """
         J = self.jac(x)
         return J.T @ J
 
@@ -408,8 +369,9 @@ class GXWrapper(_Objective):
 
     _scalar = True
     _linear = False
-    
-    
+    _units = "Q"
+    _print_value_fmt = "Total heat flux: {:10.3e} "
+ 
     def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False):
         self.eq = eq
         self.npol = npol
@@ -459,56 +421,37 @@ class GXWrapper(_Objective):
             self.grid = Grid(coords)
 
         self._dim_f = 1
-
         timer = Timer()
+
+        self._data_eq_keys = [
+            "iota",
+            "iota_r",
+            "a",
+            "rho",
+            "psi"
+        ]
+        self._data_keys = [
+            "B", "|B|",
+            "lambda", "lambda_r", "lambda_t", "lambda_z",
+            "|grad(rho)|",
+            "g^rr", "g^tt", "g^zz", "g^rt", "g^rz", "g^tz",
+            "g_tz", "g_tt", "g_zz",
+            "B_theta", "B_zeta", "B_rho", "|B|_t", "|B|_z",
+            "B^theta", "B^zeta_r", "B^theta_r", "B^zeta",
+            "e_theta", "e_theta_r", "e_zeta_r", "e_zeta",
+            "p_r"
+        ]
+
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
         
         self.eq = eq
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles_eq = get_profiles(self._data_keys, eq=eq, grid=self.grid_eq)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms_eq = get_transforms(self._data_keys, eq=eq, grid=self.grid_eq)
 
-        self._pressure = eq.pressure.copy()
-        if eq.iota is not None:
-            self._iota = eq.iota.copy()
-            self._iota_eq = eq.iota.copy()
-            self._iota.grid = self.grid
-            self._iota_eq.grid = self.grid_eq
-        else:
-            self._iota = None
-            self._iota_eq = None
-        if eq.current is not None:
-            self._current = eq.current.copy()
-            self._current.grid = self.grid
-            self._current_eq = eq.current.copy()
-            self._current_eq.grid = self.grid_eq
-        else:
-            self._current = None
-            self._current_eq = None
-
-        self._pressure.grid = self.grid
-
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=3, build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=3, build=True
-        )
-        self._L_transform = Transform(
-            self.grid, eq.L_basis, derivs=3, build=True
-        )
-
-        self._R_transform_eq = Transform(
-            self.grid_eq, eq.R_basis, derivs=3, build=True
-        )
-        self._Z_transform_eq = Transform(
-            self.grid_eq, eq.Z_basis, derivs=3, build=True
-        )
-        self._L_transform_eq = Transform(
-            self.grid_eq, eq.L_basis, derivs=3, build=True
-        )
-
-
-        
         self._args = ["R_lmn","Z_lmn","L_lmn","i_l","c_l", "p_l","Psi"]
         
         self.gx_compute = core.Primitive("gx")
@@ -526,66 +469,60 @@ class GXWrapper(_Objective):
         self._built = True
     
     def compute(self, R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi):
-        #print("At the beginning of compute: " + str(R_lmn[0]) + " " +str(Z_lmn[0]) + " " + str(L_lmn[0]))
         args = (R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi)
-        #self.gx_compute.bind(R_lmn,Z_lmn,L_lmn,i_l,p_l,Psi)
         return self.gx_compute.bind(*args)
 
     def compute_impl(self, *args):
         (R_lmn, Z_lmn, L_lmn, i_l, c_l, p_l, Psi) = args
         rho = np.sqrt(self.psi)
- 
-        if self._iota is None:
-            data_eq =compute_rotational_transform(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform_eq,self._Z_transform_eq,self._L_transform_eq,self._iota_eq,self._current_eq)
-            data_eq = compute_flux_coords(grid=self.grid_eq,data=data_eq)
-            fi = interp1d(data_eq['rho'],data_eq['iota'])
-            fs = interp1d(data_eq['rho'],data_eq['iota_r'])
-
-            iotas = fi(np.sqrt(self.psi))
-            shears = fs(np.sqrt(self.psi))
-            #if iotas < 0:
-            #    iotas = np.abs(iotas)
-            #    shears = -shears
-
-            zeta = np.linspace(-np.pi*self.npol/np.abs(iotas),np.pi*self.npol/np.abs(iotas),2*self.nzgrid+1)
-            iota = iotas * np.ones(len(zeta))
-            shear = shears * np.ones(len(zeta))
-            thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
-
-            rhoa = rho*np.ones(len(zeta))
-            c = np.vstack([rhoa,thetas,zeta]).T
-            coords = self.eq.compute_theta_coords(c,L_lmn=L_lmn)
-            self.grid = Grid(coords)
-            self._R_transform = Transform(
-                self.grid, self.eq.R_basis, derivs=3, build=True
-            )
-            self._Z_transform = Transform(
-                self.grid, self.eq.Z_basis, derivs=3, build=True
-            )
-            self._L_transform = Transform(
-                self.grid, self.eq.L_basis, derivs=3, build=True
-            )
-            data = {}
-        else:
-            data = compute_rotational_transform(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,self._current)
-
-            iota= np.abs(data['iota'])
-            iotas = iota[0]
-            if data['iota'][0] < 0:
-                shear = -data['iota_r']
-            else:
-                shear = data['iota_r']
-            data_eq = {}
-            zeta = np.linspace(-np.pi*self.npol/iotas,np.pi*self.npol/iotas,2*self.nzgrid+1)
-
-
-        #print("iota is " + str(iota))
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
+            "p_l": p_l,
+            "i_l": i_l,
+            "c_l": c_l,
+            "Psi": Psi,
+        }
         
-        if self._iota is not None:
-            data = compute_toroidal_flux(Psi,self._iota.grid,data=data)
-        else:
-            data = compute_toroidal_flux(Psi,self._current.grid,data=data)
-        psib = data['psi'][-1]*2
+        data_eq = compute_fun(
+            self._data_eq_keys,
+            params=params,
+            transforms=self._transforms_eq,
+            profiles=self._profiles_eq,
+        )
+        
+        fi = interp1d(data_eq['rho'],data_eq['iota'])
+        fs = interp1d(data_eq['rho'],data_eq['iota_r'])
+
+        iotas = fi(np.sqrt(self.psi))
+        shears = fs(np.sqrt(self.psi))
+        #if iotas < 0:
+        #    iotas = np.abs(iotas)
+        #    shears = -shears
+
+        zeta = np.linspace(-np.pi*self.npol/np.abs(iotas),np.pi*self.npol/np.abs(iotas),2*self.nzgrid+1)
+        iota = iotas * np.ones(len(zeta))
+        shear = shears * np.ones(len(zeta))
+        thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
+
+        rhoa = rho*np.ones(len(zeta))
+        c = np.vstack([rhoa,thetas,zeta]).T
+        coords = self.eq.compute_theta_coords(c,L_lmn=L_lmn)
+
+        if self._profiles_eq["iota"] is None:
+            self.grid = Grid(coords)
+            self._transforms = get_transforms(self._data_keys, eq=self.eq, grid=self.grid)
+            data = {}
+        
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+
+        psib = data_eq['psi'][-1]
         if psib < 0:
             sgn = False
             psib = np.abs(psib)
@@ -595,28 +532,23 @@ class GXWrapper(_Objective):
         
         #normalizations
         #grid = Grid(coords)
-        data_eq = compute_geometry(R_lmn,Z_lmn,self._R_transform_eq,self._Z_transform_eq,data=data_eq)
+        
         Lref = data_eq['a']
         Bref = 2*psib/Lref**2
         #print('psib is ' + str(psib))
         #print("Bref is " + str(Bref))
 
         #calculate bmag
-        data = compute_magnetic_field_magnitude(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,self._current,data=data)
         modB = data['|B|']
-        #print("modB is " + str(modB))
         bmag = modB/Bref
 
         #calculate gradpar and grho
         gradpar  = Lref*data['B^zeta']/modB
-        data = compute_contravariant_metric_coefficients(R_lmn,Z_lmn,self._R_transform,self._Z_transform,data=data)
         grho = data['|grad(rho)|']*Lref
         #print("gradpar is " + str(gradpar))
 
         #calculate grad_psi and grad_alpha
         grad_psi = 2*psib*rho
-        data = compute_lambda(L_lmn,self._L_transform,data=data)
-
         lmbda = data['lambda']
         lmbda_r = data['lambda_r']
         lmbda_t = data['lambda_t']
@@ -641,7 +573,6 @@ class GXWrapper(_Objective):
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
 
         #calculate gbdrift0 and cvdrift0
-        data = compute_covariant_magnetic_field(R_lmn,Z_lmn,L_lmn,i_l,c_l,Psi,self._R_transform,self._Z_transform,self._L_transform,self._iota,self._current,data=data)
         B_t = data['B_theta']
         B_z = data['B_zeta']
         dB_t = data['|B|_t']
@@ -653,13 +584,7 @@ class GXWrapper(_Objective):
         cvdrift0 = gbdrift0
 
         #calculate gbdrift and cvdrift
-        B_r = data['B_rho']
-        #dB_r = self.eq.compute('|B|_r',grid=grid)['|B|_r']
-
-        #data = self.eq.compute('|B|',grid=grid)
-        #data.update(self.eq.compute('B^zeta_r',grid=grid))
-        #data.update(self.eq.compute('B^theta_r',grid=grid))
-
+        B_r = data['B_rho'] 
         data["|B|_r"] = (
         data["B^theta"]
         * (
@@ -687,7 +612,6 @@ class GXWrapper(_Objective):
         gbdrift_norm = 2*Bref*Lref**2/modB**3*rho
         gbdrift = gbdrift_norm/jac*(B_r*dB_t*(lmbda_z - iota) + B_t*dB_z*(lmbda_r - zeta*shear[0]) + B_z*dB_r*(1+lmbda_t) - B_z*dB_t*(lmbda_r - zeta*shear[0]) - B_t*dB_r*(lmbda_z - iota) - B_r*dB_z*(1+lmbda_t))
         Bsa = 1/jac * (B_z*(1+lmbda_t) - B_t*(lmbda_z - iota))
-        data = compute_pressure(p_l,self._pressure,data=data)
         p_r = data['p_r']
         cvdrift = gbdrift + 2*Bref*Lref**2/modB**2 * rho*mu_0/modB**2*p_r*Bsa
 

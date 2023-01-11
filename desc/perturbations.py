@@ -1,18 +1,78 @@
-import numpy as np
+"""Functions for perturbing equilibria."""
+
 import warnings
+
+import numpy as np
 from termcolor import colored
-from desc.objectives.utils import factorize_linear_constraints
-from desc.backend import use_jax, put
-from desc.utils import Timer
+
+from desc.backend import put, use_jax
 from desc.compute import arg_order
-from desc.optimize.utils import evaluate_quadratic
+from desc.objectives import get_fixed_boundary_constraints
+from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.objectives import ObjectiveFunction, get_fixed_boundary_constraints
+from desc.optimize.utils import evaluate_quadratic_form_jac
+from desc.utils import Timer
 
-__all__ = ["perturb", "optimal_perturb"]
+__all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
 
-def perturb(
+def get_deltas(things1, things2):
+    """Compute differences between parameters for perturbations.
+
+    Parameters
+    ----------
+    things1, things2 : dict
+        should be dictionary with keys "surface", "iota", "pressure", etc.
+        Values should be objects of the appropriate type (Surface, Profile).
+        Finds deltas for a perturbation going from things1 to things2.
+        Should have same keys in both dictionaries.
+
+    Returns
+    -------
+    deltas : dict of ndarray
+        deltas to pass in to perturb
+
+    """
+    deltas = {}
+    assert things1.keys() == things2.keys(), "Must have same keys in both dictionaries"
+
+    if "surface" in things1:
+        s1 = things1.pop("surface")
+        s2 = things2.pop("surface")
+        if s1 is not None and s2 is not None:
+            s1 = s1.copy()
+            s2 = s2.copy()
+            s1.change_resolution(s2.L, s2.M, s2.N)
+            if not np.allclose(s2.R_lmn, s1.R_lmn):
+                deltas["dRb"] = s2.R_lmn - s1.R_lmn
+            if not np.allclose(s2.Z_lmn, s1.Z_lmn):
+                deltas["dZb"] = s2.Z_lmn - s1.Z_lmn
+
+    for key in ["iota", "pressure", "current"]:
+        if key in things1:
+            t1 = things1.pop(key)
+            t2 = things2.pop(key)
+            if t1 is not None and t2 is not None:
+                t1 = t1.copy()
+                t2 = t2.copy()
+                if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
+                    t1.change_resolution(t2.basis.L)
+                if not np.allclose(t2.params, t1.params):
+                    deltas["d" + key[0]] = t2.params - t1.params
+
+    if "Psi" in things1:
+        psi1 = things1.pop("Psi")
+        psi2 = things2.pop("Psi")
+        if psi1 is not None and not np.allclose(psi2, psi1):
+            deltas["dPsi"] = psi2 - psi1
+
+    assert len(things1) == 0, "get_deltas got an unexpected key: {}".format(
+        things1.keys()
+    )
+    return deltas
+
+
+def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective,
     constraints=(),
@@ -124,7 +184,7 @@ def perturb(
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective.args
+        constraints, objective.args
     )
     timer.stop("linear constraint factorize")
     if verbose > 1:
@@ -278,7 +338,6 @@ def perturb(
             threshold=1e-6,
         )
         dx3_reduced = scale @ dx3_h
-        dx3 = recover(dx3_reduced) - xp
 
     if order > 3:
         raise ValueError(
@@ -296,7 +355,7 @@ def perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective.args
+        constraints, objective.args
     )
 
     # update other attributes
@@ -321,7 +380,7 @@ def perturb(
     return eq_new
 
 
-def optimal_perturb(
+def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective_f,
     objective_g,
@@ -336,7 +395,7 @@ def optimal_perturb(
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
-    cutoff=1e-6,
+    cutoff=None,
     verbose=1,
     copy=True,
 ):
@@ -366,6 +425,7 @@ def optimal_perturb(
         element for the first step and so on.
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
+        Default is np.finfo(A.dtype).eps*max(A.shape) where A is the Jacobian matrix.
     verbose : int
         Level of output.
     copy : bool
@@ -465,12 +525,9 @@ def optimal_perturb(
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-    if objective_g.dim_f < dim_opt:
-        raise ValueError(
-            "Cannot perturb {} parameters with {} objectives.".format(
-                dim_opt, objective_g.dim_f
-            )
-        )
+    if verbose > 0:
+        print("Number of parameters: {}".format(dim_opt))
+        print("Number of objectives: {}".format(objective_g.dim_f))
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)
@@ -486,7 +543,7 @@ def optimal_perturb(
         unfixed_idx,
         project,
         recover,
-    ) = factorize_linear_constraints(constraints, extra_args=objective_f.args)
+    ) = factorize_linear_constraints(constraints, objective_f.args)
 
     # state vector
     xf = objective_f.x(eq)
@@ -536,13 +593,11 @@ def optimal_perturb(
             print("Computing df")
         timer.start("df computation")
         Fx = objective_f.jac(xf)
-        Fx = {arg: Fx[:, objective_f.x_idx[arg]] for arg in objective_f.args}
-        for arg in objective_f.args:
-            if arg not in Fx.keys():
-                Fx[arg] = np.zeros((objective_f.dim_f, objective_f.dimensions[arg]))
-        Fx = np.hstack([Fx[arg] for arg in arg_order if arg in Fx])
+        Fx = align_jacobian(Fx, objective_f, objective_g)
         Fx_reduced = Fx[:, unfixed_idx] @ Z
         Fc = Fx @ dxdc
+        if cutoff is None:
+            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
         Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
         timer.stop("df computation")
         if verbose > 1:
@@ -553,11 +608,7 @@ def optimal_perturb(
             print("Computing dg")
         timer.start("dg computation")
         Gx = objective_g.jac(xg)
-        Gx = {arg: Gx[:, objective_g.x_idx[arg]] for arg in objective_g.args}
-        for arg in objective_f.args:
-            if arg not in Gx.keys():
-                Gx[arg] = np.zeros((objective_g.dim_f, objective_g.dimensions[arg]))
-        Gx = np.hstack([Gx[arg] for arg in arg_order if arg in Gx])
+        Gx = align_jacobian(Gx, objective_g, objective_f)
         Gx_reduced = Gx[:, unfixed_idx] @ Z
         Gc = Gx @ dxdc
         timer.stop("dg computation")
@@ -684,13 +735,13 @@ def optimal_perturb(
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        constraints, extra_args=objective_f.args
+        constraints, objective_f.args
     )
 
     # update other attributes
     dx_reduced = dx1_reduced + dx2_reduced
-    dx = recover(dx_reduced) - xp
-    args = objective_f.unpack_state(xf + dx)
+    x_new = recover(x_reduced + dx_reduced)
+    args = objective_f.unpack_state(x_new)
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
@@ -700,7 +751,7 @@ def optimal_perturb(
             if not (key == "c_l" or key == "i_l") or value.size:
                 setattr(eq_new, key, value)
 
-    predicted_reduction = -evaluate_quadratic(LHS, -RHS_1g.T @ LHS, dc)
+    predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
     if verbose > 0:

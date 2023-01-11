@@ -17,6 +17,16 @@ Basis
     desc.basis.FourierZernikeBasis
 
 
+Continuation
+************
+.. autosummary::
+    :toctree: _api/continuation
+    :recursive:
+
+    desc.continuation.solve_continuation
+    desc.continuation.solve_continuation_automatic
+
+
 Derivatives
 ***********
 Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
@@ -33,7 +43,7 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
 Equilibrium
 ***********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/equilibrium
     :recursive:
     :template: class.rst
@@ -65,7 +75,7 @@ Geometry
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
     desc.geometry.ZernikeRZToroidalSection
-    
+
 Grid
 ****
 
@@ -115,7 +125,7 @@ Objective Functions
     desc.objectives.HelicalForceBalance
     desc.objectives.MagneticWell
     desc.objectives.MercierStability
-    desc.objectives.ObjectiveFunction   
+    desc.objectives.ObjectiveFunction
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
@@ -127,7 +137,7 @@ Objective Functions
 Optimize
 ********
 
-.. autosummary:: 
+.. autosummary::
    :toctree: _api/optimize
    :recursive:
    :template: class.rst
@@ -139,17 +149,18 @@ Optimize
 Perturbations
 *************
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/perturbations
     :recursive:
 
+    desc.perturbations.get_deltas
     desc.perturbations.perturb
     desc.perturbations.optimal_perturb
 
 Plotting
 ********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/plotting
     :recursive:
 
@@ -159,8 +170,12 @@ Plotting
     desc.plotting.plot_basis
     desc.plotting.plot_boozer_modes
     desc.plotting.plot_boozer_surface
-    desc.plotting.plot_coefficients	   
+    desc.plotting.plot_boundaries
+    desc.plotting.plot_boundary
+    desc.plotting.plot_coefficients
+    desc.plotting.plot_coils
     desc.plotting.plot_comparison
+    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
@@ -175,11 +190,11 @@ Profiles
     :toctree: _api/profiles
     :recursive:
     :template: class.rst
-	       
+
     desc.profiles.PowerSeriesProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
-    
+
 Transform
 *********
 
@@ -193,7 +208,7 @@ Transform
 VMEC
 ****
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/vmec/
     :recursive:
     :template: class.rst

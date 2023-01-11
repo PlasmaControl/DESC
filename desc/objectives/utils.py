@@ -1,29 +1,31 @@
-import numpy as np
-from scipy.linalg import block_diag
+"""Functions for getting common objectives and constraints."""
 
-from desc.backend import jnp, put
-from desc.utils import svd_inv_null
+import numpy as np
+
+from desc.backend import block_diag, jnp, put
 from desc.compute import arg_order
-from .objective_funs import ObjectiveFunction
+from desc.utils import svd_inv_null
+
+from ._equilibrium import (
+    CurrentDensity,
+    Energy,
+    ForceBalance,
+    HelicalForceBalance,
+    RadialForceBalance,
+)
 from .linear_objectives import (
     FixBoundaryR,
     FixBoundaryZ,
+    FixCurrent,
+    FixIota,
     FixLambdaGauge,
     FixPressure,
-    FixIota,
-    FixCurrent,
     FixPsi,
 )
-from ._equilibrium import (
-    Energy,
-    ForceBalance,
-    RadialForceBalance,
-    HelicalForceBalance,
-    CurrentDensity,
-)
+from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(profiles=True, iota=True):
+def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -32,6 +34,8 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
+    normalize : bool
+        Whether to apply constraints in normalized units.
 
     Returns
     -------
@@ -40,21 +44,28 @@ def get_fixed_boundary_constraints(profiles=True, iota=True):
 
     """
     constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
-        FixLambdaGauge(),
-        FixPsi(),
+        FixBoundaryR(
+            fixed_boundary=True, normalize=normalize, normalize_target=normalize
+        ),
+        FixBoundaryZ(
+            fixed_boundary=True, normalize=normalize, normalize_target=normalize
+        ),
+        FixLambdaGauge(normalize=normalize, normalize_target=normalize),
+        FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (FixPressure(),)
+        constraints += (FixPressure(normalize=normalize, normalize_target=normalize),)
+
         if iota:
-            constraints += (FixIota(),)
+            constraints += (FixIota(normalize=normalize, normalize_target=normalize),)
         else:
-            constraints += (FixCurrent(),)
+            constraints += (
+                FixCurrent(normalize=normalize, normalize_target=normalize),
+            )
     return constraints
 
 
-def get_equilibrium_objective(mode="force"):
+def get_equilibrium_objective(mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -63,6 +74,8 @@ def get_equilibrium_objective(mode="force"):
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
+    normalize : bool
+        Whether to normalize units of objective.
 
     Returns
     -------
@@ -71,19 +84,22 @@ def get_equilibrium_objective(mode="force"):
 
     """
     if mode == "energy":
-        objectives = Energy()
+        objectives = Energy(normalize=normalize, normalize_target=normalize)
     elif mode == "force":
-        objectives = ForceBalance()
+        objectives = ForceBalance(normalize=normalize, normalize_target=normalize)
     elif mode == "forces":
-        objectives = (RadialForceBalance(), HelicalForceBalance())
+        objectives = (
+            RadialForceBalance(normalize=normalize, normalize_target=normalize),
+            HelicalForceBalance(normalize=normalize, normalize_target=normalize),
+        )
     elif mode == "vacuum":
-        objectives = CurrentDensity()
+        objectives = CurrentDensity(normalize=normalize, normalize_target=normalize)
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, extra_args=[]):
+def factorize_linear_constraints(constraints, objective_args):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -95,9 +111,8 @@ def factorize_linear_constraints(constraints, extra_args=[]):
     ----------
     constraints : tuple of Objectives
         linear objectives/constraints to factorize for projection method.
-    extra_args : list of str
-        names of extra arguments that are not constrained but may need to be included
-        for indexing etc. Should generally include all args to all objectives.
+    objective_args : list of str
+        names of all arguments used by the desired objective.
 
     Returns
     -------
@@ -114,17 +129,19 @@ def factorize_linear_constraints(constraints, extra_args=[]):
     unfixed_idx : ndarray
         indices of x that correspond to non-fixed values
     project, recover : function
-        functions to project full vector x into reduced vector y, and recovering x from y.
+        functions to project full vector x into reduced vector y,
+        and recovering x from y.
 
     """
     # set state vector
     args = np.concatenate([obj.args for obj in constraints])
-    args = np.concatenate((args, extra_args))
+    args = np.concatenate((args, objective_args))
+    # this is all args used by both constraints and objective
     args = [arg for arg in arg_order if arg in args]
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
-    for arg in args:
+    for arg in objective_args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
 
@@ -140,6 +157,8 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
         arg = obj.args[0]
+        if arg not in objective_args:
+            continue
         constraint_args.append(arg)
         if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
@@ -147,14 +166,16 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         else:
             unfixed_args.append(arg)
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
-            b_ = obj.target
+            # using obj.compute instead of obj.target to allow for correct scale/weight
+            b_ = -obj.compute(jnp.zeros(obj.dimensions[arg]))
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
             else:
                 Ainv_ = A_.T
             A[arg] = A_
             b[arg] = b_
-            Ainv[arg] = Ainv_
+            # need to undo scaling here to work with perturbations
+            Ainv[arg] = Ainv_ * obj.weight / obj.normalization
 
     # catch any arguments that are not constrained
     for arg in x_idx.keys():
@@ -184,3 +205,35 @@ def factorize_linear_constraints(constraints, extra_args=[]):
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
 
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
+
+
+def align_jacobian(Fx, objective_f, objective_g):
+    """Pad Jacobian with zeros in the right places so that the arguments line up.
+
+    Parameters
+    ----------
+    Fx : ndarray
+        Jacobian wrt args the objective_f takes
+    objective_f : ObjectiveFunction
+        Objective corresponding to Fx
+    objective_g : ObjectiveFunction
+        Other objective we want to align Jacobian against
+
+    Returns
+    -------
+    A : ndarray
+        Jacobian matrix, reordered and padded so that it broadcasts
+        correctly against the other Jacobian
+    """
+    x_idx = objective_f.x_idx
+    args = objective_f.args
+
+    dim_f = Fx.shape[:1]
+    A = {arg: Fx.T[x_idx[arg]] for arg in args}
+    allargs = np.concatenate([objective_f.args, objective_g.args])
+    allargs = [arg for arg in arg_order if arg in allargs]
+    for arg in allargs:
+        if arg not in A.keys():
+            A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
+    A = jnp.concatenate([A[arg] for arg in allargs])
+    return A.T

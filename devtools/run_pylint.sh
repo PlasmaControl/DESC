@@ -1,6 +1,8 @@
-echo "Removing old output files..."
-rm -i -f pylint.output
+#!/bin/sh
 
-echo "Running Pylint on settings defined in pylintrc..."
-pylint ../desc  ../tests > "pylint.output"
-echo "Done!"
+echo 'Removing old output files...'
+rm --force 'pylint.output'
+
+echo 'Running Pylint on settings defined in pylintrc...'
+pylint '../desc' '../tests' --output 'pylint.output' 1>/dev/null
+echo 'Done!'

@@ -1,16 +1,21 @@
-import numpy as np
+"""Classes for magnetic field coils."""
+
 from abc import ABC
 from collections.abc import MutableSequence
+
+import numpy as np
+
 from desc.backend import jnp
-from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
-from desc.geometry.utils import xyz2rpz_vec, rpz2xyz
-from desc.magnetic_fields import MagneticField, biot_savart
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry.utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import Grid
+from desc.magnetic_fields import MagneticField, biot_savart
 
 
 class Coil(MagneticField, ABC):
-    """Class representing a magnetic field coil, as a combination
-    of a curve and current
+    """Base class representing a magnetic field coil.
+
+    Represents coils as a combination of a Curve and current
 
     Subclasses for a particular parameterization of a coil should inherit
     from Coil and the appropriate Curve type, eg MyCoil(Coil, MyCurve)
@@ -33,6 +38,7 @@ class Coil(MagneticField, ABC):
 
     @property
     def current(self):
+        """float: Current passing through the coil, in Amperes."""
         return self._current
 
     @current.setter
@@ -78,7 +84,7 @@ class Coil(MagneticField, ABC):
         return B
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -161,9 +167,11 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
 
 
 class FourierPlanarCoil(Coil, FourierPlanarCurve):
-    """Coil that lines in a plane, parameterized by a point (the center of the coil),
-    a vector (normal to the plane), and a fourier series defining the radius from the
-    center as a function of a polar angle theta.
+    """Coil that lines in a plane.
+
+    Parameterized by a point (the center of the coil), a vector (normal to the plane),
+    and a fourier series defining the radius from the center as a function of a polar
+    angle theta.
 
     Parameters
     ----------
@@ -200,7 +208,7 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
 
 
 class CoilSet(Coil, MutableSequence):
-    """Set of coils of different geometry
+    """Set of coils of different geometry.
 
     Parameters
     ----------
@@ -219,7 +227,7 @@ class CoilSet(Coil, MutableSequence):
 
     @property
     def name(self):
-        """Name of the curve."""
+        """str: Name of the curve."""
         return self._name
 
     @name.setter
@@ -228,10 +236,12 @@ class CoilSet(Coil, MutableSequence):
 
     @property
     def coils(self):
+        """list: coils in the coilset."""
         return self._coils
 
     @property
     def current(self):
+        """list: currents in each coil."""
         return [coil.current for coil in self.coils]
 
     @current.setter
@@ -243,7 +253,7 @@ class CoilSet(Coil, MutableSequence):
 
     @property
     def grid(self):
-        """Default grid for computation."""
+        """Grid: nodes for computation."""
         return self.coils[0].grid
 
     @grid.setter
@@ -272,19 +282,19 @@ class CoilSet(Coil, MutableSequence):
         return [coil.compute_length(*args, **kwargs) for coil in self.coils]
 
     def translate(self, *args, **kwargs):
-        """translate the coils along an axis"""
+        """Translate the coils along an axis."""
         [coil.translate(*args, **kwargs) for coil in self.coils]
 
     def rotate(self, *args, **kwargs):
-        """rotate the coils about an axis"""
+        """Rotate the coils about an axis."""
         [coil.rotate(*args, **kwargs) for coil in self.coils]
 
     def flip(self, *args, **kwargs):
-        """flip the coils across a plane"""
+        """Flip the coils across a plane."""
         [coil.flip(*args, **kwargs) for coil in self.coils]
 
     def compute_magnetic_field(self, coords, params={}, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -379,7 +389,7 @@ class CoilSet(Coil, MutableSequence):
 
     @classmethod
     def from_symmetry(cls, coils, NFP, sym=False):
-        """Create a coil group by reflection and symmetry
+        """Create a coil group by reflection and symmetry.
 
         Given coils over one field period, repeat coils NFP times between
         0 and 2pi to form full coil set.
@@ -443,12 +453,13 @@ class CoilSet(Coil, MutableSequence):
         return len(self._coils)
 
     def insert(self, i, new_item):
+        """Insert a new coil into the coilset at position i."""
         if not isinstance(new_item, Coil):
             raise TypeError("Members of CoilSet must be of type Coil.")
         self._coils.insert(i, new_item)
 
     def __repr__(self):
-        """string form of the object"""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "

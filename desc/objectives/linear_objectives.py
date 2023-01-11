@@ -1,20 +1,22 @@
-import warnings
+"""Classes for linear optimization constraints.
 
-import numpy as np
-from termcolor import colored
-import warnings
-from abc import ABC, abstractmethod
-
-from desc.backend import jnp
-from desc.basis import zernike_radial_coeffs, zernike_radial
-from desc.profiles import PowerSeriesProfile, SplineProfile
-from .objective_funs import _Objective
-
-"""Linear objective functions must be of the form `A*x-b`, where:
+Linear objective functions must be of the form `A*x-b`, where:
     - `A` is a constant matrix that can be pre-computed
     - `x` is a vector of one or more arguments included in `compute.arg_order`
     - `b` is the desired vector set by `objective.target`
 """
+
+import warnings
+from abc import ABC
+
+import numpy as np
+from termcolor import colored
+
+from desc.backend import jnp
+from desc.basis import zernike_radial, zernike_radial_coeffs
+
+from .normalization import compute_scaling_factors
+from .objective_funs import _Objective
 
 # TODO: need dim_x attribute
 
@@ -31,6 +33,12 @@ class FixBoundaryR(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     fixed_boundary : bool, optional
         True to enforce the boundary condition on flux surfaces,
         or False to fix the boundary surface coefficients (default).
@@ -48,12 +56,16 @@ class FixBoundaryR(_Objective):
     _scalar = False
     _linear = True
     _fixed = False  # TODO: can we dynamically detect this instead?
+    _units = "(m)"
+    _print_value_fmt = "R boundary error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         fixed_boundary=False,
         modes=True,
         surface_label=None,
@@ -63,13 +75,15 @@ class FixBoundaryR(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "R boundary error: {:10.3e} (m)"
-
-        if self._fixed_boundary:
-            self.compute = self._compute_R
-        else:
-            self.compute = self._compute_Rb
+        self._args = ["R_lmn"] if self._fixed_boundary else ["Rb_lmn"]
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -130,29 +144,25 @@ class FixBoundaryR(_Objective):
             self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
-        if self.target.size == modes.shape[0]:
+        if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0]:
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.R_lmn[idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        pass
-
-    def _compute_R(self, R_lmn, **kwargs):
-        Rb = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(Rb)
-
-    def _compute_Rb(self, Rb_lmn, **kwargs):
-        Rb = jnp.dot(self._A, Rb_lmn)
+        """Compute deviation from desired boundary."""
+        x = kwargs.get(self.args[0], args[0])
+        Rb = jnp.dot(self._A, x)
         return self._shift_scale(Rb)
 
     @property
@@ -173,6 +183,12 @@ class FixBoundaryZ(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     fixed_boundary : bool, optional
         True to enforce the boundary condition on flux surfaces,
         or False to fix the boundary surface coefficients (default).
@@ -190,12 +206,16 @@ class FixBoundaryZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Z boundary error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         fixed_boundary=False,
         modes=True,
         surface_label=None,
@@ -205,13 +225,15 @@ class FixBoundaryZ(_Objective):
         self._fixed_boundary = fixed_boundary
         self._modes = modes
         self._surface_label = surface_label
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Z boundary error: {:10.3e} (m)"
-
-        if self._fixed_boundary:
-            self.compute = self._compute_Z
-        else:
-            self.compute = self._compute_Zb
+        self._args = ["Z_lmn"] if self._fixed_boundary else ["Zb_lmn"]
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -270,29 +292,25 @@ class FixBoundaryZ(_Objective):
             self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
         # use given targets and weights if specified
-        if self.target.size == modes.shape[0]:
+        if self.target.size == modes.shape[0] and None not in self.target:
             self.target = self._target[modes_idx]
-        if self.weight.size == modes.shape[0]:
+        if self.weight.size == modes.shape[0] and self.weight != np.array(1):
             self.weight = self._weight[modes_idx]
 
         # use surface parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
             self.target = eq.surface.Z_lmn[idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        pass
-
-    def _compute_Z(self, Z_lmn, **kwargs):
-        Zb = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(Zb)
-
-    def _compute_Zb(self, Zb_lmn, **kwargs):
-        Zb = jnp.dot(self._A, Zb_lmn)
+        """Compute deviation from desired boundary."""
+        x = kwargs.get(self.args[0], args[0])
+        Zb = jnp.dot(self._A, x)
         return self._shift_scale(Zb)
 
     @property
@@ -313,6 +331,14 @@ class FixLambdaGauge(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -321,11 +347,27 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _units = "(radians)"
+    _print_value_fmt = "lambda gauge error: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, name="lambda gauge"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="lambda gauge",
+    ):
 
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "lambda gauge error: {:10.3e} (m)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -340,22 +382,24 @@ class FixLambdaGauge(_Objective):
             Level of output.
 
         """
-
         L_basis = eq.L_basis
 
         if L_basis.sym:
             # l(0,t,z) = 0
             # any zernike mode that has m != 0 (i.e., has any theta dependence)
             # contains radial dependence at least as rho^m
-            # therefore if m!=0, no constraint is needed to make the mode go to zero at rho=0
+            # therefore if m!=0, no constraint is needed to make the mode go to
+            # zero at rho=0
 
             # for the other modes with m=0, at rho =0 the basis reduces
             # to just a linear combination of sin(n*zeta), cos(n*zeta), and 1
             # since these are all linearly independent, to make lambda -> 0 at rho=0,
             # each coefficient on these terms must individually go to zero
             # i.e. if at rho=0 the lambda basis is given by
-            # Lambda(rho=0) = (L_{00-1} - L_{20-1})sin(zeta) + (L_{001} - L_{201})cos(zeta) + L_{000} - L_{200}
-            # Lambda(rho=0) = 0 constraint being enforced means that each coefficient goes to zero:
+            # Lambda(rho=0) = (L_{00-1} - L_{20-1})sin(zeta) + (L_{001}
+            #                   - L_{201})cos(zeta) + L_{000} - L_{200}
+            # Lambda(rho=0) = 0 constraint being enforced means that each
+            # coefficient goes to zero:
             # L_{00-1} - L_{20-1} = 0
             # L_{001} - L_{201} = 0
             # L_{000} - L_{200} = 0
@@ -388,8 +432,8 @@ class FixLambdaGauge(_Objective):
                     self._A[j, i] = -1
             # l(rho,0,0) = 0
             # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
-            # what this constraint does is make all the coefficients of each power of rho
-            # equal to zero
+            # what this constraint does is make all the coefficients of each power
+            # of rho equal to zero
             # i.e. if lambda = (L_200 + 2*L_310) rho**2 + (L_100 + 2*L_210)*rho
             # this constraint will make
             # L_200 + 2*L_310 = 0
@@ -408,10 +452,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, L_lmn, **kwargs):
         """Compute lambda gauge symmetry errors.
@@ -441,16 +482,24 @@ class _FixProfile(_Objective, ABC):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses Profile.params.
-        e.g. for PowerSeriesProfile these are profile coefficients, and for SplineProfile they are values at knots.
+        e.g. for PowerSeriesProfile these are profile coefficients, and for
+        SplineProfile they are values at knots.
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or Bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -466,6 +515,8 @@ class _FixProfile(_Objective, ABC):
         eq=None,
         target=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         profile=None,
         indices=True,
         name="",
@@ -473,7 +524,14 @@ class _FixProfile(_Objective, ABC):
 
         self._profile = profile
         self._indices = indices
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
         self._print_value_fmt = None
 
     def build(self, eq, profile=None, use_jit=True, verbose=1):
@@ -517,10 +575,7 @@ class _FixProfile(_Objective, ABC):
         if None in self.target or self.target.size != self.dim_f:
             self.target = self._profile.params[self._idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
 
 class FixPressure(_FixProfile):
@@ -536,12 +591,19 @@ class FixPressure(_FixProfile):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -551,12 +613,16 @@ class FixPressure(_FixProfile):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(Pa)"
+    _print_value_fmt = "Fixed-pressure profile error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         profile=None,
         indices=True,
         name="fixed-pressure",
@@ -566,11 +632,12 @@ class FixPressure(_FixProfile):
             eq=eq,
             target=target,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             profile=profile,
             indices=indices,
             name=name,
         )
-        self._print_value_fmt = "Fixed-pressure profile error: {:10.3e} (Pa)"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -586,6 +653,9 @@ class FixPressure(_FixProfile):
 
         """
         profile = eq.pressure
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["p"]
         super().build(eq, profile, use_jit, verbose)
 
     def compute(self, p_l, **kwargs):
@@ -624,12 +694,21 @@ class FixIota(_FixProfile):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices.
+        corresponding to knots for a SplineProfile).
+        Must len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -639,12 +718,16 @@ class FixIota(_FixProfile):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-iota profile error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
         weight=1,
+        normalize=False,
+        normalize_target=False,
         profile=None,
         indices=True,
         name="fixed-iota",
@@ -654,11 +737,12 @@ class FixIota(_FixProfile):
             eq=eq,
             target=target,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             profile=profile,
             indices=indices,
             name=name,
         )
-        self._print_value_fmt = "Fixed-iota profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -675,7 +759,8 @@ class FixIota(_FixProfile):
         """
         if eq.iota is None:
             raise RuntimeError(
-                "Attempt to fix rotational transform on an equilibrium with no rotational transform profile assigned"
+                "Attempt to fix rotational transform on an equilibrium with no "
+                + "rotational transform profile assigned"
             )
         profile = eq.iota
         super().build(eq, profile, use_jit, verbose)
@@ -716,12 +801,19 @@ class FixCurrent(_FixProfile):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
         indices of the Profile.params array to fix.
-        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices corresponding to knots for a SplineProfile).
-        len(target) = len(weight) = len(modes).
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
         If True/False uses all/none of the Profile.params indices.
     name : str
         Name of the objective function.
@@ -731,12 +823,16 @@ class FixCurrent(_FixProfile):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(A)"
+    _print_value_fmt = "Fixed-current profile error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         profile=None,
         indices=True,
         name="fixed-current",
@@ -746,11 +842,12 @@ class FixCurrent(_FixProfile):
             eq=eq,
             target=target,
             weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
             profile=profile,
             indices=indices,
             name=name,
         )
-        self._print_value_fmt = "Fixed-current profile error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -767,9 +864,13 @@ class FixCurrent(_FixProfile):
         """
         if eq.current is None:
             raise RuntimeError(
-                "Attempt to fix toroidal current on an equilibrium no current profile assigned"
+                "Attempting to fix toroidal current on an equilibrium with no "
+                + "current profile assigned"
             )
         profile = eq.current
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["I"]
         super().build(eq, profile, use_jit, verbose)
 
     def compute(self, c_l, **kwargs):
@@ -804,6 +905,12 @@ class FixPsi(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses Equilibrium value.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
     name : str
@@ -814,11 +921,27 @@ class FixPsi(_Objective):
     _scalar = True
     _linear = True
     _fixed = True
+    _units = "(Wb)"
+    _print_value_fmt = "Fixed-Psi error: {:10.3e} "
 
-    def __init__(self, eq=None, target=None, weight=1, name="fixed-Psi"):
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-Psi",
+    ):
 
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Fixed-Psi error: {:10.3e} (Wb)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -838,10 +961,11 @@ class FixPsi(_Objective):
         if None in self.target:
             self.target = eq.Psi
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["Psi"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.

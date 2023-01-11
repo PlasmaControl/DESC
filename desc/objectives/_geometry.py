@@ -1,10 +1,11 @@
-from desc.compute import (
-    data_index,
-    compute_geometry,
-)
+"""Objectives for targeting geometrical quantities."""
+
+from desc.compute import compute as compute_fun
+from desc.compute import get_profiles, get_transforms
 from desc.grid import QuadratureGrid
-from desc.transform import Transform
 from desc.utils import Timer
+
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
@@ -21,6 +22,12 @@ class Volume(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -30,12 +37,29 @@ class Volume(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(m^3)"
+    _print_value_fmt = "Plasma volume: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="volume"):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="volume",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Plasma volume: {:10.3e} (m^3)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -56,27 +80,25 @@ class Volume(_Objective):
             )
 
         self._dim_f = 1
+        self._data_keys = ["V"]
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute plasma volume.
@@ -94,7 +116,16 @@ class Volume(_Objective):
             Plasma volume (m^3).
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
         return self._shift_scale(data["V"])
 
 
@@ -111,6 +142,14 @@ class AspectRatio(_Objective):
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -120,12 +159,29 @@ class AspectRatio(_Objective):
 
     _scalar = True
     _linear = False
+    _units = "(dimensionless)"
+    _print_value_fmt = "Aspect ratio: {:10.3e} "
 
-    def __init__(self, eq=None, target=2, weight=1, grid=None, name="aspect ratio"):
+    def __init__(
+        self,
+        eq=None,
+        target=2,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        grid=None,
+        name="aspect ratio",
+    ):
 
         self.grid = grid
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Aspect ratio: {:10.3e} (dimensionless)"
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -146,27 +202,20 @@ class AspectRatio(_Objective):
             )
 
         self._dim_f = 1
-
+        self._data_keys = ["R0/a"]
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._R_transform = Transform(
-            self.grid, eq.R_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
-        self._Z_transform = Transform(
-            self.grid, eq.Z_basis, derivs=data_index["V"]["R_derivs"], build=True
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, R_lmn, Z_lmn, **kwargs):
         """Compute aspect ratio.
@@ -184,5 +233,14 @@ class AspectRatio(_Objective):
             Aspect ratio, dimensionless.
 
         """
-        data = compute_geometry(R_lmn, Z_lmn, self._R_transform, self._Z_transform)
+        params = {
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        }
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
         return self._shift_scale(data["R0/a"])

@@ -1,13 +1,15 @@
-import numpy as np
-import scipy.linalg
+"""Base classes for objectives."""
+
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-from desc.backend import use_jax, jnp, jit
-from desc.utils import Timer
-from desc.io import IOAble
-from desc.derivatives import Derivative
+import numpy as np
+
+from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
+from desc.derivatives import Derivative
+from desc.io import IOAble
+from desc.utils import Timer
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
@@ -25,7 +27,7 @@ class ObjectiveFunction(IOAble):
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
-        use less memory. Note that the "blocked" hessian will only be block diagonal.
+        use less memory. Note that the "blocked" Hessian will only be block diagonal.
     verbose : int, optional
         Level of output.
 
@@ -65,16 +67,8 @@ class ObjectiveFunction(IOAble):
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
 
-    def _set_derivatives(self, use_jit=True):
-        """Set up derivatives of the objective functions.
-
-        Parameters
-        ----------
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-
-        """
-
+    def _set_derivatives(self):
+        """Set up derivatives of the objective functions."""
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
         for arg in self.args:
             self._derivatives["jac"][arg] = lambda x, arg=arg: jnp.vstack(
@@ -115,29 +109,45 @@ class ObjectiveFunction(IOAble):
             self._jac = lambda x: jnp.hstack(
                 [self._derivatives["jac"][arg](x) for arg in self.args]
             )
-            self._hess = lambda x: scipy.linalg.block_diag(
+            self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
             )
         if self._deriv_mode == "batched":
-            self._grad = Derivative(self.compute_scalar, mode="grad", use_jit=use_jit)
-            self._hess = Derivative(
-                self.compute_scalar,
-                mode="hess",
-                use_jit=use_jit,
-            )
-            self._jac = Derivative(
-                self.compute,
-                mode="fwd",
-                use_jit=use_jit,
-            )
+            self._grad = Derivative(self.compute_scalar, mode="grad")
+            self._hess = Derivative(self.compute_scalar, mode="hess")
+            self._jac = Derivative(self.compute, mode="fwd")
 
-        if use_jit:
-            self.compute = jit(self.compute)
-            self.compute_scalar = jit(self.compute_scalar)
-            # TODO: add jit for jac, hess, jvp, etc.
-            # then can remove jit from Derivatives class
+    def jit(self):
+        """Apply JIT to compute methods, or re-apply after updating self."""
+        # can't loop here because del doesn't work on getattr
+        # main idea is that when jitting a method, jax replaces that method
+        # with a CompiledFunction object, with self compiled in. To re-jit
+        # (ie, after updating attributes of self), we just need to delete the jax
+        # CompiledFunction object, which will then leave the raw method in its place,
+        # and then jit the raw method with the new self
 
-    def build(self, eq, use_jit=True, verbose=1):
+        # doing str name type checking to avoid importing weird jax private stuff
+        # for proper isinstance check
+        if "CompiledFunction" in str(type(self.compute)):
+            del self.compute
+        self.compute = jit(self.compute)
+        if "CompiledFunction" in str(type(self.compute_scalar)):
+            del self.compute_scalar
+        self.compute_scalar = jit(self.compute_scalar)
+        if "CompiledFunction" in str(type(self.jac)):
+            del self.jac
+        self.jac = jit(self.jac)
+        if "CompiledFunction" in str(type(self.hess)):
+            del self.hess
+        self.hess = jit(self.hess)
+        if "CompiledFunction" in str(type(self.grad)):
+            del self.grad
+        self.grad = jit(self.grad)
+        if "CompiledFunction" in str(type(self.jvp)):
+            del self.jvp
+        self.jvp = jit(self.jvp)
+
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -150,7 +160,8 @@ class ObjectiveFunction(IOAble):
             Level of output.
 
         """
-        self._use_jit = use_jit
+        if use_jit is not None:
+            self._use_jit = use_jit
         timer = Timer()
         timer.start("Objective build")
 
@@ -167,10 +178,9 @@ class ObjectiveFunction(IOAble):
             self._scalar = False
 
         self._set_state_vector()
-
-        # build linear constraint matrices
-
-        self._set_derivatives(self.use_jit)
+        self._set_derivatives()
+        if self.use_jit:
+            self.jit()
 
         self._built = True
         timer.stop("Objective build")
@@ -343,28 +353,28 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute_scalar(x).block_until_ready()
+            _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
-            g0 = self.grad(x).block_until_ready()
+            _ = self.grad(x).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
             timer.start("Hessian compilation time")
-            H0 = self.hess(x).block_until_ready()
+            _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            f0 = self.compute(x).block_until_ready()
+            _ = self.compute(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            J0 = self.jac(x).block_until_ready()
+            _ = self.jac(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -386,19 +396,19 @@ class ObjectiveFunction(IOAble):
 
     @property
     def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
+        """bool: Whether default "compute" method is a scalar or vector."""
         if not self._built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._scalar
 
     @property
     def built(self):
-        """bool: Whether the objectives have been built (or not)."""
+        """bool: Whether the objectives have been built or not."""
         return self._built
 
     @property
     def compiled(self):
-        """bool: Whether the functions have been compiled (or not)."""
+        """bool: Whether the functions have been compiled or not."""
         return self._compiled
 
     @property
@@ -449,16 +459,43 @@ class _Objective(IOAble, ABC):
 
     """
 
-    _io_attrs_ = ["_target", "_weight", "_name"]
+    _io_attrs_ = [
+        "_target",
+        "_weight",
+        "_name",
+        "_args",
+        "_normalize",
+        "_normalize_target",
+        "_normalization",
+    ]
 
-    def __init__(self, eq=None, target=0, weight=1, name=None):
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name=None,
+    ):
 
         assert np.all(np.asarray(weight) > 0)
+        assert normalize in {True, False}
+        assert normalize_target in {True, False}
         self._target = np.atleast_1d(target)
         self._weight = np.atleast_1d(weight)
+        self._normalize = normalize
+        self._normalize_target = normalize_target
+        self._normalization = 1
         self._name = name
+        self._use_jit = None
         self._built = False
-
+        # if args is already set don't overwrite it
+        self._args = getattr(
+            self,
+            "_args",
+            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
+        )
         if eq is not None:
             self.build(eq)
 
@@ -479,10 +516,9 @@ class _Objective(IOAble, ABC):
         self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
         self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
 
-    def _set_derivatives(self, use_jit=True):
+    def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
         self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
-        self._args = [arg for arg in getfullargspec(self.compute)[0] if arg != "self"]
 
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
@@ -490,19 +526,16 @@ class _Objective(IOAble, ABC):
                     self.compute,
                     argnum=self.args.index(arg),
                     mode="fwd",
-                    use_jit=use_jit,
                 )
                 self._derivatives["grad"][arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
                     mode="grad",
-                    use_jit=use_jit,
                 )
                 self._derivatives["hess"][arg] = Derivative(
                     self.compute_scalar,
                     argnum=self.args.index(arg),
                     mode="hess",
-                    use_jit=use_jit,
                 )
             else:  # these derivatives are always zero
                 self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
@@ -515,12 +548,30 @@ class _Objective(IOAble, ABC):
                     (self.dimensions[arg], self.dimensions[arg])
                 )
 
-        if use_jit:
-            self.compute = jit(self.compute)
-            self.compute_scalar = jit(self.compute_scalar)
+    def jit(self):
+        """Apply JIT to compute methods, or re-apply after updating self."""
+        # doing str name type checking to avoid importing weird jax private stuff
+        # for proper isinstance check
+        if "CompiledFunction" in str(type(self.compute)):
+            del self.compute
+        self.compute = jit(self.compute)
+        if "CompiledFunction" in str(type(self.compute_scalar)):
+            del self.compute_scalar
+        self.compute_scalar = jit(self.compute_scalar)
+        del self._derivatives
+        self._set_derivatives()
+        for mode, val in self._derivatives.items():
+            for arg, deriv in val.items():
+                self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
 
     def _check_dimensions(self):
         """Check that len(target) = len(weight) = dim_f."""
+        if len(self.target) == 0:
+            # need this so if the objective was previously built at a resolution where
+            # target is [] and the resolution changes the target and weight get
+            # set correctly
+            self._target = np.zeros(1)
+            self._weight = np.ones(1)
         if np.unique(self.target).size == 1:
             self._target = np.repeat(self.target[0], self.dim_f)
         if np.unique(self.weight).size == 1:
@@ -543,10 +594,20 @@ class _Objective(IOAble, ABC):
 
         """
         self.target = np.atleast_1d(getattr(eq, self.target_arg, self.target))
+        if self._use_jit:
+            self.jit()
 
     @abstractmethod
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays."""
+        self._check_dimensions()
+        self._set_dimensions(eq)
+        self._set_derivatives()
+        if use_jit is not None:
+            self._use_jit = use_jit
+        if self._use_jit:
+            self.jit()
+        self._built = True
 
     @abstractmethod
     def compute(self, *args, **kwargs):
@@ -563,15 +624,30 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._print_value_fmt.format(jnp.linalg.norm(x)))
+        print(self._print_value_fmt.format(jnp.linalg.norm(x)) + self._units)
+        if self._normalize:
+            print(
+                self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization))
+                + "(normalized)"
+            )
 
     def _shift_scale(self, x):
         """Apply target and weighting."""
-        return (jnp.atleast_1d(x) - self.target) * self.weight
+        target = (
+            self.target / self.normalization if self._normalize_target else self.target
+        )
+        return (jnp.atleast_1d(x) / self.normalization - target) * self.weight
 
     def _unshift_unscale(self, x):
         """Undo target and weighting."""
-        return x / self.weight + self.target
+        target = (
+            self.target / self.normalization if self._normalize_target else self.target
+        )
+        return (x / self.weight + target) * self.normalization
+
+    def xs(self, eq):
+        """Return a tuple of args required by this objective from the Equilibrium eq."""
+        return tuple(getattr(eq, arg) for arg in self.args)
 
     @property
     def target(self):
@@ -593,6 +669,13 @@ class _Objective(IOAble, ABC):
         assert np.all(np.asarray(weight) > 0)
         self._weight = np.atleast_1d(weight)
         self._check_dimensions()
+
+    @property
+    def normalization(self):
+        """float: normalizing scale factor."""
+        if self._normalize and not self.built:
+            raise ValueError("Objective must be built first")
+        return self._normalization
 
     @property
     def built(self):
@@ -626,7 +709,7 @@ class _Objective(IOAble, ABC):
 
     @property
     def scalar(self):
-        """bool: Whether default "compute" method is a scalar (or vector)."""
+        """bool: Whether default "compute" method is a scalar or vector."""
         return self._scalar
 
     @property

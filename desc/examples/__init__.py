@@ -1,4 +1,7 @@
+"""Module for getting precomputed example equilibria."""
+
 import os
+
 import desc.io
 
 
@@ -7,8 +10,8 @@ def get(name, data=None):
 
     Returns a solved equilibrium or selected attributes for one of several examples.
 
-    Examples include: Solov'ev, D-shape, Heliotron, ATF, ESTELL, WISTELL-A, ARIES-CS,
-    QAS, NCSX, W7-X
+    Examples include: SOLOVEV, DSHAPE, DSHAPE_current, HELIOTRON, ATF, ESTELL,
+    WISTELL-A, ARIES-CS, QAS, NCSX, W7-X
 
     Parameters
     ----------
@@ -28,7 +31,7 @@ def get(name, data=None):
     """
     assert data in {None, "all", "boundary", "pressure", "iota", "current"}
     here = os.path.abspath(os.path.dirname(__file__)) + "/"
-    path = here + name.upper() + "_output.h5"
+    path = here + name + "_output.h5"
     if os.path.exists(path):
         eqf = desc.io.load(path)
     else:

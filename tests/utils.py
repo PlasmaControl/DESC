@@ -1,12 +1,16 @@
+"""Functions needed by other tests for computing differences between equilibria."""
+
 import os
+
 import numpy as np
 from shapely.geometry import Polygon
-from desc.vmec import VMECIO
+
 from desc.grid import Grid, LinearGrid
+from desc.vmec import VMECIO
 
 
 def compute_coords(equil, check_all_zeta=False):
-
+    """Computes coordinate values from a given equilibrium."""
     if equil.N == 0 and not check_all_zeta:
         Nz = 1
     else:
@@ -21,21 +25,21 @@ def compute_coords(equil, check_all_zeta=False):
     rr = np.linspace(0, 1, Nr)
     rt = np.linspace(0, 2 * np.pi, num_theta)
     rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz)
+    r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
 
     # straight field-line angles to plot
     tr = np.linspace(0, 1, num_rho)
     tt = np.linspace(0, 2 * np.pi, Nt, endpoint=False)
     tz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
-    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz)
+    t_grid = LinearGrid(rho=tr, theta=tt, zeta=tz, NFP=equil.NFP)
 
     # Note: theta* (also known as vartheta) is the poloidal straight field-line
     # angle in PEST-like flux coordinates
 
     # find theta angles corresponding to desired theta* angles
     v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-    r_coords = equil.compute("R", r_grid)
-    v_coords = equil.compute("Z", v_grid)
+    r_coords = equil.compute(["R", "Z"], grid=r_grid)
+    v_coords = equil.compute(["R", "Z"], grid=v_grid)
 
     # rho contours
     Rr1 = r_coords["R"].reshape(
@@ -61,7 +65,7 @@ def compute_coords(equil, check_all_zeta=False):
 
 
 def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
-    """Compute area difference between coordinate curves
+    """Compute area difference between coordinate curves.
 
     Parameters
     ----------
@@ -157,11 +161,6 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     if isinstance(vmec_data, (str, os.PathLike)):
         vmec_data = VMECIO.read_vmec_output(vmec_data)
 
-    if equil.N == 0:
-        Nz = 1
-    else:
-        Nz = 6
-
     coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
 
     Rr1 = coords["Rr_desc"]
@@ -172,5 +171,35 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     Zr2 = coords["Zr_vmec"]
     Rv2 = coords["Rv_vmec"]
     Zv2 = coords["Zv_vmec"]
+    area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
+    return area_rho, area_theta
+
+
+def area_difference_desc(eq1, eq2, Nr=10, Nt=8, **kwargs):
+    """Compute average normalized area difference between two DESC equilibria.
+
+    Parameters
+    ----------
+    eq1, eq2 : Equilibrium
+        desc equilibria to compare
+    Nr : int, optional
+        number of radial surfaces to average over
+    Nt : int, optional
+        number of vartheta contours to compare
+
+    Returns
+    -------
+    area_rho : ndarray, shape(Nr, Nz)
+        normalized area difference of rho contours, computed as the symmetric
+        difference divided by the intersection
+    area_theta : ndarray, shape(Nt, Nz)
+        normalized area difference between vartheta contours, computed as the area
+        of the polygon created by closing the two vartheta contours divided by the
+        perimeter squared
+
+    """
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2)
+
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta

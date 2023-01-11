@@ -1,11 +1,13 @@
+"""Tests for computing iota from fixed current profile and vice versa."""
+
 import numpy as np
+import pytest
 
 import desc.io
-from desc.compute import data_index
-from desc.compute._core import compute_rotational_transform
+from desc.compute import compute as compute_fun
+from desc.compute import get_transforms
 from desc.compute.utils import compress
-from desc.grid import QuadratureGrid, ConcentricGrid, LinearGrid
-from desc.transform import Transform
+from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
 class _ExactValueProfile:
@@ -17,18 +19,20 @@ class _ExactValueProfile:
 
     def compute(self, params, dr, *args, **kwargs):
         if dr == 0:
-            return self.eq.compute("current", self.grid)["current"]
+            return self.eq.compute("current", grid=self.grid)["current"]
         if dr == 1:
-            return self.eq.compute("current_r", self.grid)["current_r"]
+            return self.eq.compute("current_r", grid=self.grid)["current_r"]
 
 
 class TestConstrainCurrent:
     """Tests for running DESC with a fixed current profile."""
 
-    def test_compute_rotational_transform(self, DSHAPE, HELIOTRON):
-        """
-        Test that compute_rotational_transform recovers iota and iota_r
-        when the current is fixed to the current computed on an equilibrium
+    @pytest.mark.unit
+    @pytest.mark.solve
+    def test_compute_rotational_transform(self, DSHAPE_current, HELIOTRON_vac):
+        """Test that compute_rotational_transform recovers iota and iota_r.
+
+        When the current is fixed to the current computed on an equilibrium
         solved with iota fixed.
 
         This tests that compute_rotational_transform is correct, among other things.
@@ -42,29 +46,23 @@ class TestConstrainCurrent:
                 f = ConcentricGrid if grid_type == "concentric" else LinearGrid
                 grid = f(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
-            R_transform = Transform(
-                grid, eq.R_basis, derivs=data_index["iota_r"]["R_derivs"], build=True
+            transforms = get_transforms("iota_r", eq=eq, grid=grid)
+            profiles = {"iota": None, "current": _ExactValueProfile(eq, grid)}
+            params = {
+                "R_lmn": eq.R_lmn,
+                "Z_lmn": eq.Z_lmn,
+                "L_lmn": eq.L_lmn,
+                "i_l": None,
+                "c_l": None,
+                "Psi": eq.Psi,
+            }
+            data = compute_fun(
+                ["iota", "iota_r"],
+                params=params,
+                transforms=transforms,
+                profiles=profiles,
             )
-            Z_transform = Transform(
-                grid, eq.Z_basis, derivs=data_index["iota_r"]["R_derivs"], build=True
-            )
-            L_transform = Transform(
-                grid, eq.L_basis, derivs=data_index["iota_r"]["L_derivs"], build=True
-            )
-            data = compute_rotational_transform(
-                eq.R_lmn,
-                eq.Z_lmn,
-                eq.L_lmn,
-                i_l=None,
-                c_l=None,
-                Psi=eq.Psi,
-                R_transform=R_transform,
-                Z_transform=Z_transform,
-                L_transform=L_transform,
-                iota=None,
-                current=_ExactValueProfile(eq, grid),
-            )
-            benchmark_data = eq.compute("iota_r", grid)
+            benchmark_data = eq.compute("iota_r", grid=grid)
 
             if grid_type == "linear":
                 # ignore axis
@@ -82,5 +80,5 @@ class TestConstrainCurrent:
 
         for e in ("quadrature", "concentric", "linear"):
             # works with any stellarators in desc/examples
-            test(DSHAPE, e)
-            test(HELIOTRON, e)
+            test(DSHAPE_current, e)
+            test(HELIOTRON_vac, e)

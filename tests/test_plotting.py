@@ -721,10 +721,12 @@ def test_plot_boozer_surface(DSHAPE_current):
 def test_plot_qs_error():
     """Test plotting qs error metrics."""
     eq = get("WISTELL-A")
-    fig, ax, data = plot_qs_error(eq, helicity=(1, eq.NFP), log=False, return_data=True)
+    fig, ax, data = plot_qs_error(eq, helicity=(1, -eq.NFP), log=True, return_data=True)
     for string in ["rho", "f_T", "f_B", "f_C"]:
         assert string in data.keys()
         if string != "rho":
+            # ensure that there is different QS data for each surface
+            # related to gh PR #400
             assert not isalmostequal(data[string])
     return fig
 

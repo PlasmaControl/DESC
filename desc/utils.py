@@ -448,3 +448,24 @@ def multinomial_coefficients(m, n):
     num = factorial(n)
     den = factorial(k).prod(axis=-1)
     return num / den
+
+
+def is_broadcastable(shp1, shp2):
+    """Determine if 2 shapes will broadcast without error.
+
+    Parameters
+    ----------
+    shp1, shp2 : tuple of int
+        Shapes of the arrays to check.
+
+    Returns
+    -------
+    is_broadcastable : bool
+        Whether the arrays can be broadcast.
+    """
+    for a, b in zip(shp1[::-1], shp2[::-1]):
+        if a == 1 or b == 1 or a == b:
+            pass
+        else:
+            return False
+    return True

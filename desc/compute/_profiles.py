@@ -61,6 +61,25 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="psi_rrr",
+    label="\\partial_{\\rho\\rho\\rho} \\psi = \\partial_{\\rho\\rho\\rho} \\Psi / "
+    + "(2 \\pi)",
+    units="Wb",
+    units_long="Webers",
+    description="Toroidal flux (normalized by 2pi), third radial derivative",
+    dim=1,
+    params=["Psi"],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["0"],
+)
+def _psi_rrr(params, transforms, profiles, data, **kwargs):
+    data["psi_rrr"] = data["0"]
+    return data
+
+
+@register_compute_fun(
     name="grad(psi)",
     label="\\nabla\\psi",
     units="Wb / m",
@@ -494,11 +513,6 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             * profiles["current"].compute(params["c_l"], dr=0)
             / data["psi_r"]
         )
-        num = (
-            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-        ) / data["sqrt(g)"]
-        den = data["g_tt"] / data["sqrt(g)"]
-        den_avg = surface_averages(transforms["grid"], den)
         current_term_r = (
             mu_0
             / (2 * jnp.pi)
@@ -506,20 +520,124 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             / data["psi_r"]
             - current_term * data["psi_rr"] / data["psi_r"]
         )
+        num = (
+            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+        ) / data["sqrt(g)"]
         num_r = (
             data["lambda_rz"] * data["g_tt"]
             + data["lambda_z"] * data["g_tt_r"]
             - data["lambda_rt"] * data["g_tz"]
             - (1 + data["lambda_t"]) * data["g_tz_r"]
         ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
-        den_r = (
-            data["g_tt_r"] / data["sqrt(g)"]
-            - data["g_tt"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
-        )
+        den = data["g_tt"] / data["sqrt(g)"]
+        den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
+        den_avg = surface_averages(transforms["grid"], den)
         num_avg_r = surface_averages(transforms["grid"], num_r)
         den_avg_r = surface_averages(transforms["grid"], den_r)
         data["iota_r"] = (
             current_term_r + num_avg_r - data["iota"] * den_avg_r
+        ) / den_avg
+    return data
+
+
+@register_compute_fun(
+    name="iota_rr",
+    label="\\partial_{\\rho\\rho} \\iota",
+    units="~",
+    units_long="None",
+    description="Rotational transform (normalized by 2pi), second radial derivative",
+    dim=1,
+    params=["i_l", "c_l"],
+    transforms={"grid": []},
+    profiles=["iota", "current"],
+    coordinates="r",
+    data=[
+        "iota",
+        "iota_r",
+        "psi_r",
+        "psi_rr",
+        "psi_rrr",
+        "lambda_t",
+        "lambda_rt",
+        "lambda_z",
+        "lambda_rz",
+        "lambda_rt",
+        "lambda_rrt",
+        "lambda_rz",
+        "lambda_rrz",
+        "g_tt",
+        "g_tt_r",
+        "g_tt_rr",
+        "g_tz",
+        "g_tz_r",
+        "g_tz_rr",
+        "sqrt(g)",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
+)
+def _iota_rr(params, transforms, profiles, data, **kwargs):
+    # The rotational transform is computed from the toroidal current profile using
+    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
+    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
+    # with an additional term to account for finite net toroidal currents. Note that
+    # the flux surface average integrals in their formula should not be weighted by a
+    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
+    # these averages will not be canceled out.
+    if profiles["iota"] is not None:
+        data["iota_rr"] = profiles["iota"].compute(params["i_l"], dr=2)
+    elif profiles["current"] is not None:
+        current_term = (
+            mu_0
+            / (2 * jnp.pi)
+            * profiles["current"].compute(params["c_l"], dr=0)
+            / data["psi_r"]
+        )
+        current_term_r = (
+            mu_0
+            / (2 * jnp.pi)
+            * profiles["current"].compute(params["c_l"], dr=1)
+            / data["psi_r"]
+            - current_term * data["psi_rr"] / data["psi_r"]
+        )
+        current_term_rr = (
+            mu_0 / (2 * jnp.pi) * profiles["current"].compute(params["c_l"], dr=2)
+            - 2 * current_term_r * data["psi_rr"]
+            - current_term * data["psi_rrr"]
+        ) / data["psi_r"]
+        num = (
+            data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
+        ) / data["sqrt(g)"]
+        num_r = (
+            data["lambda_rz"] * data["g_tt"]
+            + data["lambda_z"] * data["g_tt_r"]
+            - data["lambda_rt"] * data["g_tz"]
+            - (1 + data["lambda_t"]) * data["g_tz_r"]
+        ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
+        num_rr = (
+            data["lambda_rrz"] * data["g_tt"]
+            + 2 * data["lambda_rz"] * data["g_tt_r"]
+            + data["lambda_z"] * data["g_tt_rr"]
+            - data["lambda_rrt"] * data["g_tz"]
+            - 2 * data["lambda_rt"] * data["g_tz_r"]
+            - (1 + data["lambda_t"]) * data["g_tz_rr"]
+            - 2 * num_r * data["sqrt(g)_r"]
+            - num * data["sqrt(g)_rr"]
+        ) / data["sqrt(g)"]
+        den = data["g_tt"] / data["sqrt(g)"]
+        den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
+        den_rr = (
+            data["g_tt_rr"] - 2 * den_r * data["sqrt(g)_r"] - den * data["sqrt(g)_rr"]
+        ) / data["sqrt(g)"]
+        den_avg = surface_averages(transforms["grid"], den)
+        den_avg_r = surface_averages(transforms["grid"], den_r)
+        den_avg_rr = surface_averages(transforms["grid"], den_rr)
+        num_avg_rr = surface_averages(transforms["grid"], num_rr)
+        data["iota_rr"] = (
+            current_term_rr
+            + num_avg_rr
+            - 2 * data["iota_r"] * den_avg_r
+            - data["iota"] * den_avg_rr
         ) / den_avg
     return data
 
@@ -564,6 +682,25 @@ def _I_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="I_rr",
+    label="\\partial_{\\rho\\rho} I",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Boozer toroidal current enclosed by flux surfaces, second derivative "
+    + "wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B_theta_rr"],
+)
+def _I_rr(params, transforms, profiles, data, **kwargs):
+    data["I_rr"] = surface_averages(transforms["grid"], data["B_theta_rr"])
+    return data
+
+
+@register_compute_fun(
     name="G",
     label="G",
     units="T \\cdot m",
@@ -602,6 +739,25 @@ def _G_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="G_rr",
+    label="\\partial_{\\rho\\rho} G",
+    units="T \\cdot m",
+    units_long="Tesla * meters",
+    description="Boozer poloidal current enclosed by flux surfaces, second derivative "
+    + "wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["B_zeta_rr"],
+)
+def _G_rr(params, transforms, profiles, data, **kwargs):
+    data["G_rr"] = surface_averages(transforms["grid"], data["B_zeta_rr"])
+    return data
+
+
+@register_compute_fun(
     name="current",
     label="\\frac{2\\pi}{\\mu_0} I",
     units="A",
@@ -635,4 +791,23 @@ def _current(params, transforms, profiles, data, **kwargs):
 )
 def _current_r(params, transforms, profiles, data, **kwargs):
     data["current_r"] = 2 * jnp.pi / mu_0 * data["I_r"]
+    return data
+
+
+@register_compute_fun(
+    name="current_rr",
+    label="\\frac{2\\pi}{\\mu_0} \\partial_{\\rho\\rho} I",
+    units="A",
+    units_long="Amperes",
+    description="Net toroidal current enclosed by flux surfaces, second derivative "
+    + "wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["I_rr"],
+)
+def _current_rr(params, transforms, profiles, data, **kwargs):
+    data["current_rr"] = 2 * jnp.pi / mu_0 * data["I_rr"]
     return data

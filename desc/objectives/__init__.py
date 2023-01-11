@@ -4,12 +4,12 @@ from ._equilibrium import (
     CurrentDensity,
     Energy,
     ForceBalance,
+    ForceBalanceGalerkin,
     HelicalForceBalance,
     RadialForceBalance,
-    ForceBalanceGalerkin,
 )
 from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
-from ._geometry import AspectRatio, Volume, SpectralCondensation
+from ._geometry import AspectRatio, Elongation, SpectralCondensation, Volume
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective

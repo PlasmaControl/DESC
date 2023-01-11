@@ -110,6 +110,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.CurrentDensity
+    desc.objectives.Elongation
     desc.objectives.Energy
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ
@@ -130,6 +131,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
+    desc.objectives.RotationalTransform
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 

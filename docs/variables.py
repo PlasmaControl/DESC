@@ -5,10 +5,10 @@ sys.path.insert(0, os.path.abspath("."))
 sys.path.append(os.path.abspath("../"))
 import csv
 
-from desc.compute.data_index import data_index
+from desc.compute import data_index
 
 with open("variables.csv", "w", newline="") as f:
-    fieldnames = ["Name", "Label", "Units", "Description", "Compute function"]
+    fieldnames = ["Name", "Label", "Units", "Description", "Module"]
     writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
 
     writer.writeheader()
@@ -19,5 +19,5 @@ with open("variables.csv", "w", newline="") as f:
         d["Label"] = ":math:`" + data_index[key]["label"].replace("$", "") + "`"
         d["Units"] = data_index[key]["units_long"]
         d["Description"] = data_index[key]["description"]
-        d["Compute function"] = "``" + data_index[key]["fun"] + "``"
+        d["Module"] = "``" + data_index[key]["fun"].__module__ + "``"
         writer.writerow(d)

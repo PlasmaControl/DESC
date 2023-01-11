@@ -641,13 +641,13 @@ class _Objective(IOAble, ABC):
         x_norm = jnp.atleast_1d(x) / self.normalization
         if isinstance(target, tuple):
             return (
-                jnp.where(
+                jnp.where(  # where values are within target bounds, return 0 error
                     jnp.logical_and(x_norm >= target[0], x_norm <= target[1]),
                     jnp.zeros_like(x_norm),
-                    jnp.where(
+                    jnp.where(  # otherwise return error = value - target bound
                         jnp.abs(x_norm - target[0]) < jnp.abs(x_norm - target[1]),
-                        x_norm - target[0],
-                        x_norm - target[1],
+                        x_norm - target[0],  # errors below lower bound are negative
+                        x_norm - target[1],  # errors above upper bound are positive
                     ),
                 )
                 * self.weight
@@ -667,13 +667,13 @@ class _Objective(IOAble, ABC):
         f_unweighted = f / self.weight
         if isinstance(target, tuple):
             return (
-                jnp.where(
+                jnp.where(  # where errors are 0, return average of target bounds
                     f_unweighted == 0,
-                    sum(target) / 2,  # return average of bounds
-                    jnp.where(
+                    sum(target) / 2,
+                    jnp.where(  # otherwise return value = error + target bound
                         f_unweighted < 0,
-                        f_unweighted + target[0],
-                        f_unweighted + target[1],
+                        f_unweighted + target[0],  # negative errors below lower bound
+                        f_unweighted + target[1],  # positive errors above upper bound
                     ),
                 )
                 * self.normalization

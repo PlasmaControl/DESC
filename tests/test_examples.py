@@ -218,7 +218,7 @@ def run_qh_step(n, eq):
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid),
+            QuasisymmetryTwoTerm(helicity=(1, eq.NFP), grid=grid),
             AspectRatio(target=8, weight=1e2),
         ),
         verbose=0,

@@ -569,15 +569,13 @@ class ForceBalanceGalerkin(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                self.grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
-                    sym=eq.sym,
-                    axis=False,
-                    node_pattern=eq.node_pattern,
                 )
+
             elif eq.node_pattern == "quad":
                 self.grid = QuadratureGrid(
                     L=eq.L_grid,

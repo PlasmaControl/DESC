@@ -3,6 +3,7 @@
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute.utils import surface_integrals
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
 
@@ -304,12 +305,13 @@ class SpectralCondensation(_Objective):
 
         """
         if self.grid is None:
+            print("grid is None")
             self.grid = QuadratureGrid(
                 L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
             )
 
-        self._dim_f = eq.R_basis.num_modes + eq.Z_basis.num_modes
-        self._data_keys = ["V"]
+        self._dim_f = eq.L_basis.num_modes
+        self._data_keys = ["F"]
 
         timer = Timer()
         if verbose > 0:
@@ -344,11 +346,17 @@ class SpectralCondensation(_Objective):
             spectral width, dimensionless.
 
         """
-        R_weights = jnp.square(self._transforms["R"]._basis.modes[:, 1])
-        Z_weights = jnp.square(self._transforms["Z"]._basis.modes[:, 1])
+        # noqa R_weights = jnp.square(self._transforms["R"]._basis.modes[:, 1])
+        # noqa Z_weights = jnp.square(self._transforms["Z"]._basis.modes[:, 1])
 
-        R_width = R_weights * R_lmn
-        Z_width = Z_weights * Z_lmn
-        I = jnp.concatenate([R_width, Z_width])
-
-        return self._shift_scale(jnp.atleast_1d(I))
+        W = -(
+            self._transforms["R"].transform(R_lmn, dt=1)
+            * self._transforms["R"].transform(R_lmn, dt=2)
+            + self._transforms["Z"].transform(Z_lmn, dt=1)
+            * self._transforms["Z"].transform(Z_lmn, dt=2)
+        )
+        W_int = surface_integrals(self.grid, q=W)
+        W_proj = self._transforms["L"].project(W_int)
+        # noqa R_width = R_weights * R_lmn
+        # noqa Z_width = Z_weights * Z_lmn
+        return self._shift_scale(jnp.atleast_1d(W_proj))

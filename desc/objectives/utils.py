@@ -97,7 +97,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     elif mode == "vacuum":
         objectives = CurrentDensity(normalize=normalize, normalize_target=normalize)
     elif mode == "force_gal":
-        objectives = ForceBalanceGalerkin()
+        objectives = (ForceBalanceGalerkin(), SpectralCondensation())
     elif mode == "spectral":
         objectives = SpectralCondensation()
     else:

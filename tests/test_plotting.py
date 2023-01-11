@@ -34,6 +34,7 @@ from desc.plotting import (
     plot_section,
     plot_surfaces,
 )
+from desc.utils import isalmostequal
 
 tol_1d = 7.8
 tol_2d = 15
@@ -717,12 +718,14 @@ def test_plot_boozer_surface(DSHAPE_current):
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_plot_qs_error(DSHAPE_current):
+def test_plot_qs_error():
     """Test plotting qs error metrics."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_qs_error(eq, helicity=(0, 0), log=False, return_data=True)
+    eq = get("HELIOTRON")
+    fig, ax, data = plot_qs_error(eq, helicity=(1, 19), log=False, return_data=True)
     for string in ["rho", "f_T", "f_B", "f_C"]:
         assert string in data.keys()
+        if string != "rho":
+            assert not isalmostequal(data[string])
     return fig
 
 

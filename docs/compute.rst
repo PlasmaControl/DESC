@@ -51,22 +51,31 @@ metadata about the quanity. The necessary fields are detailed below:
   have ``dim=1``, global scalars (such as total volume, aspect ratio, etc) have ``dim=0``
 * ``params``: list of strings of ``Equilibrium`` parameters needed to compute the quanity
   such as ``R_lmn``, ``Z_lmn`` etc. These will be passed into the compute function as a
-  dictionary in the ``params`` argument. For most quantities, this will be an empty list.
+  dictionary in the ``params`` argument. Note that this only includes direct dependencies
+  (things that are used in this function). For most quantities, this will be an empty list.
+  For example, if the function relies on ``R_t``, this dependency should be specified as a
+  data dependecy (see below), while the function to compute ``R_t`` itself will depend on
+  ``R_lmn``
 * ``transforms``: a dictionary of what ``transform`` objects are needed, with keys being the
   quantity being transformed (``R``, ``p``, etc) and the values are a list of derivative
   orders needed in ``rho``, ``theta``, ``zeta``. IE, if the quanity requires
   :math:`R_{\rho}{\zeta}{\zeta}`, then ``transforms`` should be ``{"R": [[1, 0, 2]]}``
-  indicating a first derivative in ``rho`` and a second derivative in ``zeta``. For most
+  indicating a first derivative in ``rho`` and a second derivative in ``zeta``. Note that
+  this only includes direct dependencies (things that are used in this function). For most
   quantites this will be an empty dictionary.
 * ``profiles``: List of string of ``Profile`` quantities needed, such as ``pressure`` or
-  ``iota``. For most quantites this will be an empty list.
+  ``iota``. Note that this only includes direct dependencies (things that are used in
+  this function). For most quantites this will be an empty list.
 * ``coordinates``: String denoting which coordinate the quanity depends on. Most will be
   ``"rtz"`` indicating it is a funciton of :math:`\rho, \theta, \zeta`. Profiles and flux surface
   quantities would have ``coordinates="r"`` indicating it only depends on `:math:\rho`
 * ``data``: What other physics quantites are needed to compute this quanity. In our
   example, we need the radial derivative of pressure ``p_r``, the Jacobian determinant
   ``sqrt(g)``, and contravariant components of current and magnetic field. These dependencies
-  will be passed to the compute function as a dictionary in the ``data`` argument.
+  will be passed to the compute function as a dictionary in the ``data`` argument. Note
+  that this only includes direct dependencies (things that are used in this function).
+  For example, we need ``sqrt(g)``, which itself depends on ``e_rho``, etc. But we don'take
+  need to specify ``e_rho`` here, that dependency is determined automatically at runtime.
 * ``kwargs``: If the compute function requires any additional arguments they should
   be specified like ``kwarg="thing"`` where the value is the name of the keyword argument
   that will be passed to the compute function. Most quantites do not take kwargs.
@@ -75,8 +84,11 @@ metadata about the quanity. The necessary fields are detailed below:
 The function itself should have a signature of the form
 ::
 
-    foo(params, transforms, profiles, data, **kwargs)
+    _foo(params, transforms, profiles, data, **kwargs)
 
+Our convention is to start the function name with an underscore and have the it be
+something like the ``name`` attribute, but name of the function doesn't actually matter
+as long as it is registered.
 ``params``, ``transforms``, ``profiles``, and ``data`` are dictionaries containing the needed
 dependencies specified by the decorator. The function itself should do any calculation
 needed using these dependencies and then add the output to the ``data`` dictionary and

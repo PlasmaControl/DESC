@@ -157,12 +157,15 @@ def ptolemy_identity_rev(m_1, n_1, x):
     return m_0, n_0, s, c
 
 
-def ptolemy_linear_transform(basis):
+def ptolemy_linear_transform(basis, helicity=None):
     """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
 
     Parameters
     ----------
-    basis : Basis
+    basis : DoubleFourierBasis
+        Basis of the double-Fourier series.
+    helicity : tuple, optional
+        Type of quasi-symmetry, specified as (M, N).
 
     Returns
     -------
@@ -173,6 +176,9 @@ def ptolemy_linear_transform(basis):
         Modes of the double-angle basis. First column: +1/-1 for cos/sin term.
         Second column: poloidal mode number m (range 0 to basis.M).
         Third column: toroidal mode number n (range -basis.N to basis.N).
+    idx : ndarray
+        The indices of the rows of `modes` that correspond to non-quasi-symmetric modes.
+        Only returned if helicity is specified.
 
     """
     mn = np.array(
@@ -198,7 +204,7 @@ def ptolemy_linear_transform(basis):
         modes = np.vstack((modes, [1, m, n]))
     matrix = (matrix.T / np.sum(np.abs(matrix), axis=1)).T
 
-    # indices of non-symmetric basis modes to delete
+    # delete non-stellarator-symmetric modes
     if basis.sym == "cos":
         idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
         matrix = np.delete(matrix[::2, :], idx, axis=1)
@@ -207,6 +213,21 @@ def ptolemy_linear_transform(basis):
         idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
         matrix = np.delete(matrix[1::2, :], idx, axis=1)
         modes = modes[1::2, :]
+
+    # indices of non-quasi-symmetric modes
+    if helicity is not None:
+        assert isinstance(helicity, tuple) and len(helicity) == 2
+        M = np.abs(helicity[0])
+        N = np.abs(helicity[1]) * sign(np.prod(helicity))
+        idx = np.ones((modes.shape[0],), bool)
+        idx[0] = False  # m=0,n=0 mode
+        if N == 0:
+            idx_MN = np.nonzero(modes[:, 2] == 0)[0]
+        else:
+            idx_MN = np.nonzero(np.logical_and(modes[:, 1] == M, modes[:, 2] == N))[0]
+        idx[idx_MN] = False
+
+        return matrix, modes, idx
 
     return matrix, modes
 

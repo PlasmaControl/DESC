@@ -6,13 +6,15 @@ import logging
 import numpy as np
 from termcolor import colored
 
+
+from desc import set_console_logging
 from desc.backend import put, use_jax
 from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import evaluate_quadratic_form_jac
-from desc.utils import Timer, set_console_logging
+from desc.utils import Timer
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 

@@ -6,6 +6,8 @@ import logging
 import numpy as np
 from termcolor import colored
 
+
+from desc import set_console_logging
 from desc.optimize.utils import redirect_stdout
 from io import StringIO
 from termcolor import colored
@@ -22,7 +24,7 @@ from desc.objectives import (
     WrappedEquilibriumObjective,
 )
 from desc.objectives.utils import factorize_linear_constraints
-from desc.utils import Timer, set_console_logging
+from desc.utils import Timer
 
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
@@ -309,7 +311,6 @@ class Optimizer(IOAble):
                 x0_reduced,
                 method,
                 x_scale,
-                verbose,
                 stoptol,
                 options,
             )
@@ -325,7 +326,6 @@ class Optimizer(IOAble):
                 x0_reduced,
                 method,
                 x_scale,
-                verbose,
                 stoptol,
                 options,
             )
@@ -354,7 +354,6 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=verbose,
                 callback=None,
                 options=options,
             )
@@ -371,7 +370,6 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=verbose,
                 callback=None,
                 options=options,
             )
@@ -388,7 +386,6 @@ class Optimizer(IOAble):
                 xtol=stoptol["xtol"],
                 gtol=stoptol["gtol"],
                 maxiter=stoptol["maxiter"],
-                verbose=verbose,
                 callback=None,
                 options=options,
             )

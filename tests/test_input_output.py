@@ -92,7 +92,7 @@ class TestInputReader:
         assert ir.args.plot == 0, "plot is not default 0"
         assert ir.args.quiet is False, "quiet is not default False"
         assert ir.args.verbose == 0, "verbose is not default 0"
-        assert ir.args.logging == 2, "logging is not default 2"
+        assert ir.args.logging is False, "logging is not default False"
         assert ir.args.numpy is False, "numpy is not default False"
         assert (
             os.environ["DESC_BACKEND"] == "jax"
@@ -113,8 +113,8 @@ class TestInputReader:
         ), "numpy environment variable incorrect on use"
 
     @pytest.mark.unit
-    def test_quiet_verbose(self):
-        """Test setting of quiet and verbose options."""
+    def test_logging_defaults(self):
+        """Test setting of console logging options."""
         ir = InputReader(self.argv2)
         assert (
             ir.inputs[0]["verbose"] == 0
@@ -135,9 +135,7 @@ class TestInputReader:
             ir.inputs[0]["verbose"] == 0
         ), "value of inputs['verbose'] incorrect on quiet argument"
 
-    @pytest.mark.unit
-    def test_logfile_logging(self):
-        """Test setting of logging options."""
+        """Test setting of logfile options."""
         ir = InputReader(self.argv2)
         assert (
             ir.inputs[0]["logging"] == 0
@@ -147,13 +145,6 @@ class TestInputReader:
         assert (
             ir.inputs[0]["logging"] == 1
         ), "value of inputs['logging'] incorrect on logging argument"
-        argv = self.argv2 + ["-ll"]
-        ir = InputReader(argv)
-        assert (
-            ir.inputs[0]["logging"] == 2
-        ), "value of inputs['logging'] incorrect on double logging argument"
-
-
 
     @pytest.mark.unit
     def test_vmec_to_desc_input(self):

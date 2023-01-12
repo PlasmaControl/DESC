@@ -13,9 +13,7 @@ import numpy as np
 from termcolor import colored
 
 from desc import set_device
-
-from utils import _set_logfile_logging
-from utils import _set_console_logging
+from desc import set_logfile_logging, set_console_logging
 
 class InputReader:
     """Reads command line arguments and parses input files.
@@ -123,16 +121,18 @@ class InputReader:
         if args.verbose == 0:
             pass
         if args.verbose == 1:
-            _set_console_logging("INFO", "stdout")
+            set_console_logging("INFO", "stdout")
         if args.verbose == 2:
-            _set_console_logging("DEBUG", "stdout")
+            set_console_logging("DEBUG", "stdout")
+
+        if args.quiet == 1:
+            set_console_logging("CRITICAL", "stdout")
+            set_console_logging("CRITICAL", "sterr")
 
         if args.logging == 0:
             pass
         if args.logging == 1:
-            _set_logfile_logging("INFO", "desc.log")
-        if args.logging == 2:
-            _set_logfile_logging("DEBUG", "desc.log")
+            set_logfile_logging("INFO", "desc.log")
 
         return args
 
@@ -1463,14 +1463,12 @@ def get_parser():
     parser.add_argument(
         "--version", action="store_true", help="Display version number and exit."
     )
-
     parser.add_argument(
         "-l",
         "--logging",
-        action="count",
-        default=0,
-        help="Display detailed progress information to logfile. Twice to include"
-        + " iteration and timing information",
+        action="store_true",
+        help="Display detailed iteration and timing information to 'desc.log' logfile"
+        + "using base python logging module.",
     )
 
     group = parser.add_mutually_exclusive_group()

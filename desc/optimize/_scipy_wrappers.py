@@ -18,7 +18,7 @@ from .utils import (
 
 
 def _optimize_scipy_minimize(
-    fun, grad, hess, x0, method, x_scale, verbose, stoptol, options=None
+    fun, grad, hess, x0, method, x_scale, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
 
@@ -41,10 +41,6 @@ def _optimize_scipy_minimize(
         x_scale[j]. Improved convergence may be achieved by setting x_scale such that
         a step of a given size along any of the scaled variables has a similar effect
         on the cost function.
-    verbose : int
-        * 0 : work silently.
-        * 1 : display a termination report.
-        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -200,7 +196,7 @@ def _optimize_scipy_minimize(
         logging.info("Warning: " + result["message"])
         logging.info("         Current function value: {:.3e}".format(result["fun"]))
         logging.info("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-        prilogging.infont("         Iterations: {:d}".format(result["nit"]))
+        logging.info("         Iterations: {:d}".format(result["nit"]))
         logging.info("         Function evaluations: {:d}".format(result["nfev"]))
         logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
         logging.info("         Hessian evaluations: {:d}".format(result["nhev"]))
@@ -209,7 +205,7 @@ def _optimize_scipy_minimize(
 
 
 def _optimize_scipy_least_squares(
-    fun, jac, x0, method, x_scale, verbose, stoptol, options=None
+    fun, jac, x0, method, x_scale, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
 
@@ -231,10 +227,6 @@ def _optimize_scipy_least_squares(
         a step of a given size along any of the scaled variables has a similar effect
         on the cost function. If set to ‘jac’, the scale is iteratively updated using
         the inverse norms of the columns of the Jacobian matrix.
-    verbose : int
-        * 0 : work silently.
-        * 1 : display a termination report.
-        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}

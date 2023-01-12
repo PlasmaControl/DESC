@@ -10,6 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
+from desc import set_console_logging
 from desc.basis import FourierZernikeBasis
 from desc.geometry import FourierRZCurve
 from desc.grid import LinearGrid
@@ -24,7 +25,6 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.transform import Transform
 from desc.utils import Timer
-from desc.utils import _set_console_logging
 
 
 from .configuration import _Configuration
@@ -476,11 +476,11 @@ class Equilibrium(_Configuration, IOAble):
             )
 
         if verbose == 0:
-            _set_console_logging(console_log_level="CRITICAL")
+            set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            _set_console_logging(console_log_level="INFO")
+            set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            _set_console_logging(console_log_level="DEBUG")
+            set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(
             eq,
@@ -520,7 +520,7 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         x_scale="auto",
         options={},
-        verbose=0,
+        verbose=1,
         copy=False,
     ):
         """Optimize an equilibrium for an objective.
@@ -548,9 +548,10 @@ class Equilibrium(_Configuration, IOAble):
             inverse norms of the columns of the Jacobian or Hessian matrix.
         options : dict
             Dictionary of additional options to pass to optimizer.
-        verbose : int
-            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
-            with DEBUG level timing and iteration data.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
         copy : bool
             Whether to return the current equilibrium or a copy (leaving the original
             unchanged).
@@ -579,11 +580,11 @@ class Equilibrium(_Configuration, IOAble):
             eq = self
 
         if verbose == 0:
-            _set_console_logging(console_log_level="CRITICAL")
+            set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            _set_console_logging(console_log_level="INFO")
+            set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            _set_console_logging(console_log_level="DEBUG")
+            set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(
             eq,
@@ -619,7 +620,7 @@ class Equilibrium(_Configuration, IOAble):
         ftol=1e-6,
         xtol=1e-6,
         maxiter=50,
-        verbose=0,
+        verbose=1,
         copy=False,
         solve_options={},
         perturb_options={},
@@ -638,9 +639,10 @@ class Equilibrium(_Configuration, IOAble):
             Stopping tolerance on optimization step size.
         maxiter : int
             Maximum number of optimization steps.
-        verbose : int
-            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
-            with DEBUG level timing and iteration data.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
         solve_options : dict
@@ -790,7 +792,7 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
-        verbose=0,
+        verbose=1,
         copy=False,
     ):
         """Perturb an equilibrium.
@@ -811,10 +813,11 @@ class Equilibrium(_Configuration, IOAble):
             Radius of the trust region, as a fraction of ||x||.
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
-            element for the first step and so on.
-        verbose : int
-            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
-            with DEBUG level timing and iteration data.
+                element for the first step and so on.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
         copy : bool, optional
             Whether to update the existing equilibrium or make a copy (Default).
 
@@ -936,11 +939,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             for given optimizer.
         nfev : int or array-like of int
             maximum number of function evaluations in each equilibrium subproblem.
-        verbose : integer
-            * 0: no output
-            * 1: summary of each iteration
-            * 2: as above plus timing information
-            * 3: as above plus detailed solver output
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
 
@@ -1003,11 +1005,10 @@ class EquilibriaFamily(IOAble, MutableSequence):
             for given optimizer.
         nfev : int
             maximum number of function evaluations in each equilibrium subproblem.
-        verbose : integer
-            * 0: no output
-            * 1: summary of each iteration
-            * 2: as above plus timing information
-            * 3: as above plus detailed solver output
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
         **kwargs : control continuation step sizes

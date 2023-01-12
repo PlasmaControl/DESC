@@ -379,15 +379,15 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         message=message,
     )
     if result["success"]:
-        logging.DEBUG(result["message"])
+        logging.debug(str(result["message"]))
     else:
-        logging.DEBUG("Warning: " + result["message"])
-    logging.DEBUG("         Current function value: {:.3e}".format(result["fun"]))
-    logging.DEBUG("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-    logging.DEBUG("         Iterations: {:d}".format(result["nit"]))
-    logging.DEBUG("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.DEBUG("         Gradient evaluations: {:d}".format(result["ngev"]))
-    logging.DEBUG("         Hessian evaluations: {:d}".format(result["nhev"]))
+        logging.debug("Warning: " + str(result["message"]))
+    logging.debug("         Current function value: {:.3e}".format(result["fun"]))
+    logging.debug("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+    logging.debug("         Iterations: {:d}".format(result["nit"]))
+    logging.debug("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.debug("         Gradient evaluations: {:d}".format(result["ngev"]))
+    logging.debug("         Hessian evaluations: {:d}".format(result["nhev"]))
     if return_all:
         result["allx"] = allx
     if return_tr:

@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import jnp, sign
+from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid

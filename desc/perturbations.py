@@ -10,7 +10,7 @@ from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
-from desc.optimize.utils import evaluate_quadratic_form_jac
+from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
 from desc.utils import Timer
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
@@ -88,6 +88,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     order=2,
     tr_ratio=0.1,
     weight="auto",
+    include_f=True,
     verbose=1,
     copy=True,
 ):
@@ -115,6 +116,10 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     weight : ndarray, "auto", or None, optional
         1d or 2d array for weighted least squares. 1d arrays are turned into diagonal
         matrices. Default is to weight by (mode number)**2. None applies no weighting.
+    include_f : bool, optional
+        Whether to include the 0th order objective residual in the perturbation
+        equation. Including this term can improve force balance if the perturbation
+        step is large, but can result in too large a step if the perturbation is small.
     verbose : int
         Level of output.
     copy : bool
@@ -251,15 +256,16 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         scale_inv = W
         scale = np.linalg.inv(scale_inv)
 
-        f = objective.compute(x)
-
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
-        RHS1 = f + objective.jvp(tangents, x)
+        RHS1 = objective.jvp(tangents, x)
+        if include_f:
+            f = objective.compute(x)
+            RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
@@ -281,7 +287,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx1_reduced = scale @ dx1_h
         dx1 = recover(dx1_reduced) - xp
@@ -308,7 +313,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx2_reduced = scale @ dx2_h
         dx2 = recover(dx2_reduced) - xp
@@ -335,7 +339,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
         dx3_reduced = scale @ dx3_h
 
@@ -422,7 +425,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Radius of the trust region, as a fraction of ||x||.
         Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
         If a scalar, uses the same ratio for all steps. If an array, uses the first
-        element for the first step and so on.
+        element for the first step and so on. Note that ||X|| uses a scaled norm,
+        weighted by the jacobian.
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
         Default is np.finfo(A.dtype).eps*max(A.shape) where A is the Jacobian matrix.
@@ -514,7 +518,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for key, value in deltas.items():
         c_idx = np.append(c_idx, np.where(value)[0] + c.size)
         c = np.concatenate((c, getattr(eq, key)))
-    c_norm = np.linalg.norm(c)
 
     # optimization subspace matrix
     if subspace is None:
@@ -552,7 +555,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     xg = objective_g.x(eq)
 
     x_reduced = project(xf)
-    x_norm = np.linalg.norm(x_reduced)
 
     # perturbation vectors
     dc1 = 0
@@ -590,39 +592,56 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         f = objective_f.compute(xf)
         g = objective_g.compute(xg)
 
-        # 1st partial derivatives of f objective wrt both x and c
+        # 1st partial derivatives of f objective wrt x
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
         Fx = objective_f.jac(xf)
         Fx = align_jacobian(Fx, objective_f, objective_g)
-        Fx_reduced = Fx[:, unfixed_idx] @ Z
-        Fc = Fx @ dxdc
-        if cutoff is None:
-            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
-        Fx_reduced_inv = np.linalg.pinv(Fx_reduced, rcond=cutoff)
         timer.stop("df computation")
         if verbose > 1:
             timer.disp("df computation")
 
-        # 1st partial derivatives of g objective wrt both x and c
+        # 1st partial derivatives of g objective wrt x
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
         Gx = objective_g.jac(xg)
         Gx = align_jacobian(Gx, objective_g, objective_f)
-        Gx_reduced = Gx[:, unfixed_idx] @ Z
-        Gc = Gx @ dxdc
         timer.stop("dg computation")
         if verbose > 1:
             timer.disp("dg computation")
 
-        GxFx = Gx_reduced @ Fx_reduced_inv
+        # projections onto optimization space
+        Fx_reduced = Fx[:, unfixed_idx] @ Z
+        Gx_reduced = Gx[:, unfixed_idx] @ Z
+        Fc = Fx @ dxdc
+        Gc = Gx @ dxdc
+
+        # some scaling to improve conditioning and rescale trust region
+        wf, _ = compute_jac_scale(Fx_reduced)
+        wg, _ = compute_jac_scale(Gx_reduced)
+        wx = wf + wg
+        Fxh = Fx_reduced * wx
+        Gxh = Gx_reduced * wx
+        if cutoff is None:
+            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
+        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+        GxFx = Gxh @ Fxh_inv
         LHS = GxFx @ Fc - Gc
         RHS_1g = g - GxFx @ f
 
+        # scaling for c
+        # approx dc/dx at const f
+        dcdx_f = np.linalg.lstsq(Fc, Fx_reduced, rcond=None)[0]
+        wc, _ = compute_jac_scale(dcdx_f.T)
+        LHSh = LHS * wc
         # restrict to optimization subspace
-        LHS_opt = LHS @ subspace
+        LHS_opt = LHSh @ subspace
 
         if verbose > 0:
             print("Factoring LHS")
@@ -632,7 +651,10 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("LHS factorization")
 
-        dc1_opt, bound_hit, alpha = trust_region_step_exact_svd(
+        c_norm = np.linalg.norm(dcdx_f @ x_reduced)
+        x_norm = np.linalg.norm(wx * x_reduced)
+
+        dc1h_opt, bound_hit, _ = trust_region_step_exact_svd(
             -RHS_1g,
             ug,
             sg,
@@ -641,14 +663,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
 
-        dc1 = dc1_opt @ subspace.T
+        dc1h = dc1h_opt @ subspace.T
+        dc1 = dc1h * wc
         RHS_1f = -f - Fc @ dc1
-        uf, sf, vtf = np.linalg.svd(Fx_reduced, full_matrices=False)
 
-        dx1_reduced, _, _ = trust_region_step_exact_svd(
+        dx1h_reduced, _, _ = trust_region_step_exact_svd(
             -RHS_1f,
             uf,
             sf,
@@ -657,9 +678,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
-
+        dx1_reduced = dx1h_reduced * wx
     # 2nd order
     if order > 1:
 
@@ -689,33 +709,32 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 1:
             timer.disp("d^2g computation")
 
-        dc2_opt, _, _ = trust_region_step_exact_svd(
+        dc2h_opt, _, _ = trust_region_step_exact_svd(
             -RHS_2g,
             ug,
             sg,
             vtg.T,
-            tr_ratio[1] * np.linalg.norm(dc1_opt),
+            tr_ratio[1] * np.linalg.norm(dc1h_opt),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
 
-        dc2 = dc2_opt @ subspace.T
+        dc2h = dc2h_opt @ subspace.T
+        dc2 = dc2h * wc
         RHS_2f += -Fc @ dc2
 
-        dx2_reduced, _, _ = trust_region_step_exact_svd(
+        dx2h_reduced, _, _ = trust_region_step_exact_svd(
             -RHS_2f,
             uf,
             sf,
             vtf.T,
-            tr_ratio[1] * np.linalg.norm(dx1_reduced),
+            tr_ratio[1] * np.linalg.norm(dx1h_reduced),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
-            threshold=1e-6,
         )
-
+        dx2_reduced = dx2h_reduced * wx
     if order > 2:
         raise ValueError(
             "Higher-order perturbations not yet implemented: {}".format(order)
@@ -757,9 +776,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     timer.stop("Total perturbation")
     if verbose > 0:
-        print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / c_norm))
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+        print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
+        print(
+            "||dx||/||x|| = {:10.3e}".format(
+                np.linalg.norm(dx_reduced) / np.linalg.norm(x_reduced)
+            )
+        )
     if verbose > 1:
         timer.disp("Total perturbation")
 
-    return eq_new, predicted_reduction, dc_opt, dc, c_norm, bound_hit
+    return eq_new, predicted_reduction, dc_opt, dc, np.linalg.norm(c), bound_hit

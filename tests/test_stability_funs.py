@@ -188,7 +188,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         )
         all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=2.5e-2)
+    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
     test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
     test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
 

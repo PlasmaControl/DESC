@@ -34,6 +34,7 @@ class QuasisymmetryBoozer(_Objective):
         be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+        Must be a LinearGrid with a single flux surface and sym=False.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
     M_booz : int, optional
@@ -108,6 +109,9 @@ class QuasisymmetryBoozer(_Objective):
             )
         self._data_keys = ["|B|_mn"]
         self._args = get_params(self._data_keys)
+
+        assert self.grid.sym is False
+        assert self.grid.num_rho == 1
 
         timer = Timer()
         if verbose > 0:

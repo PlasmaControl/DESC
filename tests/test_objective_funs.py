@@ -193,7 +193,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_qs_twoterm(self):
-        """Test calculation of two term qs metric."""
+        """Test calculation of two term QS metric."""
 
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
@@ -204,8 +204,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
-    def test_qs_tp(self):
-        """Test calculation of triple product qs metric."""
+    def test_qs_tripleproduct(self):
+        """Test calculation of triple product QS metric."""
 
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
@@ -214,6 +214,21 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_qs_boozer_grids(self):
+        """Test grid compatability with QS objectives."""
+        eq = get("QAS")
+
+        # symmetric grid
+        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
+        with pytest.raises(AssertionError):
+            _ = QuasisymmetryBoozer(eq=eq, grid=grid)
+
+        # multiple flux surfaces
+        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
+        with pytest.raises(AssertionError):
+            _ = QuasisymmetryBoozer(eq=eq, grid=grid)
 
     @pytest.mark.unit
     def test_mercier_stability(self):

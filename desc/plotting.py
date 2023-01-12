@@ -14,11 +14,12 @@ from scipy.interpolate import Rbf
 from termcolor import colored
 
 from desc.basis import DoubleFourierSeries, fourier, zernike_radial_poly
-from desc.compute import data_index
+from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import flatten_list
+from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
     "plot_1d",
@@ -2158,17 +2159,22 @@ def plot_boozer_modes(
         rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
         rho = np.linspace(1, 0, num=rho, endpoint=False)
-    ds = []
+
     B_mn = np.array([[]])
     linestyle = kwargs.pop("linestyle", "-")
     linewidth = kwargs.pop("linewidth", 2)
 
+    transforms = get_transforms(
+        "|B|_mn", eq=eq, grid=LinearGrid(), M_booz=2 * eq.M, N_booz=2 * eq.N
+    )
+    matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        data = eq.compute(["|B|_mn", "B modes"], grid=grid)
-        ds.append(data)
-        b_mn = np.atleast_2d(data["|B|_mn"])
+        data = eq.compute("|B|_mn", grid=grid)
+        b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
+
     idx = np.argsort(np.abs(B_mn[0, :]))
     if num_modes == -1:
         idx = idx[-1::-1]
@@ -2177,7 +2183,7 @@ def plot_boozer_modes(
     B_mn = B_mn[:, idx]
     if norm:
         B_mn = B_mn / np.max(B_mn)
-    modes = data["B modes"][idx, :]
+    modes = modes[idx, :]
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -2186,6 +2192,7 @@ def plot_boozer_modes(
     ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
     plot_data = {}
     for i in range(modes.shape[0]):
+        L = modes[i, 0]
         M = modes[i, 1]
         N = modes[i, 2]
         if (M, N) == (0, 0) and B0 is False:
@@ -2194,7 +2201,7 @@ def plot_boozer_modes(
             ax.semilogy(
                 rho,
                 np.abs(B_mn[:, i]),
-                label="M={}, N={}".format(M, N),
+                label="M={}, N={} ({})".format(M, N, "cos" if L > 0 else "sin"),
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
@@ -2203,12 +2210,12 @@ def plot_boozer_modes(
                 rho,
                 B_mn[:, i],
                 "-",
-                label="M={}, N={}".format(M, N),
+                label="M={}, N={} ({})".format(M, N, "cos" if L > 0 else "sin"),
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
-    plot_data["B_mn"] = B_mn
-    plot_data["B_modes"] = modes
+    plot_data["|B|_mn"] = B_mn
+    plot_data["B modes"] = modes
     plot_data["rho"] = rho
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0])
@@ -2463,13 +2470,15 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
-            data = eq.compute(["|B|_mn", "B modes"], grid=grid)
-            modes = data["B modes"]
-            # FIXME: update this logic
-            idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
-            f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
-                np.sum(data["|B|_mn"] ** 2)
+            transforms = get_transforms(
+                "|B|_mn", eq=eq, grid=grid, M_booz=2 * eq.M, N_booz=2 * eq.N
             )
+            matrix, modes, idx = ptolemy_linear_transform(
+                transforms["B"].basis, (helicity[0], helicity[1] / eq.NFP)
+            )
+            data = eq.compute(["|B|_mn", "B modes"], grid=grid)
+            B_mn = matrix @ data["|B|_mn"]
+            f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
             f_B = np.append(f_B, f_b)
         if fC:
             data = eq.compute("f_C", grid=grid, helicity=helicity)

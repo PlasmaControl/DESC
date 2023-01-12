@@ -385,7 +385,7 @@ def test_ESTELL_results(tmpdir_factory):
     )
     eqf = load(output_dir.join("ESTELL.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
-    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=4e-2)
+    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=5e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 

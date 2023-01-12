@@ -9,12 +9,13 @@ This module primarily tests the constructing/building/calling methods.
 import numpy as np
 import pytest
 
-import desc.examples
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    Elongation,
     Energy,
     GenericObjective,
     MagneticWell,
@@ -93,6 +94,19 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_elongation(self):
+        """Test calculation of elongation."""
+
+        def test(eq):
+            obj = Elongation(target=0, weight=1, eq=eq)
+            f = obj.compute(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
+            f = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
+
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
     def test_energy(self):
         """Test calculation of MHD energy."""
 
@@ -143,7 +157,7 @@ class TestObjectiveFunction:
     @pytest.mark.unit
     def test_qh_boozer(self):
         """Test calculation of Boozer QH metric."""
-        eq = desc.examples.get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
+        eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
         helicity = (1, -eq.NFP)
         M_booz = eq.M
         N_booz = eq.N
@@ -305,3 +319,22 @@ def test_generic_compute():
     obj = ObjectiveFunction(GenericObjective("R0/a", target=2, weight=1), eq=eq)
     a2 = obj.compute_scalar(obj.x(eq))
     assert np.allclose(a1, a2)
+
+
+@pytest.mark.unit
+def test_target_profiles():
+    """Tests for using Profile objects as targets for profile objectives."""
+    iota = PowerSeriesProfile([1, 0, -0.3])
+    current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
+    eqc = Equilibrium(L=3, N=3, M=3, current=current)
+    obji = RotationalTransform(target=iota)
+    obji.build(eqc)
+    np.testing.assert_allclose(
+        obji.target, iota(obji.grid.nodes[obji.grid.unique_rho_idx])
+    )
+    objc = ToroidalCurrent(target=current)
+    objc.build(eqi)
+    np.testing.assert_allclose(
+        objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])
+    )

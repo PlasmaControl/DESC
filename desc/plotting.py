@@ -2083,7 +2083,6 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     return fig, ax
 
 
-# FIXME: update this to use VMEC convention modes
 def plot_boozer_modes(
     eq,
     log=True,
@@ -2161,17 +2160,18 @@ def plot_boozer_modes(
         rho = np.linspace(1, 0, num=rho, endpoint=False)
 
     B_mn = np.array([[]])
+    M_booz = kwargs.pop("M_booz", 2 * eq.M)
+    N_booz = kwargs.pop("N_booz", 2 * eq.N)
     linestyle = kwargs.pop("linestyle", "-")
     linewidth = kwargs.pop("linewidth", 2)
 
-    transforms = get_transforms(
-        "|B|_mn", eq=eq, grid=LinearGrid(), M_booz=2 * eq.M, N_booz=2 * eq.N
-    )
-    matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
-
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
-        data = eq.compute("|B|_mn", grid=grid)
+        transforms = get_transforms(
+            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+        )
+        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
+        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
@@ -2187,9 +2187,6 @@ def plot_boozer_modes(
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
-    assert (
-        len(kwargs) == 0
-    ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
     plot_data = {}
     for i in range(modes.shape[0]):
         L = modes[i, 0]
@@ -2201,7 +2198,9 @@ def plot_boozer_modes(
             ax.semilogy(
                 rho,
                 np.abs(B_mn[:, i]),
-                label="M={}, N={} ({})".format(M, N, "cos" if L > 0 else "sin"),
+                label="M={}, N={}{}".format(
+                    M, N, "" if eq.sym else (" (cos)" if L > 0 else " (sin)")
+                ),
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
@@ -2210,7 +2209,9 @@ def plot_boozer_modes(
                 rho,
                 B_mn[:, i],
                 "-",
-                label="M={}, N={} ({})".format(M, N, "cos" if L > 0 else "sin"),
+                label="M={}, N={}{}".format(
+                    M, N, "" if eq.sym else (" (cos)" if L > 0 else " (sin)")
+                ),
                 linestyle=linestyle,
                 linewidth=linewidth,
             )
@@ -2220,7 +2221,12 @@ def plot_boozer_modes(
 
     ax.set_xlabel(_AXIS_LABELS_RTZ[0])
     ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$")
-    fig.legend(loc="center right")
+    if kwargs.pop("legend", True):
+        fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
 
     fig.set_tight_layout(True)
     if return_data:
@@ -2306,14 +2312,19 @@ def plot_boozer_surface(
     if grid_plot is None:
         grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True}
         grid_plot = _get_grid(**grid_kwargs)
+
+    M_booz = kwargs.pop("M_booz", 2 * eq.M)
+    N_booz = kwargs.pop("N_booz", 2 * eq.N)
     title_font_size = kwargs.pop("title_font_size", None)
 
-    data = eq.compute("|B|_mn", grid=grid_compute)
-    B_transform = Transform(
-        grid_plot,
-        DoubleFourierSeries(M=2 * eq.M, N=2 * eq.N, sym=eq.R_basis.sym, NFP=eq.NFP),
+    transforms_compute = get_transforms(
+        "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
     )
-    data = B_transform.transform(data["|B|_mn"])
+    transforms_plot = get_transforms(
+        "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+    )
+    data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
+    data = transforms_plot["B"].transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
@@ -2453,6 +2464,8 @@ def plot_qs_error(  # noqa: 16 fxn too complex
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
+    M_booz = kwargs.pop("M_booz", 2 * eq.M)
+    N_booz = kwargs.pop("N_booz", 2 * eq.N)
     ls = kwargs.pop("ls", ["-", "-", "-"])
     colors = kwargs.pop("colors", ["r", "b", "g"])
     markers = kwargs.pop("markers", ["o", "o", "o"])
@@ -2471,12 +2484,12 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
-                "|B|_mn", eq=eq, grid=grid, M_booz=2 * eq.M, N_booz=2 * eq.N
+                "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             matrix, modes, idx = ptolemy_linear_transform(
                 transforms["B"].basis, (helicity[0], helicity[1] / eq.NFP)
             )
-            data = eq.compute(["|B|_mn", "B modes"], grid=grid)
+            data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
             B_mn = matrix @ data["|B|_mn"]
             f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
             f_B = np.append(f_B, f_b)
@@ -2497,10 +2510,12 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 / B0**4
             )
             f_T = np.append(f_T, f_t)
+
     plot_data["f_B"] = f_B
     plot_data["f_C"] = f_C
     plot_data["f_T"] = f_T
     plot_data["rho"] = rho
+
     if log is True:
         if fB:
             ax.semilogy(

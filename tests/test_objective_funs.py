@@ -8,6 +8,7 @@ This module primarily tests the constructing/building/calling methods.
 
 import numpy as np
 import pytest
+from scipy.constants import mu_0
 
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -65,13 +66,11 @@ class TestObjectiveFunction:
                 target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
             V = obj.compute(eq.R_lmn, eq.Z_lmn)
-            np.testing.assert_allclose(V, 10)
-            V = obj.compute(*obj.xs(eq))
-            np.testing.assert_allclose(V, 10)
-            V_compute_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
-            np.testing.assert_allclose(V_compute_scalar, 10)
-            V_compute_scalar = obj.compute_scalar(*obj.xs(eq))
-            np.testing.assert_allclose(V_compute_scalar, 10)
+            V_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            V_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(V, 20 * np.pi**2)
+            np.testing.assert_allclose(V_scaled, 10)
+            np.testing.assert_allclose(V_scalar, 10)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -81,11 +80,11 @@ class TestObjectiveFunction:
         """Test calculation of aspect ratio."""
 
         def test(eq):
-            obj = AspectRatio(target=5, weight=2, eq=eq)
+            obj = AspectRatio(target=5, weight=1, eq=eq)
             AR = obj.compute(eq.R_lmn, eq.Z_lmn)
+            AR_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(AR, 10)
-            AR = obj.compute(*obj.xs(eq))
-            np.testing.assert_allclose(AR, 10)
+            np.testing.assert_allclose(AR_scaled, 5)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -95,11 +94,11 @@ class TestObjectiveFunction:
         """Test calculation of elongation."""
 
         def test(eq):
-            obj = Elongation(target=0, weight=1, eq=eq)
+            obj = Elongation(target=0, weight=2, eq=eq)
             f = obj.compute(eq.R_lmn, eq.Z_lmn)
+            f_scaled = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
-            f = obj.compute(*obj.xs(eq))
-            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
+            np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
         test(get("HELIOTRON"))
 
@@ -108,9 +107,11 @@ class TestObjectiveFunction:
         """Test calculation of MHD energy."""
 
         def test(eq):
-            obj = Energy(target=0, weight=(4 * np.pi * 1e-7), eq=eq, normalize=False)
+            obj = Energy(target=0, weight=mu_0, eq=eq, normalize=False)
             W = obj.compute(*obj.xs(eq))
-            np.testing.assert_allclose(W, 10)
+            W_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(W, 10 / mu_0)
+            np.testing.assert_allclose(W_scaled, 10)
 
         test(Equilibrium(node_pattern="quad", iota=PowerSeriesProfile(0)))
         test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
@@ -121,8 +122,10 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = RotationalTransform(target=1, weight=2, eq=eq)
-            iota = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
-            np.testing.assert_allclose(iota, -2 / 3)
+            iota = obj.compute(*obj.xs(eq))
+            iota_scaled = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(iota, 0)
+            np.testing.assert_allclose(iota_scaled, -2 / 3)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -133,8 +136,10 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
-            I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
-            np.testing.assert_allclose(I, -2 / 3)
+            I = obj.compute(*obj.xs(eq))
+            I_scaled = obj.compute_scaled(*obj.xs(eq))
+            np.testing.assert_allclose(I, 0)
+            np.testing.assert_allclose(I_scaled, -2 / 3)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -145,7 +150,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
-            fb = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
+            fb = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 
         test(Equilibrium(L=2, M=2, N=1, iota=PowerSeriesProfile(0)))
@@ -157,7 +162,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
-            fc = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
+            fc = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(fc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -169,7 +174,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
-            ft = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
+            ft = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(ft, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -181,9 +186,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MercierStability(eq=eq)
-            DMerc = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            DMerc = obj.compute(*obj.xs(eq))
             np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
@@ -196,9 +199,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MagneticWell(eq=eq)
-            magnetic_well = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            magnetic_well = obj.compute(*obj.xs(eq))
             np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
@@ -232,6 +233,7 @@ def test_rejit():
     """Test that updating attributes and recompiling correctly updates."""
 
     class DummyObjective(_Objective):
+
         def __init__(self, y, eq=None, target=0, weight=1, name="dummy"):
             self.y = y
             super().__init__(eq=eq, target=target, weight=weight, name=name)
@@ -241,7 +243,7 @@ def test_rejit():
             super().build(eq, use_jit, verbose)
 
         def compute(self, R_lmn):
-            return self.target * self.weight + self.y * R_lmn**3
+            return self.y * R_lmn**3
 
     objective = DummyObjective(3.0)
     eq = Equilibrium()

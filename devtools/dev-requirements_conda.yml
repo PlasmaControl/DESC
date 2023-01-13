@@ -24,7 +24,7 @@ dependencies:
   - sphinx > 3.0.0
   - sphinx-argparse
   - sphinx-copybutton
-  - sphinx_rtd_theme
+  - sphinx_rtd_theme >= 1.0, < 2.0
 
   # linting
   - black = 22.10.0

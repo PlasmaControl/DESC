@@ -99,7 +99,9 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args, dimensions=None):
+def factorize_linear_constraints(  # noqa: C901
+    constraints, objective_args, dimensions=None
+):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -206,6 +208,18 @@ def factorize_linear_constraints(constraints, objective_args, dimensions=None):
         """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
+
+    # check that all constraints are actually satisfiable
+    xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
+    for con in constraints:
+        arg = con.args[0]
+        if arg not in objective_args:
+            continue
+        res = con.compute(**xp_dict)
+        if not np.allclose(res, 0):
+            raise ValueError(
+                f"Incompatible constraints detected, cannot satisfy constraint {con}"
+            )
 
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
 

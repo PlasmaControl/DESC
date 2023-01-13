@@ -142,15 +142,30 @@ Name,Label,Units,Description,Module
 ``B^theta_z``,:math:`\partial_{\zeta} B^{\theta}`,Tesla / meter,"Contravariant poloidal component of magnetic field, derivative wrt toroidal angle",``desc.compute._field``
 ``B^zeta_z``,:math:`\partial_{\zeta} B^{\zeta}`,Tesla / meter,"Contravariant toroidal component of magnetic field, derivative wrt toroidal angle",``desc.compute._field``
 ``B_z``,:math:`\partial_{\zeta} \mathbf{B}`,Tesla,"Magnetic field, derivative wrt toroidal angle",``desc.compute._field``
+``B0_rr``,:math:`\psi''' / \sqrt{g} - 2 \psi'' \partial_{\rho} \sqrt{g} / g - \psi' \partial_{\rho\rho} \sqrt{g} / g + 2 \psi' (\partial_{\rho} \sqrt{g})^2 / (\sqrt{g})^3`,Tesla / meters,,``desc.compute._field``
+``B^theta_rr``,:math:`\partial_{\rho\rho} B^{\theta}`,Tesla / meters,"Contravariant poloidal component of magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
+``B^zeta_rr``,:math:`\partial_{\rho\rho} B^{\zeta}`,Tesla / meters,"Contravariant toroidal component of magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
+``B_rr``,:math:`\partial_{\rho\rho} \mathbf{B}`,Tesla,"Magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
 ``B0_tt``,:math:`-\partial_{\rho} \psi \partial_{\theta\theta} \sqrt{g} / g + 2 \partial_{\rho} \psi (\partial_{\theta} \sqrt{g})^2 / (\sqrt{g})^{3}`,Tesla / meter,,``desc.compute._field``
 ``B^theta_tt``,:math:`\partial_{\theta\theta} B^{\theta}`,Tesla / meter,"Contravariant poloidal component of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
 ``B^zeta_tt``,:math:`\partial_{\theta\theta} B^{\zeta}`,Tesla / meter,"Contravariant toroidal component of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
+``B_tt``,:math:`\partial_{\theta\theta} \mathbf{B}`,Tesla,"Magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
 ``B0_zz``,:math:`-\partial_{\rho} \psi \partial_{\zeta\zeta} \sqrt{g} / g + 2 \partial_{\rho} \psi (\partial_{\zeta} \sqrt{g})^2 / (\sqrt{g})^{3}`,Tesla / meter,,``desc.compute._field``
 ``B^theta_zz``,:math:`\partial_{\zeta\zeta} B^{\theta}`,Tesla / meter,"Contravariant poloidal component of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
 ``B^zeta_zz``,:math:`\partial_{\zeta\zeta} B^{\zeta}`,Tesla / meter,"Contravariant toroidal component of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
+``B_zz``,:math:`\partial_{\zeta\zeta} \mathbf{B}`,Tesla,"Magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
+``B0_rt``,:math:`\psi'' \partial_{\theta} \sqrt{g} / g + \psi' \partial_{\rho\theta} \sqrt{g} / g + 2 \psi' \partial_{\rho} \sqrt{g} \partial_{\theta} \sqrt{g} / (\sqrt{g})^3`,Tesla / meters,,``desc.compute._field``
+``B^theta_rt``,:math:`\partial_{\rho\theta} B^{\theta}`,Tesla / meters,"Contravariant poloidal component of magnetic field, second derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
+``B^zeta_rt``,:math:`\partial_{\rho\theta} B^{\zeta}`,Tesla / meters,"Contravariant toroidal component of magnetic field, second derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
+``B_rt``,:math:`\partial_{\rho\theta} \mathbf{B}`,Tesla,"Magnetic field, second derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
 ``B0_tz``,:math:`-\partial_{\rho} \psi \partial_{\theta\zeta} \sqrt{g} / g + 2 \partial_{\rho} \psi \partial_{\theta} \sqrt{g} \partial_{\zeta} \sqrt{g} / (\sqrt{g})^{3}`,Tesla / meter,,``desc.compute._field``
 ``B^theta_tz``,:math:`\partial_{\theta\zeta} B^{\theta}`,Tesla / meter,"Contravariant poloidal component of magnetic field, second derivative wrt poloidal and toroidal angles",``desc.compute._field``
 ``B^zeta_tz``,:math:`\partial_{\theta\zeta} B^{\zeta}`,Tesla / meter,"Contravariant toroidal component of magnetic field, second derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``B_tz``,:math:`\partial_{\theta\zeta} \mathbf{B}`,Tesla,"Magnetic field, second derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``B0_rz``,:math:`\psi'' \partial_{\zeta} \sqrt{g} / g + \psi' \partial_{\rho\zeta} \sqrt{g} / g + 2 \psi' \partial_{\rho} \sqrt{g} \partial_{\zeta} \sqrt{g} / (\sqrt{g})^3`,Tesla / meters,,``desc.compute._field``
+``B^theta_rz``,:math:`\partial_{\rho\zeta} B^{\theta}`,Tesla / meters,"Contravariant poloidal component of magnetic field, second derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
+``B^zeta_rz``,:math:`\partial_{\rho\zeta} B^{\zeta}`,Tesla / meters,"Contravariant toroidal component of magnetic field, second derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
+``B_rz``,:math:`\partial_{\rho\zeta} \mathbf{B}`,Tesla,"Magnetic field, second derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
 ``B_rho``,:math:`B_{\rho}`,Tesla * meters,Covariant radial component of magnetic field,``desc.compute._field``
 ``B_theta``,:math:`B_{\theta}`,Tesla * meters,Covariant poloidal component of magnetic field,``desc.compute._field``
 ``B_zeta``,:math:`B_{\zeta}`,Tesla * meters,Covariant toroidal component of magnetic field,``desc.compute._field``
@@ -163,13 +178,35 @@ Name,Label,Units,Description,Module
 ``B_rho_z``,:math:`\partial_{\zeta} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, derivative wrt toroidal angle",``desc.compute._field``
 ``B_theta_z``,:math:`\partial_{\zeta} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, derivative wrt toroidal angle",``desc.compute._field``
 ``B_zeta_z``,:math:`\partial_{\zeta} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, derivative wrt toroidal angle",``desc.compute._field``
+``B_rho_rr``,:math:`\partial_{\rho\rho} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
+``B_theta_rr``,:math:`\partial_{\rho\rho} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
+``B_zeta_rr``,:math:`\partial_{\rho\rho} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
+``B_rho_tt``,:math:`\partial_{\theta\theta} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
+``B_theta_tt``,:math:`\partial_{\theta\theta} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
+``B_zeta_tt``,:math:`\partial_{\theta\theta} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
+``B_rho_zz``,:math:`\partial_{\zeta\zeta} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
+``B_theta_zz``,:math:`\partial_{\zeta\zeta} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
+``B_zeta_zz``,:math:`\partial_{\zeta\zeta} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
+``B_rho_rt``,:math:`\partial_{\rho\theta} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, second derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
+``B_theta_rt``,:math:`\partial_{\rho\theta} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, second derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
+``B_zeta_rt``,:math:`\partial_{\rho\theta} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, second derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
+``B_rho_tz``,:math:`\partial_{\theta\zeta} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, second derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``B_theta_tz``,:math:`\partial_{\theta\zeta} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, second derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``B_zeta_tz``,:math:`\partial_{\theta\zeta} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, second derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``B_rho_rz``,:math:`\partial_{\rho\zeta} B_{\rho}`,Tesla * meters,"Covariant radial component of magnetic field, second derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
+``B_theta_rz``,:math:`\partial_{\rho\zeta} B_{\theta}`,Tesla * meters,"Covariant poloidal component of magnetic field, second derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
+``B_zeta_rz``,:math:`\partial_{\rho\zeta} B_{\zeta}`,Tesla * meters,"Covariant toroidal component of magnetic field, second derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
 ``|B|^2``,:math:`|\mathbf{B}|^{2}`,Tesla squared,"Magnitude of magnetic field, squared",``desc.compute._field``
 ``|B|``,:math:`|\mathbf{B}|`,Tesla,Magnitude of magnetic field,``desc.compute._field``
+``|B|_r``,:math:`\partial_{\rho} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate",``desc.compute._field``
 ``|B|_t``,:math:`\partial_{\theta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt poloidal angle",``desc.compute._field``
 ``|B|_z``,:math:`\partial_{\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt toroidal angle",``desc.compute._field``
+``|B|_rr``,:math:`\partial_{\rho\rho} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, second derivative wrt radial coordinate",``desc.compute._field``
 ``|B|_tt``,:math:`\partial_{\theta\theta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, second derivative wrt poloidal angle",``desc.compute._field``
 ``|B|_zz``,:math:`\partial_{\zeta\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, second derivative wrt toroidal angle",``desc.compute._field``
+``|B|_rt``,:math:`\partial_{\rho\theta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
 ``|B|_tz``,:math:`\partial_{\theta\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt poloidal and toroidal angles",``desc.compute._field``
+``|B|_rz``,:math:`\partial_{\rho\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
 ``<|B|>_vol``,:math:`\langle |B| \rangle_{vol}`,Tesla,Volume average magnetic field,``desc.compute._field``
 ``<|B|>``,:math:`\langle |B| \rangle`,Tesla,Flux surface average magnetic field,``desc.compute._field``
 ``<B^2>``,:math:`\langle B^2 \rangle`,Tesla squared,Flux surface average magnetic field squared,``desc.compute._field``
@@ -200,6 +237,7 @@ Name,Label,Units,Description,Module
 ``R0``,:math:`R_{0}`,meters,Average major radius,``desc.compute._geometry``
 ``a``,:math:`a`,meters,Average minor radius,``desc.compute._geometry``
 ``R0/a``,:math:`R_{0} / a`,None,Aspect ratio,``desc.compute._geometry``
+``a_major/a_minor``,:math:`a_{major} / a_{minor}`,None,Elongation,``desc.compute._geometry``
 ``n_rho``,:math:`\hat{\mathbf{n}}_{\rho}`,None,Unit normal vector to constant rho surface,``desc.compute._geometry``
 ``L_sff``,:math:`L_{sff}`,meters,L coefficient of second fundamental form,``desc.compute._geometry``
 ``M_sff``,:math:`M_{sff}`,meters,M coefficient of second fundamental form,``desc.compute._geometry``
@@ -215,10 +253,12 @@ Name,Label,Units,Description,Module
 ``sqrt(g)_r``,:math:`\partial_{\rho} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, derivative wrt radial coordinate",``desc.compute._metric``
 ``sqrt(g)_t``,:math:`\partial_{\theta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, derivative wrt poloidal angle",``desc.compute._metric``
 ``sqrt(g)_z``,:math:`\partial_{\zeta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, derivative wrt toroidal angle",``desc.compute._metric``
-``sqrt(g)_rr``,:math:`\partial_{\rho \rho} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt radial coordinate",``desc.compute._metric``
-``sqrt(g)_tt``,:math:`\partial_{\theta \theta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt poloidal angle",``desc.compute._metric``
-``sqrt(g)_zz``,:math:`\partial_{\zeta \zeta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt toroidal angle",``desc.compute._metric``
-``sqrt(g)_tz``,:math:`\partial_{\theta \zeta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt poloidal and toroidal angles",``desc.compute._metric``
+``sqrt(g)_rr``,:math:`\partial_{\rho\rho} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt radial coordinate",``desc.compute._metric``
+``sqrt(g)_tt``,:math:`\partial_{\theta\theta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt poloidal angle",``desc.compute._metric``
+``sqrt(g)_zz``,:math:`\partial_{\zeta\zeta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt toroidal angle",``desc.compute._metric``
+``sqrt(g)_rt``,:math:`\partial_{\rho\theta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt radial coordinate and poloidal angle",``desc.compute._metric``
+``sqrt(g)_tz``,:math:`\partial_{\theta\zeta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt poloidal and toroidal angles",``desc.compute._metric``
+``sqrt(g)_rz``,:math:`\partial_{\rho\zeta} \sqrt{g}`,cubic meters,"Jacobian determinant of flux coordinate system, second derivative wrt radial coordinate and toroidal angle",``desc.compute._metric``
 ``g_rr``,:math:`g_{\rho\rho}`,square meters,Radial/Radial element of covariant metric tensor,``desc.compute._metric``
 ``g_tt``,:math:`g_{\theta\theta}`,square meters,Poloidal/Poloidal element of covariant metric tensor,``desc.compute._metric``
 ``g_zz``,:math:`g_{\zeta\zeta}`,square meters,Toroidal/Toroidal element of covariant metric tensor,``desc.compute._metric``
@@ -227,6 +267,8 @@ Name,Label,Units,Description,Module
 ``g_tz``,:math:`g_{\theta\zeta}`,square meters,Poloidal/Toroidal element of covariant metric tensor,``desc.compute._metric``
 ``g_tt_r``,:math:`\partial_{\rho} g_{\theta\theta}`,square meters,"Poloidal/Poloidal element of covariant metric tensor, derivative wrt rho",``desc.compute._metric``
 ``g_tz_r``,:math:`\partial_{\rho} g_{\theta\zeta}`,square meters,"Poloidal/Toroidal element of covariant metric tensor, derivative wrt rho",``desc.compute._metric``
+``g_tt_rr``,:math:`\partial_{\rho\rho} g_{\theta\theta}`,square meters,"Poloidal/Poloidal element of covariant metric tensor, second derivative wrt rho",``desc.compute._metric``
+``g_tz_rr``,:math:`\partial_{\rho\rho} g_{\theta\zeta}`,square meters,"Poloidal/Toroidal element of covariant metric tensor, second derivative wrt rho",``desc.compute._metric``
 ``g^rr``,:math:`g^{\rho\rho}`,inverse square meters,Radial/Radial element of contravariant metric tensor,``desc.compute._metric``
 ``g^tt``,:math:`g^{\theta\theta}`,inverse square meters,Poloidal/Poloidal element of contravariant metric tensor,``desc.compute._metric``
 ``g^zz``,:math:`g^{\zeta\zeta}`,inverse square meters,Toroidal/Toroidal element of contravariant metric tensor,``desc.compute._metric``
@@ -239,6 +281,7 @@ Name,Label,Units,Description,Module
 ``psi``,:math:`\psi = \Psi / (2 \pi)`,Webers,Toroidal flux (normalized by 2pi),``desc.compute._profiles``
 ``psi_r``,:math:`\partial_{\rho} \psi = \partial_{\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux (normalized by 2pi), first radial derivative",``desc.compute._profiles``
 ``psi_rr``,:math:`\partial_{\rho\rho} \psi = \partial_{\rho\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux (normalized by 2pi), second radial derivative",``desc.compute._profiles``
+``psi_rrr``,:math:`\partial_{\rho\rho\rho} \psi = \partial_{\rho\rho\rho} \Psi / (2 \pi)`,Webers,"Toroidal flux (normalized by 2pi), third radial derivative",``desc.compute._profiles``
 ``grad(psi)``,:math:`\nabla\psi`,Webers per meter,Toroidal flux gradient (normalized by 2pi),``desc.compute._profiles``
 ``|grad(psi)|^2``,:math:`|\nabla\psi|^{2}`,Webers squared per square meter,Toroidal flux gradient (normalized by 2pi) magnitude squared,``desc.compute._profiles``
 ``|grad(psi)|``,:math:`|\nabla\psi|`,Webers per meter,Toroidal flux gradient (normalized by 2pi) magnitude,``desc.compute._profiles``
@@ -250,12 +293,16 @@ Name,Label,Units,Description,Module
 ``<|grad(p)|>_vol``,:math:`\langle |\nabla p| \rangle_{vol}`,Newtons per cubic meter,Volume average of magnitude of pressure gradient,``desc.compute._profiles``
 ``iota``,:math:`\iota`,None,Rotational transform (normalized by 2pi),``desc.compute._profiles``
 ``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform (normalized by 2pi), first radial derivative",``desc.compute._profiles``
+``iota_rr``,:math:`\partial_{\rho\rho} \iota`,None,"Rotational transform (normalized by 2pi), second radial derivative",``desc.compute._profiles``
 ``I``,:math:`I`,Tesla * meters,Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current),``desc.compute._profiles``
 ``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current), derivative wrt radial coordinate",``desc.compute._profiles``
+``I_rr``,:math:`\partial_{\rho\rho} I`,Tesla * meters,"Boozer toroidal current enclosed by flux surfaces, second derivative wrt radial coordinate",``desc.compute._profiles``
 ``G``,:math:`G`,Tesla * meters,Covariant toroidal component of magnetic field in Boozer coordinates (proportional to poloidal current),``desc.compute._profiles``
 ``G_r``,:math:`\partial_{\rho} G`,Tesla * meters,"Covariant toroidal component of magnetic field in Boozer coordinates (proportional to poloidal current), derivative wrt radial coordinate",``desc.compute._profiles``
+``G_rr``,:math:`\partial_{\rho\rho} G`,Tesla * meters,"Boozer poloidal current enclosed by flux surfaces, second derivative wrt radial coordinate",``desc.compute._profiles``
 ``current``,:math:`\frac{2\pi}{\mu_0} I`,Amperes,Net toroidal current enclosed by flux surfaces,``desc.compute._profiles``
 ``current_r``,:math:`\frac{2\pi}{\mu_0} \partial_{\rho} I`,Amperes,"Net toroidal current enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._profiles``
+``current_rr``,:math:`\frac{2\pi}{\mu_0} \partial_{\rho\rho} I`,Amperes,"Net toroidal current enclosed by flux surfaces, second derivative wrt radial coordinate",``desc.compute._profiles``
 ``B_theta_mn``,":math:`B_{\theta, m, n}`",Tesla * meters,Fourier coefficients for covariant poloidal component of magnetic field,``desc.compute._qs``
 ``B_zeta_mn``,":math:`B_{\zeta, m, n}`",Tesla * meters,Fourier coefficients for covariant toroidal component of magnetic field,``desc.compute._qs``
 ``w_Boozer_mn``,":math:`w_{Boozer,m,n}`",Tesla * meters,RHS of eq 10 in Hirshman 1995 'Transformation from VMEC to Boozer Coordinates',``desc.compute._qs``

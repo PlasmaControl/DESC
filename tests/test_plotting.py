@@ -34,6 +34,7 @@ from desc.plotting import (
     plot_section,
     plot_surfaces,
 )
+from desc.utils import isalmostequal
 
 tol_1d = 7.8
 tol_2d = 15
@@ -45,7 +46,7 @@ def test_kwarg_warning(DummyStellarator):
     """Test that passing in unknown kwargs throws an error."""
     eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
     with pytest.raises(AssertionError):
-        fig, ax = plot_1d(eq, "p", not_a_kwarg=True)
+        fig, ax = plot_1d(eq, "psi_rr", not_a_kwarg=True)
     return None
 
 
@@ -58,6 +59,31 @@ def test_1d_p(SOLOVEV):
     fig, ax, data = plot_1d(eq, "p", figsize=(4, 4), return_data=True)
     assert "p" in data.keys()
     return fig
+
+
+@pytest.mark.unit
+def test_1d_fsa_consistency():
+    """Test that plot_1d uses 2d grid to compute quantities with surface averages."""
+    eq = get("W7-X")
+
+    def test(name, with_sqrt_g=True, grid=None):
+        _, ax_0 = plot_1d(eq, name, grid=grid)
+        # 100 rho points is plot_1d default
+        _, ax_1 = plot_fsa(
+            eq,
+            name,
+            with_sqrt_g=with_sqrt_g,
+            rho=100 if grid is None else grid.nodes[:, 0],
+        )
+        np.testing.assert_allclose(
+            ax_0.lines[0].get_xydata(), ax_1.lines[0].get_xydata()
+        )
+
+    lg = LinearGrid(rho=np.linspace(0, 1, 30))
+    test("magnetic well")
+    test("magnetic well", grid=lg)
+    test("current", with_sqrt_g=False)
+    test("current", with_sqrt_g=False, grid=lg)
 
 
 @pytest.mark.unit
@@ -100,7 +126,7 @@ def test_1d_iota_radial(DSHAPE_current):
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_logpsi(DSHAPE_current):
-    """Test plotting 1d flux funciton with log scale."""
+    """Test plotting 1d flux function with log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax, data = plot_1d(eq, "psi", log=True, figsize=(4, 4), return_data=True)
     ax.set_ylim([1e-5, 1e0])
@@ -231,7 +257,7 @@ def test_3d_rt(DSHAPE_current):
 def test_fsa_I(DSHAPE_current):
     """Test plotting of flux surface average toroidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_fsa(eq, "B_theta", return_data=True)
+    fig, ax, data = plot_fsa(eq, "B_theta", with_sqrt_g=False, return_data=True)
     assert "rho" in data.keys()
     assert "<B_theta>_fsa" in data.keys()
     assert "normalization" in data.keys()
@@ -246,7 +272,7 @@ def test_fsa_I(DSHAPE_current):
 def test_fsa_G(DSHAPE_current):
     """Test plotting of flux surface average poloidal current."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_fsa(eq, "B_zeta", log=True)
+    fig, ax = plot_fsa(eq, "B_zeta", with_sqrt_g=False, log=True)
     ax.set_ylim([1e-1, 1e0])
     return fig
 
@@ -692,12 +718,16 @@ def test_plot_boozer_surface(DSHAPE_current):
 @pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_plot_qs_error(DSHAPE_current):
+def test_plot_qs_error():
     """Test plotting qs error metrics."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_qs_error(eq, helicity=(0, 0), log=False, return_data=True)
+    eq = get("WISTELL-A")
+    fig, ax, data = plot_qs_error(eq, helicity=(1, -eq.NFP), log=True, return_data=True)
     for string in ["rho", "f_T", "f_B", "f_C"]:
         assert string in data.keys()
+        if string != "rho":
+            # ensure that there is different QS data for each surface
+            # related to gh PR #400
+            assert not isalmostequal(data[string])
     return fig
 
 

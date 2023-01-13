@@ -18,6 +18,8 @@ from desc.objectives.utils import (
     get_fixed_boundary_constraints,
 )
 
+from .utils import compute_jac_scale, f_where_x
+
 
 class ProximalProjection(ObjectiveFunction):
     """Create a proximal projection operator for equilibirum constraints.
@@ -155,6 +157,8 @@ class ProximalProjection(ObjectiveFunction):
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
 
         self._allx = [self._x_old]
+        self._allxopt = [self._objective.x(eq)]
+        self._allxeq = [self._constraint.x(eq)]
         self.history = {}
         for arg in self._full_args:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
@@ -192,7 +196,11 @@ class ProximalProjection(ObjectiveFunction):
         After updating, if store=False, self._eq will revert back to the previous
         solution when store was True
         """
-        if jnp.allclose(x, self._x_old, rtol=1e-14, atol=1e-14):
+        # first check if its something we've seen before, if it is just return
+        # cached value, no need to perturb + resolve
+        xopt = f_where_x(x, self._allx, self._allxopt)
+        xeq = f_where_x(x, self._allx, self._allxeq)
+        if xopt.size > 0 and xeq.size > 0:
             pass
         else:
             x_dict = self.unpack_state(x)
@@ -212,14 +220,25 @@ class ProximalProjection(ObjectiveFunction):
                 constraints=self._linear_constraints,
                 **self._solve_options
             )
+            xopt = self._objective.x(self._eq)
+            xeq = self._eq_objective.x(self._eq)
+            self._allx.append(x)
+            self._allxopt.append(xopt)
+            self._allxeq.append(xeq)
 
-        xopt = self._objective.x(self._eq)
-        xeq = self._constraint.x(self._eq)
         if store:
             self._x_old = x
-            self._allx.append(x)
+            xd = self.unpack_state(x)
+            xod = self._objective.unpack_state(xopt)
+            xed = self._constraint.unpack_state(xeq)
+            xd.update(xod)
+            xd.update(xed)
             for arg in self._full_args:
-                self.history[arg] += [np.asarray(getattr(self._eq, arg)).copy()]
+                val = xd[arg]
+                self.history[arg] += [np.asarray(val).copy()]
+                # ensure eq has correct values if we didn't go into else block above.
+                if val.size:
+                    setattr(self._eq, arg, val)
         else:
             for arg in self._full_args:
                 val = self.history[arg][-1].copy()
@@ -302,6 +321,32 @@ class ProximalProjection(ObjectiveFunction):
         Gx = self._objective.jac(xg)
         Fx = align_jacobian(Fx, self._constraint, self._objective)
         Gx = align_jacobian(Gx, self._objective, self._constraint)
+
+        # projections onto optimization space
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
+        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
+        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
+        Fc = Fx @ dxdc
+        Gc = Gx @ dxdc
+
+        # some scaling to improve conditioning
+        wf, _ = compute_jac_scale(Fx_reduced)
+        wg, _ = compute_jac_scale(Gx_reduced)
+        wx = wf + wg
+        Fxh = Fx_reduced * wx
+        Gxh = Gx_reduced * wx
+
+        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        LHS = Gxh @ (Fxh_inv @ Fc) - Gc
+        return -LHS
+
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z

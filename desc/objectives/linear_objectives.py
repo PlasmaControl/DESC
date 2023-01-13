@@ -51,6 +51,12 @@ class FixBoundaryR(_Objective):
     name : str
         Name of the objective function.
 
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
     """
 
     _scalar = False
@@ -128,7 +134,17 @@ class FixBoundaryR(_Objective):
                         "yellow",
                     )
                 )
+
         self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
 
         if self._fixed_boundary:  # R_lmn -> Rb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -157,7 +173,10 @@ class FixBoundaryR(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        x = kwargs.get(self.args[0], args[0])
+        if len(args):
+            x = kwargs.get(self.args[0], args[0])
+        else:
+            x = kwargs.get(self.args[0])
         Rb = jnp.dot(self._A, x)
         return self._shift_scale(Rb)
 
@@ -197,6 +216,12 @@ class FixBoundaryZ(_Objective):
     name : str
         Name of the objective function.
 
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
     """
 
     _scalar = False
@@ -276,6 +301,15 @@ class FixBoundaryZ(_Objective):
                 )
 
         self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
 
         if self._fixed_boundary:  # Z_lmn -> Zb_lmn boundary condition
             self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
@@ -303,7 +337,10 @@ class FixBoundaryZ(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        x = kwargs.get(self.args[0], args[0])
+        if len(args):
+            x = kwargs.get(self.args[0], args[0])
+        else:
+            x = kwargs.get(self.args[0])
         Zb = jnp.dot(self._A, x)
         return self._shift_scale(Zb)
 

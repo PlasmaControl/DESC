@@ -26,7 +26,7 @@ from .least_squares import lsqtr
 from .stochastic import sgd
 from .aug_lagrangian_ls_stel import fmin_lag_ls_stel
 from .utils import find_matching_inds
-
+from scipy.constants import mu_0
 
 class Optimizer(IOAble):
     """A helper class to wrap several optimization routines.
@@ -71,7 +71,7 @@ class Optimizer(IOAble):
     _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
     _scipy_constrained_least_squares_methods = []
     _desc_constrained_scalar_methods = []
-    _desc_constrained_least_squares_methods = []
+    _desc_constrained_least_squares_methods = ["lsq-auglag"]
     _scalar_methods = (
         _desc_scalar_methods
         + _scipy_scalar_methods
@@ -110,6 +110,7 @@ class Optimizer(IOAble):
         + _desc_scalar_methods
         + _desc_least_squares_methods
         + _desc_stochastic_methods
+        + _desc_constrained_least_squares_methods
     )
 
     def __init__(self, method):
@@ -241,9 +242,9 @@ class Optimizer(IOAble):
 
             if not constraint_objectives.built:
                 constraint_objectives.build(eq,verbose=verbose)
-            if not equality_objectives.built:
+            if not equality_objectives.built and len(equality_constraints) != 0:
                 equality_objectives.build(eq,verbose=verbose)
-            if not inequality_objectives.built:
+            if not inequality_objectives.built and len(inequality_constraints) != 0:
                 inequality_objectives.build(eq,verbose=verbose)
            
 
@@ -418,12 +419,14 @@ class Optimizer(IOAble):
 
         elif self.method in Optimizer._desc_constrained_least_squares_methods:
             
-            result = fmin_lag_stel(
+            eq_constr = compute_eq_constraints_wrapped if len(equality_constraints) != 0 else None
+            ineq_constr = compute_ineq_constraints_wrapped if len(inequality_constraints) !=0 else None
+            result = fmin_lag_ls_stel(
                 compute_wrapped,
                 x0=x0_reduced,
-                jac=jac_wrapped,
-                eq_constr=compute_eq_constraints_wrapped,
-                ineq_constr=compute_ineq_constraints_wrapped,
+                grad=jac_wrapped,
+                eq_constr=eq_constr,
+                ineq_constr=ineq_constr,
                 args=(),
                 x_scale=x_scale,
                 ftol=stoptol["ftol"],
@@ -547,7 +550,7 @@ def _wrap_constraint_objectives(objective, linear_constraints, equality_objectiv
 
     def compute_eq_constraints_wrapped(x_reduced):
         x = recover(x_reduced)
-        c = mu_0*equality_objectives.compute(x)
+        c = equality_objectives.compute(x)
         return c
             
     def compute_ineq_constraints_wrapped(x_reduced):
@@ -604,9 +607,9 @@ def _wrap_constraints(nonlinear_constraints, equality_constraints, inequality_co
                 + "cannot handle general nonlinear constraint {}.".format(constraint)
         )
 
-    constraint_objectives = ObjectiveFunction(nonlinear_constraints, eq)
-    equality_objectives = ObjectiveFunction(equality_constraints,eq)
-    inequality_objectives = ObjectiveFunction(inequality_constraints,eq)
+    constraint_objectives = ObjectiveFunction(nonlinear_constraints)
+    equality_objectives = ObjectiveFunction(equality_constraints)
+    inequality_objectives = ObjectiveFunction(inequality_constraints)
 
     return constraint_objectives, equality_objectives, inequality_objectives
  

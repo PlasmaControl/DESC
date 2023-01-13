@@ -2,6 +2,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.derivatives import Derivative
 from .objective_funs import ObjectiveFunction
+from desc.backend import put
 
 class AugLagrangianLS(ObjectiveFunction):
     

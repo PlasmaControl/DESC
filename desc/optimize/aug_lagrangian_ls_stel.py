@@ -41,10 +41,12 @@ def fmin_lag_ls_stel(
     grad,
     eq_constr,
     ineq_constr,
+    args=(),
     x_scale=1,
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
+    ctol=1e-6,
     verbose=1,
     maxiter=None,
     tr_method="svd",
@@ -62,9 +64,9 @@ def fmin_lag_ls_stel(
     nfev += 1
     g = grad(x, *args)
     ngev += 1
-
-    eq = eq_constr(x) if eq_constr is None else jnp.array([])
-    ineq = ineq_constr(x) if ineq_constr is None else jnp.array([])
+    
+    eq = eq_constr(x) if eq_constr is not None else jnp.array([])
+    ineq = ineq_constr(x) if ineq_constr is not None else jnp.array([])
     eq_dim = len(eq.flatten())
     ineq_dim = len(ineq.flatten())
     x = np.append(x,1.0*np.ones(ineq_dim))
@@ -82,9 +84,9 @@ def fmin_lag_ls_stel(
     def wrapped_constraint(x):
         c = np.array([])
         slack = x[len(recover(x)):]**2
-        
-        eq = eq_constr(x)
-        ineq = ineq_constr(x)
+        eq = eq_constr(x) if eq_constr is not None else jnp.array([])
+        ineq = ineq_constr(x) if ineq_constr is not None else jnp.array([])
+
         c = jnp.append(c,eq_constr(x))
         slack = jnp.append(jnp.zeros(len(eq.flatten())),slack)
         c = jnp.append(c,ineq)
@@ -95,13 +97,13 @@ def fmin_lag_ls_stel(
         return fun(recover(x))
         
     constr = np.array([wrapped_constraint])         
-
+    print("constraint is " + str(np.mean(wrapped_constrained(x))))
     L = AugLagrangianLS(wrapped_obj, constr)
     gradL = Derivative(L.compute,0,"fwd")
     hessL = Derivative(L.compute,argnum=0,mode="hess")
     
-    gtolk = 1/(10*np.linalg.norm(mu0))
-    ctolk = 1/(np.linalg.norm(mu0)**(0.1))    
+    gtolk = 1/(10*np.linalg.norm(mu))
+    ctolk = 1/(np.linalg.norm(mu)**(0.1))    
     xold = x
     f = fun(recover(x))
     fold = f

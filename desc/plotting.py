@@ -2191,7 +2191,7 @@ def plot_boozer_modes(
     for i in range(modes.shape[0]):
         L = modes[i, 0]
         M = modes[i, 1]
-        N = modes[i, 2] * eq.NFP
+        N = modes[i, 2] * int(eq.NFP)
         if (M, N) == (0, 0) and B0 is False:
             continue
         if log is True:

@@ -340,5 +340,9 @@ def f_where_x(x, xs, fs):
     x, xs, fs = map(np.asarray, (x, xs, fs))
     assert len(xs) == len(fs)
     assert len(xs) == 0 or x.shape == xs[0].shape
-    i = np.where(np.all(x == xs, axis=1))
+    eps = np.finfo(x.dtype).eps
+    i = np.where(np.all(np.isclose(x, xs, rtol=eps, atol=eps), axis=1))[0]
+    # sometimes two things are within eps of x, we want the most recent one
+    if len(i) > 1:
+        i = i[-1]
     return fs[i].squeeze()

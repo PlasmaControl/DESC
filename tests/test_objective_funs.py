@@ -96,7 +96,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Elongation(target=0, weight=2, eq=eq)
             f = obj.compute(eq.R_lmn, eq.Z_lmn)
-            f_scaled = obj.compute(eq.R_lmn, eq.Z_lmn)
+            f_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
@@ -123,7 +123,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = RotationalTransform(target=1, weight=2, eq=eq)
             iota = obj.compute(*obj.xs(eq))
-            iota_scaled = obj.compute(*obj.xs(eq))
+            iota_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
             np.testing.assert_allclose(iota_scaled, -2 / 3)
 
@@ -233,7 +233,6 @@ def test_rejit():
     """Test that updating attributes and recompiling correctly updates."""
 
     class DummyObjective(_Objective):
-
         def __init__(self, y, eq=None, target=0, weight=1, name="dummy"):
             self.y = y
             super().__init__(eq=eq, target=target, weight=weight, name=name)

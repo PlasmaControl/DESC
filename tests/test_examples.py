@@ -170,8 +170,8 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
-def test_solve_target_bounds():
-    """Tests optimizing with target=(lower bound, upper bound)."""
+def test_solve_bounds():
+    """Tests optimizing with bounds=(lower bound, upper bound)."""
     # decrease resolution and double pressure so no longer in force balance
     eq = desc.examples.get("DSHAPE")
     eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
@@ -179,7 +179,7 @@ def test_solve_target_bounds():
 
     # target force balance residuals with |F| <= 1e3 N
     obj = ObjectiveFunction(
-        ForceBalance(normalize=False, normalize_target=False, target=(-1e3, 1e3)), eq=eq
+        ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3)), eq=eq
     )
     eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
 

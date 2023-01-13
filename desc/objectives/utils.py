@@ -167,7 +167,7 @@ def factorize_linear_constraints(constraints, objective_args):
             unfixed_args.append(arg)
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute(jnp.zeros(obj.dimensions[arg]))
+            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
             else:
@@ -210,7 +210,7 @@ def factorize_linear_constraints(constraints, objective_args):
         arg = con.args[0]
         if arg not in objective_args:
             continue
-        res = con.compute(**xp_dict)
+        res = con.compute_scaled(**xp_dict)
         if not np.allclose(res, 0):
             raise ValueError(
                 f"Incompatible constraints detected, cannot satisfy constraint {con}"

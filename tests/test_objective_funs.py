@@ -11,7 +11,6 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.examples import get
-from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
     Elongation,

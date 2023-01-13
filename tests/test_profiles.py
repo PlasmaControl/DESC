@@ -188,6 +188,44 @@ class TestProfiles:
         np.testing.assert_allclose(f(), 2 * pp(x) ** 3, atol=1e-3)
 
     @pytest.mark.unit
+    def test_product_profiles_derivative(self):
+        """Test that product profiles computes the derivative correctly."""
+        p1 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 4]), params=np.array([1, 3, -2, 4]), sym="auto"
+        )
+        p2 = PowerSeriesProfile(
+            modes=np.array([0, 1, 2, 3]),
+            params=np.array([2.02, 4.93, 0.22, 0.46]),
+            sym="auto",
+        )
+        p3 = PowerSeriesProfile(
+            modes=np.array([0, 1, 3, 4]),
+            params=np.array([1.79, 3.19, 1.82, 2.07]),
+            sym="auto",
+        )
+
+        f = p1 * p2 * p3
+        x = np.linspace(0, 1, 50)
+        f.grid = x
+
+        # Below is a simpler method to compute first derivative of product series
+        # than the more general combinatorics algorithm in implementation.
+        # Analytic formula derived from logarithmic differentiation.
+        _sum = 0
+        _sum_r = 0
+        for profile in f._profiles:
+            result = profile.compute()
+            result_r = profile.compute(dr=1)
+            result_rr = profile.compute(dr=2)
+            _sum += result_r / result
+            _sum_r += result_rr / result - (result_r / result) ** 2
+        f_r = f.compute() * _sum
+        f_rr = f_r * _sum + f.compute() * _sum_r
+
+        np.testing.assert_allclose(f_r, f.compute(dr=1))
+        np.testing.assert_allclose(f_rr, f.compute(dr=2))
+
+    @pytest.mark.unit
     def test_scaled_profiles(self):
         """Test scaling profiles by a constant."""
         pp = PowerSeriesProfile(

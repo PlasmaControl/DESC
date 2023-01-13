@@ -1,7 +1,8 @@
 """Tests for Mercier stability functions."""
 
-import numpy as np
 import pytest
+import logging
+import numpy as np
 from netCDF4 import Dataset
 
 import desc.examples
@@ -215,18 +216,32 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
 
 
 @pytest.mark.unit
-def test_mercier_print(capsys):
+def test_mercier_print(TmpDir):
     """Test that the Mercier stability criteria prints correctly."""
+
+    #Create temporary logfile to capture outputs
+    logfile_path = str(TmpDir.join("/DESC_test_mercier_print.log"))    
+    log_connection = open(logfile_path, "x")
+    testlogger = logging.getLogger()
+    logfile_formatter = logging.Formatter("%(message)s")
+    testlogger.setLevel(logging.DEBUG)
+    logfile_handler = logging.StreamHandler(log_connection)
+    logfile_handler.setLevel("INFO")
+    logfile_handler.setFormatter(logfile_formatter)
+    testlogger.addHandler(logfile_handler)
+
+    #Test magnetic well stability print functions
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
-
     Dmerc = eq.compute("D_Mercier", grid=grid)["D_Mercier"]
-
     mercier_obj = MercierStability(eq=eq, grid=grid)
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
     mercier_obj.print_value(*mercier_obj.xs(eq))
-    out = capsys.readouterr()
 
+    #Read and compare logfile to expected output
+    logconnection = open(logfile_path)
+    out = logconnection.read()
+    logconnection.close()
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
@@ -256,21 +271,29 @@ def test_mercier_print(capsys):
         + "(normalized)"
         + "\n"
     )
-    assert out.out == corr_out
+    assert out == corr_out
 
 
-@pytest.mark.unit
-def test_magwell_print(capsys):
+def test_magwell_print(TmpDir):
     """Test that the magnetic well stability criteria prints correctly."""
+
+    #Create temporary logfile to capture outputs
+    logfile_path = str(TmpDir.join("/DESC_test_magwell_print.log"))    
+    log_connection = open(logfile_path, "x")
+    testlogger = logging.getLogger()
+    logfile_formatter = logging.Formatter("%(message)s")
+    testlogger.setLevel(logging.DEBUG)
+    logfile_handler = logging.StreamHandler(log_connection)
+    logfile_handler.setLevel("INFO")
+    logfile_handler.setFormatter(logfile_formatter)
+    testlogger.addHandler(logfile_handler)
+
+    #Test magnetic well stability print functions
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
-
     magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
-
     magwell_obj = MagneticWell(eq=eq, grid=grid)
-
     w = compress(magwell_obj.grid, magwell_obj.grid.spacing[:, 0], surface_label="rho")
-
     np.testing.assert_allclose(
         magwell_obj.compute(*magwell_obj.xs(eq)), magwell * w, atol=1e-16
     )
@@ -278,10 +301,12 @@ def test_magwell_print(capsys):
     # Can't compare print statement against the magwell calc from eq.compute due to
     # some tiny roundoff errors, the printed values are slightly different
     magwell_vals = magwell_obj.compute(*magwell_obj.xs(eq)) / w
-
     magwell_obj.print_value(*magwell_obj.xs(eq))
-    out = capsys.readouterr()
 
+    #Read and compare logfile to expected output
+    logconnection = open(logfile_path)
+    out = logconnection.read()
+    logconnection.close()
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
@@ -297,4 +322,4 @@ def test_magwell_print(capsys):
         + magwell_obj._units
         + "\n"
     )
-    assert out.out == corr_out
+    assert out == corr_out

@@ -202,7 +202,7 @@ def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
 
     # Assign handler to root logger
     logfile_logger.addHandler(logfile_handler)
-
+    logging.captureWarnings(True)
     return True
 
 
@@ -262,10 +262,11 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
 
     # Assign handlers to logger
     logger.addHandler(console_handler)
-
+    logging.captureWarnings(True)
     return True
 
 
 set_logfile_logging()
+set_console_logging()
 
 del RotatingFileHandler

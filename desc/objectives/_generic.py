@@ -5,6 +5,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import compress, get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
+from desc.profiles import Profile
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -206,6 +207,9 @@ class ToroidalCurrent(_Objective):
                 axis=False,
             )
 
+        if isinstance(self._target, Profile):
+            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
+
         self._dim_f = self.grid.num_rho
         self._data_keys = ["current"]
         self._args = get_params(self._data_keys)
@@ -292,6 +296,7 @@ class RotationalTransform(_Objective):
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -332,6 +337,7 @@ class RotationalTransform(_Objective):
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
+
         """
         if self.grid is None:
             self.grid = LinearGrid(
@@ -342,6 +348,8 @@ class RotationalTransform(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
+        if isinstance(self._target, Profile):
+            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
 
         self._dim_f = self.grid.num_rho
         self._data_keys = ["iota"]
@@ -383,6 +391,7 @@ class RotationalTransform(_Objective):
         -------
         iota : ndarray
             rotational transform on specified flux surfaces.
+
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(

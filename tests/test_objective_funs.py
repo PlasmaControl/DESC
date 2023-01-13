@@ -10,9 +10,11 @@ import numpy as np
 import pytest
 
 from desc.equilibrium import Equilibrium
+from desc.examples import get
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    Elongation,
     Energy,
     GenericObjective,
     MagneticWell,
@@ -88,6 +90,19 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_elongation(self):
+        """Test calculation of elongation."""
+
+        def test(eq):
+            obj = Elongation(target=0, weight=1, eq=eq)
+            f = obj.compute(eq.R_lmn, eq.Z_lmn)
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
+            f = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
+
+        test(get("HELIOTRON"))
 
     @pytest.mark.unit
     def test_energy(self):
@@ -315,3 +330,22 @@ def test_shift_unshift_scale_unscale():
     assert len(idx0)
     assert np.allclose(f_unscaled[idxR], data[idxR])
     assert np.allclose(f_unscaled[idx0], 10 * w)
+
+
+@pytest.mark.unit
+def test_target_profiles():
+    """Tests for using Profile objects as targets for profile objectives."""
+    iota = PowerSeriesProfile([1, 0, -0.3])
+    current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
+    eqc = Equilibrium(L=3, N=3, M=3, current=current)
+    obji = RotationalTransform(target=iota)
+    obji.build(eqc)
+    np.testing.assert_allclose(
+        obji.target, iota(obji.grid.nodes[obji.grid.unique_rho_idx])
+    )
+    objc = ToroidalCurrent(target=current)
+    objc.build(eqi)
+    np.testing.assert_allclose(
+        objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])
+    )

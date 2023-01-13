@@ -211,11 +211,11 @@ class MagneticWell(_Objective):
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
+        Note: Has no effect for this objective.
     normalize_target : bool
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: has no effect for this objective.
+        this should also be set to True. Note: Has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str

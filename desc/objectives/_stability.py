@@ -159,28 +159,25 @@ class MercierStability(_Objective):
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(
-            self.compute(*args, **kwargs)
-            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        )
-        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
 
         if self._normalize:
             print(
                 "Maximum "
-                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
                 + "(normalized)"
             )
             print(
                 "Minimum "
-                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
                 + "(normalized)"
             )
             print(
                 "Average "
-                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"
             )
 
@@ -327,10 +324,7 @@ class MagneticWell(_Objective):
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(
-            self.compute(*args, **kwargs)
-            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        )
-        print("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

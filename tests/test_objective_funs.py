@@ -294,42 +294,7 @@ def test_target_bounds():
         _ = GenericObjective("R", target=(1, -1), eq=eq)
 
 
-@pytest.mark.unit
-def test_shift_unshift_scale_unscale():
-    """Test that shift/unshift and scale/unscale are inverse operations."""
-    eq = Equilibrium()
-    grid = LinearGrid(M=6, N=0, rho=1.0)
-    w = grid.weights[0]
-    data = eq.compute("R", grid=grid)["R"] * w
-
-    # test objective with a single target
-    obj = ObjectiveFunction(
-        GenericObjective("R", target=10 * w, weight=3, grid=grid),
-        eq=eq,
-    )
-    f_scaled = obj.compute(obj.x(eq))
-    f_unscaled = obj.objectives[0]._unshift_unscale(f_scaled)
-    assert np.allclose(f_unscaled, data)
-
-    # test objective with a bounded target
-    obj = ObjectiveFunction(
-        GenericObjective(
-            "R",
-            target=(9.4 * w, np.ones_like(data) * 10.6 * w),
-            weight=2,
-            grid=grid,
-            normalize_target=True,
-        ),
-        eq=eq,
-    )
-    f_scaled = obj.compute(obj.x(eq))
-    f_unscaled = obj.objectives[0]._unshift_unscale(f_scaled)
-    idxR = np.where(f_scaled)[0]
-    idx0 = np.where(f_scaled == 0)[0]
-    assert len(idxR)
-    assert len(idx0)
-    assert np.allclose(f_unscaled[idxR], data[idxR])
-    assert np.allclose(f_unscaled[idx0], 10 * w)
+# TODO: add test for _Objective.compute_scaled
 
 
 @pytest.mark.unit

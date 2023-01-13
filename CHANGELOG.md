@@ -1,6 +1,21 @@
 Changelog
 =========
 
+v0.7.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.0...v0.7.1)
+
+What's Changed
+- Allow targets for `RotationalTransform` and `ToroidalCurrent` objectives to be Profile
+  objects rather than just arrays.
+- Document how to add new compute functions and objectives.
+- Add objective for targeting elongation.
+- Fix bug in `plot_qs_error` causing the same value to be plotted for each value of rho.
+- Fix bug sometimes causing the wrong equilibrium to be returned after optimization.
+- Improve numerical stability of perturbations and optimization.
+
+
 v0.7.0
 ------
 

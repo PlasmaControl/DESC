@@ -101,8 +101,7 @@ def _optimize_scipy_minimize(
         hess_allf.append(H)
         return H / (np.atleast_2d(x_scale).T * np.atleast_2d(x_scale))
 
-    def callback(xs):
-        x1 = xs / x_scale
+    def callback(x1):
         allx.append(x1)
         f1 = f_where_x(x1, func_allx, func_allf)
         g1 = f_where_x(x1, grad_allx, grad_allf)
@@ -114,15 +113,15 @@ def _optimize_scipy_minimize(
             dx_norm = np.inf
             reduction_ratio = 0
         else:
-            x0 = allx[-2]
-            f0 = f_where_x(x0, func_allx, func_allf)
-            df = f0 - f1
-            dx = x1 - x0
+            x2 = allx[-2]
+            f2 = f_where_x(x2, func_allx, func_allf)
+            df = f2 - f1
+            dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
             H1 = f_where_x(x1, hess_allx, hess_allf)
             if not H1.size:
                 H1 = np.eye(x1.size) / dx_norm
-            predicted_reduction = f0 - evaluate_quadratic_form_hess(dx, f1, g1, H1)
+            predicted_reduction = f2 - evaluate_quadratic_form_hess(dx, f1, g1, H1)
             if predicted_reduction > 0:
                 reduction_ratio = df / predicted_reduction
             elif predicted_reduction == df == 0:
@@ -152,6 +151,8 @@ def _optimize_scipy_minimize(
             stoptol["max_ngev"],
             len(hess_allx),
             stoptol["max_nhev"],
+            dx_total=np.linalg.norm(x1 - x0),
+            max_dx=options.get("max_dx", np.inf),
         )
 
         if success[0] is not None:
@@ -287,11 +288,11 @@ def _optimize_scipy_least_squares(
             dx_norm = np.inf
             reduction_ratio = 0
         else:
-            x0 = jac_allx[-2]
-            f0 = f_where_x(x0, fun_allx, fun_allf)
-            c0 = 1 / 2 * np.dot(f0, f0)
-            df = c0 - c1
-            dx = x1 - x0
+            x2 = jac_allx[-2]
+            f2 = f_where_x(x2, fun_allx, fun_allf)
+            c2 = 1 / 2 * np.dot(f2, f2)
+            df = c2 - c1
+            dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
 
             predicted_reduction = -evaluate_quadratic_form_jac(J1, g1, dx)
@@ -324,6 +325,8 @@ def _optimize_scipy_least_squares(
             stoptol["max_njev"],  # max_ngev,
             len(jac_allf),  # nhev,
             stoptol["max_njev"],  # max_nhev,
+            dx_total=np.linalg.norm(x1 - x0),
+            max_dx=options.get("max_dx", np.inf),
         )
 
         if success[0] is not None:

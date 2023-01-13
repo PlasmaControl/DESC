@@ -183,8 +183,7 @@ class ForceBalance(_Objective):
         fb = data["F_helical"] * data["|e^helical|"]
         fb = fb * data["sqrt(g)"] * self.grid.weights
 
-        f = jnp.concatenate([fr, fb])
-        return self._shift_scale(f)
+        return jnp.concatenate([fr, fb])
 
 
 class RadialForceBalance(_Objective):
@@ -341,9 +340,7 @@ class RadialForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return f * data["sqrt(g)"] * self.grid.weights
 
 
 class HelicalForceBalance(_Objective):
@@ -501,9 +498,7 @@ class HelicalForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_helical"] * data["|e^helical|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return f * data["sqrt(g)"] * self.grid.weights
 
 
 class Energy(_Objective):
@@ -673,7 +668,7 @@ class Energy(_Objective):
             profiles=self._profiles,
             gamma=self._gamma,
         )
-        return self._shift_scale(data["W"])
+        return data["W"]
 
     @property
     def gamma(self):
@@ -839,5 +834,4 @@ class CurrentDensity(_Objective):
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
         jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
 
-        f = jnp.concatenate([jr, jt, jz])
-        return self._shift_scale(f)
+        return jnp.concatenate([jr, jt, jz])

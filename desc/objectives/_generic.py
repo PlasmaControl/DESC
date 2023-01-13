@@ -125,7 +125,7 @@ class GenericObjective(_Objective):
         f = data[self.f]
         if not self.scalar:
             f = (f.T * self.grid.weights).flatten()
-        return self._shift_scale(f)
+        return f
 
 
 class ToroidalCurrent(_Objective):
@@ -265,7 +265,7 @@ class ToroidalCurrent(_Objective):
         )
         I = compress(self.grid, data["current"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(I) * w
+        return I * w  # FIXME: shift_scale(I)
 
 
 class RotationalTransform(_Objective):
@@ -402,4 +402,4 @@ class RotationalTransform(_Objective):
         )
         iota = compress(self.grid, data["iota"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(iota) * w
+        return iota * w  # FIXME: shift_scale(iota)

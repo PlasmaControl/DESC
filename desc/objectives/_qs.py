@@ -185,10 +185,8 @@ class QuasisymmetryBoozer(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        b_mn = data["|B|_mn"]
-        b_mn = b_mn[self._idx]
-
-        return self._shift_scale(b_mn)
+        B_mn = data["|B|_mn"]
+        return B_mn[self._idx]
 
     @property
     def helicity(self):
@@ -351,9 +349,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=self._profiles,
             helicity=self.helicity,
         )
-        f = data["f_C"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return data["f_C"] * self.grid.weights
 
     @property
     def helicity(self):
@@ -506,6 +502,4 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = data["f_T"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return data["f_T"] * self.grid.weights

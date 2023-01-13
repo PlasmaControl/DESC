@@ -155,7 +155,7 @@ class MercierStability(_Objective):
         )
         f = compress(self.grid, data["D_Mercier"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(f) * w
+        return f * w  # FIXME: shift_scale(f)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -323,7 +323,7 @@ class MagneticWell(_Objective):
         )
         f = compress(self.grid, data["magnetic well"], surface_label="rho")
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(f) * w
+        return f * w  # FIXME: shift_scale(f)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

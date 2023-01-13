@@ -125,7 +125,7 @@ class AspectRatio(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["R0/a"])
+        return data["R0/a"]
 
 
 class Elongation(_Objective):
@@ -244,7 +244,7 @@ class Elongation(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["a_major/a_minor"])
+        return data["a_major/a_minor"]
 
 
 class Volume(_Objective):
@@ -364,4 +364,4 @@ class Volume(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["V"])
+        return data["V"]

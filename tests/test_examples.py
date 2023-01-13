@@ -260,10 +260,6 @@ def run_qh_step(n, eq):
 
 @pytest.mark.regression
 @pytest.mark.solve
-<<<<<<< HEAD
-@pytest.mark.skip
-=======
->>>>>>> master
 def test_qh_optimization1():
     """Tests precise QH optimization, step 1."""
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]

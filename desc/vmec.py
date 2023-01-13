@@ -1,7 +1,6 @@
 """Functions and classes for interfacing with VMEC equilibria."""
 
 import os
-import warnings
 import logging
 
 import matplotlib.pyplot as plt
@@ -64,10 +63,11 @@ class VMECIO:
 
         version = file.variables["version_"][0]
         if version < 9:
-            warnings.warn(
-                "VMEC output appears to be from version {}".format(str(version))
-                + " while DESC is only designed for compatibility with VMEC version"
-                + " 9. Some data may not be loaded correctly."
+            logging.warning(
+                "VMEC output appears to be from version {} while DESC is only designed"
+                + " for compatibility with VMEC version 9. Some data may not be loaded"
+                + " correctly.",
+                str(version)
             )
 
         # parameters
@@ -103,7 +103,7 @@ class VMECIO:
         preset = file.dimensions["preset"].size
         pmass_type = "".join(file.variables["pmass_type"][:].astype(str)).strip()
         if pmass_type != "power_series":
-            warnings.warn("Pressure is not a power series!")
+            logging.warning("Pressure is not a power series!")
         p0 = file.variables["presf"][0] / file.variables["am"][0]
         inputs["pressure"] = np.zeros((preset, 2))
         inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
@@ -111,7 +111,7 @@ class VMECIO:
         if profile == "iota":
             piota_type = "".join(file.variables["piota_type"][:].astype(str)).strip()
             if piota_type != "power_series":
-                warnings.warn("Iota is not a power series!")
+                logging.warning("Iota is not a power series!")
             inputs["iota"] = np.zeros((preset, 2))
             inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["iota"][:, 1] = file.variables["ai"][:]
@@ -119,7 +119,7 @@ class VMECIO:
         if profile == "current":
             pcurr_type = "".join(file.variables["pcurr_type"][:].astype(str)).strip()
             if pcurr_type != "power_series":
-                warnings.warn("Current is not a power series!")
+                logging.warning("Current is not a power series!")
             inputs["current"] = np.zeros((preset, 2))
             inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["current"][:, 1] = file.variables["ac"][:]
@@ -1310,7 +1310,7 @@ class VMECIO:
         return out.x
 
     @classmethod
-    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
         """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC.
 
         Parameters
@@ -1323,6 +1323,9 @@ class VMECIO:
             number of rho contours
         Nt : int, optional
             number of vartheta contours
+        Nz : int, optional
+            Number of zeta planes to compare. If None, use 1 plane for axisymmetric
+            cases or 6 for non-axisymmetric.
 
         Returns
         -------
@@ -1334,9 +1337,9 @@ class VMECIO:
         if isinstance(vmec_data, (str, os.PathLike)):
             vmec_data = cls.read_vmec_output(vmec_data)
 
-        if equil.N == 0:
+        if Nz is None and equil.N == 0:
             Nz = 1
-        else:
+        elif Nz is None:
             Nz = 6
 
         num_theta = kwargs.get("num_theta", 180)

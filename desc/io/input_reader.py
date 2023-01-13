@@ -5,7 +5,6 @@ import io
 import os
 import pathlib
 import re
-import warnings
 import logging
 from datetime import datetime
 
@@ -568,7 +567,7 @@ class InputReader:
             del inputs["iota"]
 
         if inputs["objective"] == "vacuum" and (pres_flag or iota_flag or curr_flag):
-            warnings.warn(
+            logging.warning(
                 "Vacuum objective does not use any profiles, "
                 + "ignoring presssure, iota, and current"
             )
@@ -856,9 +855,9 @@ class InputReader:
 
             # global parameters
             if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
-                warnings.warn(colored("Using free-boundary mode!", "yellow"))
+                logging.warning(colored("Using free-boundary mode!", "yellow"))
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
-                warnings.warn(
+                logging.warning(
                     colored("Using poloidal flux instead of toroidal flux!", "yellow")
                 )
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
@@ -919,7 +918,7 @@ class InputReader:
             match = re.search(r"bPMASS_TYPE\s*=\s*\w*", command, re.IGNORECASE)
             if match:
                 if not re.search(r"\bpower_series\b", match.group(0), re.IGNORECASE):
-                    warnings.warn(colored("Pressure is not a power series!", "yellow"))
+                    logging.warning(colored("Pressure is not a power series!", "yellow"))
             match = re.search(r"GAMMA\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -928,7 +927,7 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if numbers[0] != 0:
-                    warnings.warn(colored("GAMMA is not 0.0", "yellow"))
+                    logging.warning(colored("GAMMA is not 0.0", "yellow"))
             match = re.search(r"BLOAT\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -937,7 +936,7 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if numbers[0] != 1:
-                    warnings.warn(colored("BLOAT is not 1.0", "yellow"))
+                    logging.warning(colored("BLOAT is not 1.0", "yellow"))
             match = re.search(r"SPRES_PED\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -946,7 +945,7 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if numbers[0] != 1:
-                    warnings.warn(colored("SPRES_PED is not 1.0", "yellow"))
+                    logging.warning(colored("SPRES_PED is not 1.0", "yellow"))
             match = re.search(r"PRES_SCALE\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -978,7 +977,7 @@ class InputReader:
             # rotational transform
             if re.search(r"\bPIOTA_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
-                    warnings.warn(colored("Iota is not a power series!", "yellow"))
+                    logging.warning(colored("Iota is not a power series!", "yellow"))
             match = re.search(
                 r"AI\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
@@ -1002,7 +1001,7 @@ class InputReader:
             # current
             if re.search(r"\bPCURR_TYPE\b", command, re.IGNORECASE):
                 if not re.search(r"\bpower_series\b", command, re.IGNORECASE):
-                    warnings.warn(colored("Current is not a power series!", "yellow"))
+                    logging.warning(colored("Current is not a power series!", "yellow"))
             match = re.search(r"CURTOR\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1133,7 +1132,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n = abs(n)
                 if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
+                    logging.warning(colored("m is negative!", "yellow"))
                     m = abs(m)
                 RBS = numbers[2]
                 if m != 0:  # RBS*sin(m*t)*cos(n*p)
@@ -1181,7 +1180,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n = abs(n)
                 if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
+                    logging.warning(colored("m is negative!", "yellow"))
                     m = abs(m)
                 RBC = numbers[2]
                 # RBC*cos(m*t)*cos(n*p)  # noqa: E800
@@ -1231,7 +1230,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n = abs(n)
                 if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
+                    logging.warning(colored("m is negative!", "yellow"))
                     m = abs(m)
                 ZBS = numbers[2]
                 if m != 0:  # ZBS*sin(m*t)*cos(n*p)
@@ -1279,7 +1278,7 @@ class InputReader:
                 n_sgn = np.sign(np.array([n]))[0]
                 n = abs(n)
                 if m_sgn < 0:
-                    warnings.warn(colored("m is negative!", "yellow"))
+                    logging.warning(colored("m is negative!", "yellow"))
                     m = abs(m)
                 ZBC = numbers[2]
                 # ZBC*cos(m*t)*cos(n*p)  # noqa: E800

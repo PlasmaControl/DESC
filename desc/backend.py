@@ -33,7 +33,7 @@ else:
 
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
-                warnings.warn(
+                logging.warning(
                     "JAX failed to detect GPU, are you sure you "
                     + "installed JAX with GPU support?"
                 )
@@ -53,7 +53,7 @@ else:
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
-        warnings.warn(colored("Failed to load JAX", "red"))
+        logging.warning(colored("Failed to load JAX", "red"))
         logging.info(
             "DESC version {}, using NumPy backend, version={}, dtype={}".format(
                 desc.__version__, np.__version__, y.dtype

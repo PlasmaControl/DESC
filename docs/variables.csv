@@ -237,6 +237,7 @@ Name,Label,Units,Description,Module
 ``R0``,:math:`R_{0}`,meters,Average major radius,``desc.compute._geometry``
 ``a``,:math:`a`,meters,Average minor radius,``desc.compute._geometry``
 ``R0/a``,:math:`R_{0} / a`,None,Aspect ratio,``desc.compute._geometry``
+``a_major/a_minor``,:math:`a_{major} / a_{minor}`,None,Elongation,``desc.compute._geometry``
 ``n_rho``,:math:`\hat{\mathbf{n}}_{\rho}`,None,Unit normal vector to constant rho surface,``desc.compute._geometry``
 ``L_sff``,:math:`L_{sff}`,meters,L coefficient of second fundamental form,``desc.compute._geometry``
 ``M_sff``,:math:`M_{sff}`,meters,M coefficient of second fundamental form,``desc.compute._geometry``

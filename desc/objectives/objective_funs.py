@@ -3,8 +3,8 @@
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-import numpy as np
 import logging
+import numpy as np
 
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
@@ -34,9 +34,7 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(
-        self, objectives, eq=None, use_jit=True, deriv_mode="batched"
-    ):
+    def __init__(self, objectives, eq=None, use_jit=True, deriv_mode="batched"):
 
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
@@ -165,7 +163,7 @@ class ObjectiveFunction(IOAble):
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
-            logging.info("Building objective: " + objective.name)
+            logging.info("Building objective: ", objective.name)
             objective.build(eq, use_jit=self.use_jit)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
@@ -475,6 +473,7 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
+        self._print_value_format = "Value of Objective {}: {:10.3e} ".format(self.name)
         # if args is already set don't overwrite it
         self._args = getattr(
             self,
@@ -601,8 +600,8 @@ class _Objective(IOAble, ABC):
         logging.info(self._print_value_fmt.format(jnp.linalg.norm(x)) + self._units)
         if self._normalize:
             logging.info(
-                self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization))
-                + "(normalized)"
+                self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization)),
+                "(normalized)"  
             )
 
     def _shift_scale(self, x):

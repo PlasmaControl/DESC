@@ -69,150 +69,129 @@ def get_vmec_data(stellarator, quantity):
     return rho, q
 
 
-#@pytest.mark.unit
-#def test_mercier_vacuum():
-#    """Test that the Mercier stability criteria are 0 without pressure."""
-#    eq = Equilibrium()
-#    np.testing.assert_allclose(eq.compute("D_shear")["D_shear"], 0)
-#    np.testing.assert_allclose(eq.compute("D_current")["D_current"], 0)
-#    np.testing.assert_allclose(eq.compute("D_well")["D_well"], 0)
-#    np.testing.assert_allclose(eq.compute("D_geodesic")["D_geodesic"], 0)
-#    np.testing.assert_allclose(eq.compute("D_Mercier")["D_Mercier"], 0)
+@pytest.mark.unit
+def test_mercier_vacuum():
+    """Test that the Mercier stability criteria are 0 without pressure."""
+    eq = Equilibrium()
+    np.testing.assert_allclose(eq.compute("D_shear")["D_shear"], 0)
+    np.testing.assert_allclose(eq.compute("D_current")["D_current"], 0)
+    np.testing.assert_allclose(eq.compute("D_well")["D_well"], 0)
+    np.testing.assert_allclose(eq.compute("D_geodesic")["D_geodesic"], 0)
+    np.testing.assert_allclose(eq.compute("D_Mercier")["D_Mercier"], 0)
 
 
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
-#    """Test that D_shear has a stabilizing effect and matches VMEC."""
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
+    """Test that D_shear has a stabilizing effect and matches VMEC."""
 
-#    def test(stellarator, rho_range=(0, 1), rtol=1e-12, atol=0):
-#        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-#        rho, d_shear_vmec = get_vmec_data(stellarator, "DShear")
-#        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-#        d_shear = compress(grid, eq.compute("D_shear", grid=grid)["D_shear"])
+    def test(stellarator, rho_range=(0, 1), rtol=1e-12, atol=0):
+        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, d_shear_vmec = get_vmec_data(stellarator, "DShear")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        d_shear = compress(grid, eq.compute("D_shear", grid=grid)["D_shear"])
 
-#        assert np.all(
-#            d_shear[np.isfinite(d_shear)] >= 0
-#        ), "D_shear should always have a stabilizing effect."
-#        all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
+        assert np.all(
+            d_shear[np.isfinite(d_shear)] >= 0
+        ), "D_shear should always have a stabilizing effect."
+        all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
 
-#    test(DSHAPE_current, (0.2, 0.9), atol=0.01, rtol=0.1)
-#    test(HELIOTRON_ex)
-
-
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
-#    """Test calculation of D_current stability criterion against VMEC."""
-
-#    def test(
-#        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-#    ):
-#        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-#        rho, d_current_vmec = get_vmec_data(stellarator, "DCurr")
-#        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-#        d_current = compress(grid, eq.compute("D_current", grid=grid)["D_current"])
-
-#        assert (
-#            len(np.where(np.sign(d_current) != np.sign(d_current_vmec))[0])
-#            <= MAX_SIGN_DIFF
-#        )
-#        all_close(d_current, d_current_vmec, rho, rho_range, rtol, atol)
-
-#    test(DSHAPE_current, (0.2, 0.9), rtol=1e-2, atol=1e-2)
-#    test(HELIOTRON_ex, (0.25, 0.85), rtol=1e-1)
+    test(DSHAPE_current, (0.2, 0.9), atol=0.01, rtol=0.1)
+    test(HELIOTRON_ex)
 
 
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
-#    """Test calculation of D_well stability criterion against VMEC."""
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
+    """Test calculation of D_current stability criterion against VMEC."""
 
-#    def test(
-#        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-#    ):
-#        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-#        rho, d_well_vmec = get_vmec_data(stellarator, "DWell")
-#        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-#        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
+    def test(
+        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
+    ):
+        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, d_current_vmec = get_vmec_data(stellarator, "DCurr")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        d_current = compress(grid, eq.compute("D_current", grid=grid)["D_current"])
 
-#        assert (
-#            len(np.where(np.sign(d_well) != np.sign(d_well_vmec))[0]) <= MAX_SIGN_DIFF
-#        )
-#        all_close(d_well, d_well_vmec, rho, rho_range, rtol, atol)
+        assert (
+            len(np.where(np.sign(d_current) != np.sign(d_current_vmec))[0])
+            <= MAX_SIGN_DIFF
+        )
+        all_close(d_current, d_current_vmec, rho, rho_range, rtol, atol)
 
-#    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
-#    test(HELIOTRON_ex, (0.01, 0.45), rtol=1.75e-1)
-#    test(HELIOTRON_ex, (0.45, 0.6), atol=7.2e-1)
-#    test(HELIOTRON_ex, (0.6, 0.99), rtol=1.3e-2)
-
-
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
-#    """Test that D_geodesic has a destabilizing effect and matches VMEC."""
-
-#    def test(
-#        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-#    ):
-#        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-#        rho, d_geodesic_vmec = get_vmec_data(stellarator, "DGeod")
-#        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-#        d_geodesic = compress(grid, eq.compute("D_geodesic", grid=grid)["D_geodesic"])
-
-#        assert np.all(
-#            d_geodesic[np.isfinite(d_geodesic)] <= 0
-#        ), "D_geodesic should always have a destabilizing effect."
-#        all_close(d_geodesic, d_geodesic_vmec, rho, rho_range, rtol, atol)
-
-#    test(DSHAPE_current, (0.2, 0.9), rtol=2e-2)
-#    test(HELIOTRON_ex, (0.15, 0.825), rtol=1.2e-1)
-#    test(HELIOTRON_ex, (0.85, 0.95), atol=1.2e-1)
+    test(DSHAPE_current, (0.2, 0.9), rtol=1e-2, atol=1e-2)
+    test(HELIOTRON_ex, (0.25, 0.85), rtol=1e-1)
 
 
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
-#    """Test calculation of D_Mercier stability criterion against VMEC."""
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
+    """Test calculation of D_well stability criterion against VMEC."""
 
-#    def test(
-#        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
-#    ):
-#        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-#        rho, d_mercier_vmec = get_vmec_data(stellarator, "DMerc")
-#        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-#        d_mercier = compress(grid, eq.compute("D_Mercier", grid=grid)["D_Mercier"])
+    def test(
+        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
+    ):
+        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, d_well_vmec = get_vmec_data(stellarator, "DWell")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
 
-#        assert (
-#            len(np.where(np.sign(d_mercier) != np.sign(d_mercier_vmec))[0])
-#            <= MAX_SIGN_DIFF
-#        )
-#        all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
+        assert (
+            len(np.where(np.sign(d_well) != np.sign(d_well_vmec))[0]) <= MAX_SIGN_DIFF
+        )
+        all_close(d_well, d_well_vmec, rho, rho_range, rtol, atol)
 
-#    test(DSHAPE_current, (0.2, 0.9), rtol=2.5e-2)
-#    test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
-#    test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
+    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
+    test(HELIOTRON_ex, (0.01, 0.45), rtol=1.75e-1)
+    test(HELIOTRON_ex, (0.45, 0.6), atol=7.2e-1)
+    test(HELIOTRON_ex, (0.6, 0.99), rtol=1.3e-2)
 
 
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
-#    """Test that D_well and magnetic_well match signs under finite pressure."""
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
+    """Test that D_geodesic has a destabilizing effect and matches VMEC."""
 
-#    def test(stellarator, rho=np.linspace(0, 1, 128)):
-#        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-#        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-#        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
-#        magnetic_well = compress(
-#            grid, eq.compute("magnetic well", grid=grid)["magnetic well"]
-#        )
+    def test(
+        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
+    ):
+        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, d_geodesic_vmec = get_vmec_data(stellarator, "DGeod")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        d_geodesic = compress(grid, eq.compute("D_geodesic", grid=grid)["D_geodesic"])
 
-#        assert (
-#            len(np.where(np.sign(d_well) != np.sign(magnetic_well))[0]) <= MAX_SIGN_DIFF
-#        )
+        assert np.all(
+            d_geodesic[np.isfinite(d_geodesic)] <= 0
+        ), "D_geodesic should always have a destabilizing effect."
+        all_close(d_geodesic, d_geodesic_vmec, rho, rho_range, rtol, atol)
 
-#    test(DSHAPE_current)
-#    test(HELIOTRON_ex)
+    test(DSHAPE_current, (0.2, 0.9), rtol=2e-2)
+    test(HELIOTRON_ex, (0.15, 0.825), rtol=1.2e-1)
+    test(HELIOTRON_ex, (0.85, 0.95), atol=1.2e-1)
+
+
+@pytest.mark.unit
+@pytest.mark.solve
+def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
+    """Test calculation of D_Mercier stability criterion against VMEC."""
+
+    def test(
+        stellarator, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
+    ):
+        eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+        rho, d_mercier_vmec = get_vmec_data(stellarator, "DMerc")
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+        d_mercier = compress(grid, eq.compute("D_Mercier", grid=grid)["D_Mercier"])
+
+        assert (
+            len(np.where(np.sign(d_mercier) != np.sign(d_mercier_vmec))[0])
+            <= MAX_SIGN_DIFF
+        )
+        all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
+
+    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
+    test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
+    test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
 
 
 @pytest.mark.unit
@@ -299,9 +278,9 @@ def test_magwell_print(TmpDir):
     np.testing.assert_allclose(
         magwell_obj.compute(*magwell_obj.xs(eq)), magwell * w, atol=1e-16
     )
-        # can't compare print statement against the magwell calc from eq.compute
-        #  due to some tiny roundoff errors,
-        # the printed values are slightly different
+    
+    # Can't compare print statement against the magwell calc from eq.compute due to
+    # some tiny roundoff errors, the printed values are slightly different
     magwell_vals = magwell_obj.compute(*magwell_obj.xs(eq)) / w
     magwell_obj.print_value(*magwell_obj.xs(eq))
 

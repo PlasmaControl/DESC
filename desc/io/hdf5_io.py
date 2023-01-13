@@ -1,7 +1,7 @@
 """Classes for reading and writing HDF5 files."""
 
 import pydoc
-import warnings
+import logging
 
 import h5py
 import numpy as np
@@ -122,7 +122,7 @@ class hdf5Reader(hdf5IO, Reader):
         loc = self.resolve_where(where)
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
-                warnings.warn(
+                logging.warning(
                     "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
                 )
                 continue
@@ -132,7 +132,7 @@ class hdf5Reader(hdf5IO, Reader):
                     setattr(obj, attr, s)
             elif isinstance(loc[attr], h5py.Group):
                 if "__class__" not in loc[attr].keys():
-                    warnings.warn(
+                    logging.warning(
                         "Could not load attribute '{}', no class name found.".format(
                             attr
                         ),
@@ -158,7 +158,7 @@ class hdf5Reader(hdf5IO, Reader):
                             ),
                         )
                     else:
-                        warnings.warn(
+                        logging.warning(
                             "Class '{}' could not be imported.".format(cls_name),
                             RuntimeWarning,
                         )
@@ -182,7 +182,7 @@ class hdf5Reader(hdf5IO, Reader):
 
             elif isinstance(loc[key], h5py.Group):
                 if "__class__" not in loc[key].keys():
-                    warnings.warn(
+                    logging.warning(
                         "Could not load attribute '{}', no class name found.".format(
                             key
                         ),
@@ -203,7 +203,7 @@ class hdf5Reader(hdf5IO, Reader):
                             file_format=self._file_format_,
                         )
                     else:
-                        warnings.warn(
+                        logging.warning(
                             "Class '{}' could not be imported.".format(cls_name),
                             RuntimeWarning,
                         )
@@ -230,7 +230,7 @@ class hdf5Reader(hdf5IO, Reader):
                     thelist.append(s)
             elif isinstance(loc[str(i)], h5py.Group):
                 if "__class__" not in loc[str(i)].keys():
-                    warnings.warn(
+                    logging.warning(
                         "Could not load attribute '{}', no class name found.".format(
                             str(i)
                         ),
@@ -253,7 +253,7 @@ class hdf5Reader(hdf5IO, Reader):
                             ),
                         )
                     else:
-                        warnings.warn(
+                        logging.warning(
                             "Class '{}' could not be imported.".format(cls_name),
                             RuntimeWarning,
                         )
@@ -311,7 +311,7 @@ class hdf5Writer(hdf5IO, Writer):
                 )
                 loc.create_dataset(attr, data=data, compression=compression)
             except AttributeError:
-                warnings.warn(
+                logging.warning(
                     "Save attribute '{}' was not saved as it does "
                     "not exist.".format(attr),
                     RuntimeWarning,
@@ -331,7 +331,7 @@ class hdf5Writer(hdf5IO, Writer):
                         sub_obj = getattr(obj, attr)
                         sub_obj.save(group)
                     except AttributeError:
-                        warnings.warn(
+                        logging.warning(
                             "Could not save object '{}'.".format(attr), RuntimeWarning
                         )
 

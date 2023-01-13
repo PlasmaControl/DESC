@@ -1,7 +1,6 @@
 """Core class representing MHD equilibrium."""
 
 import numbers
-import warnings
 import logging
 from collections.abc import MutableSequence
 
@@ -459,7 +458,7 @@ class Equilibrium(_Configuration, IOAble):
             eq = self
 
         if eq.N > eq.N_grid or eq.M > eq.M_grid or eq.L > eq.L_grid:
-            warnings.warn(
+            logging.warnings(
                 colored(
                     "Equilibrium has one or more spectral resolutions "
                     + "greater than the corresponding collocation grid resolution! "
@@ -792,6 +791,8 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
+        weight="auto",
+        include_f=True,
         verbose=1,
         copy=False,
     ):
@@ -814,6 +815,15 @@ class Equilibrium(_Configuration, IOAble):
             Enforces ||dx1|| <= tr_ratio*||x|| and ||dx2|| <= tr_ratio*||dx1||.
             If a scalar, uses the same ratio for all steps. If an array, uses the first
                 element for the first step and so on.
+        weight : ndarray, "auto", or None, optional
+            1d or 2d array for weighted least squares. 1d arrays are turned into
+            diagonal matrices. Default is to weight by (mode number)**2. None applies
+            no weighting.
+        include_f : bool, optional
+            Whether to include the 0th order objective residual in the perturbation
+            equation. Including this term can improve force balance if the perturbation
+            step is large, but can result in too large a step if the perturbation
+            is small.
         verbose : integer, optional
             * 0  : work silently.
             * 1  : display a termination report
@@ -860,6 +870,8 @@ class Equilibrium(_Configuration, IOAble):
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
+            weight=weight,
+            include_f=include_f,
             verbose=verbose,
             copy=copy,
         )

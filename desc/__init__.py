@@ -113,10 +113,10 @@ def set_device(kind="cpu"):
         os.environ["CUDA_VISIBLE_DEVICES"] = str(selected_gpu["index"])
 
 
-logging.getLogger().addHandler( logging.NullHandler())
-# Standard practice is to give the logging module a NullHandler such that no 
+logging.getLogger().addHandler(logging.NullHandler())
+# Standard practice is to give the logging module a NullHandler such that no
 # output is generated without user intending it.  However, as DESC evolves we
-# have a logger automatically set up to save crash data- can be turned 
+# have a logger automatically set up to save crash data- can be turned
 # off with a call to set_logfile_logging(log_activated = False)
 
 def stop_logfile_logging():
@@ -138,10 +138,9 @@ def stop_logfile_logging():
     return False
 
 
-def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
+def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
 
-    """Quickly adds a logfile handler to the root logger.  Non-global version 
-    of the set_logfile_logging function from __init__.py for internal use.
+    """Quickly adds a logfile handler to the root logger.  
     
     Arguments allow basic configuration of the logger, but this is not meant to
     be a replacement for setting up logging when using DESC in the context of a
@@ -156,13 +155,13 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
     logfile_file : str
         path to, and filename of, logfile to write output to
     logfile_level : str
-        level of logging to logfile; "DEBUG", "INFO", WARNING", "ERROR" or 
+        level of logging to logfile; "DEBUG", "INFO", WARNING", "ERROR" or
         "CRITICAL" are accepted values, in increasing order of severity. DESC
         only uses "DEBUG" and "INFO" currently.
         
     Returns
     -------
-    bool : 
+    bool :
         Returns True if logging is set up, or stopped successfully.
     """
 
@@ -172,18 +171,22 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
 
     # Create file handler
     logfile_handler = logging.handlers.RotatingFileHandler(
-                    logfile_file, 
-                    maxBytes=5*1024*1024, 
-                    backupCount=1, mode='w')
-    try: 
+        logfile_file, 
+        maxBytes=5*1024*1024, 
+        backupCount=1, mode='w')
+    try:
         logfile_handler.setLevel(logfile_level)
-    except:
+    except ValueError:
         warnings.warn(
             colored(
-                "Failed to set log file log level: invalid level: '%s'" 
-                    % logfile_level),
+                "Failed to set log file log level: invalid level: '%s'"
+                    % logfile_level,
                 "yellow"
-                )     
+                )
+            + "use 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', or an integer"
+            + "value from 0 to 50"
+        )
+
         return False
 
     # Set log formatting
@@ -201,7 +204,7 @@ def set_logfile_logging(logfile_level = "DEBUG", logfile_file = "desc.log"):
     return True
 
 
-def set_console_logging(console_log_level = "INFO", console_log_output = "stdout"):
+def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     """Quickly adds console handlers to python's root logger.  Non-global version 
     of the set_console_logging function from __init__.py for internal use.
 
@@ -217,7 +220,7 @@ def set_console_logging(console_log_level = "INFO", console_log_output = "stdout
     Parameters
     ----------
     console_log_level : str
-        level of logging to console; "DEBUG", "INFO", WARNING", "ERROR" or 
+        level of logging to console; "DEBUG", "INFO", WARNING", "ERROR" or
         "CRITICAL" are accepted values, in increasing order of severity
     console_log_output : str
         output logging to console with either "stdout" or "stderr"
@@ -235,7 +238,7 @@ def set_console_logging(console_log_level = "INFO", console_log_output = "stdout
     console_log_output = console_log_output.lower()
     if (console_log_output == "stdout"):
         console_handler = logging.StreamHandler(sys.stdout)
-    elif (console_log_output == "stderr"):
+    elif console_log_output == "stderr":
         console_handler = logging.StreamHandler(sys.stderr)
     else:
         print("Console logging setup failed: invalid output: '%s'"%console_log_output)
@@ -258,6 +261,7 @@ def set_console_logging(console_log_level = "INFO", console_log_output = "stdout
 
     # Assign handlers to logger
     logger.addHandler(console_handler)
+
 
     return True
 

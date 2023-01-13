@@ -1,6 +1,5 @@
 """Class for wrapping a number of common optimization methods."""
 
-import warnings
 import logging
 
 import numpy as np
@@ -30,7 +29,6 @@ from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_mini
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
-from .utils import find_matching_inds
 
 
 class Optimizer(IOAble):
@@ -255,7 +253,7 @@ class Optimizer(IOAble):
                 constraint.build(eq)
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
-            warnings.warn(
+            logging.warning(
                 colored(
                     "method {} is not intended for scalar objective function".format(
                         ".".join([self.method])
@@ -289,9 +287,9 @@ class Optimizer(IOAble):
             options,
         )
 
-        
-        logging.info("Number of parameters: {}".format(x0_reduced.size))
-        logging.info("Number of objectives: {}".format(objective.dim_f))
+
+        logging.info("Number of parameters: {}", x0_reduced.size)
+        logging.info("Number of objectives: {}", objective.dim_f)
 
         logging.info("Starting optimization")
         timer.start("Solution time")
@@ -391,16 +389,6 @@ class Optimizer(IOAble):
             )
 
         if wrapped:
-            # history from objective includes steps the optimizer didn't accept
-            # need to find where the optimizer actually stepped and only take those
-            wrapped_allx = objective._allx
-            projected_wrapped_allx = []
-            for i, x in enumerate(wrapped_allx):
-                projected_wrapped_allx.append(project(x))
-            optim_allx = result["allx"]
-            match_inds = find_matching_inds(optim_allx, projected_wrapped_allx)
-            for key, val in objective.history.items():
-                objective.history[key] = np.asarray(val)[match_inds]
             result["history"] = objective.history
         else:
             result["history"] = {}
@@ -505,6 +493,7 @@ def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, option
             )
     perturb_options = options.pop("perturb_options", {})
     perturb_options.setdefault("verbose", 0)
+    perturb_options.setdefault("include_f", False)
     solve_options = options.pop("solve_options", {})
     solve_options.setdefault("verbose", 0)
     objective = WrappedEquilibriumObjective(

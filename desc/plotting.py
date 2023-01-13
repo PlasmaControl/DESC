@@ -2449,7 +2449,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ls = kwargs.pop("ls", ["-", "-", "-"])
     colors = kwargs.pop("colors", ["r", "b", "g"])
     markers = kwargs.pop("markers", ["o", "o", "o"])
-    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_B$"])
+    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
 
     data = eq.compute(["R0", "|B|"])
     R0 = data["R0"]
@@ -2463,7 +2463,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     for i, r in enumerate(rho):
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
-            data = eq.compute(["|B|_mn", "B modes"], grid=grid, data=data)
+            data = eq.compute(["|B|_mn", "B modes"], grid=grid)
             modes = data["B modes"]
             idx = np.where(modes[1, :] * helicity[1] != modes[2, :] * helicity[0])[0]
             f_b = np.sqrt(np.sum(data["|B|_mn"][idx] ** 2)) / np.sqrt(
@@ -2471,7 +2471,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             )
             f_B = np.append(f_B, f_b)
         if fC:
-            data = eq.compute("f_C", grid=grid, data=data, helicity=helicity)
+            data = eq.compute("f_C", grid=grid, helicity=helicity)
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -2479,7 +2479,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             )
             f_C = np.append(f_C, f_c)
         if fT:
-            data = eq.compute("f_T", grid=grid, data=data)
+            data = eq.compute("f_T", grid=grid)
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -3506,9 +3506,9 @@ def plot_field_lines_real_space(
 
     for i, solution in enumerate(field_line_coords["IVP solutions"]):
         if not solution.success:
-            logging.error(
+            logging.warning(
                 "Integration from seed theta %1.2f radians was not successful!"
-                % seed_thetas[i]
+                %   seed_thetas[i]
             )
 
     for i in range(n_lines):
@@ -3623,7 +3623,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
 
     # integrate field lines in Phi
     logging.info(
-        "Integrating Magnetic Field Line Equation from seed theta = %f radians" % theta0
+        "Integrating Magnetic Field Line Equation from seed theta = %f radians", theta0
     )
     y0 = [fR[0], fZ[0]]
 

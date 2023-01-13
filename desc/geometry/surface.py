@@ -1,7 +1,7 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
 import numbers
-import warnings
+import logging
 
 import numpy as np
 
@@ -118,7 +118,7 @@ class FourierRZToroidalSurface(Surface):
         self.rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
-            warnings.warn(
+            logging.warnings(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
                 + " modes with m<0"

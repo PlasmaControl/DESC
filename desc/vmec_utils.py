@@ -218,7 +218,7 @@ def ptolemy_linear_transform(basis, helicity=None):
     if helicity is not None:
         assert isinstance(helicity, tuple) and len(helicity) == 2
         M = np.abs(helicity[0])
-        N = np.abs(helicity[1]) * sign(np.prod(helicity))
+        N = np.abs(helicity[1]) / basis.NFP * sign(np.prod(helicity))
         idx = np.ones((modes.shape[0],), bool)
         idx[0] = False  # m=0,n=0 mode
         if N == 0:

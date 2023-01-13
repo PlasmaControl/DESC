@@ -2191,7 +2191,7 @@ def plot_boozer_modes(
     for i in range(modes.shape[0]):
         L = modes[i, 0]
         M = modes[i, 1]
-        N = modes[i, 2]
+        N = modes[i, 2] * eq.NFP
         if (M, N) == (0, 0) and B0 is False:
             continue
         if log is True:
@@ -2487,7 +2487,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             matrix, modes, idx = ptolemy_linear_transform(
-                transforms["B"].basis, (helicity[0], helicity[1] / eq.NFP)
+                transforms["B"].basis, helicity
             )
             data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
             B_mn = matrix @ data["|B|_mn"]

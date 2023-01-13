@@ -263,9 +263,12 @@ class ToroidalCurrent(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        I = compress(self.grid, data["current"], surface_label="rho")
+        return compress(self.grid, data["current"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return I * w  # FIXME: shift_scale(I)
+        return super().compute_scaled(*args, **kwargs) * w
 
 
 class RotationalTransform(_Objective):
@@ -400,6 +403,9 @@ class RotationalTransform(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        iota = compress(self.grid, data["iota"], surface_label="rho")
+        return compress(self.grid, data["iota"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return iota * w  # FIXME: shift_scale(iota)
+        return super().compute_scaled(*args, **kwargs) * w

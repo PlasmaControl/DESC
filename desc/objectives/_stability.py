@@ -153,9 +153,12 @@ class MercierStability(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = compress(self.grid, data["D_Mercier"], surface_label="rho")
+        return compress(self.grid, data["D_Mercier"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return f * w  # FIXME: shift_scale(f)
+        return super().compute_scaled(*args, **kwargs) * w
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -318,9 +321,12 @@ class MagneticWell(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = compress(self.grid, data["magnetic well"], surface_label="rho")
+        return compress(self.grid, data["magnetic well"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return f * w  # FIXME: shift_scale(f)
+        return super().compute_scaled(*args, **kwargs) * w
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

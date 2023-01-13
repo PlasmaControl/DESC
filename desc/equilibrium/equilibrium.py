@@ -789,6 +789,8 @@ class Equilibrium(_Configuration, IOAble):
         dPsi=None,
         order=2,
         tr_ratio=0.1,
+        weight="auto",
+        include_f=True,
         verbose=1,
         copy=False,
     ):
@@ -827,6 +829,15 @@ class Equilibrium(_Configuration, IOAble):
             * 2  : display progress and timing info during iterations
 =======
             element for the first step and so on.
+        weight : ndarray, "auto", or None, optional
+            1d or 2d array for weighted least squares. 1d arrays are turned into
+            diagonal matrices. Default is to weight by (mode number)**2. None applies
+            no weighting.
+        include_f : bool, optional
+            Whether to include the 0th order objective residual in the perturbation
+            equation. Including this term can improve force balance if the perturbation
+            step is large, but can result in too large a step if the perturbation
+            is small.
         verbose : int
             Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
             with DEBUG level timing and iteration data.
@@ -873,6 +884,8 @@ class Equilibrium(_Configuration, IOAble):
             dPsi=dPsi,
             order=order,
             tr_ratio=tr_ratio,
+            weight=weight,
+            include_f=include_f,
             verbose=verbose,
             copy=copy,
         )

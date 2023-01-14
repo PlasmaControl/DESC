@@ -1,7 +1,7 @@
 """Functions for flux surface averages and vector algebra operations."""
 
 import copy
-import warnings
+import logging
 
 import numpy as np
 from termcolor import colored
@@ -530,7 +530,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
 
     """
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
-        warnings.warn(
+        logging.warnings(
             colored(
                 "Integrals over constant theta surfaces are poorly defined for "
                 + "ConcentricGrid.",

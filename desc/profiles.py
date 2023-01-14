@@ -1,6 +1,6 @@
 """Profile objects for representing pressure, rotational transform, etc."""
 
-import warnings
+import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -1096,7 +1096,7 @@ class MTanhProfile(Profile):
             fun, jac=jac, x0=p0, method="trf", bounds=(pmin, pmax), **kwargs
         )
         if not out.success:
-            warnings.warn("Fitting did not converge, parameters may not be correct")
+            logging.warning("Fitting did not converge, parameters may not be correct")
         params = out.x
         return MTanhProfile(params, grid, name)
 

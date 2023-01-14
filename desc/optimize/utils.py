@@ -1,9 +1,10 @@
 """Utility functions used in optimization problems."""
 
-import numpy as np
-import logging
 import contextlib
+import logging
 import sys
+
+import numpy as np
 
 from io import StringIO
 from desc.backend import cond, fori_loop, jit, jnp, put
@@ -230,9 +231,8 @@ def print_iteration_nonlinear(
         optimality = "{:^15.2e}".format(optimality)
 
     logging.debug(
-        "{0}{1}{2}{3}{4}{5}".format(
-            iteration, nfev, cost, cost_reduction, step_norm, optimality
-        )
+        "{0}{1}{2}{3}{4}{5}",
+        iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
 
 

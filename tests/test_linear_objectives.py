@@ -205,7 +205,6 @@ def test_correct_indexing_passed_modes():
             QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -223,7 +222,7 @@ def test_correct_indexing_passed_modes():
         FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),
     )
     for con in constraints:
-        con.build(eq, verbose=0)
+        con.build(eq)
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
@@ -266,7 +265,6 @@ def test_correct_indexing_passed_modes_and_passed_target():
             QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
             AspectRatio(target=8, weight=1e2),
         ),
-        verbose=0,
     )
     R_modes = np.vstack(
         (
@@ -297,7 +295,7 @@ def test_correct_indexing_passed_modes_and_passed_target():
         ),
     )
     for con in constraints:
-        con.build(eq, verbose=0)
+        con.build(eq)
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 

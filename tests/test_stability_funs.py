@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from netCDF4 import Dataset
 
+import logging
 import desc.examples
 import desc.io
 from desc.compute.utils import compress

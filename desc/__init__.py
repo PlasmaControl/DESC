@@ -265,7 +265,6 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     logging.captureWarnings(True)
     return True
 
-
 set_logfile_logging()
 set_console_logging()
 

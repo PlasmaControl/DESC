@@ -5,6 +5,8 @@ import logging
 import numpy as np
 from termcolor import colored
 
+
+from desc import set_console_logging
 from desc.backend import put, use_jax
 from desc.compute import arg_order
 from desc.objectives import get_fixed_boundary_constraints

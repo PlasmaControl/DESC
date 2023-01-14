@@ -1,8 +1,8 @@
 """Function for solving nonlinear least squares problems."""
 
-import numpy as np
 import logging
-import warnings
+import numpy as np
+
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
@@ -377,7 +377,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     if result["success"]:
         logging.info(result["message"])
     else:
-        warnings.warn("Warning: " + result["message"])
+        logging.warning("Warning: " + result["message"])
     logging.info("         Current function value: {:.3e}".format(result["cost"]))
     logging.info("         Iterations: {:d}".format(result["nit"]))
     logging.info("         Function evaluations: {:d}".format(result["nfev"]))

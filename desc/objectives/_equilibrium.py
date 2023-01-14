@@ -1,6 +1,5 @@
 """Objectives for solving equilibrium problems."""
 
-import warnings
 import logging
 
 from termcolor import colored
@@ -562,7 +561,7 @@ class Energy(_Objective):
                 "ocs",
                 "linear",
             ]:
-                warnings.warn(
+                logging.warning(
                     colored(
                         "Energy objective built using grid "
                         + "that is not the quadrature grid! "

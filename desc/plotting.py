@@ -3506,9 +3506,9 @@ def plot_field_lines_real_space(
 
     for i, solution in enumerate(field_line_coords["IVP solutions"]):
         if not solution.success:
-            logging.error(
+            logging.warning(
                 "Integration from seed theta %1.2f radians was not successful!"
-                % seed_thetas[i]
+                %   seed_thetas[i]
             )
 
     for i in range(n_lines):
@@ -3623,7 +3623,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
 
     # integrate field lines in Phi
     logging.info(
-        "Integrating Magnetic Field Line Equation from seed theta = %f radians" % theta0
+        "Integrating Magnetic Field Line Equation from seed theta = %f radians", theta0
     )
     y0 = [fR[0], fZ[0]]
 

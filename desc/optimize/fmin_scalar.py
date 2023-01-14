@@ -1,3 +1,4 @@
+
 """Function for minimizing a scalar function of multiple variables."""
 
 import logging
@@ -394,7 +395,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     logging.debug("         Function evaluations: {:d}".format(result["nfev"]))
     logging.debug("         Gradient evaluations: {:d}".format(result["ngev"]))
     logging.debug("         Hessian evaluations: {:d}".format(result["nhev"]))
-
     if return_all:
         result["allx"] = allx
     if return_tr:

@@ -241,7 +241,7 @@ def solve_continuation_automatic(  # noqa: C901
     eq.L_lmn = eqi.L_lmn
     eqfam[-1] = eq
     timer.stop("Total time")
-    logging.info"====================")
+    logging.info("====================")
     logging.info("Done")
     timer.disp("Total time")
     if checkpoint_path is not None:

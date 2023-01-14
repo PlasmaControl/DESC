@@ -185,7 +185,7 @@ def test_solve_bounds():
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute(obj.x(eq))
-    np.testing.assert_allclose(f, 0, atol=1e-8)
+    np.testing.assert_allclose(f, 0, atol=1e-10)
 
 
 @pytest.mark.regression

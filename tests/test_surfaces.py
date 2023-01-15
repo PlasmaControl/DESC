@@ -111,6 +111,7 @@ class TestFourierRZToroidalSurface:
             true_surf.Z_lmn, desc_surf.Z_lmn, atol=1e-10, rtol=1e-10
         )
 
+    @pytest.mark.unit
     def test_from_near_axis(self):
         """Test constructing approximate QI surface from near axis parameters."""
         surf = FourierRZToroidalSurface.from_near_axis(10, 4, 0.3, 0.2)
@@ -127,6 +128,7 @@ class TestFourierRZToroidalSurface:
             atol=1e-6,
         )
 
+    @pytest.mark.unit
     def test_curvature(self):
         """Tests for gaussian, mean, principle curvatures."""
         s = FourierRZToroidalSurface()
@@ -202,6 +204,7 @@ class TestZernikeRZToroidalSection:
 
         assert c.sym
 
+    @pytest.mark.unit
     def test_curvature(self):
         """Tests for gaussian, mean, principle curvatures.
 
@@ -217,6 +220,7 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(k2, 0)
 
 
+@pytest.mark.unit
 def test_surface_orientation():
     """Tests for computing the orientation of a surface in weird edge cases."""
     # this has the axis outside the surface, and negative orientation

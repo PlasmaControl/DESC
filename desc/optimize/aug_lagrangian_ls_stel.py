@@ -97,7 +97,7 @@ def fmin_lag_ls_stel(
         return fun(recover(x))
         
     constr = np.array([wrapped_constraint])         
-    print("constraint is " + str(np.mean(wrapped_constrained(x))))
+    print("constraint is " + str(np.mean(wrapped_constraint(x))))
     L = AugLagrangianLS(wrapped_obj, constr)
     gradL = Derivative(L.compute,0,"fwd")
     hessL = Derivative(L.compute,argnum=0,mode="hess")

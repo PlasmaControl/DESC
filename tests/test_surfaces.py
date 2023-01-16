@@ -137,8 +137,8 @@ class TestFourierRZToroidalSurface:
         K, H, k1, k2 = s.compute_curvature()
         np.testing.assert_allclose(K, 0)
         np.testing.assert_allclose(H, -1 / 2)
-        np.testing.assert_allclose(k1, 1)
-        np.testing.assert_allclose(k2, 0)
+        np.testing.assert_allclose(k1, 0)
+        np.testing.assert_allclose(k2, -1)
 
 
 class TestZernikeRZToroidalSection:
@@ -229,7 +229,7 @@ def test_surface_orientation():
     Zb = np.array([0.0, -0.16, 1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == -1
+    assert surf._compute_orientation() == -1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1
 
@@ -239,7 +239,7 @@ def test_surface_orientation():
     Zb = np.array([0.0, 0.16, -1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == 1
+    assert surf._compute_orientation() == 1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
@@ -249,7 +249,7 @@ def test_surface_orientation():
     Zb = np.array([0.0, -0.16, 1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == 1
+    assert surf._compute_orientation() == 1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
@@ -259,6 +259,6 @@ def test_surface_orientation():
     Zb = np.array([0.0, 0.16, -1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == -1
+    assert surf._compute_orientation() == -1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1

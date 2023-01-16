@@ -368,6 +368,11 @@ class Volume(_Objective):
 class PlasmaVesselDistance(_Objective):
     """Penalize the minimum distance between the plasma and a surounding surface.
 
+    Computes the minimum distance from each point on the plasma grid to a point on the
+    surface grid. For dense grids, this will approximate the global min, but in general
+    will only be an upper bound on the minimum separation between the plasma and the
+    surrounding surface.
+
     Parameters
     ----------
     surface : Surface

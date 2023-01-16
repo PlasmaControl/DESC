@@ -11,6 +11,8 @@ import pytest
 
 from desc.equilibrium import Equilibrium
 from desc.examples import get
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
     Elongation,
@@ -19,6 +21,7 @@ from desc.objectives import (
     MagneticWell,
     MercierStability,
     ObjectiveFunction,
+    PlasmaVesselDistance,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -298,3 +301,45 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])
     )
+
+
+@pytest.mark.unit
+def test_plasma_vessel_distance():
+    """Test calculation of min distance from plasma to vessel."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    # For equally spaced grids, should get true d=1
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    d = obj.compute(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    # for unequal M, should have error of order M_spacing*a_p
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=10, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    d = obj.compute(*obj.xs(eq))
+    assert abs(d.min() - (a_s - a_p)) < 1e-14
+    assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
+
+    # for unequal N, should have error of order N_spacing*R0
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=12)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    d = obj.compute(*obj.xs(eq))
+    assert abs(d.min() - (a_s - a_p)) < 1e-14
+    assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0

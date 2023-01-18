@@ -342,18 +342,15 @@ def test_generic_compute():
 
 
 @pytest.mark.unit
-def test_target_bounds():
+def test_bounds_format():
     """Test that tuple targets are in the format (lower bound, upper bound)."""
     eq = Equilibrium()
     with pytest.raises(AssertionError):
-        _ = GenericObjective("R", target=(1,), eq=eq)
+        _ = GenericObjective("R", bounds=(1,), eq=eq)
     with pytest.raises(AssertionError):
-        _ = GenericObjective("R", target=(1, 2, 3), eq=eq)
+        _ = GenericObjective("R", bounds=(1, 2, 3), eq=eq)
     with pytest.raises(ValueError):
-        _ = GenericObjective("R", target=(1, -1), eq=eq)
-
-
-# TODO: add test for _Objective.compute_scaled
+        _ = GenericObjective("R", bounds=(1, -1), eq=eq)
 
 
 @pytest.mark.unit

@@ -576,15 +576,15 @@ class _Objective(IOAble, ABC):
                 self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
 
     def _check_dimensions(self):
-        """Check that len(target) = len(weight) = dim_f."""
-        if isinstance(self.target, tuple):
-            self._target = tuple([np.asarray(tar) for tar in self._target])
-            for tar in self.target:
-                if not is_broadcastable((self.dim_f,), tar.shape):
-                    raise ValueError("len(target) != dim_f")
-            if np.any(self.target[1] - self.target[0] < 0):
-                raise ValueError("tuple target must be: (lower bound, upper bound)")
-        else:
+        """Check that len(target) = len(bounds) = len(weight) = dim_f."""
+        if self.bounds is not None:  # must be a tuple of length 2
+            self._bounds = tuple([np.asarray(bound) for bound in self._bounds])
+            for bound in self.bounds:
+                if not is_broadcastable((self.dim_f,), bound.shape):
+                    raise ValueError("len(bounds) != dim_f")
+            if np.any(self.bounds[1] - self.bounds[0] < 0):
+                raise ValueError("bounds must be: (lower bound, upper bound)")
+        else:  # target only gets used if bounds is None
             self._target = np.asarray(self._target)
             if not is_broadcastable((self.dim_f,), self.target.shape):
                 raise ValueError("len(target) != dim_f")
@@ -707,7 +707,7 @@ class _Objective(IOAble, ABC):
 
     @bounds.setter
     def bounds(self, bounds):
-        self._bounds = tuple(bounds)
+        assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         self._check_dimensions()
 
     @property

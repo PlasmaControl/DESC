@@ -35,6 +35,15 @@ def test_vmec_input(tmpdir_factory):
         v.pop("output_path")
     assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
 
+    # test default solver tolerances are correct
+    defaults = {"ftol": "1e-2", "xtol": "1e-6", "gtol": "1e-6", "nfev": "100"}
+    with open(path) as f:
+        lines = f.readlines()
+        for line in lines:
+            for key in defaults.keys():
+                if line.find(key) != -1:
+                    assert line.split("=").split(",")[-1] == defaults[key]
+
 
 @pytest.mark.unit
 def test_near_axis_input_files():

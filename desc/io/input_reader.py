@@ -690,13 +690,14 @@ class InputReader:
             )
 
         f.write("\n# solver tolerances\n")
+        defaults = {"ftol": "1e-2", "xtol": "1e-6", "gtol": "1e-6", "nfev": "100"}
         for key in ["ftol", "xtol", "gtol", "nfev"]:
             f.write(
                 key
                 + " = {}\n".format(
                     ", ".join(
                         [
-                            str(inp[key]) if inp[key] is not None else str(0)
+                            str(inp[key]) if inp[key] is not None else defaults[key]
                             for inp in inputs
                         ]
                     )

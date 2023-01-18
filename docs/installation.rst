@@ -77,7 +77,7 @@ The following are instructions tested to work on the Traverse supercomputer at P
     conda create --name desc-env python=3.8
     conda activate desc-env
     # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
-    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,~=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0" psutil "scipy>=1.5.0" termcolor
+    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0" psutil "scipy>=1.5.0" termcolor
     pip install nvgpu
 
 Build and install JAX with GPU support:

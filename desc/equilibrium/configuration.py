@@ -20,11 +20,12 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
-from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
+from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.utils import copy_coeffs
 
 from .coords import compute_flux_coords, compute_theta_coords, is_nested, to_sfl
 from .initial_guess import set_initial_guess
+from .utils import parse_profile
 
 
 class _Configuration(IOAble, ABC):
@@ -357,25 +358,6 @@ class _Configuration(IOAble, ABC):
             ion_temperature = electron_temperature
         if not use_kinetic and pressure is None:
             pressure = 0
-
-        def parse_profile(prof, name="", **kwargs):
-            if isinstance(prof, Profile):
-                return prof
-            if isinstance(prof, numbers.Number) or (
-                isinstance(prof, (np.ndarray, jnp.ndarray)) and prof.ndim == 1
-            ):
-                return PowerSeriesProfile(params=prof, name=name, **kwargs)
-            if (
-                isinstance(prof, (np.ndarray, jnp.ndarray))
-                and prof.ndim == 2
-                and prof.shape[1] == 2
-            ):
-                return PowerSeriesProfile(
-                    modes=prof[:, 0], params=prof[:, 1], name=name, **kwargs
-                )
-            if prof is None:
-                return None
-            raise TypeError(f"Got unknown {name} profile {prof}")
 
         self._electron_temperature = parse_profile(
             electron_temperature, "electron temperature"
@@ -876,12 +858,7 @@ class _Configuration(IOAble, ABC):
 
     @pressure.setter
     def pressure(self, new):
-        if isinstance(new, Profile):
-            self._pressure = new
-        else:
-            raise TypeError(
-                f"pressure profile should be of type Profile or a subclass, got {new} "
-            )
+        self._pressure = parse_profile(new, "pressure")
 
     @property
     def p_l(self):
@@ -904,13 +881,7 @@ class _Configuration(IOAble, ABC):
 
     @electron_temperature.setter
     def electron_temperature(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._electron_temperature = new
-        else:
-            raise TypeError(
-                "electron_temperature profile should be of type Profile "
-                + f"or a subclass, got {new} "
-            )
+        self._electron_temperature = parse_profile(new, "electron temperature")
 
     @property
     def Te_l(self):
@@ -937,13 +908,7 @@ class _Configuration(IOAble, ABC):
 
     @electron_density.setter
     def electron_density(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._electron_density = new
-        else:
-            raise TypeError(
-                "electron_density profile should be of type Profile "
-                + f"or a subclass, got {new} "
-            )
+        self._electron_density = parse_profile(new, "electron density")
 
     @property
     def ne_l(self):
@@ -970,13 +935,7 @@ class _Configuration(IOAble, ABC):
 
     @ion_temperature.setter
     def ion_temperature(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._ion_temperature = new
-        else:
-            raise TypeError(
-                "ion_temperature profile should be of type Profile "
-                + f"or a subclass, got {new} "
-            )
+        self._ion_temperature = parse_profile(new, "ion temperature")
 
     @property
     def Ti_l(self):
@@ -1001,13 +960,7 @@ class _Configuration(IOAble, ABC):
 
     @atomic_number.setter
     def atomic_number(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._atomic_number = new
-        else:
-            raise TypeError(
-                "atomic_number profile should be of type Profile "
-                + f"or a subclass, got {new} "
-            )
+        self._atomic_number = parse_profile(new, "atomic number")
 
     @property
     def Zeff_l(self):
@@ -1030,12 +983,7 @@ class _Configuration(IOAble, ABC):
 
     @iota.setter
     def iota(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._iota = new
-        else:
-            raise TypeError(
-                f"iota profile should be of type Profile or a subclass, got {new} "
-            )
+        self._iota = parse_profile(new, "iota")
 
     @property
     def i_l(self):
@@ -1058,12 +1006,7 @@ class _Configuration(IOAble, ABC):
 
     @current.setter
     def current(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._current = new
-        else:
-            raise TypeError(
-                f"current profile should be of type Profile or a subclass, got {new} "
-            )
+        self._current = parse_profile(new, "current")
 
     @property
     def c_l(self):

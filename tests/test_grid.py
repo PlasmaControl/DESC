@@ -64,9 +64,11 @@ class TestGrid:
         ).T
 
         np.testing.assert_allclose(g.nodes, nodes)
-        # spacing.prod == weights for linear grids (not true for concentric)
-        np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
         np.testing.assert_allclose(g.weights.sum(), (2 * np.pi) ** 2)
+        # spacing.prod == weights for linear grids
+        # this is not true for concentric or any grid with duplicates
+        if not endpoint:
+            np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
 
     @pytest.mark.unit
     def test_linear_grid_spacing(self):
@@ -97,6 +99,7 @@ class TestGrid:
             np.testing.assert_allclose(grid1.spacing, grid2.spacing)
 
         test(endpoint=False)
+        test(endpoint=True)
         test(axis=False)
         test(axis=True)
 
@@ -105,15 +108,137 @@ class TestGrid:
         """Test that 2 node grids assign equal spacing to nodes."""
         node_count = 2
         NFP = 7  # any integer > 1 is good candidate for test
-        endpoint = False  # TODO: fix endpoint = True issue later
-        lg = LinearGrid(
-            theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
-            zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
-            NFP=NFP,
-            endpoint=endpoint,
+
+        def test(endpoint):
+            lg = LinearGrid(
+                theta=np.linspace(0, 2 * np.pi, node_count, endpoint=endpoint),
+                zeta=np.linspace(0, 2 * np.pi / NFP, node_count, endpoint=endpoint),
+                NFP=NFP,
+                endpoint=endpoint,
+            )
+            # when endpoint is true, rho nodes spacing should be scaled down
+            # so that theta / zeta surface integrals weigh duplicate nodes less
+            spacing = np.tile(
+                [1 / 2 if endpoint else 1, np.pi, np.pi], (node_count**2, 1)
+            )
+            np.testing.assert_allclose(lg.spacing, spacing)
+
+        test(endpoint=False)
+        test(endpoint=True)
+
+    @pytest.mark.unit
+    def test_duplicate_node_areas(self):
+        """Test surface areas on grids with a duplicate node from endpoint=True."""
+
+        def test(grid):
+            surface_area = compress(
+                grid, surface_integrals(grid, surface_label="rho"), "rho"
+            )
+            np.testing.assert_allclose(4 * np.pi**2, surface_area)
+
+            surface_area = compress(
+                grid, surface_integrals(grid, surface_label="theta"), "theta"
+            )
+            np.testing.assert_allclose(2 * np.pi, surface_area[1:-1])
+            if ntheta > 1:
+                # theta=0 and theta=2pi surface should have half weight
+                np.testing.assert_allclose(np.pi, surface_area[0])
+                np.testing.assert_allclose(np.pi, surface_area[-1])
+
+            surface_area = compress(
+                grid, surface_integrals(grid, surface_label="zeta"), "zeta"
+            )
+            np.testing.assert_allclose(2 * np.pi, surface_area[1:-1])
+            if nzeta > 1:
+                # zeta=0 and zeta=2pi/NFP surface should have half weight
+                np.testing.assert_allclose(np.pi, surface_area[0])
+                np.testing.assert_allclose(np.pi, surface_area[-1])
+
+        nrho = 4
+        ntheta = 5
+        nzeta = 7
+        NFP = 3
+        endpoint = True
+        test(LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, NFP=NFP, endpoint=endpoint))
+        test(
+            LinearGrid(
+                rho=np.linspace(1, 0, nrho)[::-1],
+                theta=np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint),
+                zeta=np.linspace(0, 2 * np.pi / NFP, nzeta, endpoint=endpoint),
+                NFP=NFP,
+                endpoint=endpoint,
+            )
         )
-        spacing = np.tile([1, np.pi, np.pi], (node_count * node_count, 1))
-        np.testing.assert_allclose(lg.spacing, spacing)
+
+    @pytest.mark.unit
+    def test_duplicate_node_spacing(self):
+        """Test surface differential element weight on grid with endpoint=True."""
+        nrho = 1
+        ntheta = 8  # unique theta count
+        nzeta = 13  # unique zeta count
+        NFP = 3
+        axis = True
+        endpoint = True
+
+        def test(grid):
+            is_theta_dupe = endpoint & (grid.nodes[:, 1] % (2 * np.pi) == 0)
+            is_zeta_dupe = endpoint & (grid.nodes[:, 2] % (2 * np.pi / NFP) == 0)
+
+            def test_surface(actual_ds, desired_ds):
+                for index, ds in enumerate(actual_ds):
+                    if is_theta_dupe[index] and is_zeta_dupe[index]:
+                        # the grid has 4 of these nodes
+                        np.testing.assert_allclose(ds, desired_ds / 4)
+                    elif is_theta_dupe[index] or is_zeta_dupe[index]:
+                        # the grid has 2 of these nodes
+                        np.testing.assert_allclose(ds, desired_ds / 2)
+                    else:
+                        # unique node
+                        np.testing.assert_allclose(ds, desired_ds)
+
+            # rho surface
+            test_surface(
+                grid.spacing[:, 1:].prod(axis=1),
+                (2 * np.pi / ntheta) * (2 * np.pi / nzeta),
+            )
+            # theta surface
+            test_surface(
+                grid.spacing[:, [0, 2]].prod(axis=1),
+                (1 / nrho) * (2 * np.pi / nzeta),
+            )
+            # zeta surface
+            test_surface(
+                grid.spacing[:, :2].prod(axis=1),
+                (1 / nrho) * (2 * np.pi / ntheta),
+            )
+
+        test(
+            LinearGrid(
+                rho=nrho,
+                theta=ntheta + endpoint,
+                zeta=nzeta + endpoint,
+                NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
+            )
+        )
+        # The test below might fail for theta and zeta surfaces only if nrho > 1.
+        # This is unrelated to how duplicate node spacing is handled.
+        # The cause is because grid construction does not always
+        # compute drho as constant (even when the rho nodes are linearly spaced),
+        # and this test assumes drho to be a constant for grids without duplicates.
+        test(
+            LinearGrid(
+                rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
+                theta=np.linspace(0, 2 * np.pi, ntheta + endpoint, endpoint=endpoint),
+                zeta=np.linspace(
+                    0, 2 * np.pi / NFP, nzeta + endpoint, endpoint=endpoint
+                ),
+                NFP=NFP,
+                axis=axis,
+                endpoint=endpoint,
+            )
+        )
 
     @pytest.mark.unit
     def test_concentric_grid(self):
@@ -223,7 +348,7 @@ class TestGrid:
 
         eq = Equilibrium(**inputs)
         grid = QuadratureGrid(L=eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
-        g = eq.compute("sqrt(g)", grid)
+        g = eq.compute("sqrt(g)", grid=grid)
         vol_quad = np.sum(np.abs(g["sqrt(g)"]) * grid.weights)
 
         np.testing.assert_allclose(vol, vol_quad)

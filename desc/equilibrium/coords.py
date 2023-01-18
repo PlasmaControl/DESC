@@ -6,7 +6,8 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jit, jnp, put, while_loop
-from desc.compute import compute_jacobian, data_index
+from desc.compute import compute as compute_fun
+from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Index
@@ -187,8 +188,8 @@ def compute_flux_coords(
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-    Does so by checking coordianate jacobian (sqrt(g)) sign.
-    If coordinate jacobian switches sign somewhere in the volume, this
+    Does so by checking coordianate Jacobian (sqrt(g)) sign.
+    If coordinate Jacobian switches sign somewhere in the volume, this
     indicates that it is zero at some point, meaning surfaces are touching and
     the equilibrium is not nested.
 
@@ -200,7 +201,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     eq : Equilibrium
         Equilibrium to use
     grid  :  Grid, optional
-        Grid on which to evaluate the coordinate jacobian and check for the sign.
+        Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
     R_lmn, Z_lmn : ndarray, optional
         spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
@@ -220,13 +221,15 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    R_transform = Transform(grid, eq.R_basis, derivs=data_index["sqrt(g)"]["R_derivs"])
-    Z_transform = Transform(grid, eq.Z_basis, derivs=data_index["sqrt(g)"]["R_derivs"])
-    data = compute_jacobian(
-        R_lmn,
-        Z_lmn,
-        R_transform,
-        Z_transform,
+    transforms = get_transforms("sqrt(g)", eq=eq, grid=grid)
+    data = compute_fun(
+        "sqrt(g)",
+        params={
+            "R_lmn": R_lmn,
+            "Z_lmn": Z_lmn,
+        },
+        transforms=transforms,
+        profiles={},  # no profiles needed
     )
 
     nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
@@ -309,15 +312,15 @@ def to_sfl(
     grid = ConcentricGrid(L_grid, M_grid, N_grid, node_pattern="ocs")
     bdry_grid = LinearGrid(M=M, N=N, rho=1.0)
 
-    toroidal_coords = eq.compute("R", grid)
+    toroidal_coords = eq.compute(["R", "Z", "lambda"], grid=grid)
     theta = grid.nodes[:, 1]
-    vartheta = theta + eq.compute("lambda", grid)["lambda"]
+    vartheta = theta + toroidal_coords["lambda"]
     sfl_grid = grid
     sfl_grid.nodes[:, 1] = vartheta
 
-    bdry_coords = eq.compute("R", bdry_grid)
+    bdry_coords = eq.compute(["R", "Z", "lambda"], grid=bdry_grid)
     bdry_theta = bdry_grid.nodes[:, 1]
-    bdry_vartheta = bdry_theta + eq.compute("lambda", bdry_grid)["lambda"]
+    bdry_vartheta = bdry_theta + bdry_coords["lambda"]
     bdry_sfl_grid = bdry_grid
     bdry_sfl_grid.nodes[:, 1] = bdry_vartheta
 

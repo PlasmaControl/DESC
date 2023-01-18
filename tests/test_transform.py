@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+import desc.examples
 from desc.basis import (
     DoubleFourierSeries,
     FourierSeries,
@@ -10,6 +11,7 @@ from desc.basis import (
     PowerSeries,
     ZernikePolynomial,
 )
+from desc.compute import get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
@@ -532,3 +534,36 @@ class TestTransform:
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_empty_grid(self):
+        """Make sure we can build transforms with empty grids."""
+        grid = Grid(nodes=np.empty((0, 3)))
+        basis = FourierZernikeBasis(6, 0, 0)
+        _ = Transform(grid, basis)
+
+        basis = FourierZernikeBasis(6, 6, 6)
+        _ = Transform(grid, basis)
+
+    @pytest.mark.unit
+    def test_Z_projection(self):
+        """Make sure we always have the 0,0,0 derivative for projections."""
+        eq = desc.examples.get("DSHAPE")
+        data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)", "F_helical", "|e^helical|"]
+        grid = ConcentricGrid(
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+            node_pattern=eq.node_pattern,
+        )
+        tr = get_transforms(data_keys, eq, grid)
+        f = np.ones(grid.num_nodes)
+
+        assert tr["Z"].matrices["direct1"][0][0][0].shape == (
+            grid.num_nodes,
+            eq.Z_basis.num_modes,
+        )
+        _ = tr["Z"].project(f)

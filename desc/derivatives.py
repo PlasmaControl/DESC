@@ -111,10 +111,10 @@ class AutoDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
-        ``'hess'`` (hessian of a scalar function),
-        or ``'jvp'`` (jacobian vector product)
+        ``'hess'`` (Hessian of a scalar function),
+        or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
 
     Raises
@@ -167,7 +167,7 @@ class AutoDiffDerivative(_Derivative):
         Returns
         -------
         jvp : array-like
-            jacobian times vectors v, summed over different argnums
+            Jacobian times vectors v, summed over different argnums
 
         """
         tangents = list(nested_zeros_like(args))
@@ -322,10 +322,10 @@ class FiniteDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
-        ``'hess'`` (hessian of a scalar function),
-        or ``'jvp'`` (jacobian vector product)
+        ``'hess'`` (Hessian of a scalar function),
+        or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
     rel_step : float, optional
         Relative step size: dx = max(1, abs(x))*rel_step
@@ -341,7 +341,7 @@ class FiniteDiffDerivative(_Derivative):
         self._set_mode(mode)
 
     def _compute_hessian(self, *args):
-        """Compute the hessian matrix using 2nd order centered finite differences.
+        """Compute the Hessian matrix using 2nd order centered finite differences.
 
         Parameters
         ----------
@@ -384,7 +384,7 @@ class FiniteDiffDerivative(_Derivative):
         return hess
 
     def _compute_grad_or_jac(self, *args):
-        """Compute the gradient or jacobian matrix (ie, first derivative).
+        """Compute the gradient or Jacobian matrix (ie, first derivative).
 
         Parameters
         ----------
@@ -442,7 +442,7 @@ class FiniteDiffDerivative(_Derivative):
         Returns
         -------
         jvp : array-like
-            jacobian times vectors v, summed over different argnums
+            Jacobian times vectors v, summed over different argnums
 
         """
         rel_step = kwargs.get("rel_step", 1e-3)

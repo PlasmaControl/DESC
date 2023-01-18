@@ -110,6 +110,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.CurrentDensity
+    desc.objectives.Elongation
     desc.objectives.Energy
     desc.objectives.FixBoundaryR
     desc.objectives.FixBoundaryZ
@@ -130,6 +131,7 @@ Objective Functions
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
+    desc.objectives.RotationalTransform
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 
@@ -170,9 +172,12 @@ Plotting
     desc.plotting.plot_basis
     desc.plotting.plot_boozer_modes
     desc.plotting.plot_boozer_surface
+    desc.plotting.plot_boundaries
     desc.plotting.plot_boundary
     desc.plotting.plot_coefficients
+    desc.plotting.plot_coils
     desc.plotting.plot_comparison
+    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo

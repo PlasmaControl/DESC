@@ -10,6 +10,7 @@ from scipy import integrate, interpolate, optimize
 
 from desc.backend import sign
 from desc.basis import DoubleFourierSeries
+from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
@@ -159,6 +160,8 @@ class VMECIO:
         m, n, L_mn = ptolemy_identity_fwd(xm, xn, s=lmns, c=lmnc)
         eq.L_lmn = fourier_to_zernike(m, n, L_mn, eq.L_basis)
 
+        eq = ensure_positive_jacobian(eq)
+
         # apply boundary conditions
         constraints = (
             FixBoundaryR(fixed_boundary=True),
@@ -171,26 +174,6 @@ class VMECIO:
         args = objective.unpack_state(recover(project(objective.x(eq))))
         for key, value in args.items():
             setattr(eq, key, value)
-
-        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
-        if signgs < 0:
-            # vmec always outputs negative jacobian - flip theta and iota
-            rone = np.ones_like(eq.R_lmn)
-            rone[eq.R_basis.modes[:, 1] < 0] *= -1
-            eq.R_lmn *= rone
-
-            zone = np.ones_like(eq.Z_lmn)
-            zone[eq.Z_basis.modes[:, 1] < 0] *= -1
-            eq.Z_lmn *= zone
-
-            lone = np.ones_like(eq.L_lmn)
-            lone[eq.L_basis.modes[:, 1] >= 0] *= -1
-            eq.L_lmn *= lone
-
-            if eq.iota is not None:
-                eq.i_l *= -1
-        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
-        assert signgs == 1
 
         return eq
 
@@ -224,8 +207,6 @@ class VMECIO:
             see lines 300+ for full list of included variables
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
-
-        signgs = sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -350,7 +331,9 @@ class VMECIO:
 
         signgs = file.createVariable("signgs", np.int32)
         signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = -sign(eq.compute("sqrt(g)", Grid(np.array([[1, 0, 0]])))["sqrt(g)"])
+        signgs[:] = -sign(
+            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
+        )
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
@@ -428,7 +411,7 @@ class VMECIO:
         else:
             # value closest to axis will be nan
             grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
-            iotaf[:] = signgs[:] * compress(grid, eq.compute("iota", grid)["iota"])
+            iotaf[:] = signgs[:] * compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
@@ -437,7 +420,9 @@ class VMECIO:
             iotas[1:] = signgs[:] * eq.iota(r_half)
         else:
             grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
-            iotas[1:] = signgs[:] * compress(grid, eq.compute("iota", grid)["iota"])
+            iotas[1:] = signgs[:] * compress(
+                grid, eq.compute("iota", grid=grid)["iota"]
+            )
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -487,7 +472,7 @@ class VMECIO:
         volume_p[:] = eq.compute("V")["V"]
 
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute("D_Mercier", grid=grid)
+        data = eq.compute(["D_Mercier", "I", "G"], grid=grid)
 
         # Boozer currents
         buco = file.createVariable("buco", np.float64, ("radius",))
@@ -628,7 +613,7 @@ class VMECIO:
         # derived quantities (approximate conversion)
 
         grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP)
-        coords = eq.compute("R", grid)
+        coords = eq.compute(["R", "Z"], grid=grid)
         sin_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="sin")
         cos_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym="cos")
         full_basis = DoubleFourierSeries(M=M_nyq, N=N_nyq, NFP=NFP, sym=None)
@@ -661,12 +646,13 @@ class VMECIO:
 
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
-        data_half_grid = eq.compute("|B|", half_grid)
-        data_half_grid = eq.compute("J", half_grid, data=data_half_grid)
+        data_half_grid = eq.compute(
+            ["J", "|B|", "B_rho", "B_theta", "B_zeta"], grid=half_grid
+        )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute("J", full_grid)
+        data_full_grid = eq.compute(["J", "B_rho", "B_theta", "B_zeta"], grid=full_grid)
 
         # Jacobian
         timer.start("Jacobian")
@@ -1355,7 +1341,7 @@ class VMECIO:
         return out.x
 
     @classmethod
-    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
         """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC.
 
         Parameters
@@ -1368,6 +1354,9 @@ class VMECIO:
             number of rho contours
         Nt : int, optional
             number of vartheta contours
+        Nz : int, optional
+            Number of zeta planes to compare. If None, use 1 plane for axisymmetric
+            cases or 6 for non-axisymmetric.
 
         Returns
         -------
@@ -1379,9 +1368,9 @@ class VMECIO:
         if isinstance(vmec_data, (str, os.PathLike)):
             vmec_data = cls.read_vmec_output(vmec_data)
 
-        if equil.N == 0:
+        if Nz is None and equil.N == 0:
             Nz = 1
-        else:
+        elif Nz is None:
             Nz = 6
 
         num_theta = kwargs.get("num_theta", 180)
@@ -1408,8 +1397,8 @@ class VMECIO:
 
         # find theta angles corresponding to desired theta* angles
         v_grid = Grid(equil.compute_theta_coords(t_grid.nodes))
-        r_coords_desc = equil.compute("R", r_grid)
-        v_coords_desc = equil.compute("R", v_grid)
+        r_coords_desc = equil.compute(["R", "Z"], grid=r_grid)
+        v_coords_desc = equil.compute(["R", "Z"], grid=v_grid)
 
         # rho contours
         Rr_desc = r_coords_desc["R"].reshape(

@@ -8,8 +8,8 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._free_boundary import BoundaryErrorNESTOR
-from ._generic import GenericObjective, ToroidalCurrent
-from ._geometry import AspectRatio, Volume
+from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
+from ._geometry import AspectRatio, Elongation, Volume
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective

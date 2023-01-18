@@ -9,8 +9,10 @@ This module primarily tests the constructing/building/calling methods.
 import numpy as np
 import pytest
 
+from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
+from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
     Elongation,
@@ -28,6 +30,7 @@ from desc.objectives import (
 )
 from desc.objectives.objective_funs import _Objective
 from desc.profiles import PowerSeriesProfile
+from desc.vmec_utils import ptolemy_linear_transform
 
 
 class TestObjectiveFunction:
@@ -140,8 +143,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
-    def test_qs_boozer(self):
-        """Test calculation of boozer qs metric."""
+    def test_qa_boozer(self):
+        """Test calculation of Boozer QA metric."""
 
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
@@ -152,8 +155,45 @@ class TestObjectiveFunction:
         test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_qh_boozer(self):
+        """Test calculation of Boozer QH metric."""
+        eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
+        helicity = (1, -eq.NFP)
+        M_booz = eq.M
+        N_booz = eq.N
+        grid = LinearGrid(M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+
+        # objective function returns amplitudes of non-symmetric modes
+        obj = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid,
+            normalize=False,
+            eq=eq,
+        )
+        f = obj.compute(*obj.xs(eq))
+        idx_f = np.argsort(np.abs(f))
+
+        # compute all amplitudes in the Boozer spectrum
+        transforms = get_transforms(
+            "|B|_mn",
+            eq=eq,
+            grid=grid,
+            M_booz=M_booz,
+            N_booz=N_booz,
+        )
+        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+        data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
+        B_mn = matrix @ data["|B|_mn"]
+        idx_B = np.argsort(np.abs(B_mn))
+
+        # check that objective returns the lowest amplitude modes, since example is QH
+        np.testing.assert_allclose(f[idx_f], B_mn[idx_B[: obj.dim_f]])
+
+    @pytest.mark.unit
     def test_qs_twoterm(self):
-        """Test calculation of two term qs metric."""
+        """Test calculation of two term QS metric."""
 
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
@@ -164,8 +204,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
-    def test_qs_tp(self):
-        """Test calculation of triple product qs metric."""
+    def test_qs_tripleproduct(self):
+        """Test calculation of triple product QS metric."""
 
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
@@ -174,6 +214,21 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_qs_boozer_grids(self):
+        """Test grid compatability with QS objectives."""
+        eq = get("QAS")
+
+        # symmetric grid
+        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
+        with pytest.raises(AssertionError):
+            _ = QuasisymmetryBoozer(eq=eq, grid=grid)
+
+        # multiple flux surfaces
+        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
+        with pytest.raises(AssertionError):
+            _ = QuasisymmetryBoozer(eq=eq, grid=grid)
 
     @pytest.mark.unit
     def test_mercier_stability(self):

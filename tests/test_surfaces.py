@@ -220,6 +220,7 @@ class TestZernikeRZToroidalSection:
         np.testing.assert_allclose(k2, 0)
 
 
+@pytest.mark.unit
 def test_surface_orientation():
     """Tests for computing the orientation of a surface in weird edge cases."""
     # this has the axis outside the surface, and negative orientation
@@ -228,7 +229,7 @@ def test_surface_orientation():
     Zb = np.array([0.0, -0.16, 1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == -1
+    assert surf._compute_orientation() == -1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1
 
@@ -238,7 +239,7 @@ def test_surface_orientation():
     Zb = np.array([0.0, 0.16, -1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == 1
+    assert surf._compute_orientation() == 1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
@@ -248,7 +249,7 @@ def test_surface_orientation():
     Zb = np.array([0.0, -0.16, 1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == 1
+    assert surf._compute_orientation() == 1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == 1
 
@@ -258,6 +259,6 @@ def test_surface_orientation():
     Zb = np.array([0.0, 0.16, -1.47])
     Z_modes = np.array([[-3, 0], [-2, 0], [-1, 0]])
     surf = FourierRZToroidalSurface(Rb, Zb, R_modes, Z_modes, check_orientation=False)
-    assert surf._compute_orientation == -1
+    assert surf._compute_orientation() == -1
     eq = Equilibrium(M=surf.M, N=surf.N, surface=surf)
     assert np.sign(eq.compute("sqrt(g)")["sqrt(g)"].mean()) == -1

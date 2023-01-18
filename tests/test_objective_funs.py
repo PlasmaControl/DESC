@@ -297,33 +297,37 @@ def test_rejit():
             super().build(eq, use_jit, verbose)
 
         def compute(self, R_lmn):
-            return self.y * R_lmn**3
+            return 200 + self.target * self.weight - self.y * R_lmn**3
 
-    objective = DummyObjective(3.0)
+    obj = DummyObjective(3)
     eq = Equilibrium()
-    objective.build(eq)
-    assert objective.compute(4.0) == 192.0
-    objective.target = 1.0
-    objective.weight = 2.0
-    assert objective.compute(4.0) == 192.0
-    objective.jit()
-    assert objective.compute(4.0) == 194.0
+    obj.build(eq)
+    assert obj.compute(4) == 8
+    assert obj.compute_scaled(4) == 8
+    obj.target = 1
+    obj.weight = 2
+    assert obj.compute(4) == 10  # compute method is not JIT compiled
+    assert obj.compute_scaled(4) == 8  # only compute_scaled is JIT compiled
+    obj.jit()
+    assert obj.compute(4) == 10
+    assert obj.compute_scaled(4) == 18
 
-    objective2 = ObjectiveFunction(objective)
-    objective2.build(eq)
-    x = objective2.x(eq)
+    objFun = ObjectiveFunction(obj)
+    objFun.build(eq)
+    x = objFun.x(eq)
 
-    z = objective2.compute(x)
-    J = objective2.jac(x)
-    assert z[0] == 3002.0
-    objective2.objectives[0].target = 3.0
-    objective2.objectives[0].weight = 4.0
-    objective2.objectives[0].y = 2.0
-    assert objective2.compute(x)[0] == 3002.0
-    np.testing.assert_allclose(objective2.jac(x), J)
-    objective2.jit()
-    assert objective2.compute(x)[0] == 2012.0
-    np.testing.assert_allclose(objective2.jac(x), J / 3 * 2)
+    f = objFun.compute(x)
+    J = objFun.jac(x)
+    np.testing.assert_allclose(f, [-5598, 402, 396])
+    np.testing.assert_allclose(J, np.diag([-1800, 0, -18]))
+    objFun.objectives[0].target = 3
+    objFun.objectives[0].weight = 4
+    objFun.objectives[0].y = 2
+    np.testing.assert_allclose(objFun.compute(x), f)
+    np.testing.assert_allclose(objFun.jac(x), J)
+    objFun.jit()
+    np.testing.assert_allclose(objFun.compute(x), [-7164, 836, 828])
+    np.testing.assert_allclose(objFun.jac(x), J * 4 / 3)
 
 
 @pytest.mark.unit

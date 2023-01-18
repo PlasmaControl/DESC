@@ -532,6 +532,7 @@ def test_kinetic_errors():
     with pytest.raises(ValueError):
         eqp.Zeff_l = params
 
+    params = np.ones((3, 4))
     profile = PowerSeriesProfile()
     eqk.pressure = profile
     eqp.electron_temperature = profile

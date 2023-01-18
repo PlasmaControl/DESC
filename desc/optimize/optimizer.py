@@ -526,9 +526,7 @@ def _get_default_tols(
         stoptol["maxiter"] = maxiter
     stoptol.setdefault(
         "xtol",
-        options.pop(
-            "xtol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-4
-        ),
+        options.pop("xtol", 1e-6),
     )
     stoptol.setdefault(
         "ftol",

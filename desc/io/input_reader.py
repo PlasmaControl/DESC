@@ -640,7 +640,7 @@ class InputReader:
         return inputs_list
 
     @staticmethod
-    def write_desc_input(filename, inputs, header=""):
+    def write_desc_input(filename, inputs, header=""):  # noqa: 16 fxn too complex
         """Generate a DESC input file from a dictionary of parameters.
 
         Parameters
@@ -691,9 +691,12 @@ class InputReader:
 
         f.write("\n# solver tolerances\n")
         for key in ["ftol", "xtol", "gtol", "nfev"]:
+            at_least_one_is_none = False
             for inp in inputs:
                 if inp[key] is None:
-                    break  # don't write if an input tolerance is None
+                    at_least_one_is_none = True
+            if at_least_one_is_none:
+                break  # don't write if an input tolerance is None
 
             f.write(
                 key

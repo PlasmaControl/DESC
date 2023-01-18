@@ -125,8 +125,8 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=True, order=1):
     """
 
     constraints = (
-        FixAxisR(fixed_boundary=True),
-        FixAxisZ(fixed_boundary=True),
+        FixAxisR(),
+        FixAxisZ(),
         FixLambdaZero(),
         # lambda=0 as the mapping from NAE->DESC assumes theta is boozer angle
         FixPsi(),

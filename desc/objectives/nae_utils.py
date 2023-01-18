@@ -205,7 +205,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
     Rconstraints += Rcons1 + Rcons2
     Zconstraints += Zcons1 + Zcons2
 
-    return Rconstraints, Zconstraints
+    return Rconstraints + Zconstraints
 
 
 """ Order (rho^2)"""
@@ -913,4 +913,4 @@ def make_RZ_cons_2nd_order(qsc, desc_eq):
         qsc, desc_eq, coeffs, bases
     )
 
-    return Rconstraints, Zconstraints
+    return Rconstraints + Zconstraints

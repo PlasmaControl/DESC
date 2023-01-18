@@ -470,7 +470,11 @@ def test_correct_indexing_passed_modes_axis():
         FixAxisZ(modes=Z_modes, normalize=False),
         FixModeR(modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
         FixModeZ(modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
-        FixSumModesR(modes=np.array([[3, 3, 3], [4, 4, 4]]), normalize=False),
+        FixSumModesR(
+            modes=np.array([[3, 3, 3], [4, 4, 4]]),
+            normalize=False,
+            sum_weights=np.ones(2),
+        ),
         FixSumModesZ(modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
     )
     for con in constraints:

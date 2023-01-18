@@ -237,6 +237,7 @@ Name,Label,Units,Description,Module
 ``R0``,:math:`R_{0}`,meters,Average major radius,``desc.compute._geometry``
 ``a``,:math:`a`,meters,Average minor radius,``desc.compute._geometry``
 ``R0/a``,:math:`R_{0} / a`,None,Aspect ratio,``desc.compute._geometry``
+``a_major/a_minor``,:math:`a_{major} / a_{minor}`,None,Maximum elongation,``desc.compute._geometry``
 ``n_rho``,:math:`\hat{\mathbf{n}}_{\rho}`,None,Unit normal vector to constant rho surface,``desc.compute._geometry``
 ``L_sff``,:math:`L_{sff}`,meters,L coefficient of second fundamental form,``desc.compute._geometry``
 ``M_sff``,:math:`M_{sff}`,meters,M coefficient of second fundamental form,``desc.compute._geometry``
@@ -316,7 +317,7 @@ Name,Label,Units,Description,Module
 ``sqrt(g)_B``,:math:`\sqrt{g}_{B}`,None,Jacobian determinant of Boozer coordinates,``desc.compute._qs``
 ``|B|_mn``,:math:`B_{mn}^{Boozer}`,Tesla,Boozer harmonics of magnetic field,``desc.compute._qs``
 ``B modes``,:math:`Boozer modes`,None,Boozer harmonics,``desc.compute._qs``
-``f_C``,:math:`(\mathbf{B} \times \nabla \psi) \cdot \nabla B - (M G + N I) / (M \iota - N) \mathbf{B} \cdot \nabla B`,Tesla cubed,Two-term quasisymmetry metric,``desc.compute._qs``
+``f_C``,:math:`(M \iota - N) (\mathbf{B} \times \nabla \psi) \cdot \nabla B - (M G + N I) \mathbf{B} \cdot \nabla B`,Tesla cubed,Two-term quasisymmetry metric,``desc.compute._qs``
 ``f_T``,:math:`\nabla \psi \times \nabla B \cdot \nabla (\mathbf{B} \cdot \nabla B)`,Tesla quarted / square meters,Triple product quasisymmetry metric,``desc.compute._qs``
 ``D_shear``,:math:`D_{shear}`,Inverse Webers squared,Mercier stability criterion magnetic shear term,``desc.compute._stability``
 ``D_current``,:math:`D_{current}`,Inverse Webers squared,Mercier stability criterion toroidal current term,``desc.compute._stability``

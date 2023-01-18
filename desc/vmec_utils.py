@@ -47,7 +47,7 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
     N = int(np.max(np.abs(n_0)))
 
     mn_1 = np.array(
-        [[m - M, n - N] for m in range(2 * M + 1) for n in range(2 * N + 1)]
+        [[m - M, n - N] for n in range(2 * N + 1) for m in range(2 * M + 1)]
     )
     m_1 = mn_1[:, 0]
     n_1 = mn_1[:, 1]
@@ -155,6 +155,81 @@ def ptolemy_identity_rev(m_1, n_1, x):
                 c[:, idx_neg[0]] += x[:, k] / (2**p)
 
     return m_0, n_0, s, c
+
+
+def ptolemy_linear_transform(basis, helicity=None):
+    """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
+
+    Parameters
+    ----------
+    basis : DoubleFourierBasis
+        Basis of the double-Fourier series.
+    helicity : tuple, optional
+        Type of quasi-symmetry, specified as (M, N).
+
+    Returns
+    -------
+    matrix : ndarray
+        Transform matrix such that M*a=b, where a are the double-Fourier coefficients
+        and b are the double-angle coefficients.
+    modes : ndarray, shape(num_modes,3)
+        Modes of the double-angle basis. First column: +1/-1 for cos/sin term.
+        Second column: poloidal mode number m (range 0 to basis.M).
+        Third column: toroidal mode number n (range -basis.N to basis.N).
+    idx : ndarray
+        The indices of the rows of `modes` that correspond to non-quasi-symmetric modes.
+        Only returned if helicity is specified.
+
+    """
+    mn = np.array(
+        [[m, n - basis.N] for m in range(basis.M + 1) for n in range(2 * basis.N + 1)]
+    )[basis.N + 1 :, :]
+    matrix = np.zeros((2 * mn.shape[0] + 1,))
+    matrix[mn.shape[0]] = 1  # cos(0*t-0*z) mode
+    modes = np.array([[1, 0, 0]])
+
+    # build matrix from forward Ptolemy identity
+    for i, (m, n) in enumerate(mn):
+        temp = np.zeros((mn.shape[0],))
+        temp[i] = 1
+        mm, nn, row = ptolemy_identity_fwd(
+            mn[:, 0], mn[:, 1], temp, np.zeros_like(temp)
+        )
+        matrix = np.vstack((matrix, row))
+        modes = np.vstack((modes, [-1, m, n]))
+        mm, nn, row = ptolemy_identity_fwd(
+            mn[:, 0], mn[:, 1], np.zeros_like(temp), temp
+        )
+        matrix = np.vstack((matrix, row))
+        modes = np.vstack((modes, [1, m, n]))
+    matrix = (matrix.T / np.sum(np.abs(matrix), axis=1)).T
+
+    # delete non-stellarator-symmetric modes
+    if basis.sym == "cos":
+        idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
+        matrix = np.delete(matrix[::2, :], idx, axis=1)
+        modes = modes[::2, :]
+    elif basis.sym == "sin":
+        idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
+        matrix = np.delete(matrix[1::2, :], idx, axis=1)
+        modes = modes[1::2, :]
+
+    # indices of non-quasi-symmetric modes
+    if helicity is not None:
+        assert isinstance(helicity, tuple) and len(helicity) == 2
+        M = np.abs(helicity[0])
+        N = np.abs(helicity[1]) / basis.NFP * sign(np.prod(helicity))
+        idx = np.ones((modes.shape[0],), bool)
+        idx[0] = False  # m=0,n=0 mode
+        if N == 0:
+            idx_MN = np.nonzero(modes[:, 2] == 0)[0]
+        else:
+            idx_MN = np.nonzero(np.logical_and(modes[:, 1] == M, modes[:, 2] == N))[0]
+        idx[idx_MN] = False
+
+        return matrix, modes, idx
+
+    return matrix, modes
 
 
 def fourier_to_zernike(m, n, x_mn, basis):

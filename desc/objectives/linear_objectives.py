@@ -690,7 +690,7 @@ class FixPressure(_FixProfile):
         Parameters
         ----------
         p_l : ndarray
-            parameters of the pressure profile.
+            parameters of the pressure profile (Pa).
 
         Returns
         -------
@@ -905,7 +905,7 @@ class FixCurrent(_FixProfile):
         Parameters
         ----------
         c_l : ndarray
-            parameters of the current profile.
+            parameters of the current profile (A).
 
         Returns
         -------
@@ -1013,7 +1013,7 @@ class FixElectronTemperature(_FixProfile):
         Parameters
         ----------
         Te_l : ndarray
-            parameters of the electron temperature profile.
+            parameters of the electron temperature profile (eV).
 
         Returns
         -------
@@ -1120,7 +1120,7 @@ class FixElectronDensity(_FixProfile):
         Parameters
         ----------
         ne_l : ndarray
-            parameters of the electron density profile.
+            parameters of the electron density profile (1/m^3).
 
         Returns
         -------
@@ -1228,7 +1228,7 @@ class FixIonTemperature(_FixProfile):
         Parameters
         ----------
         Ti_l : ndarray
-            parameters of the ion temperature profile.
+            parameters of the ion temperature profile (eV).
 
         Returns
         -------

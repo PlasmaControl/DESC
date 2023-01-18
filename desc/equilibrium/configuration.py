@@ -334,7 +334,7 @@ class _Configuration(IOAble, ABC):
         self._current = None
         self._electron_temperature = None
         self._electron_density = None
-        self.ion_temperature = None
+        self._ion_temperature = None
         self._atomic_number = None
 
         if current is not None and iota is not None:

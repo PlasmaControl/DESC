@@ -1173,7 +1173,7 @@ class TestBootstrapObjectives:
         B0 = 5.0  # Mean |B|
         LM_resolution = 8
 
-        initial_iota = 0.61
+        initial_iota = -0.61
         num_iota_points = 21
         iota = SplineProfile(np.full(num_iota_points, initial_iota))
 
@@ -1184,7 +1184,7 @@ class TestBootstrapObjectives:
         surface = FourierRZToroidalSurface(
             R_lmn=np.array([Rmajor, aminor]),
             modes_R=[[0, 0], [1, 0]],
-            Z_lmn=np.array([aminor]),
+            Z_lmn=np.array([-aminor]),
             modes_Z=[[-1, 0]],
             NFP=NFP,
         )
@@ -1303,7 +1303,7 @@ class TestBootstrapObjectives:
         surface = FourierRZToroidalSurface(
             R_lmn=np.array([Rmajor, aminor]),
             modes_R=[[0, 0], [1, 0]],
-            Z_lmn=np.array([aminor]),
+            Z_lmn=np.array([-aminor]),
             modes_Z=[[-1, 0]],
             NFP=NFP,
         )

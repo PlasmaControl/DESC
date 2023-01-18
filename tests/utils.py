@@ -9,20 +9,18 @@ from desc.grid import Grid, LinearGrid
 from desc.vmec import VMECIO
 
 
-def compute_coords(equil, check_all_zeta=False):
+def compute_coords(equil, Nr=10, Nt=8, Nz=None):
     """Computes coordinate values from a given equilibrium."""
-    if equil.N == 0 and not check_all_zeta:
+    if Nz is None and equil.N == 0:
         Nz = 1
-    else:
+    elif Nz is None:
         Nz = 6
 
-    Nr = 10
-    Nt = 8
     num_theta = 1000
     num_rho = 1000
 
     # flux surfaces to plot
-    rr = np.linspace(0, 1, Nr)
+    rr = np.linspace(1, 0, Nr, endpoint=False)[::-1]
     rt = np.linspace(0, 2 * np.pi, num_theta)
     rz = np.linspace(0, 2 * np.pi / equil.NFP, Nz, endpoint=False)
     r_grid = LinearGrid(rho=rr, theta=rt, zeta=rz, NFP=equil.NFP)
@@ -132,7 +130,7 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
     return area_rho, area_theta
 
 
-def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
+def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
     """Compute average normalized area difference between VMEC and DESC equilibria.
 
     Parameters
@@ -145,6 +143,9 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
         number of radial surfaces to average over
     Nt : int, optional
         number of vartheta contours to compare
+    Nz : int, optional
+        Number of zeta planes to compare. If None, use 1 plane for axisymmetric cases
+        or 6 for non-axisymmetric.
 
     Returns
     -------
@@ -161,7 +162,8 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     if isinstance(vmec_data, (str, os.PathLike)):
         vmec_data = VMECIO.read_vmec_output(vmec_data)
 
-    coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, **kwargs)
+    signgs = vmec_data["signgs"]
+    coords = VMECIO.compute_coord_surfaces(equil, vmec_data, Nr, Nt, Nz, **kwargs)
 
     Rr1 = coords["Rr_desc"]
     Zr1 = coords["Zr_desc"]
@@ -169,13 +171,14 @@ def area_difference_vmec(equil, vmec_data, Nr=10, Nt=8, **kwargs):
     Zv1 = coords["Zv_desc"]
     Rr2 = coords["Rr_vmec"]
     Zr2 = coords["Zr_vmec"]
-    Rv2 = coords["Rv_vmec"]
-    Zv2 = coords["Zv_vmec"]
+    # need to reverse the order of these due to different sign conventions for theta
+    Rv2 = coords["Rv_vmec"][::signgs]
+    Zv2 = coords["Zv_vmec"][::signgs]
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta
 
 
-def area_difference_desc(eq1, eq2, Nr=10, Nt=8, **kwargs):
+def area_difference_desc(eq1, eq2, Nr=10, Nt=8, Nz=None):
     """Compute average normalized area difference between two DESC equilibria.
 
     Parameters
@@ -183,9 +186,12 @@ def area_difference_desc(eq1, eq2, Nr=10, Nt=8, **kwargs):
     eq1, eq2 : Equilibrium
         desc equilibria to compare
     Nr : int, optional
-        number of radial surfaces to average over
+        Number of radial surfaces to average over
     Nt : int, optional
-        number of vartheta contours to compare
+        Number of vartheta contours to compare
+    Nz : int, optional
+        Number of zeta planes to compare. If None, use 1 plane for axisymmetric cases
+        or 6 for non-axisymmetric.
 
     Returns
     -------
@@ -198,8 +204,8 @@ def area_difference_desc(eq1, eq2, Nr=10, Nt=8, **kwargs):
         perimeter squared
 
     """
-    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1)
-    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2)
+    Rr1, Zr1, Rv1, Zv1 = compute_coords(eq1, Nr=Nr, Nt=Nt, Nz=Nz)
+    Rr2, Zr2, Rv2, Zv2 = compute_coords(eq2, Nr=Nr, Nt=Nt, Nz=Nz)
 
     area_rho, area_theta = area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2)
     return area_rho, area_theta

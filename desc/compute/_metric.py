@@ -153,7 +153,7 @@ def _sqrtg_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_rr",
-    label="\\partial_{\\rho \\rho} \\sqrt{g}",
+    label="\\partial_{\\rho\\rho} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of flux coordinate system, second derivative wrt "
@@ -189,7 +189,7 @@ def _sqrtg_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_tt",
-    label="\\partial_{\\theta \\theta} \\sqrt{g}",
+    label="\\partial_{\\theta\\theta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of flux coordinate system, second derivative wrt "
@@ -225,7 +225,7 @@ def _sqrtg_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="sqrt(g)_zz",
-    label="\\partial_{\\zeta \\zeta} \\sqrt{g}",
+    label="\\partial_{\\zeta\\zeta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of flux coordinate system, second derivative wrt "
@@ -260,8 +260,50 @@ def _sqrtg_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_rt",
+    label="\\partial_{\\rho\\theta} \\sqrt{g}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "radial coordinate and poloidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_rho_t",
+        "e_theta_t",
+        "e_zeta_t",
+        "e_rho_rt",
+        "e_theta_rt",
+        "e_zeta_rt",
+    ],
+)
+def _sqrtg_rt(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_rt"] = (
+        dot(data["e_rho_rt"], cross(data["e_theta"], data["e_zeta"]))
+        + dot(data["e_rho_r"], cross(data["e_theta_t"], data["e_zeta"]))
+        + dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_t"]))
+        + dot(data["e_rho_t"], cross(data["e_theta_r"], data["e_zeta"]))
+        + dot(data["e_rho"], cross(data["e_theta_rt"], data["e_zeta"]))
+        + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_t"]))
+        + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_r"]))
+        + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_r"]))
+        + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rt"]))
+    )
+    return data
+
+
+@register_compute_fun(
     name="sqrt(g)_tz",
-    label="\\partial_{\\theta \\zeta} \\sqrt{g}",
+    label="\\partial_{\\theta\\zeta} \\sqrt{g}",
     units="m^{3}",
     units_long="cubic meters",
     description="Jacobian determinant of flux coordinate system, second derivative wrt "
@@ -275,12 +317,12 @@ def _sqrtg_zz(params, transforms, profiles, data, **kwargs):
         "e_rho",
         "e_theta",
         "e_zeta",
-        "e_rho_z",
-        "e_theta_z",
-        "e_zeta_z",
         "e_rho_t",
         "e_theta_t",
         "e_zeta_t",
+        "e_rho_z",
+        "e_theta_z",
+        "e_zeta_z",
         "e_rho_tz",
         "e_theta_tz",
         "e_zeta_tz",
@@ -297,6 +339,48 @@ def _sqrtg_tz(params, transforms, profiles, data, **kwargs):
         + dot(data["e_rho_t"], cross(data["e_theta"], data["e_zeta_z"]))
         + dot(data["e_rho"], cross(data["e_theta_t"], data["e_zeta_z"]))
         + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_tz"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_rz",
+    label="\\partial_{\\rho\\zeta} \\sqrt{g}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system, second derivative wrt "
+    + "radial coordinate and toroidal angle",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_rho_z",
+        "e_theta_z",
+        "e_zeta_z",
+        "e_rho_rz",
+        "e_theta_rz",
+        "e_zeta_rz",
+    ],
+)
+def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_rz"] = (
+        dot(data["e_rho_rz"], cross(data["e_theta"], data["e_zeta"]))
+        + dot(data["e_rho_r"], cross(data["e_theta_z"], data["e_zeta"]))
+        + dot(data["e_rho_r"], cross(data["e_theta"], data["e_zeta_z"]))
+        + dot(data["e_rho_z"], cross(data["e_theta_r"], data["e_zeta"]))
+        + dot(data["e_rho"], cross(data["e_theta_rz"], data["e_zeta"]))
+        + dot(data["e_rho"], cross(data["e_theta_r"], data["e_zeta_z"]))
+        + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_r"]))
+        + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_r"]))
+        + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rz"]))
     )
     return data
 
@@ -445,6 +529,51 @@ def _g_sub_tt_r(params, transforms, profiles, data, **kwargs):
 def _g_sub_tz_r(params, transforms, profiles, data, **kwargs):
     data["g_tz_r"] = dot(data["e_theta_r"], data["e_zeta"]) + dot(
         data["e_theta"], data["e_zeta_r"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g_tt_rr",
+    label="\\partial_{\\rho\\rho} g_{\\theta\\theta}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Poloidal/Poloidal element of covariant metric tensor, second "
+    + "derivative wrt rho",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_theta_r", "e_theta_rr"],
+)
+def _g_sub_tt_rr(params, transforms, profiles, data, **kwargs):
+    data["g_tt_rr"] = 2 * (
+        dot(data["e_theta_r"], data["e_theta_r"])
+        + dot(data["e_theta"], data["e_theta_rr"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="g_tz_rr",
+    label="\\partial_{\\rho\\rho} g_{\\theta\\zeta}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Poloidal/Toroidal element of covariant metric tensor, second "
+    + "derivative wrt rho",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "e_theta_rr", "e_zeta_rr"],
+)
+def _g_sub_tz_rr(params, transforms, profiles, data, **kwargs):
+    data["g_tz_rr"] = (
+        dot(data["e_theta_rr"], data["e_zeta"])
+        + 2 * dot(data["e_theta_r"], data["e_zeta_r"])
+        + dot(data["e_theta"], data["e_zeta_rr"])
     )
     return data
 

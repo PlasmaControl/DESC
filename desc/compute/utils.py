@@ -520,7 +520,7 @@ def expand(grid, x, surface_label="rho"):
         return x[grid.inverse_zeta_idx]
 
 
-def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
+def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=False):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
@@ -531,6 +531,9 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         Quantity to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
+    max_surface : bool
+        If True, only computes the surface integral on the flux surface with the
+        maximum radial coordinate (as opposed to on all flux surfaces).
 
     Returns
     -------
@@ -549,6 +552,14 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
 
     q = jnp.atleast_1d(q)
     nodes, unique_idx, _, ds, max_surface_val = _get_grid_surface(grid, surface_label)
+
+    if max_surface:
+        max_rho = grid.nodes[grid.unique_rho_idx[-1], 0]
+        idx = np.nonzero(grid.nodes[:, 0] == max_rho)[0]
+        q = q[idx]
+        nodes = nodes[idx]
+        unique_idx = (unique_idx / grid.num_rho).astype(int)
+        ds = ds[idx] / grid.spacing[idx, 0] / max_rho
 
     # Separate nodes into bins with boundaries at unique values of the surface label.
     # This groups nodes with identical surface label values.

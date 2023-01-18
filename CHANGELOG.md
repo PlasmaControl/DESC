@@ -1,6 +1,51 @@
 Changelog
 =========
 
+v0.7.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.0...v0.7.1)
+
+What's Changed
+- Allow targets for `RotationalTransform` and `ToroidalCurrent` objectives to be Profile
+  objects rather than just arrays.
+- Document how to add new compute functions and objectives.
+- Add objective for targeting elongation.
+- Fix bug in `plot_qs_error` causing the same value to be plotted for each value of rho.
+- Fix bug sometimes causing the wrong equilibrium to be returned after optimization.
+- Improve numerical stability of perturbations and optimization.
+
+
+v0.7.0
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.6.4...v0.7.0)
+
+New Features
+- Add implementation of `Surface.compute_curvature`.
+- Add `return_data` flag to plotting functions to return dictionary of plotted data.
+- Add computation of beta, average B, surface curvature, magnetic field derivatives, and others.
+  Full list at https://desc-docs.readthedocs.io/en/stable/variables.html
+- Modify `Surface` classes to always orient surfaces correctly to give the equilibrium a positive Jacobian. This means DESC will always use a right handed coordinate system in both cylindrical and flux coordinates. Previously the orientation of the flux coordinate system would depend on the boundary parameterization.
+- New utility function `desc.compat.ensure_positive_jacobian` for converting previously saved equilibria to a right handed coordinate system.
+
+Major Changes
+- Refactored backend `compute` functions to calculate dependencies recursively. This should make it much easier to add new quantities, and reduces compilation times by 50-70%
+
+Minor Changes
+- Refactor wrapping of scipy optimizers.
+- Add check for incompatible constraints in optimization.
+- Improvements to `plot_1d` to correctly plot flux surface average quantities.
+- Speed up calculation of Boozer transform.
+- Have stability objectives print their max, min and average value at end of solve.
+
+Bug Fixes
+- Fix issue where if fixing specific boundary modes, the indices used to index the target do not match up with the indices of the A matrix.
+- Fix weighting of duplicate nodes for periodic domains.
+- Ensure transforms build correctly even with empty grid.
+- Ensure transforms always have 0,0,0 derivative.
+- Change normalization for poloidal field to avoid having a 0 normalization factor.
+
 
 v0.6.4
 ------

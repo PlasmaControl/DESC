@@ -782,7 +782,7 @@ class FixAnisotropy(_FixProfile):
             self._normalization = scales["p"]
         super().build(eq, profile, use_jit, verbose)
 
-    def compute(self, d_lmn, **kwargs):
+    def compute(self, a_lmn, **kwargs):
         """Compute fixed pressure profile errors.
 
         Parameters
@@ -796,13 +796,13 @@ class FixAnisotropy(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = d_lmn[self._idx]
+        fixed_params = a_lmn[self._idx]
         return self._shift_scale(fixed_params)
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "d_lmn"
+        return "a_lmn"
 
 
 class FixIota(_FixProfile):

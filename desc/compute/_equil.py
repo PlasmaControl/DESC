@@ -376,14 +376,14 @@ def _helical_mag(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["J", "B", "grad(d)", "d", "grad(|B|^2)", "grad(p)"],
+    data=["J", "B", "grad(beta_a)", "beta_a", "grad(|B|^2)", "grad(p)"],
 )
 def _F_anisotropic(params, transforms, profiles, data, **kwargs):
     data["F_anisotropic"] = (
-        (1 - data["d"]) * cross(data["J"], data["B"]).T
-        - dot(data["B"], data["grad(d)"]) * data["B"].T
-        - data["d"] * data["grad(|B|^2)"].T / (2 * mu_0)
-        + data["grad(p)"].T
+        (1 - data["beta_a"]) * cross(data["J"], data["B"]).T
+        - dot(data["B"], data["grad(beta_a)"]) * data["B"].T / mu_0
+        - data["beta_a"] * data["grad(|B|^2)"].T / (2 * mu_0)
+        - data["grad(p)"].T
     ).T
 
     return data

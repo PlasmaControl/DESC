@@ -186,9 +186,9 @@ class ForceBalance(_Objective):
 class ForceBalanceAnisotropic(_Objective):
     """Force balance for anisotropic pressure equilibria.
 
-    F = (1-d)JxB - (B.grad(d))B - d grad(B^2/2mu0) - grad(p_perp)
+    F = (1-beta_a)JxB - 1/mu0 (B.grad(beta_a))B - beta_a grad(B^2/2mu0) - grad(p_perp)
 
-    where d is the anisotropy term: d = (p_|| - p_perp)/B^2
+    where beta_a is the anisotropy term: beta_a = mu0 (p_|| - p_perp)/B^2
 
     Parameters
     ----------
@@ -285,8 +285,8 @@ class ForceBalanceAnisotropic(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(*self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(*self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -312,8 +312,9 @@ class ForceBalanceAnisotropic(_Objective):
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
             Spectral coefficients of p(rho) -- pressure profile.
-        d_lmn : ndarray
-            Spectral coefficients of anisotropy term: d = (p_{||} - p_{perp})/B^2
+        a_lmn : ndarray
+            Spectral coefficients of anisotropy term: beta_a =
+            mu0 (p_{||} - p_{perp})/B^2
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray

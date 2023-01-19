@@ -876,13 +876,13 @@ class _Configuration(IOAble, ABC):
             )
 
     @property
-    def d_lmn(self):
+    def a_lmn(self):
         """ndarray: Coefficients of anisotropy profile."""
         return self.anisotropy.params
 
-    @d_lmn.setter
-    def d_lmn(self, d_lmn):
-        self.anisotropy.params = d_lmn
+    @a_lmn.setter
+    def a_lmn(self, a_lmn):
+        self.anisotropy.params = a_lmn
 
     @property
     def iota(self):

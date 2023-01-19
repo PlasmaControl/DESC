@@ -287,80 +287,80 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="d",
-    label="(p_{||} - p_{\\perp})/B^2",
+    name="beta_a",
+    label="\\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
     units="~",
     units_long="None",
     description="Pressure anisotropy",
     dim=1,
-    params=["d_lmn"],
+    params=["a_lmn"],
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=[],
 )
-def _d(params, transforms, profiles, data, **kwargs):
-    data["d"] = profiles["anisotropy"].compute(params["d_lmn"], dr=0)
+def _beta_a(params, transforms, profiles, data, **kwargs):
+    data["beta_a"] = profiles["anisotropy"].compute(params["a_lmn"], dr=0)
     return data
 
 
 @register_compute_fun(
-    name="d_r",
-    label="\\partial_{\\rho} (p_{||} - p_{\\perp})/B^2",
+    name="beta_a_r",
+    label="\\partial_{\\rho} \\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
     units="~",
     units_long="None",
     description="Pressure anisotropy, first radial derivative",
     dim=1,
-    params=["d_lmn"],
+    params=["a_lmn"],
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=[],
 )
-def _d_r(params, transforms, profiles, data, **kwargs):
-    data["d_r"] = profiles["anisotropy"].compute(params["d_lmn"], dr=1)
+def _beta_a_r(params, transforms, profiles, data, **kwargs):
+    data["beta_a_r"] = profiles["anisotropy"].compute(params["a_lmn"], dr=1)
     return data
 
 
 @register_compute_fun(
-    name="d_t",
-    label="\\partial_{\\theta} (p_{||} - p_{\\perp})/B^2",
+    name="beta_a_t",
+    label="\\partial_{\\theta} \\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
     units="~",
     units_long="None",
     description="Pressure anisotropy, first poloidal derivative",
     dim=1,
-    params=["d_lmn"],
+    params=["a_lmn"],
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=[],
 )
-def _d_t(params, transforms, profiles, data, **kwargs):
-    data["d_t"] = profiles["anisotropy"].compute(params["d_lmn"], dt=1)
+def _beta_a_t(params, transforms, profiles, data, **kwargs):
+    data["beta_a_t"] = profiles["anisotropy"].compute(params["a_lmn"], dt=1)
     return data
 
 
 @register_compute_fun(
-    name="d_z",
-    label="\\partial_{\\zeta} (p_{||} - p_{\\perp})/B^2",
+    name="beta_a_z",
+    label="\\partial_{\\zeta} \\beta_a = \\mu_0 (p_{||} - p_{\\perp})/B^2",
     units="~",
     units_long="None",
     description="Pressure anisotropy, first toroidal derivative",
     dim=1,
-    params=["d_lmn"],
+    params=["a_lmn"],
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
     data=[],
 )
-def _d_z(params, transforms, profiles, data, **kwargs):
-    data["d_z"] = profiles["anisotropy"].compute(params["d_lmn"], dz=1)
+def _beta_a_z(params, transforms, profiles, data, **kwargs):
+    data["beta_a_z"] = profiles["anisotropy"].compute(params["a_lmn"], dz=1)
     return data
 
 
 @register_compute_fun(
-    name="grad(d)",
-    label="\\nabla (p_{||} - p_{\\perp})/B^2",
+    name="grad(beta_a)",
+    label="\\nabla \\beta_a = \\nabla \\mu_0 (p_{||} - p_{\\perp})/B^2",
     units="m^{-1}",
     units_long="Inverse meters",
     description="Pressure anisotropy gradient",
@@ -369,13 +369,13 @@ def _d_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["d_r", "d_t", "d_z", "e^rho", "e^theta", "e^zeta"],
+    data=["beta_a_r", "beta_a_t", "beta_a_z", "e^rho", "e^theta", "e^zeta"],
 )
-def _gradd(params, transforms, profiles, data, **kwargs):
-    data["grad(d)"] = (
-        data["d_r"] * data["e^rho"].T
-        + data["d_t"] * data["e^theta"].T
-        + data["d_z"] * data["e^zeta"].T
+def _gradbeta_a(params, transforms, profiles, data, **kwargs):
+    data["grad(beta_a)"] = (
+        data["beta_a_r"] * data["e^rho"].T
+        + data["beta_a_t"] * data["e^theta"].T
+        + data["beta_a_z"] * data["e^zeta"].T
     ).T
     return data
 

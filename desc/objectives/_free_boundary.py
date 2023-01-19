@@ -4,113 +4,14 @@ import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import jnp
-from desc.compute import (
-    compute_covariant_magnetic_field,
-    compute_jacobian,
-    compute_magnetic_field_magnitude,
-)
+from desc.compute import compute as compute_fun
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
-from desc.transform import Transform
+from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
-
-
-def compute_I(
-    R_lmn,
-    Z_lmn,
-    L_lmn,
-    i_l,
-    c_l,
-    Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
-    i_profile,
-    c_profile,
-):
-    data = compute_covariant_magnetic_field(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        i_profile,
-        c_profile,
-    )
-    w = R_transform.grid.weights
-    signgs = jnp.sign(data["sqrt(g)"].mean())
-    return signgs * jnp.sum(data["B_theta"] * w) / (mu_0 * 2 * np.pi)
-
-
-def bsq_vac(
-    R_lmn,
-    Z_lmn,
-    L_lmn,
-    i_l,
-    c_l,
-    Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
-    i_profile,
-    c_profile,
-    nest,
-):
-
-    ctor = compute_I(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        i_profile,
-        c_profile,
-    )
-    out = nest.compute(R_lmn, Z_lmn, ctor)
-    grid = nest._Rb_transform.grid
-    bsq = out[1]["|B|^2"].reshape((grid.num_zeta, grid.num_theta)).T.flatten()
-    return bsq / (2 * mu_0)
-
-
-def bsq_plasma(
-    R_lmn,
-    Z_lmn,
-    L_lmn,
-    i_l,
-    c_l,
-    Psi,
-    R_transform,
-    Z_transform,
-    L_transform,
-    i_profile,
-    c_profile,
-):
-
-    data = compute_magnetic_field_magnitude(
-        R_lmn,
-        Z_lmn,
-        L_lmn,
-        i_l,
-        c_l,
-        Psi,
-        R_transform,
-        Z_transform,
-        L_transform,
-        i_profile,
-        c_profile,
-    )
-    bsq = data["|B|^2"]
-    return bsq / (2 * mu_0)
 
 
 class BoundaryErrorNESTOR(_Objective):
@@ -160,74 +61,49 @@ class BoundaryErrorNESTOR(_Objective):
             eq, self.ext_field, self.mf, self.nf, self.ntheta, self.nzeta
         )
         eq._sym = True
-        Bgrid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
-        self.BR_transform = Transform(Bgrid, eq.R_basis, derivs=1)
-        self.BZ_transform = Transform(Bgrid, eq.Z_basis, derivs=1)
-        self.BL_transform = Transform(Bgrid, eq.L_basis, derivs=1)
+        self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
+        self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
+        self._args = get_params(self._data_keys)
 
-        Igrid = LinearGrid(theta=self.ntheta, N=0, rho=1, NFP=eq.NFP)
-        self.IR_transform = Transform(Igrid, eq.R_basis, derivs=1)
-        self.IZ_transform = Transform(Igrid, eq.Z_basis, derivs=1)
-        self.IL_transform = Transform(Igrid, eq.L_basis, derivs=1)
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
 
-        self._dim_f = Bgrid.num_nodes
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
-        self.Bp_profile = eq.pressure.copy()
-        self.Ip_profile = eq.pressure.copy()
-        self.Bp_profile.grid = Bgrid
-        self.Ip_profile.grid = Igrid
-        if eq.iota is not None:
-            self.Bi_profile = eq.iota.copy()
-            self.Bi_profile.grid = Bgrid
-            self.Ii_profile = eq.iota.copy()
-            self.Ii_profile.grid = Igrid
-            self.Bc_profile = None
-            self.Ic_profile = None
-        else:
-            self.Bi_profile = None
-            self.Ii_profile = None
-            self.Bc_profile = eq.current.copy()
-            self.Ic_profile = eq.current.copy()
-            self.Bc_profile.grid = Bgrid
-            self.Ic_profile.grid = Igrid
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        self._dim_f = self.grid.num_nodes
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
             # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["p"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi):
+    def compute(self, *args, **kwargs):
 
-        bv = bsq_vac(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self.IR_transform,
-            self.IZ_transform,
-            self.IL_transform,
-            self.Ii_profile,
-            self.Ic_profile,
-            self.nest,
+
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
         )
-        bp = bsq_plasma(
-            R_lmn,
-            Z_lmn,
-            L_lmn,
-            i_l,
-            c_l,
-            Psi,
-            self.BR_transform,
-            self.BZ_transform,
-            self.BL_transform,
-            self.Bi_profile,
-            self.Bc_profile,
-        )
-        data = compute_jacobian(R_lmn, Z_lmn, self.BR_transform, self.BZ_transform)
-        w = self.BR_transform.grid.weights
+
+        ctor = jnp.mean(data['current'])
+        out = self.nest.compute(params['R_lmn'], params['Z_lmn'], ctor)
+        grid = self.nest._Rb_transform.grid
+        bsq = out[1]["|B|^2"].reshape((grid.num_zeta, grid.num_theta)).T.flatten()
+        bv = bsq / (2 * mu_0)
+
+        bp = data['|B|^2'] / (2 * mu_0)
+        w = self.grid.weights
         g = data["|e_theta x e_zeta|"]
-        return (bv - bp - self.Bp_profile([1.0])) * w * g
+        return (bv - bp - data['p']) * w * g

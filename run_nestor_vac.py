@@ -21,29 +21,18 @@ from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
 )
+from desc.compat import ensure_positive_jacobian
 
 os.getcwd()
 
 ext_field = load("./ext_field.h5")
+ext_field._axisym = False
 eqf = load("eqfv_freeb_test_iota.h5")
 veq = eqf[-1]
-
+veq = ensure_positive_jacobian(veq)
 veq.resolution_summary()
-# print("==========SOLVING VEQ==========")
-# veq.solve(ftol=1e-2, xtol=1e-6, gtol=1e-6, maxiter=100, verbose=3)
-
-
 surf = veq.get_surface_at(1)
-# ensure positive jacobian
-one = np.ones_like(surf.R_lmn)
-one[surf.R_basis.modes[:,1] < 0] *= -1
-surf.R_lmn *= one
-one = np.ones_like(surf.Z_lmn)
-one[surf.Z_basis.modes[:,1] < 0] *= -1
-surf.Z_lmn *= one
-surf.change_resolution(M=1, N=1)
 iota = veq.iota.copy()
-iota.params *= -1
 
 eq = Equilibrium(
     surface=surf,
@@ -100,7 +89,7 @@ out = eq1.optimize(
     options={
         "perturb_options": {"order": 2},
         "initial_trust_radius": 1e-1,
-        "ga_tr_ratio":  0.05,
+        "ga_tr_ratio": 0.05,
     },
 )
 
@@ -139,7 +128,7 @@ out = eq2.optimize(
     options={
         "perturb_options": {"order": 2},
         "initial_trust_radius": 1e-1,
-        "ga_tr_ratio":  0.05,
+        "ga_tr_ratio": 0.05,
     },
 )
 

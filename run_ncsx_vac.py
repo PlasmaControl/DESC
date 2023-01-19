@@ -21,28 +21,19 @@ from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
 )
+from desc.compat import ensure_positive_jacobian
 
 os.getcwd()
 
 ext_field = load("./ext_field_ncsx.h5")
+ext_field._axisym = False
 eqf = desc.examples.get("NCSX", "all")
 veq = eqf[-1]
-
 veq.change_resolution(L=20, M=10, N=10, L_grid=30, M_grid=15, N_grid=15)
+veq = ensure_positive_jacobian(veq)
 veq.resolution_summary()
-
 surf = veq.get_surface_at(1)
-# # ensure positive jacobian
-# one = np.ones_like(surf.R_lmn)
-# one[surf.R_basis.modes[:,1] < 0] *= -1
-# surf.R_lmn *= one
-# one = np.ones_like(surf.Z_lmn)
-# one[surf.Z_basis.modes[:,1] < 0] *= -1
-# surf.Z_lmn *= one
-# surf.change_resolution(M=1, N=1)
 iota = veq.iota.copy()
-# iota.params *= -1
-
 pressure = veq.pressure.copy()
 pressure.params *= 0
 
@@ -87,11 +78,7 @@ bc_objective.build(eq)
 eq1 = eq.copy()
 print("==========OPTIMIZING EQ1==========")
 out = eq1.optimize(
-    objective,
-    constraints,
-    maxiter=50,
-    verbose=3,
-    options={"initial_trust_ratio": 0.01}
+    objective, constraints, maxiter=50, verbose=3, options={"initial_trust_ratio": 0.01}
 )
 
 eq1.save("run_ncsx_vac_out1.h5")
@@ -102,11 +89,11 @@ with open("run_ncsx_vac_out1.pkl", "wb+") as f:
 eq2 = eq1.copy()
 
 eq2.change_resolution(
-    veq.L //3*2,
-    veq.M//3*2,
+    veq.L // 3 * 2,
+    veq.M // 3 * 2,
     6,
-    veq.L_grid//3*2,
-    veq.M_grid//3*2,
+    veq.L_grid // 3 * 2,
+    veq.M_grid // 3 * 2,
     9,
 )
 print("==========SOLVING EQ2==========")
@@ -130,11 +117,7 @@ bc_objective.build(eq2)
 
 print("==========OPTIMIZING EQ2==========")
 out = eq2.optimize(
-    objective,
-    constraints,
-    maxiter=50,
-    verbose=3,
-    options={"initial_trust_ratio": 0.01}
+    objective, constraints, maxiter=50, verbose=3, options={"initial_trust_ratio": 0.01}
 )
 
 
@@ -174,11 +157,7 @@ bc_objective.build(eq3)
 
 print("==========OPTIMIZING EQ3==========")
 out = eq3.optimize(
-    objective,
-    constraints,
-    maxiter=50,
-    verbose=3,
-    options={"initial_trust_ratio": 0.01}
+    objective, constraints, maxiter=50, verbose=3, options={"initial_trust_ratio": 0.01}
 )
 
 
@@ -187,14 +166,9 @@ with open("run_ncsx_vac_out3.pkl", "wb+") as f:
     pickle.dump(out, f)
 
 
-
 print("==========OPTIMIZING VEQ==========")
 out = veq.optimize(
-    objective,
-    constraints,
-    maxiter=50,
-    verbose=3,
-    options={"initial_trust_ratio": 0.01}
+    objective, constraints, maxiter=50, verbose=3, options={"initial_trust_ratio": 0.01}
 )
 
 veq.save("run_ncsx_vac_outv.h5")

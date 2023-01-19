@@ -118,7 +118,7 @@ def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
         sum_weights = []
         modes = []
         target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
+        for k in range(1, int((desc_eq.L + 1) / 2) + 1):  # FIXME: add by 1 desc_eq.L+1
             modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
@@ -131,7 +131,7 @@ def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
         sum_weights = []
         modes = []
         target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
+        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
@@ -154,7 +154,7 @@ def _make_RZ_cons_Rn1_Z1(qsc, desc_eq, coeffs, bases):
         sum_weights = []
         modes = []
         target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
+        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, -1, n])
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
@@ -166,7 +166,7 @@ def _make_RZ_cons_Rn1_Z1(qsc, desc_eq, coeffs, bases):
         sum_weights = []
         modes = []
         target = NAEcoeff * r
-        for k in range(1, int(desc_eq.L / 2) + 1):
+        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)

@@ -88,7 +88,6 @@ class BoundaryErrorNESTOR(_Objective):
 
     def compute(self, *args, **kwargs):
 
-
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
             self._data_keys,
@@ -97,13 +96,13 @@ class BoundaryErrorNESTOR(_Objective):
             profiles=self._profiles,
         )
 
-        ctor = jnp.mean(data['current'])
-        out = self.nest.compute(params['R_lmn'], params['Z_lmn'], ctor)
+        ctor = jnp.mean(data["current"])
+        out = self.nest.compute(params["R_lmn"], params["Z_lmn"], ctor)
         grid = self.nest._Rb_transform.grid
         bsq = out[1]["|B|^2"].reshape((grid.num_zeta, grid.num_theta)).T.flatten()
         bv = bsq / (2 * mu_0)
 
-        bp = data['|B|^2'] / (2 * mu_0)
+        bp = data["|B|^2"] / (2 * mu_0)
         w = self.grid.weights
         g = data["|e_theta x e_zeta|"]
-        return (bv - bp - data['p']) * w * g
+        return (bv - bp - data["p"]) * w * g

@@ -227,7 +227,9 @@ class Equilibrium(_Configuration, IOAble):
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
         logging.debug("Spectral indexing: {}".format(self.spectral_indexing))
-        logging.debug("Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N))
+        logging.debug(
+            "Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N)
+        )
         logging.debug("Node pattern: {}".format(self.node_pattern))
         logging.debug(
             "Node resolution (L,M,N)=({},{},{})".format(
@@ -1011,46 +1013,46 @@ class EquilibriaFamily(IOAble, MutableSequence):
     ):
         """Solve for an equilibrium using an automatic continuation method.
 
-        By default, the method first solves for a no pressure tokamak, then a finite
-        beta tokamak, then a finite beta stellarator. Currently hard coded to take a
-        fixed number of perturbation steps based on conservative estimates and testing.
-        In the future, continuation stepping will be done adaptively.
+            By default, the method first solves for a no pressure tokamak, then a finite
+            beta tokamak, then a finite beta stellarator. Currently hard coded to take a
+            fixed number of perturbation steps based on conservative estimates and testing.
+            In the future, continuation stepping will be done adaptively.
 
-        Parameters
-        ----------
-        eq : Equilibrium
-            Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-        objective : str or ObjectiveFunction (optional)
-            function to solve for equilibrium solution
-        optimizer : str or Optimzer (optional)
-            optimizer to use
-        pert_order : int
-            order of perturbations to use.
-        ftol, xtol, gtol : float
-            stopping tolerances for subproblem at each step. `None` will use defaults
-            for given optimizer.
-        nfev : int
-            maximum number of function evaluations in each equilibrium subproblem.
-    verbose : integer, optional
-        * 0  : work silently.
-        * 1  : display a termination report
-        * 2  : display progress and timing info during iterations
-        checkpoint_path : str or path-like
-            file to save checkpoint data (Default value = None)
-        **kwargs : control continuation step sizes
+            Parameters
+            ----------
+            eq : Equilibrium
+                Unsolved Equilibrium with the final desired boundary, profiles, resolution.
+            objective : str or ObjectiveFunction (optional)
+                function to solve for equilibrium solution
+            optimizer : str or Optimzer (optional)
+                optimizer to use
+            pert_order : int
+                order of perturbations to use.
+            ftol, xtol, gtol : float
+                stopping tolerances for subproblem at each step. `None` will use defaults
+                for given optimizer.
+            nfev : int
+                maximum number of function evaluations in each equilibrium subproblem.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
+            checkpoint_path : str or path-like
+                file to save checkpoint data (Default value = None)
+            **kwargs : control continuation step sizes
 
-            Valid keyword arguments are:
+                Valid keyword arguments are:
 
-            mres_step: int, the amount to increase Mpol by at each continuation step
-            pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
-                            at each continuation step
-            bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
-                            at each continuation step
-        Returns
-        -------
-        eqfam : EquilibriaFamily
-            family of equilibria for the intermediate steps, where the last member is
-            the final desired configuration,
+                mres_step: int, the amount to increase Mpol by at each continuation step
+                pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
+                                at each continuation step
+                bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
+                                at each continuation step
+            Returns
+            -------
+            eqfam : EquilibriaFamily
+                family of equilibria for the intermediate steps, where the last member is
+                the final desired configuration,
 
         """
         from desc.continuation import solve_continuation_automatic

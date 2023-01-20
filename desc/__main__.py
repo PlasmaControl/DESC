@@ -27,7 +27,6 @@ def main(cl_args=sys.argv[1:]):
     from desc.equilibrium import EquilibriaFamily
     from desc.plotting import plot_section, plot_surfaces
 
-
     logging.info("Reading input from {}".format(ir.input_path))
     logging.info("Outputs will be written to {}".format(ir.output_path))
 

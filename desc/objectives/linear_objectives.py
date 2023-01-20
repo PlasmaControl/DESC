@@ -6,7 +6,7 @@ Linear objective functions must be of the form `A*x-b`, where:
     - `b` is the desired vector set by `objective.target`
 """
 
-import logging
+import warnings
 from abc import ABC
 
 import numpy as np
@@ -125,7 +125,7 @@ class FixBoundaryR(_Objective):
             modes = np.atleast_2d(eq.surface.R_basis.modes[idx, :])
 
             if idx.size < modes.shape[0]:
-                logging.warning(
+                warnings.warn(
                     colored(
                         "Some of the given modes are not in the surface, "
                         + "these modes will not be fixed.",
@@ -288,7 +288,7 @@ class FixBoundaryZ(_Objective):
             modes = np.atleast_2d(eq.surface.Z_basis.modes[idx, :])
 
             if idx.size < modes.shape[0]:
-                logging.warning(
+                warnings.warn(
                     colored(
                         "Some of the given modes are not in the surface, "
                         + "these modes will not be fixed.",

@@ -1,6 +1,7 @@
 """Class for wrapping a number of common optimization methods."""
 
 import logging
+import warnings
 
 import numpy as np
 from termcolor import colored
@@ -253,7 +254,7 @@ class Optimizer(IOAble):
                 constraint.build(eq)
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "method {} is not intended for scalar objective function".format(
                         ".".join([self.method])
@@ -286,7 +287,6 @@ class Optimizer(IOAble):
             maxiter,
             options,
         )
-
 
         logging.info("Number of parameters: {}", x0_reduced.size)
         logging.info("Number of objectives: {}", objective.dim_f)

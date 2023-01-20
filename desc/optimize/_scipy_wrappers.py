@@ -125,9 +125,7 @@ def _optimize_scipy_minimize(
             else:
                 reduction_ratio = 0
 
-        print_iteration_nonlinear(
-            len(allx), len(func_allx), f1, df, dx_norm, g_norm
-        )
+        print_iteration_nonlinear(len(allx), len(func_allx), f1, df, dx_norm, g_norm)
 
         success[0], message[0] = check_termination(
             df,
@@ -196,7 +194,9 @@ def _optimize_scipy_minimize(
     else:
         logging.info("Warning: " + result["message"])
         logging.info("         Current function value: {:.3e}".format(result["fun"]))
-        logging.info("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        logging.info(
+            "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))
+        )
         logging.info("         Iterations: {:d}".format(result["nit"]))
         logging.info("         Function evaluations: {:d}".format(result["nfev"]))
         logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
@@ -205,9 +205,7 @@ def _optimize_scipy_minimize(
     return result
 
 
-def _optimize_scipy_least_squares(
-    fun, jac, x0, method, x_scale, stoptol, options=None
-):
+def _optimize_scipy_least_squares(fun, jac, x0, method, x_scale, stoptol, options=None):
     """Wrapper for scipy.optimize.least_squares.
 
     Parameters
@@ -295,9 +293,7 @@ def _optimize_scipy_least_squares(
             else:
                 reduction_ratio = 0
 
-        print_iteration_nonlinear(
-            len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
-        )
+        print_iteration_nonlinear(len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm)
 
         success[0], message[0] = check_termination(
             df,
@@ -371,7 +367,9 @@ def _optimize_scipy_least_squares(
     else:
         logging.info("Warning: " + result["message"])
         logging.info("         Current function value: {:.3e}".format(result["cost"]))
-        logging.info("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        logging.info(
+            "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))
+        )
         logging.info("         Iterations: {:d}".format(result["nit"]))
         logging.info("         Function evaluations: {:d}".format(result["nfev"]))
         logging.info("         Jacobian evaluations: {:d}".format(result["njev"]))

@@ -48,7 +48,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._compiled = True
 
         if eq is not None:
-            self.build(eq,)
+            self.build(
+                eq,
+            )
 
     def build(self, eq, use_jit=None):
         """Build the objective.

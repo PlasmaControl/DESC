@@ -1,6 +1,7 @@
 """Function for solving nonlinear least squares problems."""
 
 import logging
+import warnings
 import numpy as np
 
 from scipy.optimize import OptimizeResult
@@ -377,7 +378,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     if result["success"]:
         logging.info(result["message"])
     else:
-        logging.warning("Warning: " + result["message"])
+        warnings.warn("Warning: " + result["message"])
     logging.info("         Current function value: {:.3e}".format(result["cost"]))
     logging.info("         Iterations: {:d}".format(result["nit"]))
     logging.info("         Function evaluations: {:d}".format(result["nfev"]))

@@ -185,6 +185,7 @@ def print_header_nonlinear():
         )
     )
 
+
 @contextlib.contextmanager
 def redirect_stdout(io_stream):
     try:
@@ -193,7 +194,6 @@ def redirect_stdout(io_stream):
         yield
     finally:
         sys.stdout = _stdout
-
 
 
 def print_iteration_nonlinear(
@@ -232,7 +232,12 @@ def print_iteration_nonlinear(
 
     logging.debug(
         "{0}{1}{2}{3}{4}{5}",
-        iteration, nfev, cost, cost_reduction, step_norm, optimality
+        iteration,
+        nfev,
+        cost,
+        cost_reduction,
+        step_norm,
+        optimality,
     )
 
 

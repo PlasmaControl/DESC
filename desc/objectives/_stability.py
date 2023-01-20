@@ -156,9 +156,15 @@ class MercierStability(_Objective):
             self.compute(*args, **kwargs)
             / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         )
-        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        logging.info("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        logging.info(
+            "Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units
+        )
+        logging.info(
+            "Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units
+        )
+        logging.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units
+        )
 
         if self._normalize:
             logging.info(
@@ -317,6 +323,12 @@ class MagneticWell(_Objective):
             self.compute(*args, **kwargs)
             / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         )
-        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units)
-        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units)
-        logging.info("Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units)
+        logging.info(
+            "Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units
+        )
+        logging.info(
+            "Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units
+        )
+        logging.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units
+        )

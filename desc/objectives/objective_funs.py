@@ -473,7 +473,7 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._print_value_format = "Value of Objective {}: {:10.3e} ".format(self.name)
+        self._print_value_format = "Value of Objective: {:10.3e} "
         # if args is already set don't overwrite it
         self._args = getattr(
             self,
@@ -601,7 +601,7 @@ class _Objective(IOAble, ABC):
         if self._normalize:
             logging.info(
                 self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization)),
-                "(normalized)"  
+                "(normalized)",
             )
 
     def _shift_scale(self, x):

@@ -2,6 +2,7 @@
 
 import os
 import logging
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -63,11 +64,11 @@ class VMECIO:
 
         version = file.variables["version_"][0]
         if version < 9:
-            logging.warning(
+            warnings.warn(
                 "VMEC output appears to be from version {} while DESC is only designed"
                 + " for compatibility with VMEC version 9. Some data may not be loaded"
                 + " correctly.",
-                str(version)
+                str(version),
             )
 
         # parameters
@@ -103,7 +104,7 @@ class VMECIO:
         preset = file.dimensions["preset"].size
         pmass_type = "".join(file.variables["pmass_type"][:].astype(str)).strip()
         if pmass_type != "power_series":
-            logging.warning("Pressure is not a power series!")
+            warnings.warn("Pressure is not a power series!")
         p0 = file.variables["presf"][0] / file.variables["am"][0]
         inputs["pressure"] = np.zeros((preset, 2))
         inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
@@ -111,7 +112,7 @@ class VMECIO:
         if profile == "iota":
             piota_type = "".join(file.variables["piota_type"][:].astype(str)).strip()
             if piota_type != "power_series":
-                logging.warning("Iota is not a power series!")
+                warnings.warn("Iota is not a power series!")
             inputs["iota"] = np.zeros((preset, 2))
             inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["iota"][:, 1] = file.variables["ai"][:]
@@ -119,7 +120,7 @@ class VMECIO:
         if profile == "current":
             pcurr_type = "".join(file.variables["pcurr_type"][:].astype(str)).strip()
             if pcurr_type != "power_series":
-                logging.warning("Current is not a power series!")
+                warnings.warn("Current is not a power series!")
             inputs["current"] = np.zeros((preset, 2))
             inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
             inputs["current"][:, 1] = file.variables["ac"][:]

@@ -2,6 +2,7 @@
 
 import numbers
 import logging
+import warnings
 
 import numpy as np
 
@@ -118,7 +119,7 @@ class FourierRZToroidalSurface(Surface):
         self.rho = rho
 
         if check_orientation and self._compute_orientation() == -1:
-            logging.warnings(
+            warnings.warn(
                 "Left handed coordinates detected, switching sign of theta."
                 + " To avoid this warning in the future, switch the sign of all"
                 + " modes with m<0"

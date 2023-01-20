@@ -2,7 +2,7 @@
 
 import copy
 import numbers
-import logging
+import warnings
 from abc import ABC
 
 import numpy as np
@@ -358,7 +358,7 @@ class _Configuration(IOAble, ABC):
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
             if isinstance(p, PowerSeriesProfile) and p.sym != "even":
-                logging.warning(
+                warnings.warn(
                     colored(f"{profile} profile is not an even power series.", "yellow")
                 )
 

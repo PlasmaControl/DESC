@@ -1,6 +1,6 @@
 """Functions for mapping between flux, sfl, and real space coordinates."""
 
-import logging
+import warnings
 
 import numpy as np
 from termcolor import colored
@@ -235,7 +235,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
     if not nested:
         if msg == "auto":
-            logging.warning(
+            warnings.warn(
                 colored(
                     "WARNING: Flux surfaces are no longer nested, exiting early. "
                     + "Automatic continuation method failed, consider specifying "
@@ -244,7 +244,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
                 )
             )
         elif msg == "manual":
-            logging.warning(
+            warnings.warn(
                 colored(
                     "WARNING: Flux surfaces are no longer nested, exiting early."
                     + "Consider taking smaller perturbation/resolution steps "

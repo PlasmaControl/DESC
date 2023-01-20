@@ -1,6 +1,7 @@
 """Functions for perturbing equilibria."""
 
 import logging
+import warnings
 
 import numpy as np
 from termcolor import colored
@@ -141,9 +142,9 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         set_console_logging(console_log_level="INFO")
     if verbose == 2:
         set_console_logging(console_log_level="DEBUG")
-   
+
     if not use_jax:
-        logging.warning(
+        warnings.warn(
             colored(
                 "Computing perturbations with finite differences can be "
                 + "highly inaccurate. Consider using JAX for exact derivatives.",
@@ -189,7 +190,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         deltas["Rb_lmn"] = dRb
     if dZb is not None and np.any(dZb):
         deltas["Zb_lmn"] = dZb
-         
+
     logging.info("Perturbing {}", ", ".join(deltas.keys()))
 
     timer = Timer()
@@ -448,7 +449,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         set_console_logging(console_log_level="DEBUG")
 
     if not use_jax:
-        logging.warning(
+        warnings.warn(
             colored(
                 "Computing perturbations with finite differences can be "
                 + "highly inaccurate. Consider using JAX for exact derivatives.",
@@ -537,7 +538,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
-
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(iota=eq.iota is not None)

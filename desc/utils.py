@@ -1,6 +1,7 @@
 """Utility functions, independent of the rest of DESC."""
 
 import logging
+import warnings
 import sys
 
 import numpy as np
@@ -41,7 +42,7 @@ class Timer:
             except AttributeError:
                 self.op = time.perf_counter
                 self._ns = False
-                logging.warning(
+                warnings.warn(
                     colored(
                         "nanosecond timing not available on this system,"
                         + " reverting to microsecond timing",

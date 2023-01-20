@@ -10,6 +10,7 @@ from .objective_funs import _Objective
 
 import logging
 
+
 class AspectRatio(_Objective):
     """Aspect ratio = major radius / minor radius.
 

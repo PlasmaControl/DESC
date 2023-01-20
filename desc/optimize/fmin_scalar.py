@@ -1,8 +1,9 @@
-
 """Function for minimizing a scalar function of multiple variables."""
 
 import logging
+import warnings
 import numpy as np
+
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
@@ -355,7 +356,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
             print_iteration_nonlinear(
                 iteration, nfev, f, actual_reduction, step_norm, g_norm
-                )
+            )
 
             if callback is not None:
                 stop = callback(np.copy(x), *args)
@@ -388,13 +389,15 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     if result["success"]:
         logging.info(str(result["message"]))
     else:
-        logging.warning("Warning: " + str(result["message"]))
-    logging.debug("         Current function value: {:.3e}".format(result["fun"]))
-    logging.debug("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
-    logging.debug("         Iterations: {:d}".format(result["nit"]))
-    logging.debug("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.debug("         Gradient evaluations: {:d}".format(result["ngev"]))
-    logging.debug("         Hessian evaluations: {:d}".format(result["nhev"]))
+        warnings.warn("Warning: " + str(result["message"]))
+    logging.info("         Current function value: {:.3e}".format(result["fun"]))
+    logging.info(
+        "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))
+    )
+    logging.info("         Iterations: {:d}".format(result["nit"]))
+    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
+    logging.info("         Hessian evaluations: {:d}".format(result["nhev"]))
     if return_all:
         result["allx"] = allx
     if return_tr:

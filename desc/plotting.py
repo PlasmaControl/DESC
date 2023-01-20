@@ -3506,9 +3506,9 @@ def plot_field_lines_real_space(
 
     for i, solution in enumerate(field_line_coords["IVP solutions"]):
         if not solution.success:
-            logging.warning(
+            warnings.warn(
                 "Integration from seed theta %1.2f radians was not successful!"
-                %   seed_thetas[i]
+                % seed_thetas[i]
             )
 
     for i in range(n_lines):

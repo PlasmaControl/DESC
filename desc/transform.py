@@ -1,7 +1,6 @@
 """Class to transform from spectral basis to real space."""
 
 import warnings
-import logging
 from itertools import combinations_with_replacement, permutations
 
 import numpy as np
@@ -60,7 +59,7 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
-            logging.warning(
+            warnings.warn(
                 colored(
                     "Unequal number of field periods for grid {} and basis {}.".format(
                         self.grid.NFP, self.basis.NFP
@@ -157,7 +156,7 @@ class Transform(IOAble):
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
         if not isalmostequal(zeta_cts):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires the same number of nodes on each zeta plane, "
                     + "falling back to direct1 method",
@@ -170,7 +169,7 @@ class Transform(IOAble):
         if not isalmostequal(
             grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
         ):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires that node pattern is the same on each zeta "
                     + "plane, falling back to direct1 method",
@@ -182,7 +181,7 @@ class Transform(IOAble):
 
         id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
         if not issorted(id2):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires zernike indices to be sorted by toroidal mode "
                     + "number, falling back to direct1 method",
@@ -196,7 +195,7 @@ class Transform(IOAble):
             len(zeta_vals) > 1
             and not abs((zeta_vals[-1] + zeta_vals[1]) * basis.NFP - 2 * np.pi) < 1e-14
         ):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires that nodes complete 1 full field period, "
                     + "falling back to direct2 method",
@@ -208,7 +207,7 @@ class Transform(IOAble):
 
         n_vals, n_cts = np.unique(basis.modes[:, 2], return_counts=True)
         if len(n_vals) > 1 and not islinspaced(n_vals):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires the toroidal modes are equally spaced in n, "
                     + "falling back to direct1 method",
@@ -219,7 +218,7 @@ class Transform(IOAble):
             return
 
         if len(zeta_vals) < len(n_vals):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method can not undersample in zeta, "
                     + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
@@ -233,7 +232,7 @@ class Transform(IOAble):
             return
 
         if len(zeta_vals) % 2 == 0:
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires an odd number of toroidal nodes, "
                     + "falling back to direct2 method",
@@ -244,7 +243,7 @@ class Transform(IOAble):
             return
 
         if not issorted(grid.nodes[:, 2]):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires nodes to be sorted by toroidal angle in "
                     + "ascending order, falling back to direct1 method",
@@ -255,7 +254,7 @@ class Transform(IOAble):
             return
 
         if len(zeta_vals) > 1 and not islinspaced(zeta_vals):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "fft method requires nodes to be equally spaced in zeta, "
                     + "falling back to direct2 method",
@@ -296,7 +295,7 @@ class Transform(IOAble):
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
         if not issorted(grid.nodes[:, 2]):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "direct2 method requires nodes to be sorted by toroidal angle in "
                     + "ascending order, falling back to direct1 method",
@@ -307,7 +306,7 @@ class Transform(IOAble):
             return
 
         if not isalmostequal(zeta_cts):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "direct2 method requires the same number of nodes on each zeta "
                     + "plane, falling back to direct1 method",
@@ -320,7 +319,7 @@ class Transform(IOAble):
         if len(zeta_vals) > 1 and not isalmostequal(
             grid.nodes[:, :2].T.reshape((2, zeta_cts[0], -1), order="F")
         ):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "direct2 method requires that node pattern is the same on each "
                     + "zeta plane, falling back to direct1 method",
@@ -332,7 +331,7 @@ class Transform(IOAble):
 
         id2 = np.lexsort((basis.modes[:, 1], basis.modes[:, 0], basis.modes[:, 2]))
         if not issorted(id2):
-            logging.warning(
+            warnings.warn(
                 colored(
                     "direct2 method requires zernike indices to be sorted by toroidal "
                     + "mode number, falling back to direct1 method",

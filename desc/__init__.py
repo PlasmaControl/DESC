@@ -142,16 +142,16 @@ def stop_logfile_logging():
 
 def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
 
-    """Quickly adds a logfile handler to the root logger.  
-    
+    """Quickly adds a logfile handler to the root logger.
+
     Arguments allow basic configuration of the logger, but this is not meant to
     be a replacement for setting up logging when using DESC in the context of a
-    larger project- primarily meant for debugging.  Selecting a lower level of 
+    larger project- primarily meant for debugging.  Selecting a lower level of
     logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
     "ERROR" and "CRITICAL" logs would be displayed in the same location as well.
     Accepts numeric inputs as well- levels "DEBUG", "INFO", "WARNING", "ERROR",
     "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.
-    
+
     Parameters
     ----------
     logfile_file : str
@@ -160,31 +160,29 @@ def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
         level of logging to logfile; "DEBUG", "INFO", WARNING", "ERROR" or
         "CRITICAL" are accepted values, in increasing order of severity. DESC
         only uses "DEBUG" and "INFO" currently.
-        
+
     Returns
     -------
     bool :
         Returns True if logging is set up, or stopped successfully.
     """
 
-    #Creates(or overwrites) logger that accepts DEBUG level logs and up
+    # Creates(or overwrites) logger that accepts DEBUG level logs and up
     logfile_logger = logging.getLogger("DESC_logger")
     logfile_logger.setLevel(logfile_level)
 
     # Create file handler
     logfile_handler = logging.handlers.RotatingFileHandler(
-        logfile_file, 
-        maxBytes=5*1024*1024, 
-        backupCount=1, mode='w')
+        logfile_file, maxBytes=5 * 1024 * 1024, backupCount=1, mode="w"
+    )
     try:
         logfile_handler.setLevel(logfile_level)
     except ValueError:
         warnings.warn(
             colored(
-                "Failed to set log file log level: invalid level: '%s'"
-                    % logfile_level,
-                "yellow"
-                )
+                "Failed to set log file log level: invalid level: '%s'" % logfile_level,
+                "yellow",
+            )
             + "use 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', or an integer"
             + "value from 0 to 50"
         )
@@ -193,9 +191,11 @@ def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
 
     # Set log formatting
     logfile_formatter = logging.Formatter(
-        "%(asctime)s  ::  " + "%(name)s  ::  %(levelname)s ::  " +
-        "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  :: %(message)s ",
-        datefmt="%Y-%m-%d %H:%M:%S.uuu")
+        "%(asctime)s  ::  "
+        + "%(name)s  ::  %(levelname)s ::  "
+        + "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  :: %(message)s ",
+        datefmt="%Y-%m-%d %H:%M:%S.uuu",
+    )
 
     # Assign formatter to handler
     logfile_handler.setFormatter(logfile_formatter)
@@ -211,13 +211,13 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
 
     Arguments allow basic configuration of the logger, but this is not meant to
     be a replacement for setting up logging when using DESC in the context of a
-    larger project- primarily meant for debugging.  Selecting a lower level of 
+    larger project- primarily meant for debugging.  Selecting a lower level of
     logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
     "ERROR" and "CRITICAL" logs would be displayed in the same location as well.
     Accepts numeric inputs as well- levels "DEBUG", "INFO", "WARNING", "ERROR",
-    "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.  DESC only 
+    "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.  DESC only
     uses DEBUG and INFO currently.
-    
+
     Parameters
     ----------
     console_log_level : str
@@ -227,36 +227,38 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
         output logging to console with either "stdout" or "stderr"
     Returns
     -------
-    bool : 
+    bool :
         Returns True if logging setup successfully
     """
-           
-    #Create logger that accepts DEBUG level logs and up
+
+    # Create logger that accepts DEBUG level logs and up
     logger = logging.getLogger("DESC_logger")
     logger.setLevel(logging.DEBUG)
-    
+
     # Create console handler
     console_log_output = console_log_output.lower()
-    if (console_log_output == "stdout"):
+    if console_log_output == "stdout":
         console_handler = logging.StreamHandler(sys.stdout)
     elif console_log_output == "stderr":
         console_handler = logging.StreamHandler(sys.stderr)
     else:
-        print("Console logging setup failed: invalid output: '%s'"%console_log_output)
+        print("Console logging setup failed: invalid output: '%s'" % console_log_output)
         return False
-    
+
     # Set console log level
     try:
         console_handler.setLevel(console_log_level.upper())
     except:
-        print("Console logging setup failed: invalid level: '%s'"%console_log_level)
+        print("Console logging setup failed: invalid level: '%s'" % console_log_level)
         return False
 
     # Set log formatting
     console_formatter = logging.Formatter(
-        "%(asctime)s  ::  " + "%(name)s  ::  %(levelname)s ::  " +
-        "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  :: %(message)s ",
-        datefmt="%Y-%m-%d %H:%M:%S.uuu")
+        "%(asctime)s  ::  "
+        + "%(name)s  ::  %(levelname)s ::  "
+        + "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  :: %(message)s ",
+        datefmt="%Y-%m-%d %H:%M:%S.uuu",
+    )
 
     console_handler.setFormatter(console_formatter)
 
@@ -264,6 +266,7 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     logger.addHandler(console_handler)
     logging.captureWarnings(True)
     return True
+
 
 set_logfile_logging()
 set_console_logging()

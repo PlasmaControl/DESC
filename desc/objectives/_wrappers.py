@@ -29,6 +29,16 @@ from desc.derivatives import FiniteDiffDerivative
 import netCDF4 as nc
 from shutil import copyfile
 
+import parsl
+from parsl.addresses import address_by_hostname
+from parsl.app.app import python_app, bash_app
+from parsl.config import Config
+from parsl.executors.threads import ThreadPoolExecutor
+from parsl.executors import HighThroughputExecutor
+from parsl.providers import LocalProvider
+from parsl.channels import LocalChannel
+from parsl.launchers import SrunLauncher, SimpleLauncher
+
 class WrappedEquilibriumObjective(ObjectiveFunction):
     """Evaluate an objective subject to equilibrium constraint.
 
@@ -155,7 +165,33 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self.history = {}
         for arg in self._full_args:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
+        
+        #Here I define the parsl config. The ThreadPoolExecutor is used for jvps since computing those should be cheap. The HTE is used to call gx.
+        local_threads = Config(
+            executors=[
+                ThreadPoolExecutor(
+                max_threads=2,
+                label='jvp_threads'
+                ),
+                HighThroughputExecutor(
+                label='gx_threads',
+                max_workers=4,
+                cores_per_worker=1,
+                working_dir='/scratch/gpfs/pk2354/DESC',
+                address=address_by_hostname(),
+                provider=LocalProvider(
+                    channel=LocalChannel(script_dir='/scratch/gpfs/pk2354/DESC'),
+                    nodes_per_block=1,
+                    launcher=SrunLauncher(overrides='-N 1 -t 00:10:00 --ntasks=1 --gpus-per-task=1 --exact --overcommit'),
+                    worker_init='cd /scratch/gpfs/pk2354/DESC; module load anaconda3/2022.5; conda activate desc-env'
+                    ),
+                )
+            ]
+        )
 
+        parsl.load(local_threads)
+
+        
         self._built = True
 
     def _update_equilibrium(self, x, store=False):
@@ -294,47 +330,57 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 #        GxFx = Gx_reduced @ Fx_reduced_inv
 
 #        LHS  = GxFx @ Fc - Gc
-        tang = jnp.array([])
-        for i in range(len(dxdc)):
-            ti = self._projectl(dxdc[i,:])
-            if np.abs(ti[0]) > 0.00001:
-                print("ti is " + str(ti))
-            tang = jnp.hstack([tang,ti])
-        tang = jnp.atleast_2d(0.001*tang).T
-
-        print("computing fx")
-        Gc = jnp.array([])
-        for i in range(len(tang[0])):
-            print("tangent is " + str(tang[:,i]))
-            Gc = jnp.hstack([Gc,self._objective.jvp(tang[:,i],xg)])
+#        tang = jnp.array([])
         
+        
+        #parsl app for jvps
+        @python_app(executors=["jvp_threads"])
+        def calc_jvp(tang,x):
+            return self._objective.jvp(tang,x).T
+
+        tang = self._projectl(dxdc[0,:])
+        for i in range(len(dxdc)-1):
+            ti = self._projectl(dxdc[i+1,:])
+            tang = jnp.vstack([tang,ti])
+        tang = jnp.atleast_2d(0.001*tang)
+
+        #Gc = jnp.array([])
+        #Gc = self._objective.jvp(tang[:,0],xg)
+        jvps = []
+        for i in range(len(tang[0])):
+            #Gc = jnp.vstack([Gc,self._objective.jvp(tang[:,i+1],xg)])
+            jvps.append(calc_jvp(tang[:,i],xg))
+        Gc = jnp.array([i.result() for i in jvps]).T      
+
         print("Gc new proj is " + str(Gc))
-        Gc = self._recoverl(Gc)
+#        Gc_rec = self._recoverl(jnp.array([Gc[i]]))
+        Gc_rec = self._recoverl(Gc[:,0])
+        for i in range(len(Gc[0])-1):
+#            Gc_rec = jnp.vstack([Gc_rec,self._recoverl(jnp.array([Gc[i+1]]))])
+            Gc_rec = jnp.vstack([Gc_rec,self._recoverl(Gc[:,i+1])])
+        #Gc = self._recoverl(Gc)
+        Gc = Gc_rec
         print("Gc new is " + str(Gc))
         
-        #Gc = jnp.array([])
-        #for i in range(len(dxdc[0])):
-        #    Gc = jnp.hstack([Gc,self._objective.jvp(dxdc[:,i],xg)])
-        #print("Gc old is " + str(Gc))
-        #print("Gc old proj is " + str(self._projectl(Gc)))
-
-
         I = jnp.eye(len(xg),len(self._Z))
         t = I @ self._Z @ Fx_reduced_inv @ Fc
         
-        num_singular_values = 9
+        num_singular_values = 5
         tnorm = jnp.linalg.norm(t,axis=0)        
 
         tU, tS, tV = jnp.linalg.svd(t)
-        tu1 = tU[:,:num_singular_values+1]
-        tv1 = tV[:num_singular_values+1,:]
-        ts1 = tS[:num_singular_values+1]
+        tu1 = tU[:,:num_singular_values]
+        tv1 = tV[:num_singular_values,:]
+        ts1 = tS[:num_singular_values]
 
-        GxFxFc = jnp.array([])
+        print("The singular values are " + str(ts1))
+#        GxFxFc = jnp.array([])
+        GxFxFc = self._objective.jvp(tu1[:,0],xg)
         gx_eval = 0
-        for i in range(len(tu1[0])):
-            GxFxFc = jnp.hstack([GxFxFc,self._objective.jvp(tu1[:,i],xg)])
+        for i in range(len(tu1[0])-1):
+            GxFxFc = jnp.vstack([GxFxFc,self._objective.jvp(tu1[:,i+1],xg)])
             gx_eval = gx_eval + 1
+        GxFxFc = jnp.transpose(GxFxFc)
         GxFxFc = GxFxFc @ jnp.diag(ts1) @ tv1
         LHS = jnp.atleast_2d(GxFxFc - Gc)
        
@@ -372,7 +418,7 @@ class GXWrapper(_Objective):
     _units = "Q"
     _print_value_fmt = "Total heat flux: {:10.3e} "
  
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False, path='/home/pk2354/src/gx',path_in='/scratch/gpfs/pk2354/DESC/GX/gx_nl',path_geo='/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap'):
         self.eq = eq
         self.npol = npol
         self.nzgrid = nzgrid
@@ -386,7 +432,10 @@ class GXWrapper(_Objective):
         self.lb = lb
         self.equality = equality
         self._print_value_fmt = "Total heat flux: {:10.3e} " + units
-
+        
+        self.path = path
+        self.path_in = path_in
+        self.path_geo = path_geo
 
     def build(self, eq, use_jit=False, verbose=1):
         if self.grid is None:
@@ -497,9 +546,6 @@ class GXWrapper(_Objective):
 
         iotas = fi(np.sqrt(self.psi))
         shears = fs(np.sqrt(self.psi))
-        #if iotas < 0:
-        #    iotas = np.abs(iotas)
-        #    shears = -shears
 
         zeta = np.linspace(-np.pi*self.npol/np.abs(iotas),np.pi*self.npol/np.abs(iotas),2*self.nzgrid+1)
         iota = iotas * np.ones(len(zeta))
@@ -530,13 +576,9 @@ class GXWrapper(_Objective):
             sgn = True
         
         
-        #normalizations
-        #grid = Grid(coords)
-        
+        #normalizations       
         Lref = data_eq['a']
         Bref = 2*psib/Lref**2
-        #print('psib is ' + str(psib))
-        #print("Bref is " + str(Bref))
 
         #calculate bmag
         modB = data['|B|']
@@ -545,7 +587,6 @@ class GXWrapper(_Objective):
         #calculate gradpar and grho
         gradpar  = Lref*data['B^zeta']/modB
         grho = data['|grad(rho)|']*Lref
-        #print("gradpar is " + str(gradpar))
 
         #calculate grad_psi and grad_alpha
         grad_psi = 2*psib*rho
@@ -621,29 +662,44 @@ class GXWrapper(_Objective):
 
 
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn)
-        self.write_geo()
-        self.run_gx()
+        t = str(time.time())
+        path_geo_old = self.path_geo + '.out'
+        path_in_old = self.path_in + '.in'
+        path_geo_new = self.path_geo + '_' + t + '.out'
+        path_in_new = self.path_in + '_' + t + '.in'
+        self.write_geo(path_geo_new)
+        self.write_input(path_in_old,path_geo_old,path_in_new,path_geo_new)
+        
+        
+        #Bash app to run the gx executable
+        @bash_app(executors=['jvp_threads'])
+        def run_gx_bash(cmd,stdout='stdout.out',stderr='stderr.out'):
+            return cmd
+        
+        stdout = 'stdout.out_' + t
+        stderr = 'stderr.out_' + t
+        cmd = self.path + '/gx ' + ' ' + path_in_new
+#        cmd ='srun -N 1 -t 00:10:00 --ntasks=1 --gpus-per-task=1 --exact --overcommit ' + self.path + '/gx' + ' ' + path_in_new
 
-        ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
+
+        out = run_gx_bash(cmd=cmd,stdout=stdout,stderr=stderr)
+        out_res = out.result()
+#        self.run_gx(t)
+
+        out_file = self.path_in + '_' + t + '.nc'
+        ds = nc.Dataset(out_file)
+
+        #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc')
         #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         
         qflux = ds['Fluxes/qflux']
         qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
         print(qflux_avg)
         
-        #om = ds['Special/omega_v_time'][len(ds['Special/omega_v_time'])-1][:]
-        #gamma = np.zeros(len(om))
-        #for i in range(len(gamma)):
-        #    gamma[i] = om[i][0][1]
-        #print(max(gamma))     
-        
-
-        os.rename('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
-        os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
+        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
+        #os.rename('/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out','/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap_old.out')
 
         
-        #print(gamma)
-        #return self._shift_scale(jnp.atleast_1d(max(gamma)))
         return self._shift_scale(jnp.atleast_1d(qflux_avg))
     
     def compute_gx_jvp(self,values,tangents):
@@ -810,14 +866,10 @@ class GXWrapper(_Objective):
             self.cvdrift0_gx = -self.cvdrift0_gx
 
 
-    def write_geo(self):
+    def write_geo(self,path_geo):
         nperiod = 1
-        #rmaj = self.eq.compute('R0')['R0']
         kxfac = 1.0
-        #print("At write geo: " + str(self.gbdrift_gx[0]) + str(self.gds2_gx[0]) + str(self.bmag_gx[0]))
-        #open('gxinput_wrap.out', 'w').close()
-        fname = '/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap.out'
-        f = open(fname, "w")
+        f = open(path_geo, "w")
         f.write("ntgrid nperiod ntheta drhodpsi rmaj shat kxfac q scale")
         f.write("\n"+str(self.nzgrid)+" "+str(nperiod)+" "+str(2*self.nzgrid)+" "+str(1.0)+" "+ str(1/self.Lref)+" "+str(self.shat)+" "+str(kxfac)+" "+str(1/self.iota[0]) + " " + str(2*self.npol-1))
 
@@ -839,35 +891,29 @@ class GXWrapper(_Objective):
             
         f.close()
 
-    def write_input(self,t):
-        fname = '/scratch/gpfs/pk2354/DESC/GX/gx_nl.in'
-        fname_new = '/scratch/gpfs/pk2354/DESC/GX/gx_nl_' + t + '.in'
+    def write_input(self,path_in_temp,geo_temp,path_in,geo):
+        copyfile(path_in_temp,path_in)
 
-        geo = 'gxinput_wrap_old.out'
-        geo_new = 'gxinput_wrap_old_' + t + '.out'
-        copyfile(fname,fname_new)
-
-        f = open(fname_new,"r")
+        f = open(path_in,"r")
         data = f.read()
 
-        data = data.replace(geo,geo_new)
+        data = data.replace(geo_temp,geo)
         f.close()
 
-        f = open(fname_new,"r")
+        f = open(path_in,"w")
         f.write(data)
+        f.close()
 
     
-    
 
-    def run_gx(self):
-        fs = open('stdout.out','w')
+    def run_gx(self,t):
+        fs = open('stdout.out_' + str(t),'w')
         path = '/home/pk2354/src/gx/'
-        path_in = '/scratch/gpfs/pk2354/DESC/GX/gx_nl.in'
-        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', path+'./gx',path_in]
+        path_in = '/scratch/gpfs/pk2354/DESC/GX/gx_nl_' + t + '.in'
+        cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',path+'./gx',path_in]
         #cmd = [path+'./gx','/scratch/gpfs/pk2354/DESC/GX/gx_nl.in']
         #process = []
         #print(cmd)
-        p = subprocess.run(cmd,stdout=fs)
+        print("BEFORE SUBPROCESS")
+        subprocess.run(cmd,stdout=fs)
         #p.wait()
-
-

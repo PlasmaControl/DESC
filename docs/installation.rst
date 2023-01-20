@@ -22,7 +22,8 @@ Or from GitHub (for development builds)
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-    # OPTION 1: install with pip
+    # OPTION 1: install with pip after first creating a conda environment
+    conda create
     # standard build
     pip install -r requirements.txt
     # developer build (if you want to run tests)
@@ -37,6 +38,13 @@ Or from GitHub (for development builds)
 
 On Most Linux Computing Clusters
 ********************************
+# FIXME: add DESC to your pythonpath
+#  also make sure your git ssh key is setup, or try https (but cannot push with this) (include error you'd get?)
+
+These examples use conda environments and either installing with conda or with pip.
+
+With CPU support only
+---------------------
 
 Install from PyPI:
 
@@ -44,7 +52,7 @@ Install from PyPI:
 
     pip install desc-opt
 
-Or from GitHub (for development builds)
+Or from GitHub (for development builds):
 
 .. code-block:: sh
 
@@ -53,11 +61,85 @@ Or from GitHub (for development builds)
 
     module load anaconda  # load your python module
 
+Using conda to install packages (note, this will only install DESC + JAX with CPU capabilities, NOT GPU):
+
+.. code-block:: sh
+
     # standard build
     conda env create --file requirements_conda.yml
     # developer build (if you want to run tests)
     conda env create --file devtools/dev-requirements_conda.yml
     conda activate desc-env
+
+Using pip install (note, this will only install DESC + JAX with CPU capabilities, NOT GPU):
+
+.. code-block:: sh
+
+    # standard build
+    pip install -r requirements.txt
+    # developer build (if you want to run tests)
+    pip install -r devtools/dev-requirements.txt
+    conda activate desc-env
+
+With CPU+GPU support
+--------------------
+
+We will show the installation instructions that worked for the clusters we've tested.
+If your cluster is not shown, try the installation for the cluster most resembling your own, or see if your cluster has
+specific JAX GPU installation instructions, as that is the main installation difference between clusters.
+(note, most of these clusters below are `x86_64` architectures, see the `JAX installation docs <https://github.com/google/jax#installation>`_ for more info if you have a different architecture ).
+
+Della Cluster (Princeton)
++++++++++++++++++++++++
+These instructions were tested and confirmed to work on the Della cluster at Princeton as of 10-13-2022.
+
+
+First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`_ ):
+
+.. code-block:: sh
+
+    module load anaconda3/2021.11
+    conda create --name DESC_env python=3.9
+    conda activate DESC_env
+    pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+
+Then, we install DESC:
+.. code-block:: sh
+
+    git clone git@github.com:PlasmaControl/DESC.git
+    # then go into requirements.txt and remove the jax line, as we already have installed them above
+    sed -i '/jax/d' ./requirements.txt
+    # then install as usual
+    pip install -r requirements.txt
+    # developer build (if you want to be able to run tests)
+    pip install -r devtools/dev-requirements.txt
+
+
+Stellar Cluster (Princeton)
++++++++++++++++++++++++
+Using pip install and including GPU capabilities.
+These instructions were tested and confirmed to work on the Stellar cluster at Princeton as of 1-12-2023.
+
+First, install JAX with GPU support (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`_ ):
+
+.. code-block:: sh
+
+    module load anaconda3/2022.5
+    CONDA_OVERRIDE_CUDA="11.2" conda create --name DESC_env jax "jaxlib==0.4.1=cuda112*" -c conda-forge
+
+Then, we install DESC:
+.. code-block:: sh
+
+    conda activate DESC_env
+    git clone git@github.com:PlasmaControl/DESC.git
+    # then use sed on requirements.txt to remove the jax line, as we already have installed it above
+    cd DESC
+    sed '/jax/d' ./requirements.txt > ./requirements_no_jax.txt
+    # then install as usual
+    pip install -r requirements_no_jax.txt
+    # developer build (if you want to be able to run tests)
+    pip install -r devtools/dev-requirements.txt
+
 
 On Clusters with IBM Power Architecture
 ***************************************

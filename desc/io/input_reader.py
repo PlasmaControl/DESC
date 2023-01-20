@@ -691,12 +691,12 @@ class InputReader:
 
         f.write("\n# solver tolerances\n")
         for key in ["ftol", "xtol", "gtol", "nfev"]:
-            at_least_one_is_none = False
+            inputs_not_None = []
             for inp in inputs:
-                if inp[key] is None:
-                    at_least_one_is_none = True
-            if at_least_one_is_none:
-                break  # don't write if an input tolerance is None
+                if inp[key] is not None:
+                    inputs_not_None.append(inp)
+            if not inputs_not_None:  # an  empty list evals to False
+                break  # don't write line if all input tolerance are None
 
             f.write(
                 key
@@ -704,7 +704,7 @@ class InputReader:
                     ", ".join(
                         [
                             str(inp[key]) if inp[key] is not None else str(0)
-                            for inp in inputs
+                            for inp in inputs_not_None
                         ]
                     )
                 )

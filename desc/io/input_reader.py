@@ -631,7 +631,7 @@ class InputReader:
                 inputs_ii["current"][:, 1] *= inputs_ii["curr_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
-                inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
+                inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1.0
             )
             inputs_ii["surface"][:, 3] *= bdry_factor
             inputs_ii["surface"][:, 4] *= bdry_factor
@@ -686,7 +686,8 @@ class InputReader:
         f.write("\n# continuation parameters\n")
         for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
             f.write(
-                key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
+                key
+                + " = {} \n".format(", ".join([str(float(inp[key])) for inp in inputs]))
             )
 
         f.write("\n# solver tolerances\n")
@@ -1368,12 +1369,12 @@ class InputReader:
                 inputs_arr[i]["L_grid"] = 2 * inputs_arr[i]["L"]
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = 0
+                inputs_arr[i]["pres_ratio"] = 0.0
                 inputs_arr[i]["curr_ratio"] = 0
                 if bdry_steps != 0:
                     inputs_arr[i]["bdry_ratio"] = 0
                 else:
-                    inputs_arr[i]["bdry_ratio"] = 1
+                    inputs_arr[i]["bdry_ratio"] = 1.0
             elif i < (res_steps + pres_steps):
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
@@ -1383,7 +1384,7 @@ class InputReader:
                 if bdry_steps != 0:
                     inputs_arr[i]["bdry_ratio"] = 0
                 else:
-                    inputs_arr[i]["bdry_ratio"] = 1
+                    inputs_arr[i]["bdry_ratio"] = 1.0
             else:
                 inputs_arr[i]["pert_order"] = 2
                 inputs_arr[i]["bdry_ratio"] = (

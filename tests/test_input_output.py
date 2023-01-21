@@ -26,6 +26,9 @@ def test_vmec_input(tmpdir_factory):
     shutil.copyfile(input_path, tmp_path)
     ir = InputReader(cl_args=[str(tmp_path)])
     vmec_inputs = ir.inputs
+    # ir makes a VMEC file automatically
+    path_converted_file = tmpdir.join("input.DSHAPE_desc")
+    # also test making a DESC file from the ir.inputs manually
     path = tmpdir.join("desc_from_vmec")
     ir.write_desc_input(path, ir.inputs)
     ir2 = InputReader(cl_args=[str(path)])
@@ -34,6 +37,23 @@ def test_vmec_input(tmpdir_factory):
         d.pop("output_path")
         v.pop("output_path")
     assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
+
+    correct_file_path = ".//tests//inputs//input.DSHAPE_desc"
+    print(path)
+
+    # check DESC input file matches known correct one line-by-line
+    with open(correct_file_path) as f:
+        lines_correct = f.readlines()
+    with open(path) as f:
+        lines_direct = f.readlines()
+    with open(path_converted_file) as f:
+        lines_converted = f.readlines()
+    # skip first 3 lines as they have date and pwd info
+    for line1, line2 in zip(lines_correct[3:], lines_converted[3:]):
+        assert line1 == line2
+    # skip first 4 here as the directly written file lacks a header
+    for line1, line2 in zip(lines_correct[4:], lines_direct):
+        assert line1 == line2
 
 
 @pytest.mark.unit
@@ -133,13 +153,6 @@ class TestInputReader:
         assert (
             ir.inputs[0]["verbose"] == 0
         ), "value of inputs['verbose'] incorrect on quiet argument"
-
-    @pytest.mark.unit
-    def test_vmec_to_desc_input(self):
-        """Test that we correctly convert a VMEC input file to DESC input file."""
-        # FIXME: maybe just store a file we know is converted correctly,
-        #  and checksum compare a live conversion to it
-        pass
 
     @pytest.mark.unit
     def test_vacuum_objective_with_iota_yields_current(self):

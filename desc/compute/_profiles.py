@@ -224,7 +224,7 @@ def _ne_r(params, transforms, profiles, data, **kwargs):
     units_long="electron-Volts",
     description="Ion temperature",
     dim=1,
-    params=["Te_l"],
+    params=["Ti_l"],
     transforms={},
     profiles=["ion_temperature"],
     coordinates="r",

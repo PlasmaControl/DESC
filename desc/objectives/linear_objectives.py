@@ -1004,7 +1004,7 @@ class FixElectronTemperature(_FixProfile):
         profile = eq.electron_temperature
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["p"]
+            self._normalization = scales["T"]
         super().build(eq, profile, use_jit, verbose)
 
     def compute(self, Te_l, **kwargs):
@@ -1111,7 +1111,8 @@ class FixElectronDensity(_FixProfile):
             )
         profile = eq.electron_density
         if self._normalize:
-            self._normalization = 1e19
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["n"]
         super().build(eq, profile, use_jit, verbose)
 
     def compute(self, ne_l, **kwargs):
@@ -1219,7 +1220,7 @@ class FixIonTemperature(_FixProfile):
         profile = eq.ion_temperature
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["p"]
+            self._normalization = scales["T"]
         super().build(eq, profile, use_jit, verbose)
 
     def compute(self, Ti_l, **kwargs):

@@ -640,7 +640,7 @@ class InputReader:
         return inputs_list
 
     @staticmethod
-    def write_desc_input(filename, inputs, header=""):  # noqa: 16 fxn too complex
+    def write_desc_input(filename, inputs, header=""):  # noqa: C901 - fxn too complex
         """Generate a DESC input file from a dictionary of parameters.
 
         Parameters

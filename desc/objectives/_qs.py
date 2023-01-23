@@ -127,7 +127,7 @@ class QuasisymmetryBoozer(_Objective):
             N_booz=self.N_booz,
         )
         self._matrix, self._modes, self._idx = ptolemy_linear_transform(
-            self._transforms["B"].basis, self.helicity
+            self._transforms["B"].basis, helicity=self.helicity
         )
 
         timer.stop("Precomputing transforms")

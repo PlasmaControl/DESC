@@ -157,13 +157,19 @@ def ptolemy_identity_rev(m_1, n_1, x):
     return m_0, n_0, s, c
 
 
-def ptolemy_linear_transform(basis, helicity=None):
+def ptolemy_linear_transform(basis, modes=None, helicity=None):
     """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
 
     Parameters
     ----------
     basis : DoubleFourierBasis
         Basis of the double-Fourier series.
+    modes : ndarray, shape(num_modes,3), optional
+        Desired order of modes of the double-angle basis.
+        First column: +1/-1 for cos/sin term.
+        Second column: poloidal mode number m (range 0 to basis.M).
+        Third column: toroidal mode number n (range -basis.N to basis.N).
+        If None, determined automatically.
     helicity : tuple, optional
         Type of quasi-symmetry, specified as (M, N).
 
@@ -181,38 +187,63 @@ def ptolemy_linear_transform(basis, helicity=None):
         Only returned if helicity is specified.
 
     """
-    mn = np.array(
-        [[m, n - basis.N] for m in range(basis.M + 1) for n in range(2 * basis.N + 1)]
-    )[basis.N + 1 :, :]
-    matrix = np.zeros((2 * mn.shape[0] + 1,))
-    matrix[mn.shape[0]] = 1  # cos(0*t-0*z) mode
-    modes = np.array([[1, 0, 0]])
+    if modes is None:
+        # this finds the VMEC modes corresponding to a given set of DESC modes
+        # order : [+1 for cos/-1 for sin, m, n]
+        modes = np.vstack(
+            [
+                sign(basis.modes[:, 2]) * sign(basis.modes[:, 1]),
+                abs(basis.modes[:, 1]),
+                basis.modes[:, 2],
+            ]
+        ).T
+        modes[modes[:, 1] == 0, 2] = abs(modes[modes[:, 1] == 0, 2])
+        modes = modes[np.lexsort(modes.T[np.array([0, 2, 1])])]
 
-    # build matrix from forward Ptolemy identity
-    for i, (m, n) in enumerate(mn):
-        temp = np.zeros((mn.shape[0],))
-        temp[i] = 1
-        mm, nn, row = ptolemy_identity_fwd(
-            mn[:, 0], mn[:, 1], temp, np.zeros_like(temp)
-        )
-        matrix = np.vstack((matrix, row))
-        modes = np.vstack((modes, [-1, m, n]))
-        mm, nn, row = ptolemy_identity_fwd(
-            mn[:, 0], mn[:, 1], np.zeros_like(temp), temp
-        )
-        matrix = np.vstack((matrix, row))
-        modes = np.vstack((modes, [1, m, n]))
-    matrix = (matrix.T / np.sum(np.abs(matrix), axis=1)).T
+    cs, m1, n1 = modes.T
+    _, m2, n2 = basis.modes.T
 
-    # delete non-stellarator-symmetric modes
-    if basis.sym == "cos":
-        idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
-        matrix = np.delete(matrix[::2, :], idx, axis=1)
-        modes = modes[::2, :]
-    elif basis.sym == "sin":
-        idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
-        matrix = np.delete(matrix[1::2, :], idx, axis=1)
-        modes = modes[1::2, :]
+    # some logical masking for different patterns of m,n
+    idx_smn_m1 = (cs == -1) * (n1 < 0) * (m1 == m2[:, None]) * (n1 == n2[:, None])
+    idx_smn_m2 = (cs == -1) * (n1 < 0) * (m1 == -m2[:, None]) * (n1 == -n2[:, None])
+    idx_smn_p1 = (cs == -1) * (n1 > 0) * (m1 == m2[:, None]) * (n1 == -n2[:, None])
+    idx_smn_p2 = (cs == -1) * (n1 > 0) * (m1 == -m2[:, None]) * (n1 == n2[:, None])
+    idx_cmn_m1 = (cs == 1) * (n1 < 0) * (m1 == -m2[:, None]) * (n1 == n2[:, None])
+    idx_cmn_m2 = (cs == 1) * (n1 < 0) * (m1 == m2[:, None]) * (n1 == -n2[:, None])
+    idx_cmn_p1 = (cs == 1) * (n1 > 0) * (m1 == -m2[:, None]) * (n1 == -n2[:, None])
+    idx_cmn_p2 = (cs == 1) * (n1 > 0) * (m1 == m2[:, None]) * (n1 == n2[:, None])
+    m_zero = (m1 == 0) * (m2[:, None] == 0)
+    n_zero = (n1 == 0) * (n2[:, None] == 0)
+    both_zero = m_zero * n_zero
+    either_zero = m_zero + n_zero
+
+    mat = np.zeros((len(basis.modes), len(modes)))
+    # pattern for m!=0, n!=0:
+    # vmec smn- = 1/2 desc m,n + 1/2 desc -m,-n
+    # vmec smn+ = -1/2 desc m,-n + 1/2 desc -m,n
+    # vmec cmn- = -1/2 desc -m,n + 1/2 desc m,-n
+    # vmec cmn+ = 1/2 desc -m,-n + 1/2 desc m,n
+    mat[idx_smn_m1] = 0.5
+    mat[idx_smn_m2] = 0.5
+    mat[idx_smn_p1] = -0.5
+    mat[idx_smn_p2] = 0.5
+    mat[idx_cmn_m1] = -0.5
+    mat[idx_cmn_m2] = 0.5
+    mat[idx_cmn_p1] = 0.5
+    mat[idx_cmn_p2] = 0.5
+    # above stuff is wrong when m or n is 0 so reset those
+    mat[either_zero] = 0
+    # for m=0, cos terms get +1 where n1==n2
+    mat[m_zero * (n1 == n2[:, None]) * (cs == 1)] = 1
+    # and sin terms get -1 where n1==-n2
+    mat[m_zero * (n1 == -n2[:, None]) * (cs == -1)] = -1
+    # for n=0, sin terms get +1 where n1==-n2
+    mat[n_zero * (m1 == -m2[:, None]) * (cs == -1)] = 1
+    # and cos terms get 1 where n1==n2
+    mat[n_zero * (m1 == m2[:, None]) * (cs == 1)] = 1
+    # m=n=0 is always 1
+    mat[both_zero] = 1
+    matrix = mat.T
 
     # indices of non-quasi-symmetric modes
     if helicity is not None:

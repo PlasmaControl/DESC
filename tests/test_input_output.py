@@ -56,6 +56,7 @@ def test_vmec_input(tmpdir_factory):
         assert line1.strip() == line2.strip()
 
 
+@pytest.mark.unit
 def test_write_desc_input_Nones(tmpdir_factory):
     """Test converting writing DESC input file when an input tol is None."""
     # tests how None is handled as a passed-in input to the input writer

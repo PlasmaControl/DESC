@@ -697,17 +697,12 @@ class InputReader:
                 if inp[key] is not None:
                     inputs_not_None.append(inp)
             if not inputs_not_None:  # an  empty list evals to False
-                break  # don't write line if all input tolerance are None
+                continue  # don't write line if all input tolerance are None
 
             f.write(
                 key
                 + " = {}\n".format(
-                    ", ".join(
-                        [
-                            str(inp[key]) if inp[key] is not None else str(0)
-                            for inp in inputs_not_None
-                        ]
-                    )
+                    ", ".join([str(inp[key]) for inp in inputs_not_None])
                 )
             )
 

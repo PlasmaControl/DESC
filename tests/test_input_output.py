@@ -60,6 +60,16 @@ def test_vmec_input(tmpdir_factory):
 def test_write_desc_input_Nones(tmpdir_factory):
     """Test converting writing DESC input file when an input tol is None."""
     # tests how None is handled as a passed-in input to the input writer
+    # if None is passed for one of the elements of an input item
+    # such as ftol, gtol, xtol or nfev,
+    # then that will not be written
+    # for example if inputs['ftol'] = [1e-2,None,1e-3]
+    # the written file will have ftol = 0.01,0.001
+    # and the None will have not been written
+
+    # if None is passed for one of the tols, only that one will not
+    # be written. gtol is used here as that test
+
     input_path = "./tests/inputs/DSHAPE"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("DSHAPE")
@@ -69,6 +79,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
     ftols_input_with_none = [1e-2, None, 1e-3]
     for i, inp in enumerate(ir.inputs):
         inp["ftol"] = ftols_input_with_none[i]
+        inp["gtol"] = None
 
     path = tmpdir.join("desc_with_None")
     ir.write_desc_input(path, ir.inputs)
@@ -79,6 +90,8 @@ def test_write_desc_input_Nones(tmpdir_factory):
 
     # now check that the written line is the
     # the correct "ftol = 1e-2, 1e-3"
+    # and that gtol is NOT written anywhere
+    no_gtol = True
     with open(path) as f:
         lines = f.readlines()
     for line in lines:
@@ -89,7 +102,9 @@ def test_write_desc_input_Nones(tmpdir_factory):
             line = line.strip().split(",")
             for i, string_num in enumerate(line):
                 assert float(string_num) == correct_ftols[i]
-            break
+        elif line.find("gtol") != -1:
+            no_gtol = False
+    assert no_gtol
 
 
 @pytest.mark.unit

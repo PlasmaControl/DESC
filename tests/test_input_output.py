@@ -67,7 +67,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
     # the written file will have ftol = 0.01,0.001
     # and the None will have not been written
 
-    # if None is passed for one of the tols, only that one will not
+    # if only Nones are passed for just one of the tols, only that one will not
     # be written. gtol is used here as that test
 
     input_path = "./tests/inputs/DSHAPE"
@@ -90,7 +90,8 @@ def test_write_desc_input_Nones(tmpdir_factory):
 
     # now check that the written line is the
     # the correct "ftol = 1e-2, 1e-3"
-    # and that gtol is NOT written anywhere
+    # and that gtol is NOT written anywhere,
+    # since only None was passed in for that input
     no_gtol = True
     with open(path) as f:
         lines = f.readlines()
@@ -104,7 +105,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
                 assert float(string_num) == correct_ftols[i]
         elif line.find("gtol") != -1:
             no_gtol = False
-    assert no_gtol
+    assert no_gtol  # fail test if gtol line is written
 
 
 @pytest.mark.unit

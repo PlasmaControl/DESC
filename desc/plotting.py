@@ -2488,7 +2488,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(
-                    transforms["B"].basis, helicity
+                    transforms["B"].basis, helicity=helicity
                 )
             data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
             B_mn = matrix @ data["|B|_mn"]

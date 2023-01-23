@@ -13,11 +13,10 @@ from scipy.integrate import solve_ivp
 from scipy.interpolate import Rbf
 from termcolor import colored
 
-from desc.basis import DoubleFourierSeries, fourier, zernike_radial_poly
+from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid, QuadratureGrid
-from desc.transform import Transform
 from desc.utils import flatten_list
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -2171,7 +2170,8 @@ def plot_boozer_modes(
             "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+        if i == 0:
+            matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
@@ -2486,9 +2486,10 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             transforms = get_transforms(
                 "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
-            matrix, modes, idx = ptolemy_linear_transform(
-                transforms["B"].basis, helicity
-            )
+            if i == 0:  # only need to do this once for the first rho surface
+                matrix, modes, idx = ptolemy_linear_transform(
+                    transforms["B"].basis, helicity
+                )
             data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
             B_mn = matrix @ data["|B|_mn"]
             f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))

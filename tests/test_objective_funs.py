@@ -20,9 +20,11 @@ from desc.objectives import (
     Energy,
     GenericObjective,
     MagneticWell,
+    MeanCurvature,
     MercierStability,
     ObjectiveFunction,
     PlasmaVesselDistance,
+    PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -397,3 +399,33 @@ def test_plasma_vessel_distance():
     d = obj.compute(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
+
+
+@pytest.mark.unit
+def test_mean_curvature():
+    """Test for mean curvature objective function."""
+    # simple case like dshape should have mean curvature negative everywhere
+    eq = get("DSHAPE")
+    obj = MeanCurvature(eq=eq)
+    H = obj.compute(*obj.xs(eq))
+    assert np.all(H <= 0)
+
+    # more shaped case like NCSX should have some positive curvature
+    eq = get("NCSX")
+    obj = MeanCurvature(eq=eq)
+    H = obj.compute(*obj.xs(eq))
+    assert np.any(H > 0)
+
+
+@pytest.mark.unit
+def test_principal_curvature():
+    """Test for principal curvature objective function."""
+    eq1 = get("DSHAPE")
+    eq2 = get("NCSX")
+    obj1 = PrincipalCurvature(eq=eq1, normalize=False)
+    K1 = obj1.compute(*obj1.xs(eq1))
+    obj2 = PrincipalCurvature(eq=eq2, normalize=False)
+    K2 = obj2.compute(*obj2.xs(eq2))
+
+    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
+    assert K1.mean() < K2.mean()

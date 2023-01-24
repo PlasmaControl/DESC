@@ -2170,7 +2170,8 @@ def plot_boozer_modes(
             "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
-        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+        if i == 0:
+            matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 

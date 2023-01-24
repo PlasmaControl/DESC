@@ -2171,7 +2171,7 @@ def plot_boozer_modes(
         )
         data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
         if i == 0:
-            matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+            matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
         B_mn = np.vstack((B_mn, b_mn)) if B_mn.size else b_mn
 
@@ -2488,7 +2488,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(
-                    transforms["B"].basis, helicity
+                    transforms["B"].basis.modes,
+                    helicity=helicity,
+                    NFP=transforms["B"].basis.NFP,
                 )
             data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
             B_mn = matrix @ data["|B|_mn"]

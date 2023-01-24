@@ -106,7 +106,6 @@ def factorize_linear_constraints(constraints, objective_args):
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
     Ax=b can be written as x=xp + Zy where y is now unconstrained.
 
-
     Parameters
     ----------
     constraints : tuple of Objectives
@@ -203,6 +202,18 @@ def factorize_linear_constraints(constraints, objective_args):
         """Recover the full state vector from the reduced optimization vector."""
         dx = put(jnp.zeros(dim_x), unfixed_idx, Z @ x_reduced)
         return jnp.atleast_1d(jnp.squeeze(xp + dx))
+
+    # check that all constraints are actually satisfiable
+    xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
+    for con in constraints:
+        arg = con.args[0]
+        if arg not in objective_args:
+            continue
+        res = con.compute(**xp_dict)
+        if not np.allclose(res, 0):
+            raise ValueError(
+                f"Incompatible constraints detected, cannot satisfy constraint {con}"
+            )
 
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
 

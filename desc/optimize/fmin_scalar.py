@@ -48,8 +48,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     hess : callable or ``'bfgs'``, optional:
-        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
-        method will be used to approximate the hessian.
+        function to compute Hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
+        method will be used to approximate the Hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
     method : ``'dogleg'`` or ``'subspace'``
@@ -62,7 +62,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'hess'``, the scale is iteratively updated using the
-        inverse norms of the columns of the hessian matrix.
+        inverse norms of the columns of the Hessian matrix.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function. Default
         is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
@@ -159,6 +159,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
+    max_dx = options.pop("max_dx", np.inf)
 
     hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
     assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
@@ -191,7 +192,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     trust_radius *= tr_ratio
 
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
-    min_trust_radius = options.pop("min_trust_radius", 0)
+    min_trust_radius = options.pop("min_trust_radius", np.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
@@ -240,6 +241,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             max_ngev,
             nhev,
             max_nhev,
+            min_trust_radius=min_trust_radius,
+            dx_total=np.linalg.norm(x - x0),
+            max_dx=max_dx,
         )
         if success is not None:
             break
@@ -323,6 +327,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
                 max_ngev,
                 nhev,
                 max_nhev,
+                min_trust_radius=min_trust_radius,
+                dx_total=np.linalg.norm(x - x0),
+                max_dx=max_dx,
             )
             if success is not None:
                 break
@@ -389,6 +396,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))

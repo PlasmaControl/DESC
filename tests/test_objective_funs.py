@@ -9,24 +9,30 @@ This module primarily tests the constructing/building/calling methods.
 import numpy as np
 import pytest
 
+from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
+from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
     Elongation,
     Energy,
     GenericObjective,
     MagneticWell,
+    MeanCurvature,
     MercierStability,
     ObjectiveFunction,
+    PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
+    RotationalTransform,
     ToroidalCurrent,
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.profiles import PowerSeriesProfile
+from desc.vmec_utils import ptolemy_linear_transform
 
 
 class TestObjectiveFunction:
@@ -94,7 +100,7 @@ class TestObjectiveFunction:
         """Test calculation of elongation."""
 
         def test(eq):
-            obj = Elongation(eq=eq)
+            obj = Elongation(target=0, weight=1, eq=eq)
             f = obj.compute(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             f = obj.compute(*obj.xs(eq))
@@ -115,20 +121,32 @@ class TestObjectiveFunction:
         test(Equilibrium(node_pattern="quad", current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_target_iota(self):
+        """Test calculation of iota profile."""
+
+        def test(eq):
+            obj = RotationalTransform(target=1, weight=2, eq=eq)
+            iota = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
+            np.testing.assert_allclose(iota, -2 / 3)
+
+        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
     def test_toroidal_current(self):
         """Test calculation of toroidal current."""
 
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute(eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.i_l, eq.c_l, eq.Psi)
-            np.testing.assert_allclose(I, -2)
+            np.testing.assert_allclose(I, -2 / 3)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
-    def test_qs_boozer(self):
-        """Test calculation of boozer qs metric."""
+    def test_qa_boozer(self):
+        """Test calculation of Boozer QA metric."""
 
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
@@ -139,8 +157,45 @@ class TestObjectiveFunction:
         test(Equilibrium(L=2, M=2, N=1, current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_qh_boozer(self):
+        """Test calculation of Boozer QH metric."""
+        eq = get("WISTELL-A")  # WISTELL-A is optimized for QH symmetry
+        helicity = (1, -eq.NFP)
+        M_booz = eq.M
+        N_booz = eq.N
+        grid = LinearGrid(M=2 * eq.M, N=2 * eq.N, NFP=eq.NFP, sym=False)
+
+        # objective function returns amplitudes of non-symmetric modes
+        obj = QuasisymmetryBoozer(
+            helicity=helicity,
+            M_booz=M_booz,
+            N_booz=N_booz,
+            grid=grid,
+            normalize=False,
+            eq=eq,
+        )
+        f = obj.compute(*obj.xs(eq))
+        idx_f = np.argsort(np.abs(f))
+
+        # compute all amplitudes in the Boozer spectrum
+        transforms = get_transforms(
+            "|B|_mn",
+            eq=eq,
+            grid=grid,
+            M_booz=M_booz,
+            N_booz=N_booz,
+        )
+        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+        data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
+        B_mn = matrix @ data["|B|_mn"]
+        idx_B = np.argsort(np.abs(B_mn))
+
+        # check that objective returns the lowest amplitude modes, since example is QH
+        np.testing.assert_allclose(f[idx_f], B_mn[idx_B[: obj.dim_f]])
+
+    @pytest.mark.unit
     def test_qs_twoterm(self):
-        """Test calculation of two term qs metric."""
+        """Test calculation of two term QS metric."""
 
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
@@ -151,8 +206,8 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
-    def test_qs_tp(self):
-        """Test calculation of triple product qs metric."""
+    def test_qs_tripleproduct(self):
+        """Test calculation of triple product QS metric."""
 
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
@@ -161,6 +216,21 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_qs_boozer_grids(self):
+        """Test grid compatability with QS objectives."""
+        eq = get("QAS")
+
+        # symmetric grid
+        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, sym=True)
+        with pytest.raises(AssertionError):
+            _ = QuasisymmetryBoozer(eq=eq, grid=grid)
+
+        # multiple flux surfaces
+        grid = LinearGrid(M=eq.M, N=eq.N, NFP=eq.NFP, rho=[0.25, 0.5, 0.75, 1])
+        with pytest.raises(AssertionError):
+            _ = QuasisymmetryBoozer(eq=eq, grid=grid)
 
     @pytest.mark.unit
     def test_mercier_stability(self):
@@ -255,3 +325,63 @@ def test_rejit():
     objective2.jit()
     assert objective2.compute(x)[0] == 2012.0
     np.testing.assert_allclose(objective2.jac(x), J / 3 * 2)
+
+
+@pytest.mark.unit
+def test_generic_compute():
+    """Test for gh issue #388."""
+    eq = Equilibrium()
+    obj = ObjectiveFunction(AspectRatio(target=2, weight=1), eq=eq)
+    a1 = obj.compute_scalar(obj.x(eq))
+    obj = ObjectiveFunction(GenericObjective("R0/a", target=2, weight=1), eq=eq)
+    a2 = obj.compute_scalar(obj.x(eq))
+    assert np.allclose(a1, a2)
+
+
+@pytest.mark.unit
+def test_target_profiles():
+    """Tests for using Profile objects as targets for profile objectives."""
+    iota = PowerSeriesProfile([1, 0, -0.3])
+    current = PowerSeriesProfile([4, 0, 1, 0, -1])
+    eqi = Equilibrium(L=5, N=3, M=3, iota=iota)
+    eqc = Equilibrium(L=3, N=3, M=3, current=current)
+    obji = RotationalTransform(target=iota)
+    obji.build(eqc)
+    np.testing.assert_allclose(
+        obji.target, iota(obji.grid.nodes[obji.grid.unique_rho_idx])
+    )
+    objc = ToroidalCurrent(target=current)
+    objc.build(eqi)
+    np.testing.assert_allclose(
+        objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])
+    )
+
+
+@pytest.mark.unit
+def test_mean_curvature():
+    """Test for mean curvature objective function."""
+    # simple case like dshape should have mean curvature negative everywhere
+    eq = get("DSHAPE")
+    obj = MeanCurvature(eq=eq)
+    H = obj.compute(*obj.xs(eq))
+    assert np.all(H <= 0)
+
+    # more shaped case like NCSX should have some positive curvature
+    eq = get("NCSX")
+    obj = MeanCurvature(eq=eq)
+    H = obj.compute(*obj.xs(eq))
+    assert np.any(H > 0)
+
+
+@pytest.mark.unit
+def test_principal_curvature():
+    """Test for principal curvature objective function."""
+    eq1 = get("DSHAPE")
+    eq2 = get("NCSX")
+    obj1 = PrincipalCurvature(eq=eq1, normalize=False)
+    K1 = obj1.compute(*obj1.xs(eq1))
+    obj2 = PrincipalCurvature(eq=eq2, normalize=False)
+    K2 = obj2.compute(*obj2.xs(eq2))
+
+    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
+    assert K1.mean() < K2.mean()

@@ -86,7 +86,7 @@ class Basis(IOAble, ABC):
                 self._idx[L][M] = {}
             self._idx[L][M][N] = idx
 
-    def get_idx(self, L=0, M=0, N=0):
+    def get_idx(self, L=0, M=0, N=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
@@ -97,6 +97,8 @@ class Basis(IOAble, ABC):
             Poloidal mode number.
         N : int
             Toroidal mode number.
+        error : bool
+            whether to raise exception if mode is not in basis, or return empty array
 
         Returns
         -------
@@ -107,9 +109,12 @@ class Basis(IOAble, ABC):
         try:
             return self._idx[L][M][N]
         except KeyError as e:
-            raise ValueError(
-                "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
-            ) from e
+            if error:
+                raise ValueError(
+                    "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+                ) from e
+            else:
+                return np.array([]).astype(int)
 
     @abstractmethod
     def _get_modes(self):

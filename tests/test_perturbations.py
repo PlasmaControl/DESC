@@ -77,11 +77,11 @@ def test_perturbation_orders(SOLOVEV):
 
     # evaluate equilibrium force balance
     grid = ConcentricGrid(2 * eq.L, 2 * eq.M, 2 * eq.N, eq.NFP, node_pattern="jacobi")
-    data0 = eq0.compute("|F|", grid)
-    data1 = eq1.compute("|F|", grid)
-    data2 = eq2.compute("|F|", grid)
-    data3 = eq3.compute("|F|", grid)
-    dataS = eqS.compute("|F|", grid)
+    data0 = eq0.compute("|F|", grid=grid)
+    data1 = eq1.compute("|F|", grid=grid)
+    data2 = eq2.compute("|F|", grid=grid)
+    data3 = eq3.compute("|F|", grid=grid)
+    dataS = eqS.compute("|F|", grid=grid)
 
     # total error in Newtons throughout plasma volume
     f0 = np.sum(data0["|F|"] * np.abs(data0["sqrt(g)"]) * grid.weights)
@@ -97,7 +97,6 @@ def test_perturbation_orders(SOLOVEV):
 
 
 @pytest.mark.unit
-@pytest.mark.xfail
 def test_optimal_perturb():
     """Test that a single step of optimal_perturb doesn't mess things up."""
     # as of v0.6.1, the recover operation from optimal_perturb would give
@@ -141,7 +140,7 @@ def test_optimal_perturb():
         dRb=R_modes,
         dZb=Z_modes,
         order=1,
-        tr_ratio=[0.05, 0.1],
+        tr_ratio=[0.03, 0.1],
         verbose=1,
         copy=True,
     )[0]

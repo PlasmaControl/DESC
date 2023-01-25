@@ -9,7 +9,14 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
-from ._geometry import AspectRatio, Elongation, SpectralCondensation, Volume
+from ._geometry import (
+    AspectRatio,
+    Elongation,
+    MeanCurvature,
+    PrincipalCurvature,
+    SpectralCondensation,
+    Volume,
+)
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective

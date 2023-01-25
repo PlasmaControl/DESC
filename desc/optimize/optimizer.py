@@ -172,15 +172,15 @@ class Optimizer(IOAble):
             The optimization process is stopped when ``dF < ftol * F``,
             and there was an adequate agreement between a local quadratic model and the
             true model in the last step.
-            If None, the termination by this condition is disabled.
+            If None, defaults to 1e-2 (or 1e-6 for stochastic).
         xtol : float or None, optional
             Tolerance for termination by the change of the independent variables.
             Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
-            If None, the termination by this condition is disabled.
+            If None, defaults to 1e-6.
         gtol : float or None, optional
             Absolute tolerance for termination by the norm of the gradient.
             Optimizer terminates when ``norm(g) < gtol``, where
-            If None, the termination by this condition is disabled.
+            If None, defaults to 1e-8.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -530,9 +530,7 @@ def _get_default_tols(
         stoptol["maxiter"] = maxiter
     stoptol.setdefault(
         "xtol",
-        options.pop(
-            "xtol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-4
-        ),
+        options.pop("xtol", 1e-6),
     )
     stoptol.setdefault(
         "ftol",

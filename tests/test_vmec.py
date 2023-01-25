@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from netCDF4 import Dataset
 
-from desc.basis import FourierZernikeBasis
+from desc.basis import DoubleFourierSeries, FourierZernikeBasis
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.vmec import VMECIO
@@ -12,6 +12,7 @@ from desc.vmec_utils import (
     fourier_to_zernike,
     ptolemy_identity_fwd,
     ptolemy_identity_rev,
+    ptolemy_linear_transform,
     vmec_boundary_subspace,
     zernike_to_fourier,
 )
@@ -38,9 +39,9 @@ class TestVMECIO:
         # a0 + a2*cos(t+z) + a3*cos(t-z)                                # noqa: E800
         #    = a0 + (a2+a3)*cos(t)*cos(z) + (a3-a2)*sin(t)*sin(z)
 
-        m_1_correct = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
-        n_1_correct = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
-        x_correct = np.array([[a3 - a2, a3, a1, -a0, a0, 0, a1, 0, a2 + a3]])
+        m_1_correct = np.array([-1, 0, 1, -1, 0, 1, -1, 0, 1])
+        n_1_correct = np.array([-1, -1, -1, 0, 0, 0, 1, 1, 1])
+        x_correct = np.array([[a3 - a2, -a0, a1, a3, a0, 0, a1, 0, a2 + a3]])
 
         m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
 
@@ -76,6 +77,45 @@ class TestVMECIO:
         np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
         np.testing.assert_allclose(s, s_correct, atol=1e-8)
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identities_inverse(self):
+        """Tests that forward and reverse Ptolemy's identities are inverses."""
+        basis = DoubleFourierSeries(4, 3, sym=False)
+        modes = basis.modes
+        x_correct = np.random.rand(basis.num_modes)
+
+        m1, n1, s, c = ptolemy_identity_rev(modes[:, 1], modes[:, 2], x_correct)
+        m0, n0, x = ptolemy_identity_fwd(m1, n1, s, c)
+
+        np.testing.assert_allclose(m0, modes[:, 1])
+        np.testing.assert_allclose(n0, modes[:, 2])
+        np.testing.assert_allclose(x, np.atleast_2d(x_correct))
+
+    @pytest.mark.unit
+    def test_ptolemy_linear_transform(self):
+        """Tests Ptolemy basis linear transformation utility function."""
+        basis = DoubleFourierSeries(M=4, N=3, sym=False)
+        matrix, modes = ptolemy_linear_transform(basis.modes)
+
+        x_correct = np.random.rand(basis.num_modes)
+        x_transformed = matrix @ x_correct
+
+        x_sin = np.insert(x_transformed[1::2], 0, 0)
+        x_cos = x_transformed[::2]
+
+        m, n, s, c = ptolemy_identity_rev(
+            basis.modes[:, 1], basis.modes[:, 2], x_correct
+        )
+        np.testing.assert_allclose(modes[::2, 1], m)
+        np.testing.assert_allclose(modes[::2, 2], n)
+        np.testing.assert_allclose(np.atleast_2d(x_sin), s)
+        np.testing.assert_allclose(np.atleast_2d(x_cos), c)
+
+        _, _, x_original = ptolemy_identity_fwd(
+            modes[::2, 1], modes[::2, 2], x_sin, x_cos
+        )
+        np.testing.assert_allclose(x_original, np.atleast_2d(x_correct))
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):

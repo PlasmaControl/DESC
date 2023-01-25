@@ -21,10 +21,10 @@ from ._geometry import (
     Volume,
 )
 from ._qs import (
+    QuasiIsodynamic,
     QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
-    QuasiIsodynamic,
 )
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective

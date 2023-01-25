@@ -512,6 +512,10 @@ class QuasiIsodynamic(_Objective):
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
+    M_zeta : int, optional
+        Poloidal resolution of shift_mn parameters.
+    N_zeta : int, optional
+        Toroidal resolution of shift_mn parameters.
     name : str
         Name of the objective function.
 
@@ -632,8 +636,8 @@ class QuasiIsodynamic(_Objective):
         B_mag : ndarray
             Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
         shape_i : ndarray
-            Magnetic well shaping parameters.
-            Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
+            Magnetic well shaping parameters. Inverse roots of the derivative of the
+            even polynomial B(zeta_bar), shifted by pi/2.
         shift_mn : ndarray
             Magnetic well shifting parameters.
             Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).

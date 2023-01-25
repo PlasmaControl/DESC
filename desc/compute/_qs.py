@@ -420,8 +420,8 @@ def _qi_B(params, transforms, profiles, data, **kwargs):
     zeros = jnp.concatenate(
         (
             jnp.array([0, -jnp.pi / 2, jnp.pi / 2]),
-            -jnp.pi / 2 - params["shape_i"],
-            jnp.pi / 2 + params["shape_i"],
+            -jnp.pi / 2 - 1 / params["shape_i"],
+            jnp.pi / 2 + 1 / params["shape_i"],
         )
     )
     B_i = jnp.polyint(jnp.poly(zeros))

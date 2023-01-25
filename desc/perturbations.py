@@ -123,9 +123,10 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Whether to include the 0th order objective residual in the perturbation
         equation. Including this term can improve force balance if the perturbation
         step is large, but can result in too large a step if the perturbation is small.
-    verbose : int
-            Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
-            with DEBUG level timing and iteration data.
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
     copy : bool
         Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 
@@ -429,9 +430,10 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     cutoff : float
         Relative cutoff for small singular values in pseudo-inverse.
         Default is np.finfo(A.dtype).eps*max(A.shape) where A is the Jacobian matrix.
-    verbose : int
-        Level of output, 0 for none, 1 for descriptive INFO level logs, 2 for logs
-        with DEBUG level timing and iteration data.
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
     copy : bool
         Whether to perturb the input equilibrium (False) or make a copy (True, Default).
 

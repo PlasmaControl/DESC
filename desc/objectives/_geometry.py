@@ -65,7 +65,7 @@ class AspectRatio(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -74,6 +74,10 @@ class AspectRatio(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -99,7 +103,7 @@ class AspectRatio(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["V"]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute aspect ratio.
@@ -181,7 +185,7 @@ class Elongation(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -189,7 +193,11 @@ class Elongation(_Objective):
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
+            Whether to just-in-time compile the objective and derivatives.        
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -211,7 +219,7 @@ class Elongation(_Objective):
         timer.stop("Precomputing transforms")
         timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute elongation.
@@ -300,8 +308,10 @@ class Volume(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:

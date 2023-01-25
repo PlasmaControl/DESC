@@ -200,7 +200,7 @@ def test_1d_optimization_old(SOLOVEV):
     eq._optimize(
         objective,
         copy=False,
-        solve_options={},
+        solve_options={"verbose":0},
         perturb_options={
             "dZb": True,
             "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),
@@ -248,10 +248,11 @@ def run_qh_step(n, eq):
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
+        verbose=2,
         copy=True,
         options={
-            "perturb_options": {},
-            "solve_options": {},
+            "perturb_options": {"verbose": 0},
+            "solve_options": {"verbose": 0},
         },
     )
 
@@ -453,7 +454,7 @@ def test_simsopt_QH_comparison():
             print(f"Freeing Z mode: m={m}, n={n}")
     Z_modes_to_fix = np.array(Z_modes_to_fix)
     eq.solve(
-        verbose=3,
+        verbose=2,
         ftol=1e-8,
         constraints=get_fixed_boundary_constraints(profiles=False),
         optimizer=Optimizer("lsq-exact"),
@@ -493,7 +494,7 @@ def test_simsopt_QH_comparison():
         )
     )
     eq2, result = eq.optimize(
-        verbose=3,
+        verbose=2,
         objective=objective,
         constraints=constraints,
         optimizer=Optimizer("lsq-exact"),

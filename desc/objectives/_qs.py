@@ -87,7 +87,7 @@ class QuasisymmetryBoozer(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -96,6 +96,10 @@ class QuasisymmetryBoozer(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.M_booz is None:
@@ -137,7 +141,7 @@ class QuasisymmetryBoozer(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute quasi-symmetry Boozer harmonics error.
@@ -262,7 +266,7 @@ class QuasisymmetryTwoTerm(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -271,6 +275,10 @@ class QuasisymmetryTwoTerm(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -294,7 +302,7 @@ class QuasisymmetryTwoTerm(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute quasi-symmetry two-term errors.
@@ -408,7 +416,7 @@ class QuasisymmetryTripleProduct(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -417,6 +425,10 @@ class QuasisymmetryTripleProduct(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -442,7 +454,7 @@ class QuasisymmetryTripleProduct(_Objective):
                 scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
             )
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute quasi-symmetry triple product errors.

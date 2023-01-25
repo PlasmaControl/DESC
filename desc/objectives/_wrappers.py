@@ -26,6 +26,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         Equilibrium objective to enforce.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the objectives.
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
 
     """
 
@@ -34,6 +38,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
+        verbose=1,
         perturb_options={},
         solve_options={},
     ):
@@ -48,11 +53,9 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._compiled = True
 
         if eq is not None:
-            self.build(
-                eq,
-            )
+            self.build(eq, verbose=verbose)
 
-    def build(self, eq, use_jit=None):
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -62,6 +65,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
             Note: unused by this class, should pass to sub-objectives directly.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         self._eq = eq.copy()
@@ -72,10 +79,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             and self._eq.iota is not None
         )
 
-        self._objective.build(self._eq)
-        self._eq_objective.build(self._eq)
+        self._objective.build(self._eq, verbose=verbose)
+        self._eq_objective.build(self._eq, verbose=verbose)
         for constraint in self._constraints:
-            constraint.build(self._eq)
+            constraint.build(self._eq, verbose=verbose)
         self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f

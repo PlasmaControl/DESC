@@ -6,6 +6,7 @@ from inspect import getfullargspec
 import logging
 import numpy as np
 
+from desc import set_console_logging
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
 from desc.derivatives import Derivative
@@ -29,12 +30,16 @@ class ObjectiveFunction(IOAble):
     deriv_mode : {"batched", "blocked"}
         method for computing derivatives. "batched" is generally faster, "blocked" may
         use less memory. Note that the "blocked" Hessian will only be block diagonal.
+    verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
     """
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, eq=None, use_jit=True, deriv_mode="batched"):
+    def __init__(self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1):
 
         if not isinstance(objectives, tuple):
             objectives = (objectives,)
@@ -49,7 +54,7 @@ class ObjectiveFunction(IOAble):
         self._compiled = False
 
         if eq is not None:
-            self.build(eq, use_jit=self._use_jit)
+            self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
@@ -144,7 +149,7 @@ class ObjectiveFunction(IOAble):
             del self.jvp
         self.jvp = jit(self.jvp)
 
-    def build(self, eq, use_jit=None):
+    def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -153,6 +158,10 @@ class ObjectiveFunction(IOAble):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if use_jit is not None:
@@ -160,11 +169,18 @@ class ObjectiveFunction(IOAble):
         timer = Timer()
         timer.start("Objective build")
 
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
+
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
             logging.info("Building objective: ", objective.name)
-            objective.build(eq, use_jit=self.use_jit)
+            objective.build(eq, use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True
@@ -473,7 +489,6 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        self._print_value_format = "Value of Objective: {:10.3e} "
         # if args is already set don't overwrite it
         self._args = getattr(
             self,
@@ -571,7 +586,7 @@ class _Objective(IOAble, ABC):
             self.jit()
 
     @abstractmethod
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays."""
         self._check_dimensions()
         self._set_dimensions(eq)

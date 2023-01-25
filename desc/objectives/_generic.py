@@ -72,7 +72,7 @@ class GenericObjective(_Objective):
         )
         self._units = "(" + data_index[self.f]["units"] + ")"
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -81,6 +81,10 @@ class GenericObjective(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -95,7 +99,7 @@ class GenericObjective(_Objective):
         self._args = get_params(self.f)
         self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute the quantity.
@@ -177,7 +181,7 @@ class ToroidalCurrent(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -186,6 +190,10 @@ class ToroidalCurrent(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -219,7 +227,7 @@ class ToroidalCurrent(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute toroidal current.
@@ -311,7 +319,7 @@ class RotationalTransform(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -320,6 +328,10 @@ class RotationalTransform(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self.grid is None:
@@ -348,7 +360,7 @@ class RotationalTransform(_Objective):
         timer.stop("Precomputing transforms")
         timer.disp("Precomputing transforms")
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute rotational transform profile errors.

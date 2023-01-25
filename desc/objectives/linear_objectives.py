@@ -91,7 +91,7 @@ class FixBoundaryR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -100,6 +100,10 @@ class FixBoundaryR(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self._modes is False or self._modes is None:  # no modes
@@ -167,7 +171,7 @@ class FixBoundaryR(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
@@ -254,7 +258,7 @@ class FixBoundaryZ(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -263,6 +267,10 @@ class FixBoundaryZ(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self._modes is False or self._modes is None:  # no modes
@@ -329,7 +337,7 @@ class FixBoundaryZ(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["a"]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
@@ -396,7 +404,7 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -405,6 +413,10 @@ class FixLambdaGauge(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         L_basis = eq.L_basis
@@ -477,7 +489,7 @@ class FixLambdaGauge(_Objective):
 
         self._dim_f = self._A.shape[0]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, L_lmn, **kwargs):
         """Compute lambda gauge symmetry errors.
@@ -559,7 +571,7 @@ class _FixProfile(_Objective, ABC):
         )
         self._print_value_fmt = None
 
-    def build(self, eq, profile=None, use_jit=True):
+    def build(self, eq, profile=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -570,6 +582,10 @@ class _FixProfile(_Objective, ABC):
             profile to fix
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if self._profile is None or self._profile.params.size != eq.L + 1:
@@ -588,7 +604,7 @@ class _FixProfile(_Objective, ABC):
         if self.target is None:
             self.target = self._profile.params[self._idx]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
 
 class FixPressure(_FixProfile):
@@ -652,7 +668,7 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -661,13 +677,17 @@ class FixPressure(_FixProfile):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+            verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         profile = eq.pressure
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["p"]
-        super().build(eq, profile, use_jit)
+        super().build(eq, profile, use_jit, verbose=verbose)
 
     def compute(self, p_l, **kwargs):
         """Compute fixed pressure profile errors.
@@ -755,7 +775,7 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -764,6 +784,10 @@ class FixIota(_FixProfile):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if eq.iota is None:
@@ -772,7 +796,7 @@ class FixIota(_FixProfile):
                 + "rotational transform profile assigned"
             )
         profile = eq.iota
-        super().build(eq, profile, use_jit)
+        super().build(eq, profile, use_jit, verbose=verbose)
 
     def compute(self, i_l, **kwargs):
         """Compute fixed iota errors.
@@ -858,7 +882,7 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -867,6 +891,11 @@ class FixCurrent(_FixProfile):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
+
         """
         if eq.current is None:
             raise RuntimeError(
@@ -877,7 +906,7 @@ class FixCurrent(_FixProfile):
         if self._normalize:
             scales = compute_scaling_factors(eq)
             self._normalization = scales["I"]
-        super().build(eq, profile, use_jit)
+        super().build(eq, profile, use_jit, verbose=verbose)
 
     def compute(self, c_l, **kwargs):
         """Compute fixed current errors.
@@ -949,7 +978,7 @@ class FixPsi(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True):
+    def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -958,6 +987,10 @@ class FixPsi(_Objective):
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
             Whether to just-in-time compile the objective and derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         self._dim_f = 1
@@ -969,7 +1002,7 @@ class FixPsi(_Objective):
             scales = compute_scaling_factors(eq)
             self._normalization = scales["Psi"]
 
-        super().build(eq=eq, use_jit=use_jit)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, Psi, **kwargs):
         """Compute fixed-Psi error.

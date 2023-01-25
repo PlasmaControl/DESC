@@ -101,7 +101,7 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
     return constraints
 
 
-def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=True, order=1):
+def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
 
     Parameters

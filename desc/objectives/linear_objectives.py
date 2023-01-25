@@ -177,8 +177,7 @@ class FixBoundaryR(_Objective):
             x = kwargs.get(self.args[0], args[0])
         else:
             x = kwargs.get(self.args[0])
-        Rb = jnp.dot(self._A, x)
-        return self._shift_scale(Rb)
+        return jnp.dot(self._A, x)
 
     @property
     def target_arg(self):
@@ -341,8 +340,7 @@ class FixBoundaryZ(_Objective):
             x = kwargs.get(self.args[0], args[0])
         else:
             x = kwargs.get(self.args[0])
-        Zb = jnp.dot(self._A, x)
-        return self._shift_scale(Zb)
+        return jnp.dot(self._A, x)
 
     @property
     def target_arg(self):
@@ -499,8 +497,7 @@ class FixLambdaGauge(_Objective):
             Lambda gauge symmetry errors.
 
         """
-        f = jnp.dot(self._A, L_lmn)
-        return self._shift_scale(f)
+        return jnp.dot(self._A, L_lmn)
 
 
 class _FixProfile(_Objective, ABC):
@@ -693,8 +690,7 @@ class FixPressure(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = p_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return p_l[self._idx]
 
     @property
     def target_arg(self):
@@ -800,8 +796,7 @@ class FixIota(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = i_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return i_l[self._idx]
 
     @property
     def target_arg(self):
@@ -908,8 +903,7 @@ class FixCurrent(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = c_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return c_l[self._idx]
 
     @property
     def target_arg(self):
@@ -1002,7 +996,7 @@ class FixPsi(_Objective):
             Total toroidal magnetic flux error (Wb).
 
         """
-        return self._shift_scale(Psi)
+        return Psi
 
     @property
     def target_arg(self):

@@ -23,19 +23,21 @@ class AspectRatio(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
+        Note: Has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Note: Has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -52,6 +54,7 @@ class AspectRatio(_Objective):
         self,
         eq=None,
         target=2,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -63,6 +66,7 @@ class AspectRatio(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -128,7 +132,7 @@ class AspectRatio(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["R0/a"])
+        return data["R0/a"]
 
 
 class Elongation(_Objective):
@@ -139,19 +143,21 @@ class Elongation(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
+        Note: Has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Note: Has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -168,6 +174,7 @@ class Elongation(_Objective):
         self,
         eq=None,
         target=1,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -179,6 +186,7 @@ class Elongation(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -244,7 +252,7 @@ class Elongation(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["a_major/a_minor"])
+        return data["a_major/a_minor"]
 
 
 class Volume(_Objective):
@@ -257,14 +265,18 @@ class Volume(_Objective):
     target : float, ndarray, optional
         Target value(s) of the objective.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
         be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
@@ -282,6 +294,7 @@ class Volume(_Objective):
         self,
         eq=None,
         target=1,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -293,6 +306,7 @@ class Volume(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -362,7 +376,7 @@ class Volume(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["V"])
+        return data["V"]
 
 
 class PlasmaVesselDistance(_Objective):
@@ -382,6 +396,9 @@ class PlasmaVesselDistance(_Objective):
     target : float, ndarray, optional
         Target value(s) of the objective.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -409,6 +426,7 @@ class PlasmaVesselDistance(_Objective):
         surface,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -422,6 +440,7 @@ class PlasmaVesselDistance(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -505,8 +524,7 @@ class PlasmaVesselDistance(_Objective):
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
-
-        return self._shift_scale(d.min(axis=-1))
+        return d.min(axis=-1)
 
 
 class MeanCurvature(_Objective):
@@ -525,6 +543,9 @@ class MeanCurvature(_Objective):
     target : float, ndarray, optional
         Target value(s) of the objective.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -550,6 +571,7 @@ class MeanCurvature(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -561,6 +583,7 @@ class MeanCurvature(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -628,7 +651,7 @@ class MeanCurvature(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return self._shift_scale(data["curvature_H"])
+        return data["curvature_H"]
 
 
 class PrincipalCurvature(_Objective):
@@ -650,6 +673,9 @@ class PrincipalCurvature(_Objective):
     target : float, ndarray, optional
         Target value(s) of the objective.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -675,6 +701,7 @@ class PrincipalCurvature(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -686,6 +713,7 @@ class PrincipalCurvature(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -753,5 +781,4 @@ class PrincipalCurvature(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        k = jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
-        return self._shift_scale(k)
+        return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))

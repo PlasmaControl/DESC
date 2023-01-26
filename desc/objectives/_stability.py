@@ -58,8 +58,8 @@ class MercierStability(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
-        bounds=None,
+        target=None,
+        bounds=(0, np.inf),
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -240,8 +240,8 @@ class MagneticWell(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
-        bounds=None,
+        target=None,
+        bounds=(0, np.inf),
         weight=1,
         normalize=True,
         normalize_target=True,

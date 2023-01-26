@@ -380,10 +380,10 @@ class Volume(_Objective):
 
 
 class PlasmaVesselDistance(_Objective):
-    """Penalize the minimum distance between the plasma and a surounding surface.
+    """Target the distance between the plasma and a surounding surface.
 
-    Computes the minimum distance from each point on the plasma grid to a point on the
-    surface grid. For dense grids, this will approximate the global min, but in general
+    Computes the minimum distance from each point on the surface grid to a point on the
+    plasma grid. For dense grids, this will approximate the global min, but in general
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
 
@@ -419,20 +419,20 @@ class PlasmaVesselDistance(_Objective):
     _scalar = False
     _linear = False
     _units = "(m)"
-    _print_value_fmt = "Minimum plasma-surface distance: {:10.3e} "
+    _print_value_fmt = "Plasma-vessel distance: {:10.3e} "
 
     def __init__(
         self,
         surface,
         eq=None,
-        target=0,
-        bounds=None,
+        target=None,
+        bounds=(1, np.inf),
         weight=1,
         normalize=True,
         normalize_target=True,
         surface_grid=None,
         plasma_grid=None,
-        name="vessel distance",
+        name="plasma vessel distance",
     ):
         self._surface = surface
         self._surface_grid = surface_grid
@@ -492,12 +492,12 @@ class PlasmaVesselDistance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"]
+            self._normalization = scales["a"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute minimum plasma-surface distance.
+        """Compute plasma-surface distance.
 
         Parameters
         ----------
@@ -508,9 +508,8 @@ class PlasmaVesselDistance(_Objective):
 
         Returns
         -------
-        d : ndarray, shape(plasma_grid.num_nodes,)
-            For each point in the plasma grid, approximate minimum distance to bounding
-            surface.
+        d : ndarray, shape(surface_grid.num_nodes,)
+            For each point in the surface grid, approximate distance to plasma.
 
         """
         params = self._parse_args(*args, **kwargs)
@@ -524,7 +523,7 @@ class PlasmaVesselDistance(_Objective):
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
-        return d.min(axis=-1)
+        return d.min(axis=0)
 
 
 class MeanCurvature(_Objective):
@@ -570,8 +569,8 @@ class MeanCurvature(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
-        bounds=None,
+        target=None,
+        bounds=(-np.inf, 0),
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -624,7 +623,7 @@ class MeanCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"]
+            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -700,7 +699,7 @@ class PrincipalCurvature(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=1,
         bounds=None,
         weight=1,
         normalize=True,
@@ -754,7 +753,7 @@ class PrincipalCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"]
+            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

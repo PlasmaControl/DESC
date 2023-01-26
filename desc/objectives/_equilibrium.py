@@ -157,13 +157,21 @@ class ForceBalance(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -320,13 +328,21 @@ class RadialForceBalance(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -479,13 +495,21 @@ class HelicalForceBalance(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -650,13 +674,21 @@ class Energy(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------

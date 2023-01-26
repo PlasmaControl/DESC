@@ -13,6 +13,7 @@ from scipy.integrate import solve_ivp
 from scipy.interpolate import Rbf
 from termcolor import colored
 
+from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
@@ -2241,6 +2242,7 @@ def plot_boozer_surface(
     grid_plot=None,
     fill=False,
     ncontours=100,
+    fieldlines=0,
     ax=None,
     return_data=False,
     **kwargs,
@@ -2259,6 +2261,8 @@ def plot_boozer_surface(
         Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
     ncontours : int, optional
         Number of contours to plot.
+    fieldlines : int, optional
+        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -2324,6 +2328,7 @@ def plot_boozer_surface(
         "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
     data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
+    iota = compress(grid_compute, data["iota"])
     data = transforms_plot["B"].transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
@@ -2344,24 +2349,37 @@ def plot_boozer_surface(
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    xx = (
+    zz = (
         grid_plot.nodes[:, 2]
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
-    yy = (
+    tt = (
         grid_plot.nodes[:, 1]
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
 
     if fill:
-        im = ax.contourf(xx, yy, data, **contourf_kwargs)
+        im = ax.contourf(zz, tt, data, **contourf_kwargs)
     else:
-        im = ax.contour(xx, yy, data, **contourf_kwargs)
+        im = ax.contour(zz, tt, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
+
+    if fieldlines:
+        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
+        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
+        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
+        alpha2 = np.where(
+            np.logical_or(alpha < 0, alpha > 2 * np.pi),
+            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
+            np.nan,
+        )
+        alphas = np.hstack((alpha1, alpha2))
+        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
 
     ax.set_xlabel(r"$\zeta_{Boozer}$")
     ax.set_ylabel(r"$\theta_{Boozer}$")
@@ -2369,8 +2387,8 @@ def plot_boozer_surface(
 
     fig.set_tight_layout(True)
     plot_data = {}
-    plot_data["zeta_Boozer"] = xx
-    plot_data["theta_Boozer"] = yy
+    plot_data["zeta_Boozer"] = zz
+    plot_data["theta_Boozer"] = tt
     plot_data["|B|"] = data
 
     if return_data:
@@ -2586,7 +2604,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                / B0 ** 3
+                / B0**3
             )
             f_C = np.append(f_C, f_c)
         if fT:
@@ -2594,8 +2612,8 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
-                * R0 ** 2
-                / B0 ** 4
+                * R0**2
+                / B0**4
             )
             f_T = np.append(f_T, f_t)
 
@@ -3146,7 +3164,7 @@ def plot_logo(savepath=None, **kwargs):
     fig_width = kwargs.get("fig_width", 3)
     fig_height = fig_width / 2
     contour_lw_ratio = kwargs.get("contour_lw_ratio", 0.3)
-    lw = fig_width ** 0.5
+    lw = fig_width**0.5
 
     transparent = False
     if BGcolor == "dark":

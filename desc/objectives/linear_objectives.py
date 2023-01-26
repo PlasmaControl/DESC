@@ -1015,8 +1015,7 @@ class FixElectronTemperature(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = Te_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return Te_l[self._idx]
 
     @property
     def target_arg(self):
@@ -1123,8 +1122,7 @@ class FixElectronDensity(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = ne_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return ne_l[self._idx]
 
     @property
     def target_arg(self):
@@ -1231,8 +1229,7 @@ class FixIonTemperature(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = Ti_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return Ti_l[self._idx]
 
     @property
     def target_arg(self):
@@ -1338,8 +1335,7 @@ class FixAtomicNumber(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = Zeff_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return Zeff_l[self._idx]
 
     @property
     def target_arg(self):

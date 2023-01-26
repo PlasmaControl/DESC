@@ -390,7 +390,11 @@ def _qi_zeta_bar(params, transforms, profiles, data, **kwargs):
 )
 def _qi_zeta(params, transforms, profiles, data, **kwargs):
     shift_mn_arr = params["shift_mn"].reshape((transforms["zeta"].basis.N, -1))
-    nn = transforms["zeta"].basis.modes[:, 2].reshape((transforms["zeta"].basis.N + 1, -1))
+    nn = (
+        transforms["zeta"]
+        .basis.modes[:, 2]
+        .reshape((transforms["zeta"].basis.N + 1, -1))
+    )
     shift_m0 = jnp.sum(
         shift_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
     )

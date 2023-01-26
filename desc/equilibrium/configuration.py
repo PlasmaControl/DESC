@@ -395,7 +395,7 @@ class _Configuration(IOAble, ABC):
         # FIXME: default QI parameters for initialization
         self._B_mag = np.array([0.5, 1.5])
         self._shape_i = np.array([1])
-        self._shift_mn = np.array([0])
+        self._shift_mn = np.array([0, 0, 0])
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?

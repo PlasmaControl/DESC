@@ -11,7 +11,20 @@ from desc.grid import ConcentricGrid
 from .data_index import data_index
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "B_mag",
+    "shape_i",
+    "shift_mn",
+    "Rb_lmn",
+    "Zb_lmn",
+)
 
 
 def _sort_args(args):
@@ -295,7 +308,7 @@ def get_transforms(keys, eq, grid, **kwargs):
         zeta_grid = grid.copy()
         zeta_grid.nodes[:, 2] = (grid.nodes[:, 2] * grid.NFP - np.pi) / 2
         # FIXME: this default assumes M_zeta=N_zeta
-        n = int(np.sqrt(eq.shift_mn.size - 1) / np.sqrt(2))
+        n = int((np.sqrt(8 * eq.shift_mn.size + 1) - 1) / 4)
         transforms["zeta"] = Transform(
             grid,
             DoubleFourierSeries(

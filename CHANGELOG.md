@@ -1,6 +1,21 @@
 Changelog
 =========
 
+v0.7.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
+
+What's Changed
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+symmetric due to different Fourier series conventions.
+* Improve speed of functions for converting between VMEC and DESC Fourier representations.
+* Add objectives for penalizing strong shaping.
+    - `MeanCurvature` targets values for the mean curvature of the flux surfaces
+    (average of principal curvatures)
+    - `PrincipalCurvature` penalizes the largest magnitude of the principal curvatures
+* Improve default tolerances when converting input file from VMEC to DESC
+
 v0.7.1
 ------
 

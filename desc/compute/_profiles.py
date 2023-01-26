@@ -1,4 +1,4 @@
-from scipy.constants import mu_0
+from scipy.constants import elementary_charge, mu_0
 
 from desc.backend import jnp
 
@@ -134,6 +134,174 @@ def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="Te",
+    label="T_e",
+    units="eV",
+    units_long="electron-Volts",
+    description="Electron temperature",
+    dim=1,
+    params=["Te_l"],
+    transforms={},
+    profiles=["electron_temperature"],
+    coordinates="r",
+    data=["0"],
+)
+def _Te(params, transforms, profiles, data, **kwargs):
+    if profiles["electron_temperature"] is not None:
+        data["Te"] = profiles["electron_temperature"].compute(params["Te_l"], dr=0)
+    else:
+        data["Te"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Te_r",
+    label="\\partial_{\\rho} T_e",
+    units="eV",
+    units_long="electron-Volts",
+    description="Electron temperature, first radial derivative",
+    dim=1,
+    params=["Te_l"],
+    transforms={},
+    profiles=["electron_temperature"],
+    coordinates="r",
+    data=["0"],
+)
+def _Te_r(params, transforms, profiles, data, **kwargs):
+    if profiles["electron_temperature"] is not None:
+        data["Te_r"] = profiles["electron_temperature"].compute(params["Te_l"], dr=1)
+    else:
+        data["Te_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="ne",
+    label="n_e",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Electron density",
+    dim=1,
+    params=["ne_l"],
+    transforms={},
+    profiles=["electron_density"],
+    coordinates="r",
+    data=["0"],
+)
+def _ne(params, transforms, profiles, data, **kwargs):
+    if profiles["electron_density"] is not None:
+        data["ne"] = profiles["electron_density"].compute(params["ne_l"], dr=0)
+    else:
+        data["ne"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="ne_r",
+    label="\\partial_{\\rho} n_e",
+    units="m^{-3}",
+    units_long="1 / cubic meters",
+    description="Electron density, first radial derivative",
+    dim=1,
+    params=["ne_l"],
+    transforms={},
+    profiles=["electron_density"],
+    coordinates="r",
+    data=["0"],
+)
+def _ne_r(params, transforms, profiles, data, **kwargs):
+    if profiles["electron_density"] is not None:
+        data["ne_r"] = profiles["electron_density"].compute(params["ne_l"], dr=1)
+    else:
+        data["ne_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Ti",
+    label="T_i",
+    units="eV",
+    units_long="electron-Volts",
+    description="Ion temperature",
+    dim=1,
+    params=["Ti_l"],
+    transforms={},
+    profiles=["ion_temperature"],
+    coordinates="r",
+    data=["0"],
+)
+def _Ti(params, transforms, profiles, data, **kwargs):
+    if profiles["ion_temperature"] is not None:
+        data["Ti"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=0)
+    else:
+        data["Ti"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Ti_r",
+    label="\\partial_{\\rho} T_i",
+    units="eV",
+    units_long="electron-Volts",
+    description="Ion temperature, first radial derivative",
+    dim=1,
+    params=["Ti_l"],
+    transforms={},
+    profiles=["ion_temperature"],
+    coordinates="r",
+    data=["0"],
+)
+def _Ti_r(params, transforms, profiles, data, **kwargs):
+    if profiles["ion_temperature"] is not None:
+        data["Ti_r"] = profiles["ion_temperature"].compute(params["Ti_l"], dr=1)
+    else:
+        data["Ti_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Zeff",
+    label="Z_{eff}",
+    units="~",
+    units_long="None",
+    description="Effective atomic number",
+    dim=1,
+    params=["Zeff_l"],
+    transforms={},
+    profiles=["atomic_number"],
+    coordinates="r",
+    data=["0"],
+)
+def _Zeff(params, transforms, profiles, data, **kwargs):
+    if profiles["atomic_number"] is not None:
+        data["Zeff"] = profiles["atomic_number"].compute(params["Zeff_l"], dr=0)
+    else:
+        data["Zeff"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
+    name="Zeff_r",
+    label="\\partial_{\\rho} Z_{eff}",
+    units="~",
+    units_long="None",
+    description="Effective atomic number, first radial derivative",
+    dim=1,
+    params=["Zeff_l"],
+    transforms={},
+    profiles=["atomic_number"],
+    coordinates="r",
+    data=["0"],
+)
+def _Zeff_r(params, transforms, profiles, data, **kwargs):
+    if profiles["atomic_number"] is not None:
+        data["Zeff_r"] = profiles["atomic_number"].compute(params["Zeff_l"], dr=1)
+    else:
+        data["Zeff_r"] = jnp.nan * data["0"]
+    return data
+
+
+@register_compute_fun(
     name="p",
     label="p",
     units="Pa",
@@ -144,10 +312,15 @@ def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=["pressure"],
     coordinates="r",
-    data=[],
+    data=["Te", "ne", "Ti", "Zeff"],
 )
 def _p(params, transforms, profiles, data, **kwargs):
-    data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
+    if profiles["pressure"] is not None:
+        data["p"] = profiles["pressure"].compute(params["p_l"], dr=0)
+    else:
+        data["p"] = elementary_charge * (
+            data["ne"] * data["Te"] + data["Ti"] * data["ne"] / data["Zeff"]
+        )
     return data
 
 
@@ -162,10 +335,19 @@ def _p(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=["pressure"],
     coordinates="r",
-    data=[],
+    data=["Te", "Te_r", "ne", "ne_r", "Ti", "Ti_r", "Zeff", "Zeff_r"],
 )
 def _p_r(params, transforms, profiles, data, **kwargs):
-    data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
+    if profiles["pressure"] is not None:
+        data["p_r"] = profiles["pressure"].compute(params["p_l"], dr=1)
+    else:
+        data["p_r"] = elementary_charge * (
+            data["ne_r"] * data["Te"]
+            + data["ne"] * data["Te_r"]
+            + data["Ti_r"] * data["ne"] / data["Zeff"]
+            + data["Ti"] * data["ne_r"] / data["Zeff"]
+            - data["Ti"] * data["ne"] * data["Zeff_r"] / data["Zeff"] ** 2
+        )
     return data
 
 

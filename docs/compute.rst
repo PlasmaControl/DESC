@@ -68,7 +68,7 @@ metadata about the quanity. The necessary fields are detailed below:
   this function). For most quantites this will be an empty list.
 * ``coordinates``: String denoting which coordinate the quanity depends on. Most will be
   ``"rtz"`` indicating it is a funciton of :math:`\rho, \theta, \zeta`. Profiles and flux surface
-  quantities would have ``coordinates="r"`` indicating it only depends on `:math:\rho`
+  quantities would have ``coordinates="r"`` indicating it only depends on :math:`\rho`
 * ``data``: What other physics quantites are needed to compute this quanity. In our
   example, we need the radial derivative of pressure ``p_r``, the Jacobian determinant
   ``sqrt(g)``, and contravariant components of current and magnetic field. These dependencies

@@ -73,7 +73,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
             iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
-            and self._eq.iota is not None
+            and self._eq.iota is not None,
+            kinetic=eq.electron_temperature is not None,
         )
 
         self._objective.build(self._eq, verbose=verbose)

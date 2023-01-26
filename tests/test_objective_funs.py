@@ -19,8 +19,10 @@ from desc.objectives import (
     Energy,
     GenericObjective,
     MagneticWell,
+    MeanCurvature,
     MercierStability,
     ObjectiveFunction,
+    PrincipalCurvature,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -183,7 +185,7 @@ class TestObjectiveFunction:
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+        matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
         B_mn = matrix @ data["|B|_mn"]
         idx_B = np.argsort(np.abs(B_mn))
@@ -236,9 +238,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MercierStability(eq=eq)
-            DMerc = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            DMerc = obj.compute(*obj.xs(eq))
             np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
@@ -251,9 +251,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MagneticWell(eq=eq)
-            magnetic_well = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            magnetic_well = obj.compute(*obj.xs(eq))
             np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
@@ -353,3 +351,33 @@ def test_target_profiles():
     np.testing.assert_allclose(
         objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])
     )
+
+
+@pytest.mark.unit
+def test_mean_curvature():
+    """Test for mean curvature objective function."""
+    # simple case like dshape should have mean curvature negative everywhere
+    eq = get("DSHAPE")
+    obj = MeanCurvature(eq=eq)
+    H = obj.compute(*obj.xs(eq))
+    assert np.all(H <= 0)
+
+    # more shaped case like NCSX should have some positive curvature
+    eq = get("NCSX")
+    obj = MeanCurvature(eq=eq)
+    H = obj.compute(*obj.xs(eq))
+    assert np.any(H > 0)
+
+
+@pytest.mark.unit
+def test_principal_curvature():
+    """Test for principal curvature objective function."""
+    eq1 = get("DSHAPE")
+    eq2 = get("NCSX")
+    obj1 = PrincipalCurvature(eq=eq1, normalize=False)
+    K1 = obj1.compute(*obj1.xs(eq1))
+    obj2 = PrincipalCurvature(eq=eq2, normalize=False)
+    K2 = obj2.compute(*obj2.xs(eq2))
+
+    # simple test: NCSX should have higher mean absolute curvature than DSHAPE
+    assert K1.mean() < K2.mean()

@@ -395,7 +395,7 @@ class LinearGrid(Grid):
         self._count_nodes()
         self._scale_weights(dtheta_scale)
 
-    def _create_nodes(
+    def _create_nodes(  # noqa: C901
         self,
         L=None,
         M=None,

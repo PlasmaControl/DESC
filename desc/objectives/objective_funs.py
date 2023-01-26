@@ -501,19 +501,8 @@ class _Objective(IOAble, ABC):
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""
         self._dimensions = {}
-        self._dimensions["R_lmn"] = eq.R_basis.num_modes
-        self._dimensions["Z_lmn"] = eq.Z_basis.num_modes
-        self._dimensions["L_lmn"] = eq.L_basis.num_modes
-        self._dimensions["p_l"] = eq.pressure.params.size
-        try:
-            self._dimensions["i_l"] = eq.iota.params.size
-            self._dimensions["c_l"] = 0
-        except AttributeError:
-            self._dimensions["i_l"] = 0
-            self._dimensions["c_l"] = eq.current.params.size
-        self._dimensions["Psi"] = 1
-        self._dimensions["Rb_lmn"] = eq.surface.R_basis.num_modes
-        self._dimensions["Zb_lmn"] = eq.surface.Z_basis.num_modes
+        for arg in arg_order:
+            self._dimensions[arg] = np.atleast_1d(getattr(eq, arg)).size
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""

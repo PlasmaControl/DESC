@@ -12,7 +12,21 @@ from desc.grid import ConcentricGrid
 from .data_index import data_index
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "Te_l",
+    "ne_l",
+    "Ti_l",
+    "Zeff_l",
+    "Rb_lmn",
+    "Zb_lmn",
+)
 
 
 def _sort_args(args):

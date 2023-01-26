@@ -469,7 +469,7 @@ class PlasmaVesselDistance(_Objective):
         if not np.allclose(self._plasma_grid.nodes[:, 0], 1):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
-        self._dim_f = self._plasma_grid.num_nodes
+        self._dim_f = self._surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
         self._args = get_params(self._data_keys)
 

@@ -417,6 +417,13 @@ def test_plasma_vessel_distance():
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
 
+    grid = LinearGrid(L=3, M=3, N=3)
+    eq = Equilibrium()
+    surf = FourierRZToroidalSurface()
+    obj = PlasmaVesselDistance(surface=surf, surface_grid=grid, plasma_grid=grid)
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+
 
 @pytest.mark.unit
 def test_mean_curvature():

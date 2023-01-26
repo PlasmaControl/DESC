@@ -6,7 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import put, use_jax
-from desc.compute import arg_order
+from desc.compute import arg_order, profile_names
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
@@ -48,7 +48,7 @@ def get_deltas(things1, things2):
             if not np.allclose(s2.Z_lmn, s1.Z_lmn):
                 deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
 
-    for key in ["iota", "pressure", "current"]:
+    for key, val in profile_names.items():
         if key in things1:
             t1 = things1.pop(key)
             t2 = things2.pop(key)
@@ -58,8 +58,7 @@ def get_deltas(things1, things2):
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
                     t1.change_resolution(t2.basis.L)
                 if not np.allclose(t2.params, t1.params):
-                    # FIXME: @f0uriest generalize this to more profiles
-                    deltas[key[0] + "_l"] = t2.params - t1.params
+                    deltas[val] = t2.params - t1.params
 
     if "Psi" in things1:
         psi1 = things1.pop("Psi")

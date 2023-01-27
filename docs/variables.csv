@@ -32,6 +32,7 @@ Name,Label,Units,Description,Module
 ``e^rho``,:math:`\mathbf{e}^{\rho}`,inverse meters,Contravariant radial basis vector,``desc.compute._basis_vectors``
 ``e^theta``,:math:`\mathbf{e}^{\theta}`,inverse meters,Contravariant poloidal basis vector,``desc.compute._basis_vectors``
 ``e^zeta``,:math:`\mathbf{e}^{\zeta}`,inverse meters,Contravariant toroidal basis vector,``desc.compute._basis_vectors``
+``<J*B> Redl``,:math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle_{Redl}`,Tesla Ampere / meter^2,"Bootstrap current profile, Redl model for quasisymmetry",``desc.compute._bootstrap``
 ``0``,:math:`0`,None,Zeros,``desc.compute._core``
 ``rho``,:math:`\rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux",``desc.compute._core``
 ``theta``,:math:`\theta`,radians,"Poloidal angular coordinate (geometric, not magnetic)",``desc.compute._core``
@@ -107,7 +108,8 @@ Name,Label,Units,Description,Module
 ``J_phi``,:math:`J_{\phi}`,Amperes / square meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
 ``J_Z``,:math:`J_{Z}`,Amperes / square meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
 ``|J|``,:math:`|\mathbf{J}|`,Amperes / square meter,Magnitue of plasma current density,``desc.compute._equil``
-``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current (note units are not Amperes),``desc.compute._equil``
+``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,"Current density parallel to magnetic field, times field strength (note units are not Amperes)",``desc.compute._equil``
+``<J*B>``,:math:`\langle \mathbf{J} \cdot \mathbf{B} \rangle`,Newtons / cubic meter,Flux surface average of current density dotted into magnetic field,``desc.compute._equil``
 ``J_parallel``,:math:`\mathbf{J} \cdot \hat{\mathbf{b}}`,Amperes / square meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
 ``F_rho``,:math:`F_{\rho}`,Newtons / square meter,Covariant radial component of force balance error,``desc.compute._equil``
 ``F_theta``,:math:`F_{\theta}`,Newtons / square meter,Covariant poloidal component of force balance error,``desc.compute._equil``
@@ -208,6 +210,7 @@ Name,Label,Units,Description,Module
 ``|B|_tz``,:math:`\partial_{\theta\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt poloidal and toroidal angles",``desc.compute._field``
 ``|B|_rz``,:math:`\partial_{\rho\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
 ``<|B|>_vol``,:math:`\langle |B| \rangle_{vol}`,Tesla,Volume average magnetic field,``desc.compute._field``
+``<|B|>_rms``,:math:`\langle |B| \rangle_{rms}`,Tesla,"Volume average magnetic field, root mean square",``desc.compute._field``
 ``<|B|>``,:math:`\langle |B| \rangle`,Tesla,Flux surface average magnetic field,``desc.compute._field``
 ``<B^2>``,:math:`\langle B^2 \rangle`,Tesla squared,Flux surface average magnetic field squared,``desc.compute._field``
 ``<B^2>_r``,:math:`\partial_{\rho} \langle B^2 \rangle`,Tesla squared,"Flux surface average magnetic field squared, radial derivative",``desc.compute._field``
@@ -285,6 +288,14 @@ Name,Label,Units,Description,Module
 ``grad(psi)``,:math:`\nabla\psi`,Webers per meter,Toroidal flux gradient (normalized by 2pi),``desc.compute._profiles``
 ``|grad(psi)|^2``,:math:`|\nabla\psi|^{2}`,Webers squared per square meter,Toroidal flux gradient (normalized by 2pi) magnitude squared,``desc.compute._profiles``
 ``|grad(psi)|``,:math:`|\nabla\psi|`,Webers per meter,Toroidal flux gradient (normalized by 2pi) magnitude,``desc.compute._profiles``
+``Te``,:math:`T_e`,electron-Volts,Electron temperature,``desc.compute._profiles``
+``Te_r``,:math:`\partial_{\rho} T_e`,electron-Volts,"Electron temperature, first radial derivative",``desc.compute._profiles``
+``ne``,:math:`n_e`,1 / cubic meters,Electron density,``desc.compute._profiles``
+``ne_r``,:math:`\partial_{\rho} n_e`,1 / cubic meters,"Electron density, first radial derivative",``desc.compute._profiles``
+``Ti``,:math:`T_i`,electron-Volts,Ion temperature,``desc.compute._profiles``
+``Ti_r``,:math:`\partial_{\rho} T_i`,electron-Volts,"Ion temperature, first radial derivative",``desc.compute._profiles``
+``Zeff``,:math:`Z_{eff}`,None,Effective atomic number,``desc.compute._profiles``
+``Zeff_r``,:math:`\partial_{\rho} Z_{eff}`,None,"Effective atomic number, first radial derivative",``desc.compute._profiles``
 ``p``,:math:`p`,Pascals,Pressure,``desc.compute._profiles``
 ``p_r``,:math:`\partial_{\rho} p`,Pascals,"Pressure, first radial derivative",``desc.compute._profiles``
 ``grad(p)``,:math:`\nabla p`,Newtons / cubic meter,Pressure gradient,``desc.compute._profiles``

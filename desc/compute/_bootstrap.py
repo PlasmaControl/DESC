@@ -45,10 +45,10 @@ def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
     axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
     \epsilon \cos\theta) R_0`.
 
-    This function operates on plain numpy/jax arrays, not the
-    Equilibrium attributes used as arguments to other ``compute_*``
-    functions. This is so this function can be applied to and tested
-    on analytic magnetic fields.
+    This function is not formulated as a DESC "compute" function in
+    anticipation that it will be used with multiple methods of
+    computing the "nearby perfectly quasisymmetric field" in fields
+    that are only approximately quasisymmetric.
 
     This function returns a Dictionary containing the following data,
     all 1D arrays of shape ``(grid.num_rho,)``:
@@ -139,7 +139,9 @@ def j_dot_B_Redl(
     r"""
     Compute the bootstrap current (specifically
     :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
-    Redl et al, Physics of Plasmas 28, 022502 (2021).
+    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
+    and quasi-helical symmetry, but not in other stellarators.
 
     The profiles of ne, Te, Ti, and Zeff should all be instances of
     subclasses of :obj:`desc.Profile`, i.e. they should
@@ -150,40 +152,39 @@ def j_dot_B_Redl(
     ``ne`` should have units of 1/m^3. ``Ti`` and ``Te`` should have
     units of eV.
 
-    Geometric data can be specified in one of two ways. In the first
-    approach, the arguments ``s``, ``G``, ``R``, ``iota``,
-    ``epsilon``, ``f_t``, ``psi_edge``, and ``nfp`` are specified,
-    while the argument ``geom`` is not. In the second approach, the
-    argument ``geom`` is set to an instance of either
-    :obj:`RedlGeomVmec` or :obj:`RedlGeomBoozer`, and this object will
-    be used to set all the other geometric quantities. In this case,
-    the arguments ``s``, ``G``, ``R``, ``iota``, ``epsilon``, ``f_t``,
-    ``psi_edge``, and ``nfp`` should not be specified.
+    The argument ``geom_data`` is a Dictionary that should contain the
+    following items:
 
-    The input variable ``s`` is a 1D array of values of normalized
-    toroidal flux.  The input arrays ``G``, ``R``, ``iota``,
-    ``epsilon``, and ``f_t``, should be 1d arrays evaluated on this
-    same ``s`` grid. The bootstrap current
-    :math:`\left<\vec{J}\cdot\vec{B}\right>` will be computed on this
-    same set of flux surfaces.
-
-    If you provide a :obj:`RedlGeomBoozer` object for ``geom``, then
-    it is not necessary to specify the argument ``helicity_n`` here,
-    in which case ``helicity_n`` will be taken from ``geom``.
+    - rho: 1D array with the effective minor radius.
+    - G: 1D array with the Boozer ``G`` coefficient.
+    - R: 1D array with the effective value of ``R`` to use in the Redl formula,
+      not necessarily the major radius.
+    - iota: 1D array with the rotational transform.
+    - epsilon: 1D array with the effective inverse aspect ratio to use in
+      the Redl formula.
+    - psi_edge: float, the boundary toroidal flux, divided by (2 pi).
+    - f_t: 1D array with the effective trapped particle fraction
 
     Parameters
     ----------
-    ne: A :obj:`~Profile` object with the electron density profile.
-    Te: A :obj:`~Profile` object with the electron temperature profile.
-    Ti: A :obj:`~Profile` object with the ion temperature profile.
-    Zeff: A :obj:`~Profile` object with the profile of the average
-        impurity charge :math:`Z_{eff}`. Or, a single number can be provided if this profile is
-        constant. Or, if ``None``, Zeff = 1 will be used.
+    geom_data : dict
+        Dictionary containing the data described above.
+    ne : A :obj:`~desc.profile.Profile` object
+        The electron density profile.
+    Te : A :obj:`~desc.profile.Profile` object
+        The electron temperature profile.
+    Ti : A :obj:`~desc.profile.Profile` object
+        The ion temperature profile.
+    Zeff : `None`, float, or a :obj:`~Profile` object
+        The profile of the average impurity charge :math:`Z_{eff}`. A single
+        number can be provided if this profile is constant. Or, if ``None``,
+        Zeff = 1 will be used.
     helicity_N : int
         Set to 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
         This quantity is used to apply the quasisymmetry isomorphism to map the collisionality
         and bootstrap current from the tokamak expressions to quasi-helical symmetry.
-    plot: Whether to make a plot of many of the quantities computed.
+    plot : boolean
+        Whether to make a plot of many of the quantities computed.
 
     Returns
     -------
@@ -216,8 +217,7 @@ def j_dot_B_Redl(
     d_Te_d_s = Te(rho, dr=1) / (2 * rho)
     d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
 
-    # Eq (18d)-(18e) in Sauter.
-    # Check that we do not need to convert units of n or T!
+    # Eq (18d)-(18e) in Sauter, Angioni, and Lin-Liu, Physics of Plasmas 6, 2834 (1999).
     ln_Lambda_e = 31.3 - jnp.log(jnp.sqrt(ne_rho) / Te_rho)
     ln_Lambda_ii = 30 - jnp.log(Zeff_rho**3 * jnp.sqrt(ni_rho) / (Ti_rho**1.5))
 
@@ -239,25 +239,7 @@ def j_dot_B_Redl(
         * ln_Lambda_ii
         / (Ti_rho * Ti_rho * (epsilon**1.5))
     )
-    # These if statements are incompatible with jit:
-    """
-    if jnp.any(nu_e[:-2] < 1e-6):
-        warnings.warn(
-            "nu_*e is surprisingly low. Check that the density and temperature are correct."
-        )
-    if jnp.any(nu_i[:-2] < 1e-6):
-        warnings.warn(
-            "nu_*i is surprisingly low. Check that the density and temperature are correct."
-        )
-    if jnp.any(nu_e[:-2] > 1e5):
-        warnings.warn(
-            "nu_*e is surprisingly large. Check that the density and temperature are correct."
-        )
-    if jnp.any(nu_i[:-2] > 1e5):
-        warnings.warn(
-            "nu_*i is surprisingly large. Check that the density and temperature are correct."
-        )
-    """
+
     # Redl eq (11):
     X31 = f_t / (
         1
@@ -470,16 +452,20 @@ def j_dot_B_Redl(
     data=["|B|", "sqrt(g)", "G", "I", "iota"],
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
-    """
-    Compute the geometric quantities needed for the Redl bootstrap
-    formula using the global Bmax and Bmin on each surface.
+    r"""
+    Compute the bootstrap current (specifically
+    :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
+    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
+    and quasi-helical symmetry, but not in other stellarators.
     """
     grid = transforms["grid"]
 
-    # Note that geom_data contains info only as a function of rho, not
-    # theta or zeta, i.e. on the compressed grid. In contrast, data
-    # contains quantities on a 3D grid even for quantities that are
-    # flux functions.
+    # Note that the geom_data dictionary provided to j_dot_B_Redl()
+    # contains info only as a function of rho, not theta or zeta,
+    # i.e. on the compressed grid. In contrast, "data" contains
+    # quantities on a 3D grid even for quantities that are flux
+    # functions.
     geom_data = trapped_fraction(grid, data["|B|"], data["sqrt(g)"])
     geom_data["G"] = compress(grid, data["G"])
     geom_data["I"] = compress(grid, data["I"])
@@ -489,11 +475,21 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     ]
     geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
 
-    # The "backup" PowerSeriesProfiles here are necessary for test_compute_funs.py::test_compute_everything
-    ne = profiles.get("electron_density", PowerSeriesProfile([1e20]))
-    Te = profiles.get("electron_temperature", PowerSeriesProfile([1e3]))
-    Ti = profiles.get("ion_temperature", PowerSeriesProfile([1e3]))
-    Zeff = profiles.get("atomic_number", PowerSeriesProfile([1.0]))
+    ne = profiles["electron_density"]
+    Te = profiles["electron_temperature"]
+    Ti = profiles["ion_temperature"]
+    Zeff = profiles["atomic_number"]
+    # The "backup" PowerSeriesProfiles that follow here are necessary
+    # for test_compute_funs.py::test_compute_everything
+    if ne is None:
+        ne = PowerSeriesProfile([1e20])
+    if Te is None:
+        Te = PowerSeriesProfile([1e3])
+    if Ti is None:
+        Ti = PowerSeriesProfile([1e3])
+    if Zeff is None:
+        Zeff = PowerSeriesProfile([1.0])
+
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
 

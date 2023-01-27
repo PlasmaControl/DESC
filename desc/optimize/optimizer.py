@@ -270,6 +270,7 @@ class Optimizer(IOAble):
             grad_wrapped,
             hess_wrapped,
             jac_wrapped,
+            grad_fd,
             project,
             recover,
         ) = _wrap_objective_with_constraints(objective, linear_constraints, self.method)
@@ -398,7 +399,7 @@ class Optimizer(IOAble):
                 result = sgd(
                     compute_scalar_wrapped,
                     x0=x0_reduced,
-                    grad=grad_wrapped,
+                    grad=grad_fd,
                     args=(),
                     method=self.method,
                     ftol=stoptol["ftol"],
@@ -532,12 +533,34 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
         df = objective.jac(x)
         return df[:, unfixed_idx] @ Z
 
+    def grad_fd(x_reduced):
+        x = recover(x_reduced)
+        fx = objective.compute(x)
+        dx = 0.2*x_reduced
+        tang = np.eye(len(dx))
+        jac = []
+        for i in range(len(tang)):
+            tang[i][i] = dx[i]
+        for i in range(len(tang)):
+            print("shapes are " + str(x_reduced.shape))
+            print("shapes are " + str(tang[:,i].T.shape))
+            df = (objective.compute(recover(x_reduced+tang[:,i].T))-fx)/np.linalg.norm(recover(tang[:,i].T))
+            df = df.reshape(len(df),1)
+            print("df is " + str(df))
+            jac = np.hstack((jac,df))
+            print("jac is " + str(jac))
+        print("shape of fx is " + str(fx.shape))
+        print("shape of jac is " + str(jac.shape))
+        print("shape of Z is " + str(Z.shape))
+        return fx.T @ jac
+
     return (
         compute_wrapped,
         compute_scalar_wrapped,
         grad_wrapped,
         hess_wrapped,
         jac_wrapped,
+        grad_fd,
         project,
         recover,
     )

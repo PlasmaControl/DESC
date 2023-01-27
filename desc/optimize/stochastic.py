@@ -3,6 +3,7 @@
 import numpy as np
 from scipy.optimize import OptimizeResult
 from desc.backend import jnp
+from scipy.sparse import diags
 
 from .utils import (
     STATUS_MESSAGES,
@@ -12,7 +13,14 @@ from .utils import (
 )
 
 def calc_grad(fun,x,dx):
-    return (fun(x+dx) - fun(x-dx))/np.linalg.norm(dx)
+    fx = fun(x)
+    tang = np.eye(len(x))
+    for i in range(len(tang)):
+        tang[i][i] = dx[i]
+    grad = np.zeros(len(x))
+    for i in range(len(tang)):
+        grad[i] = (fun(x+tang[:,i].T) - fx)/(np.linalg.norm(tang[:,i].T))
+    return grad
 
 def sgd(
     fun,
@@ -100,11 +108,17 @@ def sgd(
     v = np.zeros_like(x)
     f = fun(x, *args)
     nfev += 1
-    dx = 0.01*np.ones(len(x))
+    print("x is " + str(x))
+    #tang = diags(0.01*x).toarray() 
+    dx = 0.20*x
     #g = jnp.atleast_1d(calc_grad(fun,x,dx))
     g = grad(x, *args)
-    print("x is " + str(x))
     print("g is " + str(g))
+    while np.linalg.norm(g) > 5000:
+        print("DECREASING g")
+        g = g / 10
+        print("g is " + str(g))
+
     ngev += 1
 
     if maxiter is None:
@@ -156,15 +170,22 @@ def sgd(
         print("alpha is " + str(alpha))
         print("v is "  + str(v))
         x = x - alpha * v
+        fnew = fun(x, *args)
+        print("new f is " + str(fnew))
         print("x is " + str(x))
-        dx = 0.01*np.ones(len(x))
+        #tang = diags(np.squeeze(0.01*x)).toarray() 
+        dx = 0.20*x
         #g = jnp.atleast_1d(calc_grad(fun,x,dx))
         g = grad(x, *args)
         print("g is " + str(g))
+        while np.linalg.norm(g) > 5000:
+            print("DECREASING g")
+            g = g / 10
+            print("g is " + str(g))
+
         ngev += 1
         step_norm = np.linalg.norm(alpha * v, ord=xnorm_ord)
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
-        fnew = fun(x, *args)
         nfev += 1
         df = f - fnew
         f = fnew

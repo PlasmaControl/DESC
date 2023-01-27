@@ -1016,50 +1016,37 @@ def test_compute_grad_p_volume_avg():
 
 
 @pytest.mark.unit
-def test_J_dot_B():
-    """Compare <J dot B> to vmec."""
+def test_compare_quantities_to_vmec():
+    """Compare several computed quantities to vmec."""
     wout_file = ".//tests//inputs//wout_DSHAPE.nc"
     desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
 
     fid = netcdf_file(wout_file, mmap=False)
     ns = fid.variables["ns"][()]
     J_dot_B_vmec = fid.variables["jdotb"][()]
-    fid.close()
-
-    eq = EquilibriaFamily.load(desc_file)[-1]
-
-    s = np.linspace(0, 1, ns)
-    rho = np.sqrt(s)
-    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-    data = eq.compute("<J dot B>", grid=grid)
-    J_dot_B_desc = compress(grid, data["<J dot B>"])
-
-    # Drop first point since desc gives NaN:
-    np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
-
-
-@pytest.mark.unit
-def test_vol_avg_B_beta():
-    """Compare volavgB and betatotal to vmec.
-
-    Probably other fields could be compared as well.
-    """
-    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
-    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-
-    fid = netcdf_file(wout_file, mmap=False)
     volavgB = fid.variables["volavgB"][()]
     betatotal = fid.variables["betatotal"][()]
     fid.close()
 
     eq = EquilibriaFamily.load(desc_file)[-1]
 
+    # Compare 0D quantities:
     grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
     data = eq.compute("<beta>_vol", grid=grid)
     data = eq.compute("<|B|>_rms", grid=grid, data=data)
 
     np.testing.assert_allclose(volavgB, data["<|B|>_rms"], rtol=1e-7)
     np.testing.assert_allclose(betatotal, data["<beta>_vol"], rtol=1e-5)
+
+    # Compare radial profile quantities:
+    s = np.linspace(0, 1, ns)
+    rho = np.sqrt(s)
+    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+    data = eq.compute("<J*B>", grid=grid)
+    J_dot_B_desc = compress(grid, data["<J*B>"])
+
+    # Drop first point since desc gives NaN:
+    np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
 
 
 @pytest.mark.unit

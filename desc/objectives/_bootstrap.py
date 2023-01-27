@@ -202,17 +202,13 @@ class BootstrapRedlConsistency(_Objective):
             **extra_kwargs,
         )
 
-        fourpi2 = 4 * jnp.pi * jnp.pi
         rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
-        denominator = (
-            jnp.sum(
-                (data["<J*B>"] + data["<J*B> Redl"]) ** 2
-                * (data["rho"] ** self.rho_exponent)
-                * self.grid.weights
-            )
-            / fourpi2
-        )
+        denominator = jnp.sum(
+            (data["<J*B>"] + data["<J*B> Redl"]) ** 2
+            * (data["rho"] ** self.rho_exponent)
+            * self.grid.weights
+        ) / (4 * jnp.pi * jnp.pi)
 
         residuals = compress(
             self.grid,

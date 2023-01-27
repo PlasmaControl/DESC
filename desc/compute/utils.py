@@ -69,10 +69,6 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
         "M_booz",
         "N_booz",
         "gamma",
-        "ne",
-        "Te",
-        "Ti",
-        "Zeff",
     }
     bad_kwargs = set(kwargs.keys()).difference(allowed_kwargs)
     if len(bad_kwargs) > 0:

@@ -460,7 +460,12 @@ def j_dot_B_Redl(
     dim=1,
     params=[],
     transforms={},
-    profiles=[],
+    profiles=[
+        "electron_density",
+        "electron_temperature",
+        "ion_temperature",
+        "atomic_number",
+    ],
     coordinates="r",
     data=["|B|", "sqrt(g)", "G", "I", "iota"],
 )
@@ -468,14 +473,6 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     """
     Compute the geometric quantities needed for the Redl bootstrap
     formula using the global Bmax and Bmin on each surface.
-
-    The effective trapped particle fraction :math:`f_t` will also be
-    computed using the full nonaxisymmetric field strength on each
-    flux surface.
-
-    The advantage of this approach over :func:`Redl_geom_Boozer` is that no
-    transformation to Boozer coordinates is involved in this
-    method. However, the approach here may over-estimate ``epsilon``.
     """
     grid = transforms["grid"]
 
@@ -493,10 +490,10 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
 
     # The "backup" PowerSeriesProfiles here are necessary for test_compute_funs.py::test_compute_everything
-    ne = kwargs.get("ne", PowerSeriesProfile([1e20]))
-    Te = kwargs.get("Te", PowerSeriesProfile([1e3]))
-    Ti = kwargs.get("Ti", PowerSeriesProfile([1e3]))
-    Zeff = kwargs.get("Zeff", 1.0)
+    ne = profiles.get("electron_density", PowerSeriesProfile([1e20]))
+    Te = profiles.get("electron_temperature", PowerSeriesProfile([1e3]))
+    Ti = profiles.get("ion_temperature", PowerSeriesProfile([1e3]))
+    Zeff = profiles.get("atomic_number", PowerSeriesProfile([1.0]))
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
 

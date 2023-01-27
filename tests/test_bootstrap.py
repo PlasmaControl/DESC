@@ -679,14 +679,18 @@ class TestBootstrapCompute:
         The SFINCS calculation is on Matt Landreman's laptop in
         /Users/mattland/Box/work21/20211225-01-sfincs_tokamak_bootstrap_for_Redl_benchmark
         """
-        ne = PowerSeriesProfile(5.0e20 * np.array([1, -1]), modes=[0, 8])
-        Te = PowerSeriesProfile(8e3 * np.array([1, -1]), modes=[0, 2])
-        Ti = Te
         s_surfaces = np.linspace(0.01, 0.99, 99)
         rho = np.sqrt(s_surfaces)
         helicity = (1, 0)
         filename = ".//tests//inputs//circular_model_tokamak_output.h5"
         eq = desc.io.load(filename)[-1]
+        eq.electron_density = PowerSeriesProfile(
+            5.0e20 * np.array([1, -1]), modes=[0, 8]
+        )
+        eq.electron_temperature = PowerSeriesProfile(
+            8e3 * np.array([1, -1]), modes=[0, 2]
+        )
+        eq.ion_temperature = PowerSeriesProfile(8e3 * np.array([1, -1]), modes=[0, 2])
         J_dot_B_sfincs = np.array(
             [
                 -577720.30718026,
@@ -796,10 +800,6 @@ class TestBootstrapCompute:
             "<J*B> Redl",
             grid=grid,
             helicity=helicity,
-            ne=ne,
-            Te=Te,
-            Ti=Ti,
-            Zeff=1,
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
@@ -832,13 +832,16 @@ class TestBootstrapCompute:
         The SFINCS calculation is on the IPP Cobra machine in
         /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
         """
-        ne = PowerSeriesProfile(4.13e20 * np.array([1, -1]), modes=[0, 10])
-        Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
-        Ti = Te
-        Zeff = 1
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
+        eq.electron_density = PowerSeriesProfile(
+            4.13e20 * np.array([1, -1]), modes=[0, 10]
+        )
+        eq.electron_temperature = PowerSeriesProfile(
+            12.0e3 * np.array([1, -1]), modes=[0, 2]
+        )
+        eq.ion_temperature = eq.electron_temperature
         s_surfaces = np.linspace(0.025, 0.975, 39)
         rho = np.sqrt(s_surfaces)
         J_dot_B_sfincs = np.array(
@@ -890,10 +893,6 @@ class TestBootstrapCompute:
             "<J*B> Redl",
             grid=grid,
             helicity=helicity,
-            ne=ne,
-            Te=Te,
-            Ti=Ti,
-            Zeff=1,
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
@@ -928,13 +927,17 @@ class TestBootstrapCompute:
         /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi\
 60_Nx7_manySurfaces
         """
-        ne = PowerSeriesProfile(4.13e20 * np.array([1, -1]), modes=[0, 10])
-        Te = PowerSeriesProfile(12.0e3 * np.array([1, -1]), modes=[0, 2])
-        Ti = Te
-        Zeff = 1
         helicity = (1, -4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
+        eq.electron_density = PowerSeriesProfile(
+            4.13e20 * np.array([1, -1]), modes=[0, 10]
+        )
+        eq.electron_temperature = PowerSeriesProfile(
+            12.0e3 * np.array([1, -1]), modes=[0, 2]
+        )
+        eq.ion_temperature = eq.electron_temperature
+        eq.atomic_number = 1
         s_surfaces = np.linspace(0.025, 0.975, 39)
         rho = np.sqrt(s_surfaces)
         J_dot_B_sfincs = np.array(
@@ -986,10 +989,6 @@ class TestBootstrapCompute:
             "<J*B> Redl",
             grid=grid,
             helicity=helicity,
-            ne=ne,
-            Te=Te,
-            Ti=Ti,
-            Zeff=1,
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
@@ -1020,14 +1019,18 @@ class TestBootstrapObjectives:
         The BootstrapRedlConsistency objective function should be
         1/2 if the equilibrium is a vacuum field.
         """
-        # n and T profiles do not go to 0 at rho=0 to avoid divide-by-0 there:
-        ne = PowerSeriesProfile(5.0e20 * np.array([1, -0.9]), modes=[0, 8])
-        Te = PowerSeriesProfile(8e3 * np.array([1, -0.9]), modes=[0, 2])
-        Ti = PowerSeriesProfile(9e3 * np.array([1, -0.9]), modes=[0, 2])
-        Zeff = PowerSeriesProfile(np.array([1.2, 0.2]), modes=[0, 2])
         helicity = (1, -4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
+        # n and T profiles do not go to 0 at rho=0 to avoid divide-by-0 there:
+        eq.electron_density = PowerSeriesProfile(
+            5.0e20 * np.array([1, -0.9]), modes=[0, 8]
+        )
+        eq.electron_temperature = PowerSeriesProfile(
+            8e3 * np.array([1, -0.9]), modes=[0, 2]
+        )
+        eq.ion_temperature = PowerSeriesProfile(9e3 * np.array([1, -0.9]), modes=[0, 2])
+        eq.atomic_number = PowerSeriesProfile(np.array([1.2, 0.2]), modes=[0, 2])
 
         def test(grid_type, kwargs, L_factor, M_factor, N_factor, rho_exponent):
             grid = grid_type(
@@ -1041,10 +1044,6 @@ class TestBootstrapObjectives:
                 BootstrapRedlConsistency(
                     grid=grid,
                     helicity=helicity,
-                    ne=ne,
-                    Te=Te,
-                    Ti=Ti,
-                    Zeff=Zeff,
                     rho_exponent=rho_exponent,
                 ),
                 eq,
@@ -1081,13 +1080,19 @@ class TestBootstrapObjectives:
         Confirm that the BootstrapRedlConsistency objective function is
         approximately independent of grid resolution.
         """
-        ne = PowerSeriesProfile(2.0e19 * np.array([1, -0.85]), modes=[0, 4])
-        Te = PowerSeriesProfile(1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
-        Ti = PowerSeriesProfile(1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
-        Zeff = 1.4
         helicity = (1, 0)
         filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
         eq = desc.io.load(filename)[-1]
+        eq.electron_density = PowerSeriesProfile(
+            2.0e19 * np.array([1, -0.85]), modes=[0, 4]
+        )
+        eq.electron_temperature = PowerSeriesProfile(
+            1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
+        )
+        eq.ion_temperature = PowerSeriesProfile(
+            1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
+        )
+        eq.atomic_number = 1.4
 
         # Set to True to plot the profiles of <J*B>
         if False:
@@ -1095,10 +1100,6 @@ class TestBootstrapObjectives:
             data = eq.compute(
                 ["<J*B>", "<J*B> Redl", "rho"],
                 grid=grid,
-                ne=ne,
-                Te=Te,
-                Ti=Ti,
-                Zeff=Zeff,
                 helicity=helicity,
             )
             import matplotlib.pyplot as plt
@@ -1122,10 +1123,6 @@ class TestBootstrapObjectives:
                 BootstrapRedlConsistency(
                     grid=grid,
                     helicity=helicity,
-                    ne=ne,
-                    Te=Te,
-                    Ti=Ti,
-                    Zeff=Zeff,
                     rho_exponent=1,
                 ),
                 eq,
@@ -1151,12 +1148,13 @@ class TestBootstrapObjectives:
         results = np.array(results)
         np.testing.assert_allclose(results, np.mean(results), rtol=0.02)
 
+    # MJL: Should this test be decorated with @pytest.mark.slow ?
     @pytest.mark.unit
-    @pytest.mark.slow
     def test_bootstrap_consistency_iota(self):
         """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
 
-        This version of the test covers an equilibrium with an iota profile.
+        This version of the test covers an equilibrium with an iota
+        profile rather than a current profile.
         """
 
         ne0 = 4.0e20
@@ -1165,12 +1163,9 @@ class TestBootstrapObjectives:
         Te = PowerSeriesProfile(T0 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
         Zeff = 1
+
         helicity = (1, 0)
-        pressure = PowerSeriesProfile(
-            2 * ne0 * T0 * elementary_charge * np.array([1, -1, 0, 0, 0, -1, 1]),
-            modes=[0, 2, 4, 6, 8, 10, 12],
-        )
-        B0 = 5.0  # Mean |B|
+        B0 = 5.0  # Desired average |B|
         LM_resolution = 8
 
         initial_iota = -0.61
@@ -1191,7 +1186,10 @@ class TestBootstrapObjectives:
 
         eq = Equilibrium(
             surface=surface,
-            pressure=pressure,
+            electron_density=ne,
+            electron_temperature=Te,
+            ion_temperature=Ti,
+            atomic_number=Zeff,
             iota=iota,
             Psi=B0 * np.pi * (aminor**2),
             NFP=NFP,
@@ -1207,7 +1205,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(),
+            constraints=get_fixed_boundary_constraints(kinetic=True),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance()),
         )
@@ -1221,7 +1219,10 @@ class TestBootstrapObjectives:
             ForceBalance(),
             FixBoundaryR(),
             FixBoundaryZ(),
-            FixPressure(),
+            FixElectronDensity(),
+            FixElectronTemperature(),
+            FixIonTemperature(),
+            FixAtomicNumber(),
             FixPsi(),
         )
 
@@ -1236,10 +1237,6 @@ class TestBootstrapObjectives:
             BootstrapRedlConsistency(
                 grid=grid,
                 helicity=helicity,
-                ne=ne,
-                Te=Te,
-                Ti=Ti,
-                Zeff=Zeff,
             )
         )
         eq, result = eq.optimize(
@@ -1257,10 +1254,6 @@ class TestBootstrapObjectives:
         data = eq.compute(
             ["<J*B>", "<J*B> Redl"],
             grid=grid,
-            ne=ne,
-            Te=Te,
-            Ti=Ti,
-            Zeff=Zeff,
             helicity=helicity,
         )
         J_dot_B_MHD = compress(grid, data["<J*B>"])
@@ -1272,12 +1265,14 @@ class TestBootstrapObjectives:
         assert np.min(J_dot_B_MHD) > -5.4e6
         np.testing.assert_allclose(J_dot_B_MHD, J_dot_B_Redl, atol=5e5)
 
+    # MJL: Should this test be decorated with @pytest.mark.slow ?
     @pytest.mark.unit
-    @pytest.mark.slow
     def test_bootstrap_consistency_current(self):
-        """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
+        """
+        Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
 
-        This version of the test covers the case of an equilibrium with a current profile.
+        This version of the test covers the case of an equilibrium
+        with a current profile rather than an iota profile.
         """
 
         ne0 = 4.0e20
@@ -1285,13 +1280,9 @@ class TestBootstrapObjectives:
         ne = PowerSeriesProfile(ne0 * np.array([1, -1]), modes=[0, 10])
         Te = PowerSeriesProfile(T0 * np.array([1, -1]), modes=[0, 2])
         Ti = Te
-        Zeff = 1
+
         helicity = (1, 0)
-        pressure = PowerSeriesProfile(
-            2 * ne0 * T0 * elementary_charge * np.array([1, -1, 0, 0, 0, -1, 1]),
-            modes=[0, 2, 4, 6, 8, 10, 12],
-        )
-        B0 = 5.0  # Mean |B|
+        B0 = 5.0  # Desired average |B|
         LM_resolution = 8
 
         current = PowerSeriesProfile([0, -1.2e7], modes=[0, 2], sym=False)
@@ -1310,7 +1301,9 @@ class TestBootstrapObjectives:
 
         eq = Equilibrium(
             surface=surface,
-            pressure=pressure,
+            electron_density=ne,
+            electron_temperature=Te,
+            ion_temperature=Ti,
             current=current,
             Psi=B0 * np.pi * (aminor**2),
             NFP=NFP,
@@ -1328,7 +1321,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(iota=False),
+            constraints=get_fixed_boundary_constraints(kinetic=True, iota=False),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance()),
         )
@@ -1342,7 +1335,10 @@ class TestBootstrapObjectives:
             ForceBalance(),
             FixBoundaryR(),
             FixBoundaryZ(),
-            FixPressure(),
+            FixElectronDensity(),
+            FixElectronTemperature(),
+            FixIonTemperature(),
+            FixAtomicNumber(),
             FixCurrent(indices=[0]),
             FixPsi(),
         )
@@ -1358,10 +1354,6 @@ class TestBootstrapObjectives:
             BootstrapRedlConsistency(
                 grid=grid,
                 helicity=helicity,
-                ne=ne,
-                Te=Te,
-                Ti=Ti,
-                Zeff=Zeff,
             )
         )
         eq, result = eq.optimize(
@@ -1370,7 +1362,7 @@ class TestBootstrapObjectives:
             constraints=constraints,
             optimizer=Optimizer("scipy-trf"),
             ftol=1e-6,
-            gtol=0,  # Critical to set gtol=0 when optimizing current profile!
+            gtol=0,  # It is critical to set gtol=0 when optimizing current profile!
         )
 
         eq.save("test_bootstrap_consistency_current_final.h5")
@@ -1380,10 +1372,6 @@ class TestBootstrapObjectives:
         data = eq.compute(
             ["<J*B>", "<J*B> Redl"],
             grid=grid,
-            ne=ne,
-            Te=Te,
-            Ti=Ti,
-            Zeff=Zeff,
             helicity=helicity,
         )
         J_dot_B_MHD = compress(grid, data["<J*B>"])

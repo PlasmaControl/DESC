@@ -96,10 +96,6 @@ class BootstrapRedlConsistency(_Objective):
     def __init__(
         self,
         helicity=(1, 0),
-        ne=None,
-        Te=None,
-        Ti=None,
-        Zeff=1,
         rho_exponent=0,
         eq=None,
         target=0,
@@ -113,10 +109,6 @@ class BootstrapRedlConsistency(_Objective):
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
 
         self.helicity = helicity
-        self.ne = ne
-        self.Te = Te
-        self.Ti = Ti
-        self.Zeff = Zeff
         self.rho_exponent = rho_exponent
         self.grid = grid
         super().__init__(
@@ -160,18 +152,28 @@ class BootstrapRedlConsistency(_Objective):
         # Try to catch cases in which density or temperatures are specified in the wrong units.
         # Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=self.grid)["rho"]
-        if jnp.any(self.Te(rho) > 50e3):
-            warnings.warn("Te is surprisingly high. It should have units of eV")
-        if jnp.any(self.Ti(rho) > 50e3):
-            warnings.warn("Ti is surprisingly high. It should have units of eV")
+        if jnp.any(eq.electron_temperature(rho) > 50e3):
+            warnings.warn(
+                "Electron temperature is surprisingly high. It should have units of eV"
+            )
+        if jnp.any(eq.ion_temperature(rho) > 50e3):
+            warnings.warn(
+                "Ion temperature is surprisingly high. It should have units of eV"
+            )
         # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower bounds:
         rho = rho[rho < 0.85]
-        if jnp.any(self.ne(rho) < 1e17):
-            warnings.warn("ne is surprisingly low. It should have units 1/meters^3")
-        if jnp.any(self.Te(rho) < 30):
-            warnings.warn("Te is surprisingly low. It should have units of eV")
-        if jnp.any(self.Ti(rho) < 30):
-            warnings.warn("Ti is surprisingly low. It should have units of eV")
+        if jnp.any(eq.electron_density(rho) < 1e17):
+            warnings.warn(
+                "Electron density is surprisingly low. It should have units 1/meters^3"
+            )
+        if jnp.any(eq.electron_temperature(rho) < 30):
+            warnings.warn(
+                "Electron temperature is surprisingly low. It should have units of eV"
+            )
+        if jnp.any(eq.ion_temperature(rho) < 30):
+            warnings.warn(
+                "Ion temperature is surprisingly low. It should have units of eV"
+            )
 
         timer = Timer()
         if verbose > 0:
@@ -213,10 +215,6 @@ class BootstrapRedlConsistency(_Objective):
         """
         params = self._parse_args(*args, **kwargs)
         extra_kwargs = {
-            "ne": self.ne,
-            "Te": self.Te,
-            "Ti": self.Ti,
-            "Zeff": self.Zeff,
             "helicity": self.helicity,
         }
         data = compute_fun(

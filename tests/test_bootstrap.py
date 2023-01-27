@@ -396,7 +396,6 @@ class TestBootstrapCompute:
             Ti = PowerSeriesProfile([1.0e5 * Ti_over_Te])
             rho = np.linspace(0, 1, 100) ** 2
             rho = rho[1:]  # Avoid divide-by-0 on axis
-            NFP = 1
             helicity_N = 0
             epsilon = rho
             f_t = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
@@ -530,7 +529,6 @@ class TestBootstrapCompute:
                 )
                 Ti = PowerSeriesProfile([1.0e5 * Ti_over_Te], modes=[0])
                 rho = np.ones(n_f_t)
-                NFP = 0
                 helicity_N = 0
                 G = 32.0 - rho * rho  # Doesn't matter
                 R = 5.0 + 0.1 * rho * rho  # Doesn't matter
@@ -1054,7 +1052,8 @@ class TestBootstrapObjectives:
 
         results = []
 
-        # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
+        # Loop over grid trypes. For LinearGrid we need to drop the
+        # point at rho=0 to avoid a divide-by-0
         grid_types = [LinearGrid, QuadratureGrid]
         kwargs = [{"axis": False}, {}]
 
@@ -1132,7 +1131,8 @@ class TestBootstrapObjectives:
 
         results = []
 
-        # Loop over grid trypes. For LinearGrid we need to drop the point at rho=0 to avoid a divide-by-0
+        # Loop over grid trypes. For LinearGrid we need to drop the
+        # point at rho=0 to avoid a divide-by-0
         grid_types = [LinearGrid, QuadratureGrid]
         kwargss = [{"axis": False}, {}]
 
@@ -1239,7 +1239,7 @@ class TestBootstrapObjectives:
                 helicity=helicity,
             )
         )
-        eq, result = eq.optimize(
+        eq, _ = eq.optimize(
             verbose=3,
             objective=objective,
             constraints=constraints,
@@ -1356,7 +1356,7 @@ class TestBootstrapObjectives:
                 helicity=helicity,
             )
         )
-        eq, result = eq.optimize(
+        eq, _ = eq.optimize(
             verbose=3,
             objective=objective,
             constraints=constraints,

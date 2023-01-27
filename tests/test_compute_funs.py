@@ -1040,7 +1040,10 @@ def test_J_dot_B():
 
 @pytest.mark.unit
 def test_vol_avg_B_beta():
-    """Compare volavgB and betatotal to vmec."""
+    """Compare volavgB and betatotal to vmec.
+
+    Probably other fields could be compared as well.
+    """
     wout_file = ".//tests//inputs//wout_DSHAPE.nc"
     desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
 

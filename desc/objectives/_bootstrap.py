@@ -55,14 +55,6 @@ class BootstrapRedlConsistency(_Objective):
         used for evaluating the Redl bootstrap current
         formula. Set to 0 for axisymmetry or quasi-axisymmetry; set to +/- NFP for
         quasi-helical symmetry.
-    ne : Profile
-        Electron density profile, in units of meter^{-3}
-    Te : Profile
-        Electron temperature profile, in units of eV
-    Ti : Profile
-        Ion temperature profile, in units of eV
-    Zeff : Profile or float, optional
-        Effective impurity charge
     rho_exponent: float
         Exponent p acting on rho in the numerator and denominator above.
     eq : Equilibrium, optional
@@ -191,21 +183,6 @@ class BootstrapRedlConsistency(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute the bootstrap current self-consistency objective.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-        L_lmn : ndarray
-            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
-        i_l : ndarray
-            Spectral coefficients of iota(rho) -- rotational transform profile.
-        c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
-        Psi : float
-            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------

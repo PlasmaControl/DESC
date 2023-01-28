@@ -433,6 +433,8 @@ def _get_grid_surface(grid, surface_label):
         The column in the grid corresponding to this surface_label's nodes.
     unique_idx : ndarray
         The indices of the unique values of the surface_label in grid.nodes.
+    inverse_idx : ndarray
+        Indexing array to go from unique values to full grid.
     ds : ndarray
         The differential elements (dtheta * dzeta for rho surface).
     max_surface_val : float

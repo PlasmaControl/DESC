@@ -590,8 +590,11 @@ class TestBootstrapCompute:
                 alphas[j_nu_star, :] = J_dot_B_data["alpha"]
                 nu_e_stars[j_nu_star, :] = J_dot_B_data["nu_e_star"]
                 nu_i_stars[j_nu_star, :] = J_dot_B_data["nu_i_star"]
-                # np.testing.assert_allclose(J_dot_B_data["nu_e_star"], target_nu_e_star)
-                # np.testing.assert_allclose(J_dot_B_data["nu_i_star"], target_nu_i_star)
+                np.testing.assert_allclose(J_dot_B_data["nu_e_star"], target_nu_e_star)
+                # nu*i is tiny bit different from the target since lnLambda_i != lnLambda_e:
+                np.testing.assert_allclose(
+                    J_dot_B_data["nu_i_star"], target_nu_i_star, rtol=0.2
+                )
 
             # Change False to True in the next line to plot the data for debugging.
             if False:
@@ -1156,9 +1159,8 @@ class TestBootstrapObjectives:
         results = np.array(results)
         np.testing.assert_allclose(results, np.mean(results), rtol=0.02)
 
-    # MJL: Should this test be decorated with @pytest.mark.slow ?
-    @pytest.mark.unit
-    def test_bootstrap_consistency_iota(self):
+    @pytest.mark.regression
+    def test_bootstrap_consistency_iota(self, TmpDir):
         """Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.
 
         This version of the test covers an equilibrium with an iota
@@ -1217,8 +1219,11 @@ class TestBootstrapObjectives:
             objective=ObjectiveFunction(objectives=ForceBalance()),
         )
 
-        eq.save("test_bootstrap_consistency_iota_initial.h5")
-        # eq = desc.io.load("test_bootstrap_consistency_iota_initial.h5")
+        initial_output_file = str(
+            TmpDir.join("test_bootstrap_consistency_iota_initial.h5")
+        )
+        print("initial_output_file:", initial_output_file)
+        eq.save(initial_output_file)
 
         # Done establishing the initial condition. Now set up the optimization.
 
@@ -1254,7 +1259,9 @@ class TestBootstrapObjectives:
             ftol=1e-6,
         )
 
-        eq.save("test_bootstrap_consistency_iota_final.h5")
+        final_output_file = str(TmpDir.join("test_bootstrap_consistency_iota_final.h5"))
+        print("final_output_file:", final_output_file)
+        eq.save(final_output_file)
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
@@ -1272,9 +1279,8 @@ class TestBootstrapObjectives:
         assert np.min(J_dot_B_MHD) > -5.4e6
         np.testing.assert_allclose(J_dot_B_MHD, J_dot_B_Redl, atol=5e5)
 
-    # MJL: Should this test be decorated with @pytest.mark.slow ?
-    @pytest.mark.unit
-    def test_bootstrap_consistency_current(self):
+    @pytest.mark.regression
+    def test_bootstrap_consistency_current(self, TmpDir):
         """
         Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.
 
@@ -1332,8 +1338,11 @@ class TestBootstrapObjectives:
             objective=ObjectiveFunction(objectives=ForceBalance()),
         )
 
-        eq.save("test_bootstrap_consistency_current_initial.h5")
-        # eq = desc.io.load("test_bootstrap_consistency_current_initial.h5")
+        initial_output_file = str(
+            TmpDir.join("test_bootstrap_consistency_current_initial.h5")
+        )
+        print("initial_output_file:", initial_output_file)
+        eq.save(initial_output_file)
 
         # Done establishing the initial condition. Now set up the optimization.
 
@@ -1371,7 +1380,11 @@ class TestBootstrapObjectives:
             gtol=0,  # It is critical to set gtol=0 when optimizing current profile!
         )
 
-        eq.save("test_bootstrap_consistency_current_final.h5")
+        final_output_file = str(
+            TmpDir.join("test_bootstrap_consistency_current_final.h5")
+        )
+        print("final_output_file:", final_output_file)
+        eq.save(final_output_file)
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5

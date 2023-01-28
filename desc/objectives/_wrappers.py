@@ -170,7 +170,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._allxopt = [self._objective.x(eq)]
         self._allxeq = [self._eq_objective.x(eq)]
         self.history = {}
-        for arg in self._full_args:
+        for arg in arg_order:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
@@ -226,17 +226,21 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             xed = self._eq_objective.unpack_state(xeq)
             xd.update(xod)
             xd.update(xed)
-            for arg in self._full_args:
-                val = xd[arg]
+            for arg in arg_order:
+                val = xd.get(arg, self.history[arg][-1])
                 self.history[arg] += [np.asarray(val).copy()]
                 # ensure eq has correct values if we didn't go into else block above.
                 if val.size:
                     setattr(self._eq, arg, val)
+            for con in self._constraints:
+                con.update_target(self._eq)
         else:
-            for arg in self._full_args:
+            for arg in arg_order:
                 val = self.history[arg][-1].copy()
                 if val.size:
                     setattr(self._eq, arg, val)
+            for con in self._constraints:
+                con.update_target(self._eq)
         return xopt, xeq
 
     def compute(self, x):

@@ -6,25 +6,35 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
+from desc.compute._bootstrap import j_dot_B_Redl, trapped_fraction
+from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
+from desc.objectives import (
+    BootstrapRedlConsistency,
+    FixAtomicNumber,
+    FixBoundaryR,
+    FixBoundaryZ,
+    FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
+    FixPsi,
+    ForceBalance,
+    ObjectiveFunction,
+    get_fixed_boundary_constraints,
+)
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
-from desc.compute._bootstrap import trapped_fraction, j_dot_B_Redl
-from desc.compute.utils import compress
-from desc.objectives import *
 
 
 class TestBootstrapCompute:
-    """Tests for bootstrap current compute functions"""
+    """Tests for bootstrap current compute functions."""
 
     @pytest.mark.unit
     def test_trapped_fraction(self):
-        """
-        Confirm that the quantities computed by trapped_fraction()
-        match analytic results for a model magnetic field.
-        """
+        """Confirm that trapped_fraction() matches analytic results for model field."""
         M = 100
         NFP = 3
         for N in [0, 25]:
@@ -69,7 +79,8 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_trapped_fraction_Kim(self):
-        """
+        """Analytic test for trapped fraction calculation.
+
         Compare the trapped fraction to eq (C18) in Kim, Diamond, &
         Groebner, Physics of Fluids B 3, 2050 (1991), which gives
         a rough approximation for f_t.
@@ -97,7 +108,7 @@ class TestBootstrapCompute:
             # Pick out unique values:
             epsilon = np.array(sorted(list(set(epsilon_3D))))
 
-            # Eq (A6)
+            # Eq (A6)   # noqa: E800
             modB = B0 / (1 + epsilon_3D * np.cos(theta))
             # For Jacobian, use eq (A7) for the theta dependence,
             # times an arbitrary overall scale factor
@@ -121,7 +132,8 @@ class TestBootstrapCompute:
                 rtol=1e-6,
             )
             np.testing.assert_allclose(f_t_data["<1/B>"], (2 + epsilon**2) / (2 * B0))
-            # Note the loose tolerance for this next test since we do not expect precise agreement.
+            # Note the loose tolerance for this next test since we do not expect precise
+            # agreement.
             np.testing.assert_allclose(f_t_data["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
 
             # Now compute f_t numerically by a different algorithm:
@@ -163,7 +175,8 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_Redl_second_pass(self):
-        """
+        """Alternate implementation of Redl calculations for verification.
+
         A second pass through coding up the equations from Redl et al,
         Phys Plasmas (2021) to make sure I didn't make transcription
         errors.
@@ -380,7 +393,8 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_Redl_figures_2_3(self):
-        """
+        """Recreate plots to verify correctness.
+
         Make sure the implementation here can roughly recover the plots
         from figures 2 and 3 in the Redl paper.
         """
@@ -504,7 +518,8 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_Redl_figures_4_5(self):
-        """
+        """Recreate plots to verify correctness.
+
         Make sure the implementation here can roughly recover the plots
         from figures 4 and 5 in the Redl paper.
         """
@@ -670,9 +685,7 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_Redl_sfincs_tokamak_benchmark(self):
-        """
-        Compare the Redl <J*B> to a SFINCS calculation for a
-        model tokamak.
+        """Compare the Redl <J*B> to a SFINCS calculation for a model tokamak.
 
         The SFINCS calculation is on Matt Landreman's laptop in
         /Users/mattland/Box/work21/20211225-01-sfincs_tokamak_bootstrap_for_Redl_benchmark
@@ -819,16 +832,15 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_Redl_sfincs_QA(self):
-        """
-        Compare the Redl <J*B> to a SFINCS calculation for a
-        reactor-scale quasi-axisymmetric configuration.
+        """Compare the Redl <J*B> to a SFINCS calculation for reactor-scale QA.
 
         This test reproduces figure 1.a of Landreman Buller
         Drevlak, Physics of Plasmas 29, 082501 (2022)
         https://doi.org/10.1063/5.0098166
 
         The SFINCS calculation is on the IPP Cobra machine in
-        /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
+        /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226
+        -01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
         """
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
@@ -913,17 +925,15 @@ class TestBootstrapCompute:
 
     @pytest.mark.unit
     def test_Redl_sfincs_QH(self):
-        """
-        Compare the Redl <J*B> to a SFINCS calculation for a
-        reactor-scale quasi-helically symmetric configuration.
+        """Compare the Redl <J*B> to a SFINCS calculation for a reactor-scale QH.
 
         This test reproduces figure 1.b of Landreman Buller
         Drevlak, Physics of Plasmas 29, 082501 (2022)
         https://doi.org/10.1063/5.0098166
 
         The SFINCS calculation is on the IPP Cobra machine in
-        /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226-01-019_QH_Ntheta25_Nzeta39_Nxi\
-60_Nx7_manySurfaces
+        /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226
+        -01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
         """
         helicity = (1, -4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
@@ -1009,11 +1019,12 @@ class TestBootstrapCompute:
 
 
 class TestBootstrapObjectives:
-    """Tests for bootstrap current objective functions"""
+    """Tests for bootstrap current objective functions."""
 
     @pytest.mark.unit
     def test_BootstrapRedlConsistency_12(self):
-        """
+        """Test for bootstrap current in vacuum field.
+
         The BootstrapRedlConsistency objective function should be
         1/2 if the equilibrium is a vacuum field.
         """
@@ -1075,10 +1086,7 @@ class TestBootstrapObjectives:
 
     @pytest.mark.unit
     def test_BootstrapRedlConsistency_resolution(self):
-        """
-        Confirm that the BootstrapRedlConsistency objective function is
-        approximately independent of grid resolution.
-        """
+        """Confirm that the objective function is ~independent of grid resolution."""
         helicity = (1, 0)
         filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
         eq = desc.io.load(filename)[-1]
@@ -1151,12 +1159,11 @@ class TestBootstrapObjectives:
     # MJL: Should this test be decorated with @pytest.mark.slow ?
     @pytest.mark.unit
     def test_bootstrap_consistency_iota(self):
-        """Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
+        """Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.
 
         This version of the test covers an equilibrium with an iota
         profile rather than a current profile.
         """
-
         ne0 = 4.0e20
         T0 = 12.0e3
         ne = PowerSeriesProfile(ne0 * np.array([1, -1]), modes=[0, 10])
@@ -1269,12 +1276,11 @@ class TestBootstrapObjectives:
     @pytest.mark.unit
     def test_bootstrap_consistency_current(self):
         """
-        Try optimizing for bootstrap consistency in axisymmetry, at fixed boundary shape.
+        Try optimizing for bootstrap consistency in axisymmetry, at fixed shape.
 
         This version of the test covers the case of an equilibrium
         with a current profile rather than an iota profile.
         """
-
         ne0 = 4.0e20
         T0 = 12.0e3
         ne = PowerSeriesProfile(ne0 * np.array([1, -1]), modes=[0, 10])

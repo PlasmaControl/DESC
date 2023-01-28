@@ -1,18 +1,14 @@
 """Objectives related to the bootstrap current profile."""
 
 import warnings
+
 import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import (
-    get_params,
-    get_profiles,
-    get_transforms,
-)
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
-from desc.transform import Transform
 from desc.utils import Timer
 
 from .objective_funs import _Objective
@@ -40,8 +36,8 @@ class BootstrapRedlConsistency(_Objective):
     <J \cdot B>_{Redl} is the parallel current profile from drift-kinetic physics
 
     The denominator serves as a normalization so f_{boot} is dimensionless, and
-    f_{boot} = 1/2 when either <J \cdot B>_{MHD} or <J \cdot B>_{Redl} vanishes. Note that the
-    scalar objective is approximately independent of grid resolution.
+    f_{boot} = 1/2 when either <J \cdot B>_{MHD} or <J \cdot B>_{Redl} vanishes. Note
+    that the scalar objective is approximately independent of grid resolution.
 
     The objective is treated as a sum of Nr least-squares terms, where Nr is the number
     of rho grid points. In other words, the contribution to the numerator from each rho
@@ -51,8 +47,8 @@ class BootstrapRedlConsistency(_Objective):
     Parameters
     ----------
     helicity : 2-element tuple
-        First entry must be 1. Second entry is the toroidal mode number of quasisymmetry,
-        used for evaluating the Redl bootstrap current
+        First entry must be 1. Second entry is the toroidal mode number of
+        quasisymmetry, used for evaluating the Redl bootstrap current
         formula. Set to 0 for axisymmetry or quasi-axisymmetry; set to +/- NFP for
         quasi-helical symmetry.
     rho_exponent: float
@@ -141,8 +137,8 @@ class BootstrapRedlConsistency(_Objective):
         self._data_keys = ["<J*B>", "<J*B> Redl", "rho"]
         self._args = get_params(self._data_keys)
 
-        # Try to catch cases in which density or temperatures are specified in the wrong units.
-        # Densities should be ~ 10^20, temperatures are ~ 10^3.
+        # Try to catch cases in which density or temperatures are specified in the
+        # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=self.grid)["rho"]
         if jnp.any(eq.electron_temperature(rho) > 50e3):
             warnings.warn(
@@ -152,7 +148,8 @@ class BootstrapRedlConsistency(_Objective):
             warnings.warn(
                 "Ion temperature is surprisingly high. It should have units of eV"
             )
-        # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower bounds:
+        # Profiles may go to 0 at rho=1, so exclude the last few grid points from lower
+        # bounds:
         rho = rho[rho < 0.85]
         if jnp.any(eq.electron_density(rho) < 1e17):
             warnings.warn(

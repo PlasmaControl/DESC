@@ -2,8 +2,8 @@
 
 import numpy as np
 import pytest
-from scipy.signal import convolve2d
 from scipy.io import netcdf_file
+from scipy.signal import convolve2d
 
 from desc.compute import data_index
 from desc.compute.utils import compress

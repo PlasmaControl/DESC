@@ -161,7 +161,8 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{J} \\cdot \\mathbf{B}",
     units="N / m^{3}",
     units_long="Newtons / cubic meter",
-    description="Current density parallel to magnetic field, times field strength (note units are not Amperes)",
+    description="Current density parallel to magnetic field, times field strength "
+    + "(note units are not Amperes)",
     dim=1,
     params=[],
     transforms={},

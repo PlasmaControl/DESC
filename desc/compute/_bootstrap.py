@@ -1,25 +1,23 @@
 """Compute functions for bootstrap current."""
 
-import warnings
-from scipy.special import roots_legendre
 from scipy.constants import elementary_charge
+from scipy.special import roots_legendre
 
-from ..backend import jnp, fori_loop
-from ..profiles import Profile, PowerSeriesProfile
+from ..backend import fori_loop, jnp
+from ..profiles import PowerSeriesProfile, Profile
 from .data_index import register_compute_fun
 from .utils import (
     compress,
     expand,
-    surface_integrals,
     surface_averages,
-    surface_min,
+    surface_integrals,
     surface_max,
+    surface_min,
 )
 
 
 def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
-    r"""
-    Evaluate the effective trapped particle fraction.
+    r"""Evaluate the effective trapped particle fraction.
 
     Compute the effective fraction of trapped particles, which enters
     several formulae for neoclassical transport, as well as several
@@ -75,7 +73,6 @@ def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
     f_t_data : dict
         Dictionary containing the computed data listed above.
     """
-
     denominator = surface_integrals(grid, sqrt_g)
     fsa_B2 = compress(
         grid, surface_averages(grid, modB * modB, sqrt_g, denominator=denominator)
@@ -136,9 +133,9 @@ def j_dot_B_Redl(
     helicity_N=None,
     plot=False,
 ):
-    r"""
-    Compute the bootstrap current (specifically
-    :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
+    r"""Compute the bootstrap current.
+
+    (specifically :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
     Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
@@ -181,8 +178,9 @@ def j_dot_B_Redl(
         Zeff = 1 will be used.
     helicity_N : int
         Set to 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
-        This quantity is used to apply the quasisymmetry isomorphism to map the collisionality
-        and bootstrap current from the tokamak expressions to quasi-helical symmetry.
+        This quantity is used to apply the quasisymmetry isomorphism to map the
+        collisionality and bootstrap current from the tokamak expressions to
+        quasi-helical symmetry.
     plot : boolean
         Whether to make a plot of many of the quantities computed.
 
@@ -452,9 +450,9 @@ def j_dot_B_Redl(
     data=["|B|", "sqrt(g)", "G", "I", "iota"],
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
-    r"""
-    Compute the bootstrap current (specifically
-    :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
+    r"""Compute the bootstrap current.
+
+    (specifically :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
     Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.

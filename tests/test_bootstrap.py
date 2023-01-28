@@ -591,7 +591,8 @@ class TestBootstrapCompute:
                 nu_e_stars[j_nu_star, :] = J_dot_B_data["nu_e_star"]
                 nu_i_stars[j_nu_star, :] = J_dot_B_data["nu_i_star"]
                 np.testing.assert_allclose(J_dot_B_data["nu_e_star"], target_nu_e_star)
-                # nu*i is tiny bit different from the target since lnLambda_i != lnLambda_e:
+                # nu*i is tiny bit different from the target since
+                # lnLambda_i != lnLambda_e:
                 np.testing.assert_allclose(
                     J_dot_B_data["nu_i_star"], target_nu_i_star, rtol=0.2
                 )
@@ -1088,11 +1089,14 @@ class TestBootstrapObjectives:
         np.testing.assert_allclose(np.array(results), 0.5, rtol=2e-4)
 
     @pytest.mark.unit
-    def test_BootstrapRedlConsistency_resolution(self):
+    @pytest.mark.solve
+    def test_BootstrapRedlConsistency_resolution(self, DSHAPE_current):
         """Confirm that the objective function is ~independent of grid resolution."""
+
         helicity = (1, 0)
-        filename = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-        eq = desc.io.load(filename)[-1]
+
+        eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+
         eq.electron_density = PowerSeriesProfile(
             2.0e19 * np.array([1, -0.85]), modes=[0, 4]
         )

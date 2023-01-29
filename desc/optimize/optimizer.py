@@ -11,7 +11,7 @@ from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
-from ._constraint_wrappers import Lagrangian, ProximalProjection
+from ._constraint_wrappers import ProximalProjection
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
@@ -47,7 +47,7 @@ class Optimizer(IOAble):
     _io_attrs_ = ["_method"]
 
     # TODO: better way to organize these:
-    _wrappers = [None, "prox", "proximal", "lag", "lagrangian"]
+    _wrappers = [None, "prox", "proximal"]
     _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
     _scipy_scalar_methods = [
         "scipy-bfgs",
@@ -491,7 +491,7 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
 
 
 def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
-    """Use ProximalProjection or Lagrangian to handle nonlinear constraints."""
+    """Use ProximalProjection to handle nonlinear constraints."""
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
         if wrapper is not None:
@@ -506,8 +506,8 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
                 Nonlinear constraints detected but method {method} does not support
                 nonlinear constraints. Defaulting to method "proximal-{method}"
                 In the future this will raise an error. To ignore this warnging, specify
-                a wrapper to convert the nonlinearly constrained problem into an
-                unconstrained one, either "proximal-" or "lagrangian-"
+                a wrapper "proximal-" to convert the nonlinearly constrained problem
+                into an unconstrained one,
                 """
             )
         )
@@ -523,12 +523,6 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             constraint=nonlinear_constraint,
             perturb_options=perturb_options,
             solve_options=solve_options,
-        )
-    elif wrapper.lower() in ["lag", "lagrangian"]:
-        objective = Lagrangian(
-            objective,
-            nonlinear_constraint,
-            multipliers=options.pop("multipliers", None),
         )
     return objective
 

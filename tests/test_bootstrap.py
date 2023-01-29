@@ -1045,7 +1045,7 @@ class TestBootstrapObjectives:
         eq.ion_temperature = PowerSeriesProfile(9e3 * np.array([1, -0.9]), modes=[0, 2])
         eq.atomic_number = PowerSeriesProfile(np.array([1.2, 0.2]), modes=[0, 2])
 
-        def test(grid_type, kwargs, L_factor, M_factor, N_factor, rho_exponent):
+        def test(grid_type, kwargs, L_factor, M_factor, N_factor):
             grid = grid_type(
                 L=eq.L * L_factor,
                 M=eq.M * M_factor,
@@ -1057,7 +1057,6 @@ class TestBootstrapObjectives:
                 BootstrapRedlConsistency(
                     grid=grid,
                     helicity=helicity,
-                    rho_exponent=rho_exponent,
                 ),
                 eq,
             )
@@ -1067,7 +1066,7 @@ class TestBootstrapObjectives:
 
         results = []
 
-        # Loop over grid trypes. For LinearGrid we need to drop the
+        # Loop over grid types. For LinearGrid we need to drop the
         # point at rho=0 to avoid a divide-by-0
         grid_types = [LinearGrid, QuadratureGrid]
         kwargs = [{"axis": False}, {}]
@@ -1076,15 +1075,14 @@ class TestBootstrapObjectives:
         L_factors = [1, 2, 1, 1, 1]
         M_factors = [1, 1, 2, 1, 1]
         N_factors = [1, 1, 1, 2, 1]
-        rho_exponents = [0, 1, 1, 1, 2]
 
         for grid_type, kwargs in zip(grid_types, kwargs):
-            for L_factor, M_factor, N_factor, rho_exponent in zip(
-                L_factors, M_factors, N_factors, rho_exponents
+            for L_factor, M_factor, N_factor in zip(
+                L_factors,
+                M_factors,
+                N_factors,
             ):
-                results.append(
-                    test(grid_type, kwargs, L_factor, M_factor, N_factor, rho_exponent)
-                )
+                results.append(test(grid_type, kwargs, L_factor, M_factor, N_factor))
 
         np.testing.assert_allclose(np.array(results), 0.5, rtol=2e-4)
 
@@ -1137,22 +1135,22 @@ class TestBootstrapObjectives:
                 BootstrapRedlConsistency(
                     grid=grid,
                     helicity=helicity,
-                    rho_exponent=1,
                 ),
                 eq,
             )
             scalar_objective = obj.compute_scalar(obj.x(eq))
+            print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
             return scalar_objective
 
         results = []
 
-        # Loop over grid trypes. For LinearGrid we need to drop the
+        # Loop over grid types. For LinearGrid we need to drop the
         # point at rho=0 to avoid a divide-by-0
         grid_types = [LinearGrid, QuadratureGrid]
         kwargss = [{"axis": False}, {}]
 
         # Loop over grid resolutions:
-        Ls = [10, 20, 10, 10]
+        Ls = [150, 300, 150, 150]
         Ms = [10, 10, 20, 10]
         Ns = [0, 0, 0, 2]
 

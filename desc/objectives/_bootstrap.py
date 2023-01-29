@@ -20,16 +20,16 @@ class BootstrapRedlConsistency(_Objective):
     The scalar objective is defined as in eq (15) of
     Landreman, Buller, & Drevlak, Physics of Plasmas 29, 082501 (2022)
     https://doi.org/10.1063/5.0098166
-    slightly generalized to allow different radial weighting, and with a factor of
+    except with an integral in rho instead of s = rho**2, and with a factor of
     1/2 for consistency with desc conventions.
 
     f_{boot} = numerator / denominator
 
     where
 
-    numerator = (1/2) \int_0^1 d\rho \rho^p [<J \cdot B>_{MHD} - <J \cdot B>_{Redl}]^2
+    numerator = (1/2) \int_0^1 d\rho [<J \cdot B>_{MHD} - <J \cdot B>_{Redl}]^2
 
-    denominator = \int_0^1 d\rho \rho^p [<J \cdot B>_{MHD} + <J \cdot B>_{Redl}]^2
+    denominator = \int_0^1 d\rho [<J \cdot B>_{MHD} + <J \cdot B>_{Redl}]^2
 
     <J \cdot B>_{MHD} is the parallel current profile of the MHD equilibrium, and
 
@@ -51,8 +51,6 @@ class BootstrapRedlConsistency(_Objective):
         quasisymmetry, used for evaluating the Redl bootstrap current
         formula. Set to 0 for axisymmetry or quasi-axisymmetry; set to +/- NFP for
         quasi-helical symmetry.
-    rho_exponent: float
-        Exponent p acting on rho in the numerator and denominator above.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
@@ -84,7 +82,6 @@ class BootstrapRedlConsistency(_Objective):
     def __init__(
         self,
         helicity=(1, 0),
-        rho_exponent=0,
         eq=None,
         target=0,
         weight=1,
@@ -97,7 +94,6 @@ class BootstrapRedlConsistency(_Objective):
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
 
         self.helicity = helicity
-        self.rho_exponent = rho_exponent
         self.grid = grid
         super().__init__(
             eq=eq,
@@ -134,7 +130,7 @@ class BootstrapRedlConsistency(_Objective):
             self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
         self._dim_f = self.grid.num_rho
-        self._data_keys = ["<J*B>", "<J*B> Redl", "rho"]
+        self._data_keys = ["<J*B>", "<J*B> Redl"]
         self._args = get_params(self._data_keys)
 
         # Try to catch cases in which density or temperatures are specified in the
@@ -202,15 +198,12 @@ class BootstrapRedlConsistency(_Objective):
         rho_weights = compress(self.grid, self.grid.spacing[:, 0])
 
         denominator = jnp.sum(
-            (data["<J*B>"] + data["<J*B> Redl"]) ** 2
-            * (data["rho"] ** self.rho_exponent)
-            * self.grid.weights
+            (data["<J*B>"] + data["<J*B> Redl"]) ** 2 * self.grid.weights
         ) / (4 * jnp.pi * jnp.pi)
 
         residuals = compress(
             self.grid,
-            (data["<J*B>"] - data["<J*B> Redl"])
-            * jnp.sqrt(data["rho"] ** self.rho_exponent),
+            (data["<J*B>"] - data["<J*B> Redl"]),
         ) * jnp.sqrt(rho_weights / denominator)
 
         return self._shift_scale(residuals)

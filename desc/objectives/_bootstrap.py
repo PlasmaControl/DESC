@@ -133,6 +133,19 @@ class BootstrapRedlConsistency(_Objective):
         self._data_keys = ["<J*B>", "<J*B> Redl"]
         self._args = get_params(self._data_keys)
 
+        if eq.electron_temperature is None:
+            raise RuntimeError(
+                "Bootstrap current calculation requires an electron temperature profile."
+            )
+        if eq.electron_density is None:
+            raise RuntimeError(
+                "Bootstrap current calculation requires an electron density profile."
+            )
+        if eq.ion_temperature is None:
+            raise RuntimeError(
+                "Bootstrap current calculation requires an ion temperature profile."
+            )
+
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=self.grid)["rho"]

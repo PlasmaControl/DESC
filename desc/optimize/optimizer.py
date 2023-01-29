@@ -8,10 +8,9 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
-from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
-from ._constraint_wrappers import ProximalProjection
+from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
@@ -212,15 +211,13 @@ class Optimizer(IOAble):
         objective = _maybe_wrap_nonlinear_constraints(
             objective, nonlinear_constraint, self.method, options
         )
-
+        if len(linear_constraints):
+            objective = LinearConstraintProjection(objective, linear_constraints)
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if method in Optimizer._scalar_methods else "lsq"
             objective.compile(mode, verbose)
-        for constraint in linear_constraints:
-            if not constraint.built:
-                constraint.build(eq, verbose=verbose)
 
         if objective.scalar and (method in Optimizer._least_squares_methods):
             warnings.warn(
@@ -232,23 +229,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        if verbose > 0:
-            print("Factorizing linear constraints")
-        timer.start("linear constraint factorize")
-        (
-            compute_wrapped,
-            compute_scalar_wrapped,
-            grad_wrapped,
-            hess_wrapped,
-            jac_wrapped,
-            project,
-            recover,
-        ) = _wrap_objective_with_constraints(objective, linear_constraints, method)
-        timer.stop("linear constraint factorize")
-        if verbose > 1:
-            timer.disp("linear constraint factorize")
-
-        x0_reduced = project(objective.x(eq))
+        x0 = objective.x(eq)
 
         stoptol = _get_default_tols(
             method,
@@ -260,7 +241,7 @@ class Optimizer(IOAble):
         )
 
         if verbose > 0:
-            print("Number of parameters: {}".format(x0_reduced.size))
+            print("Number of parameters: {}".format(x0.size))
             print("Number of objectives: {}".format(objective.dim_f))
 
         if verbose > 0:
@@ -275,10 +256,10 @@ class Optimizer(IOAble):
                     f"Method {method} does not support x_scale type {x_scale}"
                 )
             result = _optimize_scipy_minimize(
-                compute_scalar_wrapped,
-                grad_wrapped,
-                hess_wrapped,
-                x0_reduced,
+                objective.compute_scalar,
+                objective.grad,
+                objective.hess,
+                x0,
                 method.replace("scipy-", ""),
                 x_scale,
                 verbose,
@@ -291,9 +272,9 @@ class Optimizer(IOAble):
             x_scale = "jac" if x_scale == "auto" else x_scale
 
             result = _optimize_scipy_least_squares(
-                compute_wrapped,
-                jac_wrapped,
-                x0_reduced,
+                objective.compute,
+                objective.jac,
+                x0,
                 method.replace("scipy-", ""),
                 x_scale,
                 verbose,
@@ -303,15 +284,15 @@ class Optimizer(IOAble):
 
         elif method in Optimizer._desc_scalar_methods:
 
-            hess = hess_wrapped if "bfgs" in method else "bfgs"
+            hess = objective.hess if "bfgs" in method else "bfgs"
             if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
                 options.setdefault("initial_trust_ratio", 1e-3)
                 options.setdefault("max_trust_radius", 1.0)
 
             result = fmintr(
-                compute_scalar_wrapped,
-                x0=x0_reduced,
-                grad=grad_wrapped,
+                objective.compute_scalar,
+                x0=x0,
+                grad=objective.grad,
                 hess=hess,
                 args=(),
                 method=method.replace("-bfgs", ""),
@@ -328,9 +309,9 @@ class Optimizer(IOAble):
         elif method in Optimizer._desc_stochastic_methods:
 
             result = sgd(
-                compute_scalar_wrapped,
-                x0=x0_reduced,
-                grad=grad_wrapped,
+                objective.compute_scalar,
+                x0=x0,
+                grad=objective.grad,
                 args=(),
                 method=method,
                 ftol=stoptol["ftol"],
@@ -349,9 +330,9 @@ class Optimizer(IOAble):
                 options.setdefault("max_trust_radius", 1.0)
 
             result = lsqtr(
-                compute_wrapped,
-                x0=x0_reduced,
-                jac=jac_wrapped,
+                objective.compute,
+                x0=x0,
+                jac=objective.jac,
                 args=(),
                 x_scale=x_scale,
                 ftol=stoptol["ftol"],
@@ -369,8 +350,7 @@ class Optimizer(IOAble):
             result["history"] = {}
             for arg in objective.args:
                 result["history"][arg] = []
-            for x_reduced in result["allx"]:
-                x = recover(x_reduced)
+            for x in result["allx"]:
                 kwargs = objective.unpack_state(x)
                 for arg in kwargs:
                     result["history"][arg].append(kwargs[arg])
@@ -444,52 +424,6 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def _wrap_objective_with_constraints(objective, linear_constraints, method):
-    """Factorize constraints and make new functions that project/recover + evaluate."""
-    _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        linear_constraints,
-        objective.args,
-        objective.dimensions,
-    )
-
-    def compute_wrapped(x_reduced):
-        x = recover(x_reduced)
-        f = objective.compute(x)
-        if method in Optimizer._scalar_methods:
-            return f.squeeze()
-        else:
-            return jnp.atleast_1d(f)
-
-    def compute_scalar_wrapped(x_reduced):
-        x = recover(x_reduced)
-        return objective.compute_scalar(x)
-
-    def grad_wrapped(x_reduced):
-        x = recover(x_reduced)
-        df = objective.grad(x)
-        return df[unfixed_idx] @ Z
-
-    def hess_wrapped(x_reduced):
-        x = recover(x_reduced)
-        df = objective.hess(x)
-        return Z.T @ df[unfixed_idx, :][:, unfixed_idx] @ Z
-
-    def jac_wrapped(x_reduced):
-        x = recover(x_reduced)
-        df = objective.jac(x)
-        return df[:, unfixed_idx] @ Z
-
-    return (
-        compute_wrapped,
-        compute_scalar_wrapped,
-        grad_wrapped,
-        hess_wrapped,
-        jac_wrapped,
-        project,
-        recover,
-    )
-
-
 def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
     """Use ProximalProjection to handle nonlinear constraints."""
     wrapper, method = _parse_method(method)
@@ -514,10 +448,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
         wrapper = "proximal"
     if wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
-        perturb_options.setdefault("verbose", 0)
-        perturb_options.setdefault("include_f", False)
         solve_options = options.pop("solve_options", {})
-        solve_options.setdefault("verbose", 0)
         objective = ProximalProjection(
             objective,
             constraint=nonlinear_constraint,

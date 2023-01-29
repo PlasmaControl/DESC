@@ -16,15 +16,247 @@ from desc.objectives.utils import (
     factorize_linear_constraints,
     get_fixed_boundary_constraints,
 )
+from desc.utils import Timer
 
 from .utils import compute_jac_scale, f_where_x
 
 
-class ProximalProjection(ObjectiveFunction):
-    """Create a proximal projection operator for equilibirum constraints.
+class LinearConstraintProjection(ObjectiveFunction):
+    """Remove linear constraints via orthogonal projection.
 
-    Combines objective and constraints into a single objective to then pass to an
-    unconstrained optimizer.
+    Given a problem of the form
+
+    min_x f(x)  subject to Ax=b
+
+    We can write any feasible x=xp + Zx_reduced where xp is a particular solution to
+    Ax=b (taken to be the least norm solution), Z is a representation for the null
+    space of A (AZ=0) and x_reduced is conconstrained. This transforms the problem into
+
+    min_x_reduced f(x_reduced)
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Objective function to optimize.
+    constraints : tuple of Objective
+        Linear constraints to enforce. Should be a tuple or list of Objective,
+        and must all be linear.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the objectives.
+    verbose : int, optional
+        Level of output.
+    """
+
+    def __init__(self, objective, constraints, eq=None, verbose=1):
+        assert isinstance(objective, ObjectiveFunction), (
+            "objective should be instance of ObjectiveFunction." ""
+        )
+        for con in constraints:
+            if not con.linear:
+                raise ValueError(
+                    "LinearConstraintProjection method "
+                    + "cannot handle nonlinear constraint {}.".format(con)
+                )
+        self._objective = objective
+        self._constraints = constraints
+        self._built = False
+        # don't want to compile this, just use the compiled objective
+        self._use_jit = False
+        self._compiled = False
+
+        if eq is not None:
+            self.build(eq, verbose=verbose)
+
+    # TODO: add timing and verbose statements
+    def build(self, eq, use_jit=None, verbose=1):
+        """Build the objective.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+            Note: unused by this class, should pass to sub-objectives directly.
+        verbose : int, optional
+            Level of output.
+
+        """
+        timer = Timer()
+        timer.start("Linear constraint projection build")
+
+        if not self._objective.built:
+            self._objective.build(eq, verbose=verbose)
+        for con in self._constraints:
+            if not con.built:
+                con.build(eq, verbose=verbose)
+        self._args = self._objective.args
+        self._dim_f = self._objective.dim_f
+        self._scalar = self._objective.scalar
+        (
+            self._xp,
+            self._A,
+            self._Ainv,
+            self._b,
+            self._Z,
+            self._unfixed_idx,
+            self._project,
+            self._recover,
+        ) = factorize_linear_constraints(
+            self._constraints,
+            self._objective.args,
+            self._objective.dimensions,
+        )
+        self._dim_x = self._Z.shape[1]
+        self._dim_x_full = self._objective.dim_x
+
+        self._built = True
+        timer.stop("Linear constraint projection build")
+        if verbose > 1:
+            timer.disp("Linear constraint projection build")
+
+    def compile(self, mode="lsq", verbose=1):
+        """Call the necessary functions to ensure the function is compiled.
+
+        Parameters
+        ----------
+        mode : {"auto", "lsq", "scalar", "all"}
+            Whether to compile for least squares optimization or scalar optimization.
+            "auto" compiles based on the type of objective,
+            "all" compiles all derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._objective.compile(mode, verbose)
+
+    def project(self, x):
+        """Project full vector x into x_reduced that satisfies constraints."""
+        return self._project(x)
+
+    def recover(self, x_reduced):
+        """Recover the full state vector from the reduced optimization vector."""
+        return self._recover(x_reduced)
+
+    def make_feasible(self, x):
+        """Project out the infeasible parts of x, returning a feasible x."""
+        return self.recover(self.project(x))
+
+    def x(self, eq):
+        """Return the reduced state vector from the Equilibrium eq."""
+        x = self._objective.x(eq)
+        return self.project(x)
+
+    def unpack_state(self, x):
+        """Unpack the state vector into its components.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector, either full or reduced.
+
+        Returns
+        -------
+        kwargs : dict
+            Dictionary of the state components with argument names as keys.
+
+        """
+        if len(x) == self._dim_x:
+            x = self.recover(x)
+        return self._objective.unpack_state(x)
+
+    def compute(self, x_reduced):
+        """Compute the objective function.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute(x)
+        return f
+
+    def compute_scalar(self, x_reduced):
+        """Compute the scalar form of the objective function.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        f : float
+            Objective function value.
+
+        """
+        x = self.recover(x_reduced)
+        return self._objective.compute_scalar(x)
+
+    def grad_wrapped(self, x_reduced):
+        """Compute gradient of the sum of squares of residuals.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        g : ndarray
+            gradient vector.
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.grad(x)
+        return df[self._unfixed_idx] @ self._Z
+
+    def hess(self, x_reduced):
+        """Compute Hessian of the sum of squares of residuals.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        H : ndarray
+            Hessian matrix.
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.hess(x)
+        return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
+
+    def jac(self, x_reduced):
+        """Compute Jacobian of the vector objective function.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.jac(x)
+        return df[:, self._unfixed_idx] @ self._Z
+
+
+class ProximalProjection(ObjectiveFunction):
+    """Remove equilibrium constraint by projecting onto constraint at each step.
+
+    Combines objective and equilibrium constraint into a single objective to then pass
+    to an unconstrained optimizer.
 
     At each iteration, after a step is taken to reduce the objective, the equilibrium
     is perturbed and re-solved to bring it back into force balance. This is analagous
@@ -45,7 +277,6 @@ class ProximalProjection(ObjectiveFunction):
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
-
     """
 
     def __init__(
@@ -80,6 +311,7 @@ class ProximalProjection(ObjectiveFunction):
         self._objective = objective
         self._constraint = constraint
         perturb_options.setdefault("verbose", 0)
+        perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)
         self._perturb_options = perturb_options
         self._solve_options = solve_options
@@ -91,8 +323,7 @@ class ProximalProjection(ObjectiveFunction):
         if eq is not None:
             self.build(eq, verbose=verbose)
 
-    # TODO: add timing and verbose statements
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
@@ -106,6 +337,9 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
+        timer = Timer()
+        timer.start("Proximal projection build")
+
         self._eq = eq.copy()
         self._linear_constraints = get_fixed_boundary_constraints(
             iota=not isinstance(self._constraint.objectives[0], CurrentDensity)
@@ -113,8 +347,10 @@ class ProximalProjection(ObjectiveFunction):
             kinetic=eq.electron_temperature is not None,
         )
 
-        self._objective.build(self._eq, verbose=verbose)
-        self._constraint.build(self._eq, verbose=verbose)
+        if not self._objective.built:
+            self._objective.build(self._eq, verbose=verbose)
+        if not self._constraint.built:
+            self._constraint.build(self._eq, verbose=verbose)
         # remove constraints that aren't necessary
         self._linear_constraints = tuple(
             [
@@ -212,6 +448,9 @@ class ProximalProjection(ObjectiveFunction):
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
+        timer.stop("Proximal projection build")
+        if verbose > 1:
+            timer.disp("Proximal projection build")
 
     def compile(self, mode="lsq", verbose=1):
         """Call the necessary functions to ensure the function is compiled.

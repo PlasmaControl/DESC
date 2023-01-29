@@ -344,6 +344,11 @@ class Optimizer(IOAble):
                 options=options,
             )
 
+        if isinstance(objective, LinearConstraintProjection):
+            # remove wrapper to get at underlying objective
+            result["allx"] = [objective.recover(x) for x in result["allx"]]
+            objective = objective._objective
+
         if isinstance(objective, ProximalProjection):
             result["history"] = objective.history
         else:

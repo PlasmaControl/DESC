@@ -200,7 +200,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         return self._objective.compute_scalar(x)
 
-    def grad_wrapped(self, x_reduced):
+    def grad(self, x_reduced):
         """Compute gradient of the sum of squares of residuals.
 
         Parameters

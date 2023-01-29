@@ -8,13 +8,23 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
-from ._geometry import AspectRatio, Elongation, Volume
+from ._geometry import (
+    AspectRatio,
+    Elongation,
+    MeanCurvature,
+    PrincipalCurvature,
+    Volume,
+)
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
+    FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixPressure,

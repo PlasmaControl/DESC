@@ -507,3 +507,50 @@ def test_get_profile(DSHAPE_current):
     np.testing.assert_allclose(current1.params, current2.params)
     x = np.linspace(0, 1, 20)
     np.testing.assert_allclose(current2(x), current0(x), rtol=1e-6, atol=1e-1)
+
+
+@pytest.mark.unit
+def test_kinetic_errors():
+    """Test that we can't set nonexistent profile values."""
+    eqp = Equilibrium(L=3, M=3, N=3, pressure=np.array([1, 0, -1]))
+    eqk = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        electron_temperature=np.array([1, 0, -1]),
+        electron_density=np.array([2, 0, -2]),
+    )
+    params = np.arange(3)
+    with pytest.raises(ValueError):
+        eqk.p_l = params
+    with pytest.raises(ValueError):
+        eqp.Te_l = params
+    with pytest.raises(ValueError):
+        eqp.ne_l = params
+    with pytest.raises(ValueError):
+        eqp.Ti_l = params
+    with pytest.raises(ValueError):
+        eqp.Zeff_l = params
+
+    params = np.ones((3, 4))
+    profile = PowerSeriesProfile()
+    eqk.pressure = profile
+    eqp.electron_temperature = profile
+    eqp.electron_density = profile
+    eqp.ion_temperature = profile
+    eqp.atomic_number = profile
+    with pytest.raises(TypeError):
+        eqk.pressure = params
+    with pytest.raises(TypeError):
+        eqp.electron_temperature = params
+    with pytest.raises(TypeError):
+        eqp.electron_density = params
+    with pytest.raises(TypeError):
+        eqp.ion_temperature = params
+    with pytest.raises(TypeError):
+        eqp.atomic_number = params
+
+    with pytest.raises(ValueError):
+        _ = Equilibrium(pressure=1, electron_density=1, electron_temperature=1)
+    with pytest.raises(ValueError):
+        _ = Equilibrium(electron_temperature=1)

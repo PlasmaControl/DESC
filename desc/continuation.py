@@ -69,6 +69,11 @@ def solve_continuation_automatic(  # noqa: C901
         final desired configuration,
 
     """
+    if eq.electron_temperature is not None:
+        raise NotImplementedError(
+            "Continuation method with kinetic profiles is not currently supported"
+        )
+
     timer = Timer()
     timer.start("Total time")
 
@@ -111,28 +116,28 @@ def solve_continuation_automatic(  # noqa: C901
     pres_vac.params *= 0 if pres_step else 1
 
     eqi = Equilibrium(
-        eq.Psi,
-        eq.NFP,
-        Li,
-        Mi,
-        Ni,
-        L_gridi,
-        M_gridi,
-        N_gridi,
-        eq.node_pattern,
-        pres_vac.copy(),
-        copy.copy(eq.iota),  # have to use copy.copy here since may be None
-        copy.copy(eq.current),
-        surf_axisym.copy(),
-        None,
-        eq.sym,
-        spectral_indexing,
+        Psi=eq.Psi,
+        NFP=eq.NFP,
+        L=Li,
+        M=Mi,
+        N=Ni,
+        L_grid=L_gridi,
+        M_grid=M_gridi,
+        N_grid=N_gridi,
+        node_pattern=eq.node_pattern,
+        pressure=pres_vac.copy(),
+        iota=copy.copy(eq.iota),  # have to use copy.copy here since may be None
+        current=copy.copy(eq.current),
+        surface=surf_axisym.copy(),
+        sym=eq.sym,
+        spectral_indexing=spectral_indexing,
     )
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
     constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and eq.iota is not None
+        iota=objective != "vacuum" and eq.iota is not None,
+        kinetic=eq.electron_temperature is not None,
     )
     objective_i = get_equilibrium_objective(objective)
 
@@ -169,7 +174,7 @@ def solve_continuation_automatic(  # noqa: C901
             deltas = get_deltas(
                 {"pressure": eqfam[mres_steps - 1].pressure}, {"pressure": pressure}
             )
-            deltas["dp"] *= pres_step
+            deltas["p_l"] *= pres_step
             pres_ratio += pres_step
 
         elif ii >= mres_steps + pres_steps:
@@ -177,10 +182,10 @@ def solve_continuation_automatic(  # noqa: C901
             eqi.change_resolution(L, M, N, L_grid, M_grid, N_grid)
             surf_axisym.change_resolution(L, M, N)
             deltas = get_deltas({"surface": surf_axisym}, {"surface": surface})
-            if "dRb" in deltas:
-                deltas["dRb"] *= bdry_step
-            if "dZb" in deltas:
-                deltas["dZb"] *= bdry_step
+            if "Rb_lmn" in deltas:
+                deltas["Rb_lmn"] *= bdry_step
+            if "Zb_lmn" in deltas:
+                deltas["Zb_lmn"] *= bdry_step
             bdry_ratio += bdry_step
 
         if verbose:
@@ -198,7 +203,8 @@ def solve_continuation_automatic(  # noqa: C901
 
         if len(eqfam) == 0 or (eqfam[-1].resolution != eqi.resolution):
             constraints_i = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and eq.iota is not None
+                iota=objective != "vacuum" and eq.iota is not None,
+                kinetic=eq.electron_temperature is not None,
             )
             objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
@@ -207,7 +213,7 @@ def solve_continuation_automatic(  # noqa: C901
             eqi.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
-                **deltas,
+                deltas=deltas,
                 order=pert_order,
                 verbose=verbose,
                 copy=False,
@@ -310,6 +316,11 @@ def solve_continuation(  # noqa: C901
         final desired configuration,
 
     """
+    if not all([eq.electron_temperature is None for eq in eqfam]):
+        raise NotImplementedError(
+            "Continuation method with kinetic profiles is not currently supported"
+        )
+
     timer = Timer()
     timer.start("Total time")
     pert_order, ftol, xtol, gtol, nfev, _ = np.broadcast_arrays(
@@ -322,7 +333,8 @@ def solve_continuation(  # noqa: C901
         optimizer = Optimizer(optimizer)
     objective_i = get_equilibrium_objective(objective)
     constraints_i = get_fixed_boundary_constraints(
-        iota=objective != "vacuum" and eqfam[0].iota is not None
+        iota=objective != "vacuum" and eqfam[0].iota is not None,
+        kinetic=eqfam[0].electron_temperature is not None,
     )
 
     ii = 0
@@ -368,7 +380,8 @@ def solve_continuation(  # noqa: C901
             if eqfam[ii - 1].resolution != eqi.resolution:
                 objective_i = get_equilibrium_objective(objective)
                 constraints_i = get_fixed_boundary_constraints(
-                    iota=objective != "vacuum" and eqfam[ii].iota is not None
+                    iota=objective != "vacuum" and eqfam[ii].iota is not None,
+                    kinetic=eqfam[ii].electron_temperature is not None,
                 )
 
         if len(deltas) > 0:
@@ -380,7 +393,7 @@ def solve_continuation(  # noqa: C901
             eqp.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
-                **deltas,
+                deltas=deltas,
                 order=pert_order[ii],
                 verbose=verbose,
                 copy=False,

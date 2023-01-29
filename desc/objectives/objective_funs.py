@@ -504,7 +504,7 @@ class _Objective(IOAble, ABC):
         """Set state vector component dimensions."""
         self._dimensions = {}
         for arg in arg_order:
-            self._dimensions[arg] = getattr(eq, arg, np.array([])).size
+            self._dimensions[arg] = np.atleast_1d(getattr(eq, arg)).size
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""

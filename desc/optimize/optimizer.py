@@ -5,16 +5,11 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
-from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
-from .fmin_scalar import fmintr
-from .least_squares import lsqtr
-from .stochastic import sgd
 
 
 class Optimizer(IOAble):
@@ -28,15 +23,7 @@ class Optimizer(IOAble):
     Parameters
     ----------
     method : str
-        name of the optimizer to use. Options are:
-
-        * scipy scalar routines: ``'scipy-bfgs'``, ``'scipy-trust-exact'``,
-          ``'scipy-trust-ncg'``, ``'scipy-trust-krylov'``
-        * scipy least squares routines: ``'scipy-trf'``, ``'scipy-lm'``,
-          ``'scipy-dogbox'``
-        * desc scalar routines: ``'dogleg'``, ``'subspace'``, ``'dogleg-bfgs'``,
-          ``'subspace-bfgs'``
-        * desc least squares routines: ``'lsq-exact'``
+        name of the optimizer to use. Options can be found as desc.optimize.optimizers
 
     objective : ObjectiveFunction
         objective to be optimized
@@ -44,63 +31,7 @@ class Optimizer(IOAble):
     """
 
     _io_attrs_ = ["_method"]
-
-    # TODO: better way to organize these:
     _wrappers = [None, "prox", "proximal"]
-    _scipy_least_squares_methods = ["scipy-trf", "scipy-lm", "scipy-dogbox"]
-    _scipy_scalar_methods = [
-        "scipy-bfgs",
-        "scipy-trust-exact",
-        "scipy-trust-ncg",
-        "scipy-trust-krylov",
-    ]
-    _desc_scalar_methods = ["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"]
-    _desc_stochastic_methods = ["sgd"]
-    _desc_least_squares_methods = ["lsq-exact"]
-    _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
-    _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
-    _scipy_constrained_least_squares_methods = []
-    _desc_constrained_scalar_methods = []
-    _desc_constrained_least_squares_methods = []
-    _scalar_methods = (
-        _desc_scalar_methods
-        + _scipy_scalar_methods
-        + _scipy_constrained_scalar_methods
-        + _desc_constrained_scalar_methods
-        + _desc_stochastic_methods
-    )
-    _least_squares_methods = (
-        _scipy_least_squares_methods
-        + _desc_least_squares_methods
-        + _scipy_constrained_least_squares_methods
-        + _desc_constrained_least_squares_methods
-    )
-    _scipy_methods = (
-        _scipy_least_squares_methods
-        + _scipy_scalar_methods
-        + _scipy_constrained_scalar_methods
-        + _scipy_constrained_least_squares_methods
-    )
-    _desc_methods = (
-        _desc_least_squares_methods
-        + _desc_scalar_methods
-        + _desc_constrained_scalar_methods
-        + _desc_constrained_least_squares_methods
-        + _desc_stochastic_methods
-    )
-    _constrained_methods = (
-        _desc_constrained_scalar_methods
-        + _desc_constrained_least_squares_methods
-        + _scipy_constrained_scalar_methods
-        + _scipy_constrained_least_squares_methods
-    )
-    _all_methods = (
-        _scipy_least_squares_methods
-        + _scipy_scalar_methods
-        + _desc_scalar_methods
-        + _desc_least_squares_methods
-        + _desc_stochastic_methods
-    )
 
     def __init__(self, method):
 
@@ -123,14 +54,10 @@ class Optimizer(IOAble):
     @method.setter
     def method(self, method):
         wrapper, submethod = _parse_method(method)
-        if wrapper not in self._wrappers:
-            raise ValueError("got unknown wrapper {}".format(wrapper))
-        if submethod not in Optimizer._all_methods:
+        if submethod not in optimizers:
             raise NotImplementedError(
                 colored(
-                    "method must be one of {}".format(
-                        ".".join([Optimizer._all_methods])
-                    ),
+                    "method must be one of {}".format(".".join([*optimizers.keys()])),
                     "red",
                 )
             )
@@ -216,10 +143,10 @@ class Optimizer(IOAble):
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
-            mode = "scalar" if method in Optimizer._scalar_methods else "lsq"
+            mode = "scalar" if optimizers[method]["scalar"] else "lsq"
             objective.compile(mode, verbose)
 
-        if objective.scalar and (method in Optimizer._least_squares_methods):
+        if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
                 colored(
                     "method {} is not intended for scalar objective function".format(
@@ -248,101 +175,16 @@ class Optimizer(IOAble):
             print("Starting optimization")
         timer.start("Solution time")
 
-        if method in Optimizer._scipy_scalar_methods:
-
-            x_scale = 1 if x_scale == "auto" else x_scale
-            if isinstance(x_scale, str):
-                raise ValueError(
-                    f"Method {method} does not support x_scale type {x_scale}"
-                )
-            result = _optimize_scipy_minimize(
-                objective.compute_scalar,
-                objective.grad,
-                objective.hess,
-                x0,
-                method.replace("scipy-", ""),
-                x_scale,
-                verbose,
-                stoptol,
-                options,
-            )
-
-        elif method in Optimizer._scipy_least_squares_methods:
-
-            x_scale = "jac" if x_scale == "auto" else x_scale
-
-            result = _optimize_scipy_least_squares(
-                objective.compute,
-                objective.jac,
-                x0,
-                method.replace("scipy-", ""),
-                x_scale,
-                verbose,
-                stoptol,
-                options,
-            )
-
-        elif method in Optimizer._desc_scalar_methods:
-
-            hess = objective.hess if "bfgs" in method else "bfgs"
-            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-                options.setdefault("initial_trust_ratio", 1e-3)
-                options.setdefault("max_trust_radius", 1.0)
-
-            result = fmintr(
-                objective.compute_scalar,
-                x0=x0,
-                grad=objective.grad,
-                hess=hess,
-                args=(),
-                method=method.replace("-bfgs", ""),
-                x_scale=x_scale,
-                ftol=stoptol["ftol"],
-                xtol=stoptol["xtol"],
-                gtol=stoptol["gtol"],
-                maxiter=stoptol["maxiter"],
-                verbose=verbose,
-                callback=None,
-                options=options,
-            )
-
-        elif method in Optimizer._desc_stochastic_methods:
-
-            result = sgd(
-                objective.compute_scalar,
-                x0=x0,
-                grad=objective.grad,
-                args=(),
-                method=method,
-                ftol=stoptol["ftol"],
-                xtol=stoptol["xtol"],
-                gtol=stoptol["gtol"],
-                maxiter=stoptol["maxiter"],
-                verbose=verbose,
-                callback=None,
-                options=options,
-            )
-
-        elif method in Optimizer._desc_least_squares_methods:
-
-            if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
-                options.setdefault("initial_trust_radius", 1e-3)
-                options.setdefault("max_trust_radius", 1.0)
-
-            result = lsqtr(
-                objective.compute,
-                x0=x0,
-                jac=objective.jac,
-                args=(),
-                x_scale=x_scale,
-                ftol=stoptol["ftol"],
-                xtol=stoptol["xtol"],
-                gtol=stoptol["gtol"],
-                maxiter=stoptol["maxiter"],
-                verbose=verbose,
-                callback=None,
-                options=options,
-            )
+        result = optimizers[method]["fun"](
+            objective,
+            nonlinear_constraint,
+            x0,
+            method,
+            x_scale,
+            verbose,
+            stoptol,
+            options,
+        )
 
         if isinstance(objective, LinearConstraintProjection):
             # remove wrapper to get at underlying objective
@@ -489,9 +331,7 @@ def _get_default_tols(
     )
     stoptol.setdefault(
         "ftol",
-        options.pop(
-            "ftol", 1e-6 if method in Optimizer._desc_stochastic_methods else 1e-2
-        ),
+        options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
@@ -502,3 +342,108 @@ def _get_default_tols(
     stoptol["max_nhev"] = options.pop("max_nhev", np.inf)
 
     return stoptol
+
+
+optimizers = {}
+
+
+def register_optimizer(
+    name,
+    scalar,
+    equality_constraints,
+    inequality_constraints,
+    stochastic,
+    hessian,
+    **kwargs,
+):
+    """Decorator to wrap a function for optimization.
+
+    Function being wrapped should have a signature of the form
+    fun(objective, constraint, x0, method, x_scale, verbose, stoptol, options=None)
+    and should return a scipy.optimize.OptimizeResult object
+
+    Function should take the following arguments:
+
+    objective : ObjectiveFunction
+        Function to minimize.
+    constraint : ObjectiveFunction
+        Constraint to satisfy
+    x0 : ndarray
+        Starting point.
+    method : str
+        Name of the sub-method to use.
+    x_scale : array_like or ‘jac’, optional
+        Characteristic scale of each variable.
+    verbose : int
+        * 0  : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
+    stoptol : dict
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+    options : dict, optional
+        Dictionary of optional keyword arguments to override default solver
+        settings.
+
+
+    Parameters
+    ----------
+    name : str or array-like of str
+        Name of the optimizer method. If one function supports multiple methods,
+        provide a list of names.
+    scalar : bool or array-like of bool
+        Whether the method assumes a scalar residual, or a vector of residuals for
+        least squares.
+    equality_constraints : bool or array-like of bool
+        Whether the method handles equality constraints.
+    inequality_constraints : bool or array-like of bool
+        Whether the method handles inequality constraints.
+    stochastic : bool or array-like of bool
+        Whether the method can handle noisy objectives.
+    hessian : bool or array-like of bool
+        Whether the method requires calculation of the full hessian matrix.
+    """
+    (
+        name,
+        scalar,
+        equality_constraints,
+        inequality_constraints,
+        stochastic,
+        hessian,
+    ) = map(
+        np.atleast_1d,
+        (
+            name,
+            scalar,
+            equality_constraints,
+            inequality_constraints,
+            stochastic,
+            hessian,
+        ),
+    )
+    (
+        name,
+        scalar,
+        equality_constraints,
+        inequality_constraints,
+        stochastic,
+        hessian,
+    ) = np.broadcast_arrays(
+        name, scalar, equality_constraints, inequality_constraints, stochastic, hessian
+    )
+
+    def _decorator(func):
+
+        for i, nm in enumerate(name):
+            d = {
+                "scalar": scalar[i % len(name)],
+                "equality_constraints": equality_constraints[i % len(name)],
+                "inequality_constraints": inequality_constraints[i % len(name)],
+                "stochastic": stochastic[i % len(name)],
+                "hessian": hessian[i % len(name)],
+                "fun": func,
+            }
+            optimizers[nm] = d
+        return func
+
+    return _decorator

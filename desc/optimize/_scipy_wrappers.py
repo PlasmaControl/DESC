@@ -6,6 +6,7 @@ from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
 
+from .optimizer import register_optimizer
 from .utils import (
     check_termination,
     evaluate_quadratic_form_hess,
@@ -16,19 +17,35 @@ from .utils import (
 )
 
 
+@register_optimizer(
+    name=[
+        "scipy-bfgs",
+        "scipy-lbfgs",
+        "scipy-CG",
+        "scipy-TNC",
+        "scipy-Newton-CG",
+        "scipy-dogleg",
+        "scipy-trust-exact",
+        "scipy-trust-ncg",
+        "scipy-trust-krylov",
+    ],
+    scalar=True,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=False,
+    hessian=[False, False, False, False, True, True, True, True, True],
+)
 def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
-    fun, grad, hess, x0, method, x_scale, verbose, stoptol, options=None
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
 
     Parameters
     ----------
-    fun : callable
+    objective : ObjectiveFunction
         Function to minimize.
-    grad : callable
-        Gradient of fun.
-    hess : callable
-        Hessian of fun.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
     method : str
@@ -62,6 +79,11 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 
     """
     options = {} if options is None else options
+    x_scale = 1 if x_scale == "auto" else x_scale
+    if isinstance(x_scale, str):
+        raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
+    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+
     # need to use some "global" variables here
     allx = []
     func_allx = []
@@ -165,7 +187,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             fun_wrapped,
             x0=x0,
             args=(),
-            method=method,
+            method=method.replace("scipy-", ""),
             jac=grad_wrapped,
             hess=hess_wrapped,
             tol=EPS,
@@ -210,17 +232,25 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     return result
 
 
+@register_optimizer(
+    name=["scipy-trf", "scipy-lm", "scipy-dogbox"],
+    scalar=False,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=False,
+    hessian=False,
+)
 def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
-    fun, jac, x0, method, x_scale, verbose, stoptol, options=None
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
 
     Parameters
     ----------
-    fun : callable
+    objective : ObjectiveFunction
         Function to minimize.
-    jac : callable
-        Jacobian of fun.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
     method : str
@@ -244,6 +274,8 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         Dictionary of optional keyword arguments to override default solver
         settings. See the code for more details.
 
+    Returns
+    -------
     res : OptimizeResult
        The optimization result represented as a ``OptimizeResult`` object.
        Important attributes are: ``x`` the solution array, ``success`` a
@@ -253,6 +285,8 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
 
     """
     options = {} if options is None else options
+    x_scale = "jac" if x_scale == "auto" else x_scale
+    fun, jac = objective.compute, objective.jac
     # need to use some "global" variables here
     fun_allx = []
     fun_allf = []
@@ -342,7 +376,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             x0=x0,
             args=(),
             jac=jac_wrapped,
-            method=method,
+            method=method.replace("scipy-", ""),
             x_scale=x_scale,
             ftol=EPS,
             xtol=EPS,

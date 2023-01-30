@@ -22,8 +22,9 @@ class AugLagrangianLS(ObjectiveFunction):
     def compute(self, x, lmbda, mu):
         L = self.func(x)
         c = self.compute_constraints(x)
-        for i in range(len(c)):
-            c = put(c,i,-lmbda[i]*c[i] + mu[i]/2*c[i]**2)
+        #for i in range(len(c)):
+        #    c = put(c,i,-lmbda[i]*c[i] + mu[i]/2*c[i]**2)
+        c = -lmbda*c + mu/2*c**2
         L = jnp.concatenate((L,c),axis=None)
         print("L is evaluated")
         return L
@@ -41,4 +42,36 @@ class AugLagrangianLS(ObjectiveFunction):
             c = jnp.concatenate((c,self.constr[i](x)),axis=None)
         return c
 
+class AugLagrangian(ObjectiveFunction):
+    
+    def __init__(self, func, constr):
+        self.func = func
+        self.constr = constr
+    
+    def scalar(self):
+        return True
+    
+    def name(self):
+        return "augmented lagrangian"
+    
+    def derivatives(self):
+        return
+    
+    def compute(self, x, lmbda, mu):
+        L = self.func(x)
+        c = self.compute_constraints(x)
+        return L - jnp.dot(lmbda,c) + mu/2*jnp.dot(c,c)
+    
+    def compute_scalar(self,x,lmbda,mu):
+        return self.compute(x,lmbda,mu)
+    
+    def callback(self, x, lmbda, mu):
+        L = self.compute(x,lmbda,mu)
+        print("The Lagrangian is " + str(L))
+        
+    def compute_constraints(self,x):
+        c = jnp.array([])
+        for i in range(len(self.constr)):
+            c = jnp.concatenate((c,self.constr[i](x)),axis=None)
+        return c
 

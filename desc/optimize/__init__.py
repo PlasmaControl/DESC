@@ -5,4 +5,5 @@ from .least_squares import lsqtr
 from .optimizer import Optimizer
 from .stochastic import sgd
 from .aug_lagrangian_ls_stel import fmin_lag_ls_stel
+from .aug_lagrangian import fmin_lag_stel
 

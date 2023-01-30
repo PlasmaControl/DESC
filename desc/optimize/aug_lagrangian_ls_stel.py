@@ -84,10 +84,11 @@ def fmin_lag_ls_stel(
     def wrapped_constraint(x):
         c = np.array([])
         slack = x[len(recover(x)):]**2
-        eq = eq_constr(x) if eq_constr is not None else jnp.array([])
-        ineq = ineq_constr(x) if ineq_constr is not None else jnp.array([])
+        x_recov = recover(x)
+        eq = eq_constr(x_recov) if eq_constr is not None else jnp.array([])
+        ineq = ineq_constr(x_recov) if ineq_constr is not None else jnp.array([])
 
-        c = jnp.append(c,eq_constr(x))
+        c = jnp.append(c,eq_constr(x_recov))
         slack = jnp.append(jnp.zeros(len(eq.flatten())),slack)
         c = jnp.append(c,ineq)
         c = c - bounds + slack
@@ -109,7 +110,9 @@ def fmin_lag_ls_stel(
     fold = f
     
     while iteration < maxiter:
-        xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter=10,verbose=2)
+        #xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter=10,verbose=2)
+        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-exact",jac=gradL, hess=hessL, options = {"maxiter": 10.0,"verbose":3})
+
         x = xk['x']
         f = fun(recover(x))
         cv = L.compute_constraints(x)

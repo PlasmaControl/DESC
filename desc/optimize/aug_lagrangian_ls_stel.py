@@ -110,8 +110,7 @@ def fmin_lag_ls_stel(
     fold = f
     
     while iteration < maxiter:
-        #xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter=10,verbose=2)
-        xk = minimize(L.compute,x,args=(lmbda,mu),method="trust-exact",jac=gradL, hess=hessL, options = {"maxiter": 10.0,"verbose":3})
+        xk = lsqtr(L.compute,x,gradL,args=(lmbda,mu,),gtol=gtolk,maxiter=10,verbose=2)
 
         x = xk['x']
         f = fun(recover(x))

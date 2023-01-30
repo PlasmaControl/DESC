@@ -231,8 +231,12 @@ class MagneticWell(_Objective):
         normalize_target=False,
         grid=None,
         name="Magnetic Well",
+        equality=True
     ):
+    
         self.grid = grid
+        self.equality=equality
+
         super().__init__(
             eq=eq,
             target=target,

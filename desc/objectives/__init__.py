@@ -21,6 +21,6 @@ from .linear_objectives import (
     FixPressure,
     FixPsi,
 )
-from ._auglagrangian import AugLagrangianLS
+from ._auglagrangian import AugLagrangianLS, AugLagrangian
 from .objective_funs import ObjectiveFunction
 from .utils import get_equilibrium_objective, get_fixed_boundary_constraints

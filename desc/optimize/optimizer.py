@@ -16,6 +16,8 @@ from desc.objectives import (
     ObjectiveFunction,
     RadialForceBalance,
     WrappedEquilibriumObjective,
+    AspectRatio,
+    MagneticWell
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
@@ -25,6 +27,7 @@ from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
 from .aug_lagrangian_ls_stel import fmin_lag_ls_stel
+from .aug_lagrangian import fmin_lag_stel
 
 class Optimizer(IOAble):
     """A helper class to wrap several optimization routines.
@@ -68,7 +71,7 @@ class Optimizer(IOAble):
     _hessian_free_methods = ["scipy-bfgs", "dogleg-bfgs", "subspace-bfgs"]
     _scipy_constrained_scalar_methods = ["scipy-trust-constr"]
     _scipy_constrained_least_squares_methods = []
-    _desc_constrained_scalar_methods = []
+    _desc_constrained_scalar_methods = ["auglag"]
     _desc_constrained_least_squares_methods = ["lsq-auglag"]
     _scalar_methods = (
         _desc_scalar_methods
@@ -109,6 +112,8 @@ class Optimizer(IOAble):
         + _desc_least_squares_methods
         + _desc_stochastic_methods
         + _desc_constrained_least_squares_methods
+        + _desc_constrained_scalar_methods
+
     )
 
     def __init__(self, method):
@@ -436,6 +441,28 @@ class Optimizer(IOAble):
                 options=options,
             )
 
+        elif self.method in Optimizer._desc_constrained_scalar_methods:
+            
+            eq_constr = compute_eq_constraints_wrapped if len(equality_constraints) != 0 else None
+            ineq_constr = compute_ineq_constraints_wrapped if len(inequality_constraints) !=0 else None
+            result = fmin_lag_stel(
+                compute_scalar_wrapped,
+                x0=x0_reduced,
+                grad=jac_wrapped,
+                eq_constr=eq_constr,
+                ineq_constr=ineq_constr,
+                args=(),
+                x_scale=x_scale,
+                ftol=stoptol["ftol"],
+                xtol=stoptol["xtol"],
+                gtol=stoptol["gtol"],
+                maxiter=stoptol["maxiter"],
+                verbose=disp,
+                callback=None,
+                options=options,
+            )
+
+
         if wrapped:
             result["history"] = objective.history
         else:
@@ -589,6 +616,8 @@ def _wrap_constraints(nonlinear_constraints, equality_constraints, inequality_co
                 RadialForceBalance,
                 HelicalForceBalance,
                 CurrentDensity,
+                MagneticWell,
+                AspectRatio
             ),
         ):
             raise ValueError(

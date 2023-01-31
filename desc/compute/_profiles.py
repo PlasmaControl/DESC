@@ -147,7 +147,7 @@ def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "iota"],
 )
 def _chi_r(params, transforms, profiles, data, **kwargs):
-    data["chi_r"] = params["psi_r"] * data["iota"]
+    data["chi_r"] = data["psi_r"] * data["iota"]
     return data
 
 

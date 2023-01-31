@@ -2800,7 +2800,7 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
 def _kappa(params, transforms, profiles, data, **kwargs):
     data["kappa"] = -(
         cross(data["b"], mu_0 * data["J"] + cross(data["b"], data["grad(|B|)"])).T
-        / data["B"]
+        / data["|B|"]
     ).T
     return data
 

@@ -8,26 +8,27 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
+    AspectRatio,
     CurrentDensity,
     FixCurrent,
     FixIota,
     ForceBalance,
     HelicalForceBalance,
+    MagneticWell,
     ObjectiveFunction,
     RadialForceBalance,
     WrappedEquilibriumObjective,
-    AspectRatio,
-    MagneticWell
 )
 from desc.objectives.utils import factorize_linear_constraints
 from desc.utils import Timer
 
 from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_minimize
+from .aug_lagrangian import fmin_lag_stel
+from .aug_lagrangian_ls_stel import fmin_lag_ls_stel
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
-from .aug_lagrangian_ls_stel import fmin_lag_ls_stel
-from .aug_lagrangian import fmin_lag_stel
+
 
 class Optimizer(IOAble):
     """A helper class to wrap several optimization routines.
@@ -113,7 +114,6 @@ class Optimizer(IOAble):
         + _desc_stochastic_methods
         + _desc_constrained_least_squares_methods
         + _desc_constrained_scalar_methods
-
     )
 
     def __init__(self, method):
@@ -227,7 +227,12 @@ class Optimizer(IOAble):
                 options.setdefault("initial_trust_radius", 0.5)
                 options.setdefault("max_trust_radius", 1.0)
 
-        linear_constraints, nonlinear_constraints, equality_constraints, inequality_constraints = _parse_constraints(constraints)
+        (
+            linear_constraints,
+            nonlinear_constraints,
+            equality_constraints,
+            inequality_constraints,
+        ) = _parse_constraints(constraints)
         # wrap nonlinear constraints if necessary
         wrapped = False
         if len(nonlinear_constraints) > 0 and (
@@ -239,17 +244,25 @@ class Optimizer(IOAble):
             )
 
         elif self.method in Optimizer._constrained_methods:
-            
+
             wrapped = False
-            constraint_objectives, equality_objectives, inequality_objectives = _wrap_constraints(nonlinear_constraints, equality_constraints, inequality_constraints)
+            (
+                constraint_objectives,
+                equality_objectives,
+                inequality_objectives,
+            ) = _wrap_constraints(
+                self.method,
+                nonlinear_constraints,
+                equality_constraints,
+                inequality_constraints,
+            )
 
             if not constraint_objectives.built:
-                constraint_objectives.build(eq,verbose=verbose)
+                constraint_objectives.build(eq, verbose=verbose)
             if not equality_objectives.built and len(equality_constraints) != 0:
-                equality_objectives.build(eq,verbose=verbose)
+                equality_objectives.build(eq, verbose=verbose)
             if not inequality_objectives.built and len(inequality_constraints) != 0:
-                inequality_objectives.build(eq,verbose=verbose)
-           
+                inequality_objectives.build(eq, verbose=verbose)
 
         if not objective.built:
             objective.build(eq, verbose=verbose)
@@ -266,7 +279,6 @@ class Optimizer(IOAble):
                 objective.combine_args(inequality_objectives)
             if len(equality_constraints) != 0:
                 objective.combine_args(equality_objectives)
-
 
         if objective.scalar and (self.method in Optimizer._least_squares_methods):
             warnings.warn(
@@ -295,7 +307,12 @@ class Optimizer(IOAble):
             (
                 compute_eq_constraints_wrapped,
                 compute_ineq_constraints_wrapped,
-            ) = _wrap_constraint_objectives(objective, linear_constraints, equality_objectives, inequality_objectives)
+            ) = _wrap_constraint_objectives(
+                objective,
+                linear_constraints,
+                equality_objectives,
+                inequality_objectives,
+            )
 
         timer.stop("linear constraint factorize")
         if verbose > 1:
@@ -421,9 +438,17 @@ class Optimizer(IOAble):
             )
 
         elif self.method in Optimizer._desc_constrained_least_squares_methods:
-            
-            eq_constr = compute_eq_constraints_wrapped if len(equality_constraints) != 0 else None
-            ineq_constr = compute_ineq_constraints_wrapped if len(inequality_constraints) !=0 else None
+
+            eq_constr = (
+                compute_eq_constraints_wrapped
+                if len(equality_constraints) != 0
+                else None
+            )
+            ineq_constr = (
+                compute_ineq_constraints_wrapped
+                if len(inequality_constraints) != 0
+                else None
+            )
             result = fmin_lag_ls_stel(
                 compute_wrapped,
                 x0=x0_reduced,
@@ -442,9 +467,17 @@ class Optimizer(IOAble):
             )
 
         elif self.method in Optimizer._desc_constrained_scalar_methods:
-            
-            eq_constr = compute_eq_constraints_wrapped if len(equality_constraints) != 0 else None
-            ineq_constr = compute_ineq_constraints_wrapped if len(inequality_constraints) !=0 else None
+
+            eq_constr = (
+                compute_eq_constraints_wrapped
+                if len(equality_constraints) != 0
+                else None
+            )
+            ineq_constr = (
+                compute_ineq_constraints_wrapped
+                if len(inequality_constraints) != 0
+                else None
+            )
             result = fmin_lag_stel(
                 compute_scalar_wrapped,
                 x0=x0_reduced,
@@ -461,7 +494,6 @@ class Optimizer(IOAble):
                 callback=None,
                 options=options,
             )
-
 
         if wrapped:
             result["history"] = objective.history
@@ -512,7 +544,12 @@ def _parse_constraints(constraints):
             "Toroidal current and rotational transform cannot be "
             + "constrained simultaneously."
         )
-    return linear_constraints, nonlinear_constraints, equality_constraints, inequality_constraints
+    return (
+        linear_constraints,
+        nonlinear_constraints,
+        equality_constraints,
+        inequality_constraints,
+    )
 
 
 def _wrap_objective_with_constraints(objective, linear_constraints, method):
@@ -558,7 +595,10 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
         recover,
     )
 
-def _wrap_constraint_objectives(objective, linear_constraints, equality_objectives, inequality_objectives):
+
+def _wrap_constraint_objectives(
+    objective, linear_constraints, equality_objectives, inequality_objectives
+):
     _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         linear_constraints, objective.args
     )
@@ -567,16 +607,17 @@ def _wrap_constraint_objectives(objective, linear_constraints, equality_objectiv
         x = recover(x_reduced)
         c = equality_objectives.compute(x)
         return c
-            
+
     def compute_ineq_constraints_wrapped(x_reduced):
         x = recover(x_reduced)
         c = inequality_objectives.compute(x)
         return c
-    
+
     return (
         compute_eq_constraints_wrapped,
         compute_ineq_constraints_wrapped,
     )
+
 
 def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, options):
     """Use WrappedEquilibriumObjective to hanle nonlinear equilibrium constraints."""
@@ -607,7 +648,10 @@ def _wrap_nonlinear_constraints(objective, nonlinear_constraints, method, option
     )
     return objective
 
-def _wrap_constraints(nonlinear_constraints, equality_constraints, inequality_constraints):
+
+def _wrap_constraints(
+    method, nonlinear_constraints, equality_constraints, inequality_constraints
+):
     for constraint in nonlinear_constraints:
         if not isinstance(
             constraint,
@@ -617,20 +661,21 @@ def _wrap_constraints(nonlinear_constraints, equality_constraints, inequality_co
                 HelicalForceBalance,
                 CurrentDensity,
                 MagneticWell,
-                AspectRatio
+                AspectRatio,
             ),
         ):
             raise ValueError(
-                "optimizer method {} ".format(self.method)
+                "optimizer method {} ".format(method)
                 + "cannot handle general nonlinear constraint {}.".format(constraint)
-        )
+            )
 
     constraint_objectives = ObjectiveFunction(nonlinear_constraints)
     equality_objectives = ObjectiveFunction(equality_constraints)
     inequality_objectives = ObjectiveFunction(inequality_constraints)
 
     return constraint_objectives, equality_objectives, inequality_objectives
- 
+
+
 def _get_default_tols(
     method,
     ftol=None,

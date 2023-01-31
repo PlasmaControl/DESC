@@ -4,7 +4,6 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import QuadratureGrid
 from desc.utils import Timer
-from desc.backend import jnp
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -52,11 +51,11 @@ class AspectRatio(_Objective):
         normalize_target=True,
         grid=None,
         name="aspect ratio",
-        equality=True
+        equality=True,
     ):
 
         self.grid = grid
-        self.equality=equality
+        self.equality = equality
 
         super().__init__(
             eq=eq,

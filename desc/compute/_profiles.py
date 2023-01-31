@@ -3,7 +3,7 @@ from scipy.constants import elementary_charge, mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages
+from .utils import compress, dot, expand, surface_averages
 
 
 @register_compute_fun(
@@ -130,6 +130,49 @@ def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
 )
 def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
     data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+    return data
+
+
+@register_compute_fun(
+    name="chi_r",
+    label="\\partial_{\\rho} \\chi",
+    units="Wb",
+    units_long="Webers",
+    description="Poloidal flux (normalized by 2pi), first radial derivative",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["psi_r", "iota"],
+)
+def _chi_r(params, transforms, profiles, data, **kwargs):
+    data["chi_r"] = params["psi_r"] * data["iota"]
+    return data
+
+
+@register_compute_fun(
+    name="chi",
+    label="\\chi",
+    units="Wb",
+    units_long="Webers",
+    description="Poloidal flux (normalized by 2pi)",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "chi_r",
+    ],
+)
+def _chi(params, transforms, profiles, data, **kwargs):
+    chi_r = compress(transforms["grid"], data["chi_r"], surface_label="rho")
+    drho = compress(
+        transforms["grid"], transforms["grid"].spacing[:, 0], surface_label="rho"
+    )
+    chi = jnp.cumsum(drho * chi_r)
+    data["chi"] = expand(transforms["grid"], chi, surface_label="rho")
     return data
 
 

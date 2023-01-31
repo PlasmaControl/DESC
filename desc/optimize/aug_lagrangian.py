@@ -83,6 +83,7 @@ def fmin_lag_stel(
     constr = np.array([wrapped_constraint])
     L = AugLagrangian(wrapped_obj, constr)
     gradL = Derivative(L.compute, 0, "fwd")
+    hessL = Derivative(L.compute, argnum=0, mode="hess")
 
     gtolk = 1 / (10 * mu)
     ctolk = 1 / (mu ** (0.1))
@@ -95,7 +96,8 @@ def fmin_lag_stel(
         xk = fmintr(
             L.compute,
             x,
-            gradL,
+            grad=gradL,
+            hess=hessL,
             args=(
                 lmbda,
                 mu,

@@ -370,8 +370,10 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     data=[],
 )
 def _qi_zeta_bar(params, transforms, profiles, data, **kwargs):
-    # zeta_bar grid coordinates: -pi/2 <= zeta_bar <= pi/2
-    data["zeta-bar_QI"] = transforms["zeta"].grid.nodes[:, 2]
+    # -pi/2 <= zeta_bar <= +pi/2
+    data["zeta-bar_QI"] = (
+        transforms["zeta"].grid.nodes[:, 2] * transforms["zeta"].grid.NFP - jnp.pi
+    ) / 2
     return data
 
 
@@ -399,11 +401,13 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
         shift_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
     )
     shift_mn = jnp.concatenate((shift_m0, params["shift_mn"]))
-    # XXX: is zeta_transform using theta_B?
-    zeta = data["zeta-bar_QI"] + transforms["zeta"].transform(shift_mn)
-    zeta = (2 * zeta + jnp.pi) / transforms["zeta"].basis.NFP
 
-    data["zeta_QI"] = zeta
+    # theta is being used as a placeholder for alpha (field-line label)
+    nodes = jnp.array([data["rho"], data["theta"], data["zeta-bar_QI"]]).T
+    zeta_bar = data["zeta-bar_QI"] + jnp.matmul(
+        transforms["zeta"].basis.evaluate(nodes), shift_mn
+    )
+    data["zeta_QI"] = (2 * zeta_bar + jnp.pi) / transforms["zeta"].basis.NFP
     return data
 
 
@@ -421,6 +425,7 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
     data=["zeta-bar_QI"],
 )
 def _qi_B(params, transforms, profiles, data, **kwargs):
+    # |B|_QI is only a function of zeta-bar_QI
     zeros = jnp.concatenate(
         (
             jnp.array([0, -jnp.pi / 2, jnp.pi / 2]),
@@ -453,8 +458,8 @@ def _qi_B(params, transforms, profiles, data, **kwargs):
     data=["|B|_mn", "|B|_QI", "theta_B", "zeta_QI"],
 )
 def _f_QI(params, transforms, profiles, data, **kwargs):
-    nodes = jnp.array(
-        [transforms["B"].grid.nodes[:, 0], data["theta_B"], data["zeta_QI"]]
+    nodes = jnp.array(  # alpha = theta_B + iota * zeta_B
+        [data["rho"], data["theta"] + data["iota"] * data["zeta_QI"], data["zeta_QI"]]
     ).T
     B = jnp.matmul(transforms["B"].basis.evaluate(nodes), data["|B|_mn"])
     data["f_QI"] = B - data["|B|_QI"]

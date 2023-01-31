@@ -304,9 +304,6 @@ def get_transforms(keys, eq, grid, **kwargs):
             build_pinv=True,
         )
     if "zeta" in derivs:
-        # zeta_bar grid coordinates: -pi/2 <= zeta_bar <= pi/2
-        zeta_grid = grid.copy()
-        zeta_grid.nodes[:, 2] = (grid.nodes[:, 2] * grid.NFP - np.pi) / 2
         # FIXME: this default assumes M_zeta=N_zeta
         n = int((np.sqrt(8 * eq.shift_mn.size + 1) - 1) / 4)
         transforms["zeta"] = Transform(

@@ -386,8 +386,8 @@ class FixLambdaGauge(_Objective):
         eq=None,
         target=0,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         name="lambda gauge",
     ):
 
@@ -747,8 +747,8 @@ class FixIota(_FixProfile):
         eq=None,
         target=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         profile=None,
         indices=True,
         name="fixed-iota",
@@ -1008,6 +1008,283 @@ class FixPsi(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Psi"
+
+
+class FixR(_Objective):
+    """Fixes R_lmn.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(m)"
+    _print_value_fmt = "Fixed-R error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-R",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = eq.R_basis.num_modes
+
+        if self.target is None:
+            self.target = eq.R_lmn
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["R0"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, R_lmn, **kwargs):
+        """Compute fixed-R error.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+
+        Returns
+        -------
+        f : ndarray
+            Total flux surface error (m).
+
+        """
+        return self._shift_scale(R_lmn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "R_lmn"
+
+
+class FixZ(_Objective):
+    """Fixes Z_lmn.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Z error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-Z",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = eq.Z_basis.num_modes
+
+        if self.target is None:
+            self.target = eq.Z_lmn
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["R0"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, Z_lmn, **kwargs):
+        """Compute fixed-Z error.
+
+        Parameters
+        ----------
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        f : ndarray
+            Total flux surface error (m).
+
+        """
+        return self._shift_scale(Z_lmn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Z_lmn"
+
+
+class FixLambda(_Objective):
+    """Fixes L_lmn.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(radians)"
+    _print_value_fmt = "Fixed-lambda error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        name="fixed-lambda",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        self._dim_f = eq.L_basis.num_modes
+
+        if self.target is None:
+            self.target = eq.L_lmn
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute fixed-lambda error.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Total lambda error (rad).
+
+        """
+        return self._shift_scale(L_lmn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "L_lmn"
 
 
 class FixQiScale(_Objective):

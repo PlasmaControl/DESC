@@ -33,12 +33,15 @@ from .linear_objectives import (
     FixBoundaryZ,
     FixCurrent,
     FixIota,
+    FixLambda,
     FixLambdaGauge,
     FixPressure,
     FixPsi,
     FixQiScale,
     FixQiShape,
     FixQiShift,
+    FixR,
+    FixZ,
 )
 from .objective_funs import ObjectiveFunction
 from .utils import get_equilibrium_objective, get_fixed_boundary_constraints

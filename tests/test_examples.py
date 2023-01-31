@@ -6,8 +6,11 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
+from qsc import Qsc
 
 import desc.examples
+
+# needed for iota test from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -28,6 +31,7 @@ from desc.objectives import (
     RadialForceBalance,
     get_fixed_boundary_constraints,
 )
+from desc.objectives.utils import get_NAE_constraints
 from desc.optimize import Optimizer
 from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
@@ -499,6 +503,53 @@ def test_simsopt_QH_comparison():
     aspect = eq2.compute("R0/a")["R0/a"]
     np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)
     np.testing.assert_array_less(objective.compute_scalar(objective.x(eq)), 1e-2)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_NAE_solve():
+    """Test O(rho) NAE constraints solve."""
+    # get Qsc example
+    qsc = Qsc.from_paper("precise QA")
+    ntheta = 75
+    r = 0.01
+    N = 9
+    eq = Equilibrium.from_near_axis(qsc, r=r, L=6, M=6, N=N, ntheta=ntheta)
+
+    orig_Rax_val = eq.axis.R_n
+    orig_Zax_val = eq.axis.Z_n
+
+    eq_fit = eq.copy()
+
+    # this has all the constraints we need,
+    #  iota=False specifies we want to fix current instead of iota
+    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+
+    eq.solve(verbose=3, ftol=1e-2, objective=obj, maxiter=50, xtol=1e-6, constraints=cs)
+
+    # Make sure axis is same
+    np.testing.assert_almost_equal(orig_Rax_val, eq.axis.R_n)
+    np.testing.assert_almost_equal(orig_Zax_val, eq.axis.Z_n)
+
+    # Make sure lambda is zero (as our constraint assumes Boozer poloidal angle)
+    np.testing.assert_array_equal(np.zeros_like(eq.L_lmn), eq.L_lmn)
+
+    # Make sure surfaces of solved equilibrium are same near axis as QSC
+    rho_err, theta_err = area_difference_desc(eq, eq_fit)
+    print("rho err", rho_err[:, 0])
+    print("theta err", theta_err)
+
+    np.testing.assert_allclose(rho_err[:, :], 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+
+    # Make sure iota of solved equilibrium is same near axis as QSC
+    # not used now grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
+    # not used now iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    # this will fail: np.testing.assert_allclose(iota[1:10], qsc.iota)
 
 
 class TestGetExample:

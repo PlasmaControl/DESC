@@ -10,12 +10,11 @@ from .linear_objectives import FixSumModesR, FixSumModesZ
 
 
 def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
-    """Calculate 1st order NAE coefficients' fourier representations.
+    """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
     Description
     -----------
-        uses the passed-in qsc object and the desc_eq's Fourier resolution
-        stellarator symmetry is assumed
+        uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
 
     Parameters
     ----------
@@ -26,10 +25,11 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     -------
         coeffs: dict, dictionary of arrays with keys like 'X_L_M_n', where
                 X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
-                NAE Fourier (in tor. phi) coeffs of radial order L and poloidal order M
+                NAE Fourier (in toroidal angle phi) coeffs of
+                radial order L and poloidal order M
         bases: dict, dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
             the FourierSeries basis objects used to obtain the coefficients, where
-            _cos or _sin denotes the symmetry of the Fourier series.
+            _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
             symmetry is such that the R or Z coefficients is stellarator symmetric
             i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
              stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
@@ -43,7 +43,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     dZ0_dphi = qsc.Z0p
     # normal and binormal vector components
     # Spline interpolants for the cylindrical components of the Frenet-Serret frame:
-    # these are functions of phi (toroidal cylindrical angle?)
+    # these are functions of phi (toroidal cylindrical angle)
     k_dot_R = qsc.normal_R_spline(phi)
     k_dot_phi = qsc.normal_phi_spline(phi)
     k_dot_Z = qsc.normal_z_spline(phi)
@@ -51,6 +51,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     tau_dot_phi = qsc.binormal_phi_spline(phi)
     tau_dot_Z = qsc.binormal_z_spline(phi)
 
+    # use untwisted, which accounts for when NAE has QH symmetry,
+    # and the poloidal angle is a helical angle.
+    # we want the untwisted angle
     X1c = qsc.X1c_untwisted
     X1s = qsc.X1s_untwisted
     Y1c = qsc.Y1c_untwisted
@@ -71,11 +74,17 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     )
 
     nfp = qsc.nfp
-    N = desc_eq.N
-    Rbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
-    Zbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
-    Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
-    Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+    if desc_eq.sym:
+        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
+        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
+        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+    else:
+        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+
     grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
     Rtrans = Transform(grid, Rbasis, build_pinv=True, method="auto")
     Ztrans = Transform(grid, Zbasis, build_pinv=True, method="auto")
@@ -104,8 +113,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
 
 
 def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
-    # r here should be the ratio btwn r and rho
-
+    # r is the ratio  r_NAE / rho_DESC
     r = np.sqrt(2 * desc_eq.Psi / qsc.Bbar / 2 / np.pi)
 
     Rconstraints = ()
@@ -142,6 +150,7 @@ def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
 
 
 def _make_RZ_cons_Rn1_Z1(qsc, desc_eq, coeffs, bases):
+    # r is the ratio  r_NAE / rho_DESC
     r = np.sqrt(2 * desc_eq.Psi / qsc.Bbar / 2 / np.pi)
     Rconstraints = ()
     Zconstraints = ()
@@ -178,22 +187,22 @@ def _make_RZ_cons_Rn1_Z1(qsc, desc_eq, coeffs, bases):
 
 
 def make_RZ_cons_1st_order(qsc, desc_eq):
-    """Make the first order NAE constraints for a DESC equilibrium."""
-    # Parameters
-    # ----------
-    #     qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
-    #     desc_eq (Equilibrium): desc equilibrium to constrain
+    """Make the first order NAE constraints for a DESC equilibrium.
 
-    # Returns
-    # -------
-    #     Rconstraints tuple: tuple of FixSumModesR constraints
-    #        corresponding to constraining the O(rho) DESC coefficients,
-    #        to be used in constraining a DESC equilibrium solve
-    #     Zconstraints tuple: tuple of FixSumModesZ constraints
-    #         corresponding to constraining the O(rho) DESC coefficients,
-    #         to be used in constraining a DESC equilibrium solve
+    Parameters
+    ----------
+        qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
+        desc_eq (Equilibrium): desc equilibrium to constrain
 
-    # """
+    Returns
+    -------
+        Rconstraints tuple: tuple of FixSumModesR constraints
+           corresponding to constraining the O(rho) DESC coefficients,
+           to be used in constraining a DESC equilibrium solve
+        Zconstraints tuple: tuple of FixSumModesZ constraints
+            corresponding to constraining the O(rho) DESC coefficients,
+            to be used in constraining a DESC equilibrium solve
+    """
     Rconstraints = ()
     Zconstraints = ()
 
@@ -212,14 +221,11 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
 
 
 def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
-    """Dalculate 2nd order NAE coefficients' fourier representations.
+    """Calculate 2nd order NAE coefficients' Fourier representations.
 
     Description
     -----------
-        uses the passed-in qsc object and the desc_eq's Fourier resolution
-        stellarator symmetry is assumed
-
-        #TODO: have it accept JUST qsc and then fit desc_eq here?
+        uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
 
     Parameters
     ----------
@@ -242,7 +248,7 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     """
     # get variables from qsc
     phi = qsc.phi
-    R0 = qsc.R0_func(phi)  # this is the magnetic axis R0 at the toroidal angle phi
+    R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
     R0p = dR0_dphi
     R0pp = qsc.R0pp
@@ -251,8 +257,6 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     Z0pp = qsc.Z0pp
 
     # unit vector components
-    ## can probably not use the spline and use the component arrays
-    # as I just eval at phi anyways but is fine for now
     k_dot_R = qsc.normal_R_spline(phi)
     kR = k_dot_R
     k_dot_phi = qsc.normal_phi_spline(phi)
@@ -709,11 +713,16 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     bases = {}
 
     nfp = qsc.nfp
-    Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-    Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-    Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
-    Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
-
+    if desc_eq.sym:
+        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
+        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
+        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+    else:
+        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
     bases["Rbasis_cos"] = Rbasis
     bases["Rbasis_sin"] = Rbasis_sin
     bases["Zbasis_cos"] = Zbasis
@@ -742,16 +751,6 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     # Z cos terms need sin phi basis
     # Z sin terms need cos phi basis
 
-    # constant in theta (R_20, Z_20) terms are treated as
-    #  cos bc are even in (mtheta - nphi)
-
-    # if not stell sym then can't use a sym for these, ignore for now
-
-    # TODO: generalize to non-stell-sym (add logic to check sym of desc eq,
-    #  if NOT stell sym, then these are not stell sym, otherwise they
-    # are stell sym)
-    # difference is just make the bases above all have sym=False
-
     R_2_0_n = Rtrans.fit(R_2_0)
     R_2_2_n = Rtrans.fit(R_2_2)
     R_2_neg2_n = Rtrans_sin.fit(R_2_neg2)
@@ -771,8 +770,6 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     return coeffs, bases
 
 
-# TODO: generalize for non stellarator symmetric equilibria
-#  (would need to just change bases to not be sin or cos sym)
 def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     """Creates 2nd order NAE constraints for a DESC eq based off given qsc eq.
 
@@ -780,16 +777,17 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
     ----------
         qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
         desc_eq (Equilibrium): desc equilibrium to constrain
-        coeffs (dict): dict of NAE coeffs, with keys like "R_2_0_n" being the
-                        Fourier coeffs of the rho^2 NAE term for R,
-                        i.e. L=2, M=0, Fourier series in cyl. tor. angle phi
-        bases (dict): dict of the bases for each of the coeffs in the coeffs dict
-                        sin or cos is based off of the stell sym of the coeff.
-                        If stell sym:
-                         R cos(theta) terms need a cos phi basis
-                         R sin(theta) terms need sin phi basis
-                         Z cos(theta) terms need sin phi basis
-                         Z sin(theta) terms need cos phi basis
+        coeffs: dict, dictionary of arrays with keys like 'X_L_M_n', where
+                X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
+                NAE Fourier (in tor. phi) coeffs of radial order L and poloidal order M
+        bases: dict, dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
+            the FourierSeries basis objects used to obtain the coefficients, where
+            _cos or _sin denotes the symmetry of the Fourier series.
+            symmetry is such that the R or Z coefficients is stellarator symmetric
+            i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
+             stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
+            and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
+            since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
     Returns
     -------
         Rconstraints (tuple): tuple of FixSumModesR constraints corresponding
@@ -890,21 +888,22 @@ def _calc_2nd_order_constraints(qsc, desc_eq, coeffs, bases):
 
 
 def make_RZ_cons_2nd_order(qsc, desc_eq):
-    """Make the second order NAE constraints for a DESC equilibrium."""
-    # Parameters
-    # ----------
-    #     qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
-    #     desc_eq (Equilibrium): desc equilibrium to constrain
+    """Make the second order NAE constraints for a DESC equilibrium.
 
-    # Returns
-    # -------
-    #     Rconstraints tuple: tuple of FixSumModesR constraints corresponding to
-    #      constraining the O(rho^2) DESC coefficients,
-    #      to be used in constraining a DESC equilibrium solve
-    #     Zconstraints tuple: tuple of FixSumModesZ constraints corresponding to
-    #      constraining the O(rho^2) DESC coefficients,
-    #      to be used in constraining a DESC equilibrium solve
-    # """
+    Parameters
+    ----------
+        qsc (Qsc): pyQsc Qsc object to use as the NAE constraints on the DESC eq
+        desc_eq (Equilibrium): desc equilibrium to constrain
+
+    Returns
+    -------
+        Rconstraints tuple: tuple of FixSumModesR constraints corresponding to
+         constraining the O(rho^2) DESC coefficients,
+         to be used in constraining a DESC equilibrium solve
+        Zconstraints tuple: tuple of FixSumModesZ constraints corresponding to
+         constraining the O(rho^2) DESC coefficients,
+         to be used in constraining a DESC equilibrium solve
+    """
     Rconstraints = ()
     Zconstraints = ()
 

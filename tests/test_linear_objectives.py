@@ -361,7 +361,6 @@ def test_correct_indexing_passed_modes():
     assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
 
 
-# TODO: add FixSumModes to this
 @pytest.mark.unit
 def test_correct_indexing_passed_modes_and_passed_target():
     """Test Indexing when passing in specified modes, related to gh issue #380."""
@@ -632,7 +631,7 @@ def test_FixBoundary_with_single_weight():
 # TODO: also test this for FixMode and FixSumMode and FixAxis
 @pytest.mark.unit
 def test_FixBoundary_passed_target_no_passed_modes_error():
-    """Test Fixing boundary with only a single, passed weight."""
+    """Test Fixing boundary with no passed-in modes."""
     eq = Equilibrium()
     FixZ = FixBoundaryZ(modes=True, fixed_boundary=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):

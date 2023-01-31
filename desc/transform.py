@@ -1,7 +1,6 @@
 """Class to transform from spectral basis to real space."""
 
 import warnings
-from itertools import combinations_with_replacement, permutations
 
 import numpy as np
 import scipy.linalg
@@ -9,7 +8,7 @@ from termcolor import colored
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.utils import isalmostequal, islinspaced, issorted
+from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
 
 
 class Transform(IOAble):
@@ -111,18 +110,7 @@ class Transform(IOAble):
 
         """
         if isinstance(derivs, int) and derivs >= 0:
-            derivatives = np.array([[]])
-            combos = combinations_with_replacement(range(derivs + 1), 3)
-            for combo in list(combos):
-                perms = set(permutations(combo))
-                for perm in list(perms):
-                    if derivatives.shape[1] == 3:
-                        derivatives = np.vstack([derivatives, np.array(perm)])
-                    else:
-                        derivatives = np.array([perm])
-            derivatives = derivatives[
-                derivatives.sum(axis=1) <= derivs
-            ]  # remove higher orders
+            derivatives = combination_permutation(3, derivs, False)
         elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
         elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:

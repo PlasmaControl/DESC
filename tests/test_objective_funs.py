@@ -185,7 +185,7 @@ class TestObjectiveFunction:
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        matrix, modes = ptolemy_linear_transform(transforms["B"].basis)
+        matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
         B_mn = matrix @ data["|B|_mn"]
         idx_B = np.argsort(np.abs(B_mn))
@@ -238,9 +238,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MercierStability(eq=eq)
-            DMerc = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            DMerc = obj.compute(*obj.xs(eq))
             np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
@@ -253,9 +251,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MagneticWell(eq=eq)
-            magnetic_well = obj.compute(
-                eq.R_lmn, eq.Z_lmn, eq.L_lmn, eq.p_l, eq.i_l, eq.c_l, eq.Psi
-            )
+            magnetic_well = obj.compute(*obj.xs(eq))
             np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 

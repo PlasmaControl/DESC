@@ -96,7 +96,7 @@ class TestVMECIO:
     def test_ptolemy_linear_transform(self):
         """Tests Ptolemy basis linear transformation utility function."""
         basis = DoubleFourierSeries(M=4, N=3, sym=False)
-        matrix, modes = ptolemy_linear_transform(basis)
+        matrix, modes = ptolemy_linear_transform(basis.modes)
 
         x_correct = np.random.rand(basis.num_modes)
         x_transformed = matrix @ x_correct

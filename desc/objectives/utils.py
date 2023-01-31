@@ -14,11 +14,15 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixLambdaZero,
@@ -29,7 +33,9 @@ from .nae_utils import make_RZ_cons_1st_order, make_RZ_cons_2nd_order
 from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
+def get_fixed_boundary_constraints(
+    profiles=True, iota=True, kinetic=False, normalize=True
+):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -38,6 +44,8 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to add constraints to fix kinetic profiles or pressure
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -58,7 +66,17 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
         FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (FixPressure(normalize=normalize, normalize_target=normalize),)
+        if kinetic:
+            constraints += (
+                FixElectronDensity(normalize=normalize, normalize_target=normalize),
+                FixElectronTemperature(normalize=normalize, normalize_target=normalize),
+                FixIonTemperature(normalize=normalize, normalize_target=normalize),
+                FixAtomicNumber(normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixPressure(normalize=normalize, normalize_target=normalize),
+            )
 
         if iota:
             constraints += (FixIota(normalize=normalize, normalize_target=normalize),)
@@ -330,7 +348,10 @@ def factorize_linear_constraints(  # noqa: C901  # too complex
         if arg not in objective_args:
             continue
         res = con.compute(**xp_dict)
-        if not np.allclose(res, 0):
+        x = xp_dict[arg]
+        # stuff like density is O(1e19) so need some adjustable tolerance here.
+        atol = max(1e-8, np.finfo(x).eps * np.linalg.norm(x) / x.size)
+        if not np.allclose(res, 0, atol=atol):
             raise ValueError(
                 f"Incompatible constraints detected, cannot satisfy constraint {con}"
             )

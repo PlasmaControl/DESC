@@ -364,16 +364,14 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     description="Toroidal angle used for intermediate QI computations",
     dim=1,
     params=[],
-    transforms={"zeta": [[0, 0, 0]]},
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["zeta", "NFP"],
 )
 def _qi_zeta_bar(params, transforms, profiles, data, **kwargs):
     # -pi/2 <= zeta_bar <= +pi/2
-    data["zeta-bar_QI"] = (
-        transforms["zeta"].grid.nodes[:, 2] * transforms["zeta"].grid.NFP - jnp.pi
-    ) / 2
+    data["zeta-bar_QI"] = (data["zeta"] * data["NFP"] - jnp.pi) / 2
     return data
 
 
@@ -385,10 +383,10 @@ def _qi_zeta_bar(params, transforms, profiles, data, **kwargs):
     description="Boozer toroidal angular coordinate to make the field quasi-isodynamic",
     dim=1,
     params=["shift_mn"],
-    transforms={},
+    transforms={"zeta": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["zeta-bar_QI"],
+    data=["rho", "theta", "zeta-bar_QI"],
 )
 def _qi_zeta(params, transforms, profiles, data, **kwargs):
     shift_mn_arr = params["shift_mn"].reshape((transforms["zeta"].basis.N, -1))
@@ -419,9 +417,9 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
     description="Magnitude of quasi-isodynamic magnetic field",
     dim=1,
     params=["B_mag", "shape_i"],
-    transforms={"zeta": [[0, 0, 0]]},
+    transforms={},
     profiles=[],
-    coordinates="rtz",
+    coordinates="z",
     data=["zeta-bar_QI"],
 )
 def _qi_B(params, transforms, profiles, data, **kwargs):
@@ -455,7 +453,7 @@ def _qi_B(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["|B|_mn", "|B|_QI", "theta_B", "zeta_QI"],
+    data=["|B|_mn", "|B|_QI", "rho", "theta", "zeta_QI", "iota"],
 )
 def _f_QI(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array(  # alpha = theta_B + iota * zeta_B

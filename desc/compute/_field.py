@@ -7,11 +7,11 @@ from desc.backend import jnp
 from .data_index import register_compute_fun
 from .utils import (
     dot,
+    expand,
     surface_averages,
     surface_integrals,
     surface_max,
     surface_min,
-    expand,
 )
 
 
@@ -2863,6 +2863,8 @@ def _min_tz_modB(params, transforms, profiles, data, **kwargs):
 )
 def _effective_r_over_R0(params, transforms, profiles, data, **kwargs):
     r"""
+    Compute an effective local inverse aspect ratio.
+
     This effective local inverse aspect ratio epsilon is defined by
 
     .. math::

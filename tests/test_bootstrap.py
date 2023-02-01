@@ -6,13 +6,13 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import j_dot_B_Redl, _trapped_fraction
+from desc.compute._bootstrap import _trapped_fraction, j_dot_B_Redl
 from desc.compute._field import (
-    _B2_fsa,
     _1_over_B_fsa,
+    _B2_fsa,
+    _effective_r_over_R0,
     _max_tz_modB,
     _min_tz_modB,
-    _effective_r_over_R0,
 )
 from desc.compute._geometry import _V_r_of_r
 from desc.compute.utils import compress, expand
@@ -39,6 +39,8 @@ from desc.profiles import PowerSeriesProfile, SplineProfile
 
 def trapped_fraction(grid, modB, sqrt_g):
     """
+    Helper function to test trapped fraction calculation.
+
     Function to help test the trapped fraction calculation on
     analytic B fields rather than Equilibium objects.
     """

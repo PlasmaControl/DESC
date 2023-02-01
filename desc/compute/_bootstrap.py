@@ -6,18 +6,13 @@ from scipy.special import roots_legendre
 from ..backend import fori_loop, jnp
 from ..profiles import PowerSeriesProfile, Profile
 from .data_index import register_compute_fun
-from .utils import (
-    compress,
-    expand,
-    surface_averages,
-    surface_integrals,
-)
+from .utils import compress, expand, surface_averages
 
 
 @register_compute_fun(
     name="trapped fraction",
     label="1 - \\frac{3}{4} \\left< B^2 \\right> \\int_0^{1/Bmax} "
-          "\\frac{\\lambda\\; d\\lambda}{\\left< \\sqrt{1 - \\lambda B} \\right>}",
+    "\\frac{\\lambda\\; d\\lambda}{\\left< \\sqrt{1 - \\lambda B} \\right>}",
     units="~",
     units_long="None",
     description="Neoclassical effective trapped particle fraction",

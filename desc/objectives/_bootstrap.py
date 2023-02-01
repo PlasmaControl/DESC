@@ -135,7 +135,8 @@ class BootstrapRedlConsistency(_Objective):
 
         if eq.electron_temperature is None:
             raise RuntimeError(
-                "Bootstrap current calculation requires an electron temperature profile."
+                "Bootstrap current calculation requires an electron temperature "
+                "profile."
             )
         if eq.electron_density is None:
             raise RuntimeError(

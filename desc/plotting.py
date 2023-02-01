@@ -2240,6 +2240,7 @@ def plot_boozer_surface(
     eq,
     grid_compute=None,
     grid_plot=None,
+    rho=1,
     fill=False,
     ncontours=100,
     fieldlines=0,
@@ -2257,6 +2258,8 @@ def plot_boozer_surface(
         grid to use for computing boozer spectrum
     grid_plot : Grid, optional
         grid to plot on
+    rho : float, optional
+        Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
         Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
     ncontours : int, optional
@@ -2311,10 +2314,11 @@ def plot_boozer_surface(
             "N": 6 * eq.N + 1,
             "NFP": eq.NFP,
             "endpoint": False,
+            "rho": rho,
         }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
-        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True}
+        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True, "rho": rho}
         grid_plot = _get_grid(**grid_kwargs)
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)

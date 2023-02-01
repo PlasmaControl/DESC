@@ -5,7 +5,14 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages, surface_integrals
+from .utils import (
+    dot,
+    surface_averages,
+    surface_integrals,
+    surface_max,
+    surface_min,
+    expand,
+)
 
 
 @register_compute_fun(
@@ -2338,6 +2345,29 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<1/|B|>",
+    label="\\langle 1/B \\rangle",
+    units="T^{-1}",
+    units_long="1 / Tesla",
+    description="Flux surface averaged inverse field strength",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g)", "|B|", "V_r(r)"],
+)
+def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
+    data["<1/|B|>"] = surface_averages(
+        transforms["grid"],
+        1 / data["|B|"],
+        jnp.abs(data["sqrt(g)"]),
+        denominator=data["V_r(r)"],
+    )
+    return data
+
+
+@register_compute_fun(
     name="<B^2>_r",
     label="\\partial_{\\rho} \\langle B^2 \\rangle",
     units="T^2",
@@ -2775,4 +2805,74 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
         + data["B^theta"] * data["|B|_tz"]
         + data["B^zeta"] * data["|B|_zz"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="max_tz |B|",
+    label="\\max_{\\theta \\zeta} |B|",
+    units="T",
+    units_long="Tesla",
+    description="Maximum field strength on each flux surface",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B|"],
+)
+def _max_tz_modB(params, transforms, profiles, data, **kwargs):
+    data["max_tz |B|"] = expand(
+        transforms["grid"], surface_max(transforms["grid"], data["|B|"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="min_tz |B|",
+    label="\\min_{\\theta \\zeta} |B|",
+    units="T",
+    units_long="Tesla",
+    description="Minimum field strength on each flux surface",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B|"],
+)
+def _min_tz_modB(params, transforms, profiles, data, **kwargs):
+    data["min_tz |B|"] = expand(
+        transforms["grid"], surface_min(transforms["grid"], data["|B|"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="effective r/R0",
+    label="(r / R_0)_{effective}",
+    units="~",
+    units_long="None",
+    description="Effective local inverse aspect ratio, based on max and min |B|",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["max_tz |B|", "min_tz |B|"],
+)
+def _effective_r_over_R0(params, transforms, profiles, data, **kwargs):
+    r"""
+    This effective local inverse aspect ratio epsilon is defined by
+
+    .. math::
+        \frac{Bmax}{Bmin} = \frac{1 + \epsilon}{1 - \epsilon}
+
+    This definition is motivated by the fact that this formula would
+    be true in the case of circular cross-section surfaces in
+    axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
+    \epsilon \cos\theta) R_0`.
+    """
+    w = data["max_tz |B|"] / data["min_tz |B|"]
+    data["effective r/R0"] = (w - 1) / (w + 1)
     return data

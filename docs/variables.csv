@@ -32,6 +32,7 @@ Name,Label,Units,Description,Module
 ``e^rho``,:math:`\mathbf{e}^{\rho}`,inverse meters,Contravariant radial basis vector,``desc.compute._basis_vectors``
 ``e^theta``,:math:`\mathbf{e}^{\theta}`,inverse meters,Contravariant poloidal basis vector,``desc.compute._basis_vectors``
 ``e^zeta``,:math:`\mathbf{e}^{\zeta}`,inverse meters,Contravariant toroidal basis vector,``desc.compute._basis_vectors``
+``trapped fraction``,:math:`1 - \frac{3}{4} \left< B^2 \right> \int_0^{1/Bmax} \frac{\lambda\; d\lambda}{\left< \sqrt{1 - \lambda B} \right>}`,None,Neoclassical effective trapped particle fraction,``desc.compute._bootstrap``
 ``<J*B> Redl``,:math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle_{Redl}`,Tesla Ampere / meter^2,"Bootstrap current profile, Redl model for quasisymmetry",``desc.compute._bootstrap``
 ``0``,:math:`0`,None,Zeros,``desc.compute._core``
 ``rho``,:math:`\rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux",``desc.compute._core``
@@ -213,6 +214,7 @@ Name,Label,Units,Description,Module
 ``<|B|>_rms``,:math:`\langle |B| \rangle_{rms}`,Tesla,"Volume average magnetic field, root mean square",``desc.compute._field``
 ``<|B|>``,:math:`\langle |B| \rangle`,Tesla,Flux surface average magnetic field,``desc.compute._field``
 ``<B^2>``,:math:`\langle B^2 \rangle`,Tesla squared,Flux surface average magnetic field squared,``desc.compute._field``
+``<1/|B|>``,:math:`\langle 1/B \rangle`,1 / Tesla,Flux surface averaged inverse field strength,``desc.compute._field``
 ``<B^2>_r``,:math:`\partial_{\rho} \langle B^2 \rangle`,Tesla squared,"Flux surface average magnetic field squared, radial derivative",``desc.compute._field``
 ``grad(|B|^2)_rho``,:math:`(\nabla B^{2})_{\rho}`,Tesla squared,Covariant radial component of magnetic pressure gradient,``desc.compute._field``
 ``grad(|B|^2)_theta``,:math:`(\nabla B^{2})_{\theta}`,Tesla squared,Covariant poloidal component of magnetic pressure gradient,``desc.compute._field``
@@ -231,6 +233,9 @@ Name,Label,Units,Description,Module
 ``B*grad(|B|)``,:math:`\mathbf{B} \cdot \nabla B`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_t``,:math:`\partial_{\theta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_z``,:math:`\partial_{\zeta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
+``max_tz |B|``,:math:`\max_{\theta \zeta} |B|`,Tesla,Maximum field strength on each flux surface,``desc.compute._field``
+``min_tz |B|``,:math:`\min_{\theta \zeta} |B|`,Tesla,Minimum field strength on each flux surface,``desc.compute._field``
+``effective r/R0``,:math:`(r / R_0)_{effective}`,None,"Effective local inverse aspect ratio, based on max and min |B|",``desc.compute._field``
 ``V``,:math:`V`,cubic meters,Volume,``desc.compute._geometry``
 ``V(r)``,:math:`V(\rho)`,cubic meters,Volume enclosed by flux surfaces,``desc.compute._geometry``
 ``V_r(r)``,:math:`\partial_{\rho} V(\rho)`,cubic meters,"Volume enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._geometry``

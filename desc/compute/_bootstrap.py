@@ -11,88 +11,50 @@ from .utils import (
     expand,
     surface_averages,
     surface_integrals,
-    surface_max,
-    surface_min,
 )
 
 
-def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
-    r"""Evaluate the effective trapped particle fraction.
+@register_compute_fun(
+    name="trapped fraction",
+    label="1 - \\frac{3}{4} \\left< B^2 \\right> \\int_0^{1/Bmax} "
+          "\\frac{\\lambda\\; d\\lambda}{\\left< \\sqrt{1 - \\lambda B} \\right>}",
+    units="~",
+    units_long="None",
+    description="Neoclassical effective trapped particle fraction",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g)", "V_r(r)", "|B|", "<B^2>", "max_tz |B|"],
+)
+def _trapped_fraction(params, transforms, profiles, data, **kwargs):
+    r"""
+    Evaluate the effective trapped particle fraction.
 
     Compute the effective fraction of trapped particles, which enters
-    several formulae for neoclassical transport, as well as several
-    quantities that go into its calculation.  The input data can be
-    provided on a uniform grid of arbitrary toroidal and poloidal
-    angles that need not be straight-field-line angles.
-
-    The trapped fraction ``f_t`` has a standard definition in neoclassical theory:
+    several formulae for neoclassical transport. The trapped fraction
+    ``f_t`` has a standard definition in neoclassical theory:
 
     .. math::
         f_t = 1 - \frac{3}{4} \left< B^2 \right> \int_0^{1/Bmax}
             \frac{\lambda\; d\lambda}{\left< \sqrt{1 - \lambda B} \right>}
 
     where :math:`\left< \ldots \right>` is a flux surface average.
-
-    The effective inverse aspect ratio epsilon is defined by
-
-    .. math::
-        \frac{Bmax}{Bmin} = \frac{1 + \epsilon}{1 - \epsilon}
-
-    This definition is motivated by the fact that this formula would
-    be true in the case of circular cross-section surfaces in
-    axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
-    \epsilon \cos\theta) R_0`.
-
-    This function is not formulated as a DESC "compute" function in
-    anticipation that it will be used with multiple methods of
-    computing the "nearby perfectly quasisymmetric field" in fields
-    that are only approximately quasisymmetric.
-
-    This function returns a Dictionary containing the following data,
-    all 1D arrays of shape ``(grid.num_rho,)``:
-    - ``"Bmin"``: The minimum of :math:`|B|` on each surface.
-    - ``"Bmax"``: The maximum of :math:`|B|` on each surface.
-    - ``"epsilon"``: The effective inverse aspect ratio on each surface.
-    - ``"<1/B>"``: :math:`\left<B^2\right>` on each surface,
-      where :math:`\left< \ldots \right>` denotes a flux surface average.
-    - ``"<1/B>"``: :math:`\left<1/B\right>` on each surface,
-      where :math:`\left< \ldots \right>` denotes a flux surface average.
-    - ``"f_t"``: The effective trapped fraction on each surface.
-
-    Parameters
-    ----------
-    grid : A ``Grid`` object.
-    modB : Magnetic field strength :math:`|B|` on the grid points.
-    sqrt_g : The Jacobian :math:`1/(\nabla\rho\times\nabla\theta\cdot\nabla\zeta)`
-        on the grid points.
-    n_gauss : int
-        Number of Gauss-Legendre integration points for the :math:`\lambda` integral.
-
-    Returns
-    -------
-    f_t_data : dict
-        Dictionary containing the computed data listed above.
     """
-    denominator = surface_integrals(grid, sqrt_g)
-    fsa_B2 = compress(
-        grid, surface_averages(grid, modB * modB, sqrt_g, denominator=denominator)
-    )
-    fsa_1overB = compress(
-        grid, surface_averages(grid, 1 / modB, sqrt_g, denominator=denominator)
-    )
-
-    Bmax = surface_max(grid, modB)
-    Bmin = surface_min(grid, modB)
-    w = Bmax / Bmin
-    epsilon = (w - 1) / (w + 1)
-
     # Get nodes and weights for Gauss-Legendre integration:
+    n_gauss = kwargs.get("n_gauss", 20)
     base_nodes, base_weights = roots_legendre(n_gauss)
     # Rescale for integration on [0, 1], not [-1, 1]:
     lambd = (base_nodes + 1) * 0.5
     lambda_weights = base_weights * 0.5
 
-    modB_over_Bmax = modB / expand(grid, Bmax)
+    grid = transforms["grid"]
+    Bmax = data["max_tz |B|"]
+    modB_over_Bmax = data["|B|"] / Bmax
+    sqrt_g = jnp.abs(data["sqrt(g)"])
+    denominator = data["V_r(r)"]
+    Bmax_squared = compress(grid, Bmax * Bmax)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     lambd = jnp.asarray(lambd)
@@ -106,22 +68,14 @@ def trapped_fraction(grid, modB, sqrt_g, n_gauss=20):
             denominator=denominator,
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
-            Bmax * Bmax * compress(grid, flux_surf_avg_term)
+            Bmax_squared * compress(grid, flux_surf_avg_term)
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
 
-    f_t = 1 - 0.75 * fsa_B2 * lambda_integral
-    f_t_data = {
-        "<B**2>": fsa_B2,
-        "<1/B>": fsa_1overB,
-        "Bmin": Bmin,
-        "Bmax": Bmax,
-        "epsilon": epsilon,
-        "f_t": f_t,
-        "rho": grid.nodes[grid.unique_rho_idx, 0],
-    }
-    return f_t_data
+    trapped_fraction = 1 - 0.75 * compress(grid, data["<B^2>"]) * lambda_integral
+    data["trapped fraction"] = expand(grid, trapped_fraction)
+    return data
 
 
 def j_dot_B_Redl(
@@ -397,7 +351,7 @@ def j_dot_B_Redl(
             "Bmax",
             "Bmin",
             "epsilon",
-            "<B**2>",
+            "<B^2>",
             "<1/B>",
             "f_t",
             "iota",
@@ -439,7 +393,7 @@ def j_dot_B_Redl(
     description="Bootstrap current profile, Redl model for quasisymmetry",
     dim=1,
     params=[],
-    transforms={},
+    transforms={"grid": []},
     profiles=[
         "electron_density",
         "electron_temperature",
@@ -447,7 +401,7 @@ def j_dot_B_Redl(
         "atomic_number",
     ],
     coordinates="r",
-    data=["|B|", "sqrt(g)", "G", "I", "iota"],
+    data=["trapped fraction", "G", "I", "iota", "<1/|B|>", "effective r/R0"],
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     r"""Compute the bootstrap current.
@@ -464,12 +418,16 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     # i.e. on the compressed grid. In contrast, "data" contains
     # quantities on a 3D grid even for quantities that are flux
     # functions.
-    geom_data = trapped_fraction(grid, data["|B|"], data["sqrt(g)"])
+    geom_data = {}
+    geom_data["rho"] = compress(grid, data["rho"])
+    geom_data["f_t"] = compress(grid, data["trapped fraction"])
+    geom_data["epsilon"] = compress(grid, data["effective r/R0"])
     geom_data["G"] = compress(grid, data["G"])
     geom_data["I"] = compress(grid, data["I"])
     geom_data["iota"] = compress(grid, data["iota"])
+    geom_data["<1/|B|>"] = compress(grid, data["<1/|B|>"])
     geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
-        "<1/B>"
+        "<1/|B|>"
     ]
     geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
 

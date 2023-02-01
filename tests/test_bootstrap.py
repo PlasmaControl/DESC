@@ -6,8 +6,16 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import j_dot_B_Redl, trapped_fraction
-from desc.compute.utils import compress
+from desc.compute._bootstrap import j_dot_B_Redl, _trapped_fraction
+from desc.compute._field import (
+    _B2_fsa,
+    _1_over_B_fsa,
+    _max_tz_modB,
+    _min_tz_modB,
+    _effective_r_over_R0,
+)
+from desc.compute._geometry import _V_r_of_r
+from desc.compute.utils import compress, expand
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
@@ -29,11 +37,30 @@ from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
 
+def trapped_fraction(grid, modB, sqrt_g):
+    """
+    Function to help test the trapped fraction calculation on
+    analytic B fields rather than Equilibium objects.
+    """
+    data = {"|B|": modB, "|B|^2": modB**2, "sqrt(g)": sqrt_g}
+    params = None
+    transforms = {"grid": grid}
+    profiles = None
+    data = _V_r_of_r(params, transforms, profiles, data)
+    data = _B2_fsa(params, transforms, profiles, data)
+    data = _1_over_B_fsa(params, transforms, profiles, data)
+    data = _max_tz_modB(params, transforms, profiles, data)
+    data = _min_tz_modB(params, transforms, profiles, data)
+    data = _effective_r_over_R0(params, transforms, profiles, data)
+    data = _trapped_fraction(params, transforms, profiles, data)
+    return data
+
+
 class TestBootstrapCompute:
     """Tests for bootstrap current compute functions."""
 
     @pytest.mark.unit
-    def test_trapped_fraction(self):
+    def test_trapped_fraction_analytic(self):
         """Confirm that trapped_fraction() matches analytic results for model field."""
         M = 100
         NFP = 3
@@ -60,21 +87,38 @@ class TestBootstrapCompute:
             f_t_data = trapped_fraction(grid, modB, sqrt_g)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
-                f_t_data["<B**2>"],
-                [13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2],
+                f_t_data["<B^2>"],
+                expand(
+                    grid,
+                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
+                ),
             )
             np.testing.assert_allclose(
-                f_t_data["<1/B>"],
-                [1 / np.sqrt(13.0**2 - 2.6**2), 1 / np.sqrt(9.0**2 - 3.7**2)],
+                f_t_data["<1/|B|>"],
+                expand(
+                    grid,
+                    np.array(
+                        [
+                            1 / np.sqrt(13.0**2 - 2.6**2),
+                            1 / np.sqrt(9.0**2 - 3.7**2),
+                        ]
+                    ),
+                ),
             )
             np.testing.assert_allclose(
-                f_t_data["Bmin"], [13.0 - 2.6, 9.0 - 3.7], rtol=1e-4
+                f_t_data["min_tz |B|"],
+                expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
+                rtol=1e-4,
             )
             np.testing.assert_allclose(
-                f_t_data["Bmax"], [13.0 + 2.6, 9.0 + 3.7], rtol=1e-4
+                f_t_data["max_tz |B|"],
+                expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
+                rtol=1e-4,
             )
             np.testing.assert_allclose(
-                f_t_data["epsilon"], [2.6 / 13.0, 3.7 / 9.0], rtol=1e-3
+                f_t_data["effective r/R0"],
+                expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
+                rtol=1e-3,
             )
 
     @pytest.mark.unit
@@ -119,22 +163,32 @@ class TestBootstrapCompute:
             # Eq (C18) in Kim et al:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
 
-            np.testing.assert_allclose(f_t_data["Bmin"], B0 / (1 + epsilon))
+            np.testing.assert_allclose(
+                f_t_data["min_tz |B|"], expand(grid, B0 / (1 + epsilon))
+            )
             # Looser tolerance for Bmax since there is no grid point there:
             Bmax = B0 / (1 - epsilon)
-            np.testing.assert_allclose(f_t_data["Bmax"], Bmax, rtol=0.001)
-            np.testing.assert_allclose(epsilon, f_t_data["epsilon"], rtol=1e-4)
+            np.testing.assert_allclose(
+                f_t_data["max_tz |B|"], expand(grid, Bmax), rtol=0.001
+            )
+            np.testing.assert_allclose(
+                f_t_data["effective r/R0"], expand(grid, epsilon), rtol=1e-4
+            )
             # Eq (A8):
             fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
-                f_t_data["<B**2>"],
-                fsa_B2,
+                f_t_data["<B^2>"],
+                expand(grid, fsa_B2),
                 rtol=1e-6,
             )
-            np.testing.assert_allclose(f_t_data["<1/B>"], (2 + epsilon**2) / (2 * B0))
+            np.testing.assert_allclose(
+                f_t_data["<1/|B|>"], expand(grid, (2 + epsilon**2) / (2 * B0))
+            )
             # Note the loose tolerance for this next test since we do not expect precise
             # agreement.
-            np.testing.assert_allclose(f_t_data["f_t"], f_t_Kim, rtol=0.1, atol=0.07)
+            np.testing.assert_allclose(
+                f_t_data["trapped fraction"], expand(grid, f_t_Kim), rtol=0.1, atol=0.07
+            )
 
             # Now compute f_t numerically by a different algorithm:
             modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
@@ -153,8 +207,12 @@ class TestBootstrapCompute:
 
                 integral = quad(integrand, 0, 1 / Bmax[jr])
                 f_t[jr] = 1 - 0.75 * fsa_B2[jr] * integral[0]
+
             np.testing.assert_allclose(
-                f_t_data["f_t"][1:], f_t[1:], rtol=0.001, atol=0.001
+                compress(grid, f_t_data["trapped fraction"])[1:],
+                f_t[1:],
+                rtol=0.001,
+                atol=0.001,
             )
 
             # Use True in this "if" statement to plot extra info:
@@ -162,7 +220,7 @@ class TestBootstrapCompute:
                 import matplotlib.pyplot as plt
 
                 plt.plot(epsilon, f_t_Kim, label="Kim")
-                plt.plot(epsilon, f_t_data["f_t"], label="desc")
+                plt.plot(epsilon, f_t_data["trapped fraction"], label="desc")
                 plt.plot(epsilon, f_t, ":", label="Alternative algorithm")
                 plt.xlabel("epsilon")
                 plt.ylabel("Effective trapped fraction $f_t$")
@@ -1090,7 +1148,6 @@ class TestBootstrapObjectives:
     @pytest.mark.solve
     def test_BootstrapRedlConsistency_resolution(self, DSHAPE_current):
         """Confirm that the objective function is ~independent of grid resolution."""
-
         helicity = (1, 0)
 
         eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]

@@ -27,6 +27,16 @@ arg_order = (
     "Rb_lmn",
     "Zb_lmn",
 )
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+}
 
 
 def _sort_args(args):

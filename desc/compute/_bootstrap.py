@@ -85,19 +85,9 @@ def j_dot_B_Redl(
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
 
-    The profiles of ne, Te, Ti, and Zeff should all be instances of
-    subclasses of :obj:`desc.Profile`, i.e. they should
-    have ``__call__()`` and ``dfds()`` functions. If ``Zeff == None``, a
-    constant 1 is assumed. If ``Zeff`` is a float, a constant profile will
-    be assumed.
-
-    ``ne`` should have units of 1/m^3. ``Ti`` and ``Te`` should have
-    units of eV.
-
     The argument ``geom_data`` is a Dictionary that should contain the
     following items:
 
-    - rho: 1D array with the effective minor radius.
     - G: 1D array with the Boozer ``G`` coefficient.
     - R: 1D array with the effective value of ``R`` to use in the Redl formula,
       not necessarily the major radius.
@@ -107,20 +97,24 @@ def j_dot_B_Redl(
     - psi_edge: float, the boundary toroidal flux, divided by (2 pi).
     - f_t: 1D array with the effective trapped particle fraction
 
+    The argument ``profile_data`` is a Dictionary that should contain the
+    following items, all 1D arrays with quantities on the same radial grid:
+
+    - rho: effective minor radius.
+    - ne: electron density, in meters^{-3}.
+    - Te: electron temperature, in eV.
+    - Ti: ion temperature, in eV.
+    - Zeff: effective atomic charge.
+    - ne_r: derivative of electron density with respect to rho.
+    - Te_r: derivative of electron temperature with respect to rho.
+    - Ti_r: derivative of ion temperature with respect to rho.
+
     Parameters
     ----------
     geom_data : dict
         Dictionary containing the data described above.
-    ne : A :obj:`~desc.profile.Profile` object
-        The electron density profile.
-    Te : A :obj:`~desc.profile.Profile` object
-        The electron temperature profile.
-    Ti : A :obj:`~desc.profile.Profile` object
-        The ion temperature profile.
-    Zeff : `None`, float, or a :obj:`~Profile` object
-        The profile of the average impurity charge :math:`Z_{eff}`. A single
-        number can be provided if this profile is constant. Or, if ``None``,
-        Zeff = 1 will be used.
+    profile_data : dict
+        Dictionary containing the data described above.
     helicity_N : int
         Set to 0 for quasi-axisymmetry, or +/- NFP for quasi-helical symmetry.
         This quantity is used to apply the quasisymmetry isomorphism to map the

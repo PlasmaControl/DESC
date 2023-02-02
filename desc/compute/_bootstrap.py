@@ -76,7 +76,6 @@ def j_dot_B_Redl(
     geom_data,
     profile_data,
     helicity_N=None,
-    plot=False,
 ):
     r"""Compute the bootstrap current.
 
@@ -120,8 +119,6 @@ def j_dot_B_Redl(
         This quantity is used to apply the quasisymmetry isomorphism to map the
         collisionality and bootstrap current from the tokamak expressions to
         quasi-helical symmetry.
-    plot : boolean
-        Whether to make a plot of many of the quantities computed.
 
     Returns
     -------
@@ -319,49 +316,6 @@ def j_dot_B_Redl(
     for v in variables:
         J_dot_B_data[v] = eval(v)
     J_dot_B_data["<J*B>"] = J_dot_B
-
-    if plot:
-        import matplotlib.pyplot as plt
-
-        plt.figure(figsize=(14, 7))
-        plt.rcParams.update({"font.size": 8})
-        nrows = 5
-        ncols = 5
-        variables = [
-            "Bmax",
-            "Bmin",
-            "epsilon",
-            "<B^2>",
-            "<1/B>",
-            "f_t",
-            "iota",
-            "G",
-            "R",
-            "ne",
-            "ni",
-            "Zeff",
-            "Te",
-            "Ti",
-            "ln_Lambda_e",
-            "ln_Lambda_ii",
-            "nu_e_star",
-            "nu_i_star",
-            "dnds_term",
-            "dTeds_term",
-            "dTids_term",
-            "L31",
-            "L32",
-            "alpha",
-            "<J*B>",
-        ]
-        for j, variable in enumerate(variables):
-            plt.subplot(nrows, ncols, j + 1)
-            plt.plot(rho, J_dot_B_data[variable])
-            plt.title(variable)
-            plt.xlabel(r"$\rho$")
-        plt.tight_layout()
-        plt.show()
-
     return J_dot_B_data
 
 
@@ -440,7 +394,6 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         geom_data,
         profile_data,
         helicity_N,
-        plot=False,
     )
     data["<J*B> Redl"] = expand(grid, j_dot_B_data["<J*B>"])
     return data

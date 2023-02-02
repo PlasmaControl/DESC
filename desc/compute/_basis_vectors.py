@@ -612,7 +612,7 @@ def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="b",
-    label="b",
+    label="\\hat{b}",
     units="~",
     units_long="None",
     description="Unit vector along magnetic field",
@@ -630,7 +630,7 @@ def _b(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="n",
-    label="n",
+    label="\\hat{n}",
     units="~",
     units_long="None",
     description="Unit vector normal to flux surface",

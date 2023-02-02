@@ -346,6 +346,29 @@ def test_generic_compute():
 
 
 @pytest.mark.unit
+def test_getter_setter():
+    """Test getter and setter methods of Objectives."""
+    eq = Equilibrium()
+    obj = GenericObjective("R", eq=eq)
+    R = obj.compute(*obj.xs(eq))
+
+    # target
+    target = R - 0.5
+    obj.target = target
+    np.testing.assert_allclose(obj.target, target)
+
+    # bounds
+    bounds = (0.5 * R, 2 * R)
+    obj.bounds = bounds
+    np.testing.assert_allclose(obj.bounds, bounds)
+
+    # weight
+    weight = R
+    obj.weight = weight
+    np.testing.assert_allclose(obj.weight, weight)
+
+
+@pytest.mark.unit
 def test_bounds_format():
     """Test that tuple targets are in the format (lower bound, upper bound)."""
     eq = Equilibrium()

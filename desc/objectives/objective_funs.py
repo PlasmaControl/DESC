@@ -697,6 +697,7 @@ class _Objective(IOAble, ABC):
     @bounds.setter
     def bounds(self, bounds):
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
+        self._bounds = bounds
         self._check_dimensions()
 
     @property

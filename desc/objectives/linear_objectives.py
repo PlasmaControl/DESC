@@ -969,7 +969,7 @@ class FixElectronTemperature(_FixProfile):
         normalize_target=True,
         profile=None,
         indices=True,
-        name="fixed-electron-temperaturet",
+        name="fixed-electron-temperature",
     ):
 
         super().__init__(

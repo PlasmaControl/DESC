@@ -30,6 +30,9 @@ class FixBoundaryR(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Boundary surface coefficients to fix. If None, uses surface coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -69,6 +72,7 @@ class FixBoundaryR(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -85,6 +89,7 @@ class FixBoundaryR(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -194,6 +199,9 @@ class FixBoundaryZ(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Boundary surface coefficients to fix. If None, uses surface coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -233,6 +241,7 @@ class FixBoundaryZ(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -249,6 +258,7 @@ class FixBoundaryZ(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -357,6 +367,9 @@ class FixLambdaGauge(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -383,6 +396,7 @@ class FixLambdaGauge(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -392,6 +406,7 @@ class FixLambdaGauge(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -512,6 +527,9 @@ class _FixProfile(_Objective, ABC):
         len(target) = len(weight) = len(modes). If None, uses Profile.params.
         e.g. for PowerSeriesProfile these are profile coefficients, and for
         SplineProfile they are values at knots.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -542,6 +560,7 @@ class _FixProfile(_Objective, ABC):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -555,6 +574,7 @@ class _FixProfile(_Objective, ABC):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -606,6 +626,9 @@ class FixPressure(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -638,6 +661,7 @@ class FixPressure(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -649,6 +673,7 @@ class FixPressure(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -713,6 +738,9 @@ class FixIota(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -747,6 +775,7 @@ class FixIota(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -758,6 +787,7 @@ class FixIota(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -819,6 +849,9 @@ class FixCurrent(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -851,6 +884,7 @@ class FixCurrent(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -862,6 +896,7 @@ class FixCurrent(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -926,6 +961,9 @@ class FixElectronTemperature(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -958,6 +996,7 @@ class FixElectronTemperature(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -969,6 +1008,7 @@ class FixElectronTemperature(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1033,6 +1073,9 @@ class FixElectronDensity(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -1065,6 +1108,7 @@ class FixElectronDensity(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -1076,6 +1120,7 @@ class FixElectronDensity(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1140,6 +1185,9 @@ class FixIonTemperature(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -1172,6 +1220,7 @@ class FixIonTemperature(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -1183,6 +1232,7 @@ class FixIonTemperature(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1247,6 +1297,9 @@ class FixAtomicNumber(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -1281,6 +1334,7 @@ class FixAtomicNumber(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -1292,6 +1346,7 @@ class FixAtomicNumber(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1352,6 +1407,8 @@ class FixPsi(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses Equilibrium value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -1375,6 +1432,7 @@ class FixPsi(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -1384,6 +1442,7 @@ class FixPsi(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,

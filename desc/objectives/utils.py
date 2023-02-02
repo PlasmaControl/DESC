@@ -174,6 +174,8 @@ def factorize_linear_constraints(constraints, objective_args):
     for obj in constraints:
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
+        if obj.bounds is not None:
+            raise ValueError("Linear constraints must use target instead of bounds.")
         arg = obj.args[0]
         if arg not in objective_args:
             continue

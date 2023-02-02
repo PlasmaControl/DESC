@@ -6,7 +6,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import put, use_jax
-from desc.compute import arg_order
+from desc.compute import arg_order, profile_names
 from desc.objectives import get_fixed_boundary_constraints
 from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
@@ -44,11 +44,11 @@ def get_deltas(things1, things2):
             s2 = s2.copy()
             s1.change_resolution(s2.L, s2.M, s2.N)
             if not np.allclose(s2.R_lmn, s1.R_lmn):
-                deltas["dRb"] = s2.R_lmn - s1.R_lmn
+                deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
             if not np.allclose(s2.Z_lmn, s1.Z_lmn):
-                deltas["dZb"] = s2.Z_lmn - s1.Z_lmn
+                deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
 
-    for key in ["iota", "pressure", "current"]:
+    for key, val in profile_names.items():
         if key in things1:
             t1 = things1.pop(key)
             t2 = things2.pop(key)
@@ -58,13 +58,13 @@ def get_deltas(things1, things2):
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
                     t1.change_resolution(t2.basis.L)
                 if not np.allclose(t2.params, t1.params):
-                    deltas["d" + key[0]] = t2.params - t1.params
+                    deltas[val] = t2.params - t1.params
 
     if "Psi" in things1:
         psi1 = things1.pop("Psi")
         psi2 = things2.pop("Psi")
         if psi1 is not None and not np.allclose(psi2, psi1):
-            deltas["dPsi"] = psi2 - psi1
+            deltas["Psi"] = psi2 - psi1
 
     assert len(things1) == 0, "get_deltas got an unexpected key: {}".format(
         things1.keys()
@@ -75,16 +75,8 @@ def get_deltas(things1, things2):
 def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     eq,
     objective,
-    constraints=(),
-    dR=None,
-    dZ=None,
-    dL=None,
-    dp=None,
-    di=None,
-    dc=None,
-    dPsi=None,
-    dRb=None,
-    dZb=None,
+    constraints,
+    deltas,
     order=2,
     tr_ratio=0.1,
     weight="auto",
@@ -102,10 +94,9 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Objective function to satisfy.
     constraints : tuple of Objective, optional
         List of objectives to be used as constraints during perturbation.
-    dR, dZ, dL, dp, di, dc, dPsi, dRb, dZb : ndarray or float
-        Deltas for perturbations of R, Z, lambda, pressure, rotational transform,
-        toroidal current, total toroidal magnetic flux, R_boundary, and Z_boundary.
-        Setting to None or zero ignores that term in the expansion.
+    deltas : dict of ndarray
+        Deltas for perturbations. Keys should names of Equilibrium attributes ("p_l",
+        "Rb_lmn", "L_lmn" etc.) and values of arrays of desired change in the attribute.
     order : {0,1,2,3}
         Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
     tr_ratio : float or array of float
@@ -147,6 +138,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 len(tr_ratio), order
             )
         )
+    # remove deltas that are zero
+    deltas = {key: val for key, val in deltas.items() if np.any(val)}
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
@@ -158,26 +151,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         raise AttributeError(
             "Cannot perturb with a scalar objective: {}.".format(objective)
         )
-
-    deltas = {}
-    if dR is not None and np.any(dR):
-        deltas["R_lmn"] = dR
-    if dZ is not None and np.any(dZ):
-        deltas["Z_lmn"] = dZ
-    if dL is not None and np.any(dL):
-        deltas["L_lmn"] = dL
-    if dp is not None and np.any(dp):
-        deltas["p_l"] = dp
-    if di is not None and np.any(di):
-        deltas["i_l"] = di
-    if dc is not None and np.any(dc):
-        deltas["c_l"] = dc
-    if dPsi is not None and np.any(dPsi):
-        deltas["Psi"] = dPsi
-    if dRb is not None and np.any(dRb):
-        deltas["Rb_lmn"] = dRb
-    if dZb is not None and np.any(dZb):
-        deltas["Zb_lmn"] = dZb
 
     if verbose > 0:
         print("Perturbing {}".format(", ".join(deltas.keys())))
@@ -220,9 +193,19 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # all other perturbations besides the boundary
     other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
     if len([arg for arg in other_args if arg in deltas.keys()]):
-        dc = np.concatenate([deltas[arg] for arg in other_args if arg in deltas.keys()])
+        dc = np.concatenate(
+            [
+                deltas[arg]
+                for arg in other_args
+                if arg in deltas.keys() and arg in objective.args
+            ]
+        )
         x_idx = np.concatenate(
-            [objective.x_idx[arg] for arg in other_args if arg in deltas.keys()]
+            [
+                objective.x_idx[arg]
+                for arg in other_args
+                if arg in deltas.keys() and arg in objective.args
+            ]
         )
         x_idx.sort(kind="mergesort")
         tangents += np.eye(objective.dim_x)[:, x_idx] @ dc

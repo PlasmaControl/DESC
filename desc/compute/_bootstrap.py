@@ -4,7 +4,6 @@ from scipy.constants import elementary_charge
 from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
-from ..profiles import PowerSeriesProfile, Profile
 from .data_index import register_compute_fun
 from .utils import compress, expand, surface_averages
 

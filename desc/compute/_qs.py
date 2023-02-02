@@ -423,20 +423,20 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
     data=["zeta-bar_QI"],
 )
 def _qi_B(params, transforms, profiles, data, **kwargs):
+    # TODO: remove B_mag, redundant with shape_i
     # |B|_QI is only a function of zeta-bar_QI
-    zeros = jnp.concatenate(
+    step = jnp.pi / 2 / (params["shape_i"].size + 1)
+    x = jnp.arange(-jnp.pi / 2, jnp.pi / 2 + step, step)
+    y = jnp.concatenate(
         (
-            jnp.array([0, -jnp.pi / 2, jnp.pi / 2]),
-            -jnp.pi / 2 - 1 / params["shape_i"],
-            jnp.pi / 2 + 1 / params["shape_i"],
+            jnp.atleast_1d(params["B_mag"][1]),
+            jnp.flip(jnp.atleast_1d(params["shape_i"])),
+            jnp.atleast_1d(params["B_mag"][0]),
+            jnp.atleast_1d(params["shape_i"]),
+            jnp.atleast_1d(params["B_mag"][1]),
         )
     )
-    B_i = jnp.polyint(jnp.poly(zeros))
-    B0 = jnp.sum(
-        jnp.flipud(jnp.array([(jnp.pi / 2) ** i for i in range(len(B_i))])) * B_i
-    )
-    B = jnp.polyval(B_i, data["zeta-bar_QI"])
-    B = B / B0 * (params["B_mag"][1] - params["B_mag"][0]) + params["B_mag"][0]
+    B = jnp.interp(data["zeta-bar_QI"], x, y)
 
     data["|B|_QI"] = B
     return data

@@ -75,10 +75,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
 
 def j_dot_B_Redl(
     geom_data,
-    ne,
-    Te,
-    Ti,
-    Zeff=None,
+    profile_data,
     helicity_N=None,
     plot=False,
 ):
@@ -138,7 +135,6 @@ def j_dot_B_Redl(
     J_dot_B_data : dict
         Dictionary containing the computed data listed above.
     """
-    rho = geom_data["rho"]
     G = geom_data["G"]
     R = geom_data["R"]
     iota = geom_data["iota"]
@@ -146,59 +142,56 @@ def j_dot_B_Redl(
     psi_edge = geom_data["psi_edge"]
     f_t = geom_data["f_t"]
 
-    if Zeff is None:
-        Zeff = PowerSeriesProfile(1.0, modes=[0])
-    if not isinstance(Zeff, Profile):
-        # Zeff is presumably a number. Convert it to a constant profile.
-        Zeff = PowerSeriesProfile([Zeff], modes=[0])
-
-    # Evaluate profiles on the grid:
-    ne_rho = ne(rho)
-    Te_rho = Te(rho)
-    Ti_rho = Ti(rho)
-    Zeff_rho = Zeff(rho)
-    ni_rho = ne_rho / Zeff_rho
-    pe_rho = ne_rho * Te_rho
-    pi_rho = ni_rho * Ti_rho
-    d_ne_d_s = ne(rho, dr=1) / (2 * rho)
-    d_Te_d_s = Te(rho, dr=1) / (2 * rho)
-    d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
+    # Set profiles:
+    rho = profile_data["rho"]
+    ne = profile_data["ne"]
+    Te = profile_data["Te"]
+    Ti = profile_data["Ti"]
+    # Since Zeff appears in the Redl formula via sqrt(Zeff - 1), when
+    # Zeff = 1 the gradient can sometimes evaluate to NaN. This
+    # problem is avoided by adding a tiny number here:
+    Zeff = jnp.maximum(1 + 1.0e-14, profile_data["Zeff"])
+    ni = ne / Zeff
+    pe = ne * Te
+    d_ne_d_s = profile_data["ne_r"] / (2 * rho)
+    d_Te_d_s = profile_data["Te_r"] / (2 * rho)
+    d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
 
     # Eq (18d)-(18e) in Sauter, Angioni, and Lin-Liu, Physics of Plasmas 6, 2834 (1999).
-    ln_Lambda_e = 31.3 - jnp.log(jnp.sqrt(ne_rho) / Te_rho)
-    ln_Lambda_ii = 30 - jnp.log(Zeff_rho**3 * jnp.sqrt(ni_rho) / (Ti_rho**1.5))
+    ln_Lambda_e = 31.3 - jnp.log(jnp.sqrt(ne) / Te)
+    ln_Lambda_ii = 30 - jnp.log(Zeff**3 * jnp.sqrt(ni) / (Ti**1.5))
 
     # Eq (18b)-(18c) in Sauter:
     geometry_factor = abs(R / (iota - helicity_N))
     nu_e = (
         geometry_factor
         * (6.921e-18)
-        * ne_rho
-        * Zeff_rho
+        * ne
+        * Zeff
         * ln_Lambda_e
-        / (Te_rho * Te_rho * (epsilon**1.5))
+        / (Te * Te * (epsilon**1.5))
     )
     nu_i = (
         geometry_factor
         * (4.90e-18)
-        * ni_rho
-        * (Zeff_rho**4)
+        * ni
+        * (Zeff**4)
         * ln_Lambda_ii
-        / (Ti_rho * Ti_rho * (epsilon**1.5))
+        / (Ti * Ti * (epsilon**1.5))
     )
 
     # Redl eq (11):
     X31 = f_t / (
         1
-        + (0.67 * (1 - 0.7 * f_t) * jnp.sqrt(nu_e)) / (0.56 + 0.44 * Zeff_rho)
+        + (0.67 * (1 - 0.7 * f_t) * jnp.sqrt(nu_e)) / (0.56 + 0.44 * Zeff)
         + (0.52 + 0.086 * jnp.sqrt(nu_e))
         * (1 + 0.87 * f_t)
         * nu_e
-        / (1 + 1.13 * jnp.sqrt(Zeff_rho - 1))
+        / (1 + 1.13 * jnp.sqrt(Zeff - 1))
     )
 
     # Redl eq (10):
-    Zfac = Zeff_rho**1.2 - 0.71
+    Zfac = Zeff**1.2 - 0.71
     L31 = (
         (1 + 0.15 / Zfac) * X31
         - 0.22 / Zfac * (X31**2)
@@ -210,45 +203,43 @@ def j_dot_B_Redl(
     X32e = f_t / (
         (
             1
-            + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff_rho)
+            + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
             + 0.13
             * (1 - 0.38 * f_t)
             * nu_e
-            / (Zeff_rho * Zeff_rho)
+            / (Zeff * Zeff)
             * (
-                jnp.sqrt(1 + 2 * jnp.sqrt(Zeff_rho - 1))
-                + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff_rho - 1) ** 2) * nu_e)
+                jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
+                + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
             )
         )
     )
 
     # Redl eq (13):
     F32ee = (
-        (0.1 + 0.6 * Zeff_rho)
+        (0.1 + 0.6 * Zeff)
         * (X32e - X32e**4)
-        / (Zeff_rho * (0.77 + 0.63 * (1 + (Zeff_rho - 1) ** 1.1)))
+        / (Zeff * (0.77 + 0.63 * (1 + (Zeff - 1) ** 1.1)))
         + 0.7
-        / (1 + 0.2 * Zeff_rho)
+        / (1 + 0.2 * Zeff)
         * (X32e**2 - X32e**4 - 1.2 * (X32e**3 - X32e**4))
-        + 1.3 / (1 + 0.5 * Zeff_rho) * (X32e**4)
+        + 1.3 / (1 + 0.5 * Zeff) * (X32e**4)
     )
 
     # Redl eq (16):
     X32ei = f_t / (
         1
-        + 0.87 * (1 + 0.39 * f_t) * jnp.sqrt(nu_e) / (1 + 2.95 * (Zeff_rho - 1) ** 2)
-        + 1.53 * (1 - 0.37 * f_t) * nu_e * (2 + 0.375 * (Zeff_rho - 1))
+        + 0.87 * (1 + 0.39 * f_t) * jnp.sqrt(nu_e) / (1 + 2.95 * (Zeff - 1) ** 2)
+        + 1.53 * (1 - 0.37 * f_t) * nu_e * (2 + 0.375 * (Zeff - 1))
     )
 
     # Redl eq (15):
     F32ei = (
-        -(0.4 + 1.93 * Zeff_rho)
-        / (Zeff_rho * (0.8 + 0.6 * Zeff_rho))
-        * (X32ei - X32ei**4)
+        -(0.4 + 1.93 * Zeff) / (Zeff * (0.8 + 0.6 * Zeff)) * (X32ei - X32ei**4)
         + 5.5
-        / (1.5 + 2 * Zeff_rho)
+        / (1.5 + 2 * Zeff)
         * (X32ei**2 - X32ei**4 - 0.8 * (X32ei**3 - X32ei**4))
-        - 1.3 / (1 + 0.5 * Zeff_rho) * (X32ei**4)
+        - 1.3 / (1 + 0.5 * Zeff) * (X32ei**4)
     )
 
     # Redl eq (12):
@@ -259,16 +250,16 @@ def j_dot_B_Redl(
 
     # Redl eq (20):
     alpha0 = (
-        -(0.62 + 0.055 * (Zeff_rho - 1))
+        -(0.62 + 0.055 * (Zeff - 1))
         * (1 - f_t)
         / (
-            (0.53 + 0.17 * (Zeff_rho - 1))
-            * (1 - (0.31 - 0.065 * (Zeff_rho - 1)) * f_t - 0.25 * f_t * f_t)
+            (0.53 + 0.17 * (Zeff - 1))
+            * (1 - (0.31 - 0.065 * (Zeff - 1)) * f_t - 0.25 * f_t * f_t)
         )
     )
     # Redl eq (21):
     alpha = (
-        (alpha0 + 0.7 * Zeff_rho * jnp.sqrt(f_t * nu_i)) / (1 + 0.18 * jnp.sqrt(nu_i))
+        (alpha0 + 0.7 * Zeff * jnp.sqrt(f_t * nu_i)) / (1 + 0.18 * jnp.sqrt(nu_i))
         - 0.002 * nu_i * nu_i * (f_t**6)
     ) / (1 + 0.004 * nu_i * nu_i * (f_t**6))
 
@@ -276,25 +267,26 @@ def j_dot_B_Redl(
     dnds_term = (
         -G
         * elementary_charge
-        * (ne_rho * Te_rho + ni_rho * Ti_rho)
+        * (ne * Te + ni * Ti)
         * L31
-        * (d_ne_d_s / ne_rho)
+        * (d_ne_d_s / ne)
         / (psi_edge * (iota - helicity_N))
     )
     dTeds_term = (
         -G
         * elementary_charge
-        * pe_rho
+        * pe
         * (L31 + L32)
-        * (d_Te_d_s / Te_rho)
+        * (d_Te_d_s / Te)
         / (psi_edge * (iota - helicity_N))
     )
     dTids_term = (
         -G
         * elementary_charge
-        * pi_rho
+        * ni
+        * Ti
         * (L31 + L34 * alpha)
-        * (d_Ti_d_s / Ti_rho)
+        * (d_Ti_d_s / Ti)
         / (psi_edge * (iota - helicity_N))
     )
     J_dot_B = dnds_term + dTeds_term + dTids_term
@@ -304,11 +296,11 @@ def j_dot_B_Redl(
     nu_i_star = nu_i
     variables = [
         "rho",
-        "ne_rho",
-        "ni_rho",
-        "Zeff_rho",
-        "Te_rho",
-        "Ti_rho",
+        "ne",
+        "ni",
+        "Zeff",
+        "Te",
+        "Ti",
         "d_ne_d_s",
         "d_Te_d_s",
         "d_Ti_d_s",
@@ -352,11 +344,11 @@ def j_dot_B_Redl(
             "iota",
             "G",
             "R",
-            "ne_rho",
-            "ni_rho",
-            "Zeff_rho",
-            "Te_rho",
-            "Ti_rho",
+            "ne",
+            "ni",
+            "Zeff",
+            "Te",
+            "Ti",
             "ln_Lambda_e",
             "ln_Lambda_ii",
             "nu_e_star",
@@ -387,16 +379,25 @@ def j_dot_B_Redl(
     units_long="Tesla Ampere / meter^2",
     description="Bootstrap current profile, Redl model for quasisymmetry",
     dim=1,
-    params=[],
+    params=["Psi"],
     transforms={"grid": []},
-    profiles=[
-        "electron_density",
-        "electron_temperature",
-        "ion_temperature",
-        "atomic_number",
-    ],
+    profiles=["atomic_number"],
     coordinates="r",
-    data=["trapped fraction", "G", "I", "iota", "<1/|B|>", "effective r/R0"],
+    data=[
+        "trapped fraction",
+        "G",
+        "I",
+        "iota",
+        "<1/|B|>",
+        "effective r/R0",
+        "ne",
+        "ne_r",
+        "Te",
+        "Te_r",
+        "Ti",
+        "Ti_r",
+        "Zeff",
+    ],
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     r"""Compute the bootstrap current.
@@ -414,7 +415,6 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     # quantities on a 3D grid even for quantities that are flux
     # functions.
     geom_data = {}
-    geom_data["rho"] = compress(grid, data["rho"])
     geom_data["f_t"] = compress(grid, data["trapped fraction"])
     geom_data["epsilon"] = compress(grid, data["effective r/R0"])
     geom_data["G"] = compress(grid, data["G"])
@@ -426,30 +426,26 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     ]
     geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
 
-    ne = profiles["electron_density"]
-    Te = profiles["electron_temperature"]
-    Ti = profiles["ion_temperature"]
-    Zeff = profiles["atomic_number"]
-    # The "backup" PowerSeriesProfiles that follow here are necessary
-    # for test_compute_funs.py::test_compute_everything
-    if ne is None:
-        ne = PowerSeriesProfile([1e20])
-    if Te is None:
-        Te = PowerSeriesProfile([1e3])
-    if Ti is None:
-        Ti = PowerSeriesProfile([1e3])
-    if Zeff is None:
-        Zeff = PowerSeriesProfile([1.0])
+    profile_data = {}
+    profile_data["rho"] = compress(grid, data["rho"])
+    profile_data["ne"] = compress(grid, data["ne"])
+    profile_data["ne_r"] = compress(grid, data["ne_r"])
+    profile_data["Te"] = compress(grid, data["Te"])
+    profile_data["Te_r"] = compress(grid, data["Te_r"])
+    profile_data["Ti"] = compress(grid, data["Ti"])
+    profile_data["Ti_r"] = compress(grid, data["Ti_r"])
+    if profiles["atomic_number"] is None:
+        Zeff = jnp.ones(grid.num_rho)
+    else:
+        Zeff = compress(grid, data["Zeff"])
+    profile_data["Zeff"] = Zeff
 
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
 
     j_dot_B_data = j_dot_B_Redl(
         geom_data,
-        ne,
-        Te,
-        Ti,
-        Zeff,
+        profile_data,
         helicity_N,
         plot=False,
     )

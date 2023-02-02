@@ -263,22 +263,24 @@ class TestBootstrapCompute:
         ne_rho = ne(rho)
         Te_rho = Te(rho)
         Ti_rho = Ti(rho)
-        Zeff_s = Zeff(rho)
-        ni_rho = ne_rho / Zeff_s
+        Zeff_rho = Zeff(rho)
+        ni_rho = ne_rho / Zeff_rho
         d_ne_d_s = ne(rho, dr=1) / (2 * rho)
         d_Te_d_s = Te(rho, dr=1) / (2 * rho)
         d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
 
         # Sauter eq (18d)-(18e):
         ln_Lambda_e = 31.3 - np.log(np.sqrt(ne_rho) / Te_rho)
-        ln_Lambda_ii = 30.0 - np.log((Zeff_s**3) * np.sqrt(ni_rho) / (Ti_rho**1.5))
+        ln_Lambda_ii = 30.0 - np.log(
+            (Zeff_rho**3) * np.sqrt(ni_rho) / (Ti_rho**1.5)
+        )
 
         # Sauter eq (18b)-(18c):
         nu_e = abs(
             R
             * (6.921e-18)
             * ne_rho
-            * Zeff_s
+            * Zeff_rho
             * ln_Lambda_e
             / ((iota - helicity_N) * (Te_rho**2) * (epsilon**1.5))
         )
@@ -286,7 +288,7 @@ class TestBootstrapCompute:
             R
             * (4.90e-18)
             * ni_rho
-            * (Zeff_s**4)
+            * (Zeff_rho**4)
             * ln_Lambda_ii
             / ((iota - helicity_N) * (Ti_rho**2) * (epsilon**1.5))
         )
@@ -294,15 +296,15 @@ class TestBootstrapCompute:
         # Redl eq (11):
         X31 = f_t / (
             1
-            + 0.67 * (1 - 0.7 * f_t) * np.sqrt(nu_e) / (0.56 + 0.44 * Zeff_s)
+            + 0.67 * (1 - 0.7 * f_t) * np.sqrt(nu_e) / (0.56 + 0.44 * Zeff_rho)
             + (0.52 + 0.086 * np.sqrt(nu_e))
             * (1 + 0.87 * f_t)
             * nu_e
-            / (1 + 1.13 * np.sqrt(Zeff_s - 1))
+            / (1 + 1.13 * np.sqrt(Zeff_rho - 1))
         )
 
         # Redl eq (10):
-        Zfac = Zeff_s**1.2 - 0.71
+        Zfac = Zeff_rho**1.2 - 0.71
         L31 = (
             (1 + 0.15 / Zfac) * X31
             - 0.22 / Zfac * (X31**2)
@@ -313,44 +315,47 @@ class TestBootstrapCompute:
         # Redl eq (14):
         X32e = f_t / (
             1
-            + 0.23 * (1 - 0.96 * f_t) * np.sqrt(nu_e / Zeff_s)
+            + 0.23 * (1 - 0.96 * f_t) * np.sqrt(nu_e / Zeff_rho)
             + 0.13
             * (1 - 0.38 * f_t)
             * nu_e
-            / (Zeff_s**2)
+            / (Zeff_rho**2)
             * (
-                np.sqrt(1 + 2 * np.sqrt(Zeff_s - 1))
-                + f_t * f_t * np.sqrt((0.075 + 0.25 * ((Zeff_s - 1) ** 2)) * nu_e)
+                np.sqrt(1 + 2 * np.sqrt(Zeff_rho - 1))
+                + f_t * f_t * np.sqrt((0.075 + 0.25 * ((Zeff_rho - 1) ** 2)) * nu_e)
             )
         )
 
         # Redl eq (13):
         F32ee = (
-            (0.1 + 0.6 * Zeff_s)
-            / (Zeff_s * (0.77 + 0.63 * (1 + (Zeff_s - 1) ** 1.1)))
+            (0.1 + 0.6 * Zeff_rho)
+            / (Zeff_rho * (0.77 + 0.63 * (1 + (Zeff_rho - 1) ** 1.1)))
             * (X32e - X32e**4)
             + 0.7
-            / (1 + 0.2 * Zeff_s)
+            / (1 + 0.2 * Zeff_rho)
             * (X32e**2 - X32e**4 - 1.2 * (X32e**3 - X32e**4))
-            + 1.3 / (1 + 0.5 * Zeff_s) * (X32e**4)
+            + 1.3 / (1 + 0.5 * Zeff_rho) * (X32e**4)
         )
 
         # Redl eq (16)
         X32ei = f_t / (
             1
-            + 0.87 * (1 + 0.39 * f_t) * np.sqrt(nu_e) / (1 + 2.95 * ((Zeff_s - 1) ** 2))
-            + 1.53 * (1 - 0.37 * f_t) * nu_e * (2 + 0.375 * (Zeff_s - 1))
+            + 0.87
+            * (1 + 0.39 * f_t)
+            * np.sqrt(nu_e)
+            / (1 + 2.95 * ((Zeff_rho - 1) ** 2))
+            + 1.53 * (1 - 0.37 * f_t) * nu_e * (2 + 0.375 * (Zeff_rho - 1))
         )
 
         # Redl eq (15)
         F32ei = (
-            -(0.4 + 1.93 * Zeff_s)
-            / (Zeff_s * (0.8 + 0.6 * Zeff_s))
+            -(0.4 + 1.93 * Zeff_rho)
+            / (Zeff_rho * (0.8 + 0.6 * Zeff_rho))
             * (X32ei - X32ei**4)
             + 5.5
-            / (1.5 + 2 * Zeff_s)
+            / (1.5 + 2 * Zeff_rho)
             * (X32ei**2 - X32ei**4 - 0.8 * (X32ei**3 - X32ei**4))
-            - 1.3 / (1 + 0.5 * Zeff_s) * (X32ei**4)
+            - 1.3 / (1 + 0.5 * Zeff_rho) * (X32ei**4)
         )
 
         # Redl eq (12)
@@ -358,17 +363,17 @@ class TestBootstrapCompute:
 
         # Redl eq (20):
         alpha0 = (
-            -(0.62 + 0.055 * (Zeff_s - 1))
+            -(0.62 + 0.055 * (Zeff_rho - 1))
             * (1 - f_t)
             / (
-                (0.53 + 0.17 * (Zeff_s - 1))
-                * (1 - (0.31 - 0.065 * (Zeff_s - 1)) * f_t - 0.25 * (f_t**2))
+                (0.53 + 0.17 * (Zeff_rho - 1))
+                * (1 - (0.31 - 0.065 * (Zeff_rho - 1)) * f_t - 0.25 * (f_t**2))
             )
         )
 
         # Redl eq (21):
         alpha = (
-            (alpha0 + 0.7 * Zeff_s * np.sqrt(f_t * nu_i)) / (1 + 0.18 * np.sqrt(nu_i))
+            (alpha0 + 0.7 * Zeff_rho * np.sqrt(f_t * nu_i)) / (1 + 0.18 * np.sqrt(nu_i))
             - 0.002 * (nu_i**2) * (f_t**6)
         ) / (1 + 0.004 * (nu_i**2) * (f_t**6))
 
@@ -383,7 +388,7 @@ class TestBootstrapCompute:
         pi = ni_rho * Ti_J
         p = pe + pi
         Rpe = pe / p
-        d_ni_d_s = d_ne_d_s / Zeff_s
+        d_ni_d_s = d_ne_d_s / Zeff_rho
         d_p_d_s = (
             ne_rho * d_Te_d_s_J
             + Te_J * d_ne_d_s
@@ -412,7 +417,6 @@ class TestBootstrapCompute:
         )
 
         geom_data = {
-            "rho": rho,
             "G": G,
             "R": R,
             "iota": iota,
@@ -420,7 +424,17 @@ class TestBootstrapCompute:
             "f_t": f_t,
             "psi_edge": psi_edge,
         }
-        J_dot_B_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
+        profile_data = {
+            "rho": rho,
+            "ne": ne_rho,
+            "Te": Te_rho,
+            "Ti": Ti_rho,
+            "Zeff": Zeff_rho,
+            "ne_r": ne(rho, dr=1),
+            "Te_r": Te(rho, dr=1),
+            "Ti_r": Ti(rho, dr=1),
+        }
+        J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
 
         atol = 1e-13
         rtol = 1e-13
@@ -501,7 +515,6 @@ class TestBootstrapCompute:
             # End of determining the qR profile that gives the desired nu*.
 
             geom_data = {
-                "rho": rho,
                 "G": G,
                 "R": R,
                 "iota": iota,
@@ -509,7 +522,17 @@ class TestBootstrapCompute:
                 "f_t": f_t,
                 "psi_edge": psi_edge,
             }
-            J_dot_B_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
+            profile_data = {
+                "rho": rho,
+                "ne": ne(rho),
+                "Te": Te(rho),
+                "Ti": Ti(rho),
+                "Zeff": Zeff_rho,
+                "ne_r": ne(rho, dr=1),
+                "Te_r": Te(rho, dr=1),
+                "Ti_r": Ti(rho, dr=1),
+            }
+            J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
 
             # Change False to True in the next line to plot the data for debugging.
             if False:
@@ -635,7 +658,6 @@ class TestBootstrapCompute:
                 # End of determining the qR profile that gives the desired nu*.
 
                 geom_data = {
-                    "rho": rho,
                     "G": G,
                     "R": R,
                     "iota": iota,
@@ -643,7 +665,17 @@ class TestBootstrapCompute:
                     "f_t": f_t,
                     "psi_edge": psi_edge,
                 }
-                J_dot_B_data = j_dot_B_Redl(geom_data, ne, Te, Ti, Zeff, helicity_N)
+                profile_data = {
+                    "rho": rho,
+                    "ne": ne(rho),
+                    "Te": Te(rho),
+                    "Ti": Ti(rho),
+                    "Zeff": Zeff_rho,
+                    "ne_r": ne(rho, dr=1),
+                    "Te_r": Te(rho, dr=1),
+                    "Ti_r": Ti(rho, dr=1),
+                }
+                J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
 
                 L31s[j_nu_star, :] = J_dot_B_data["L31"]
                 L32s[j_nu_star, :] = J_dot_B_data["L32"]

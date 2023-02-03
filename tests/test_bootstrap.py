@@ -1,5 +1,6 @@
 """Tests for bootstrap current functions."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 from scipy.constants import elementary_charge
@@ -35,6 +36,9 @@ from desc.objectives import (
 )
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
+
+pytest_mpl_tol = 8
+pytest_mpl_remove_text = True
 
 
 def trapped_fraction(grid, modB, sqrt_g):
@@ -124,6 +128,9 @@ class TestBootstrapCompute:
             )
 
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(
+        remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
+    )
     def test_trapped_fraction_Kim(self):
         """Analytic test for trapped fraction calculation.
 
@@ -140,6 +147,8 @@ class TestBootstrapCompute:
         epsilon_max = 0.96
 
         NFP = 3
+
+        fig = plt.figure()
 
         def test(N, grid_type):
             grid = grid_type(
@@ -217,21 +226,20 @@ class TestBootstrapCompute:
                 atol=0.001,
             )
 
-            # Use True in this "if" statement to plot extra info:
-            if False:
-                import matplotlib.pyplot as plt
-
-                plt.plot(epsilon, f_t_Kim, label="Kim")
-                plt.plot(epsilon, f_t_data["trapped fraction"], label="desc")
-                plt.plot(epsilon, f_t, ":", label="Alternative algorithm")
-                plt.xlabel("epsilon")
-                plt.ylabel("Effective trapped fraction $f_t$")
-                plt.legend(loc=0)
-                plt.show()
+            plt.plot(epsilon, f_t_Kim, "b", label="Kim")
+            plt.plot(
+                epsilon, compress(grid, f_t_data["trapped fraction"]), "r", label="desc"
+            )
+            plt.plot(epsilon, f_t, ":g", label="Alternative algorithm")
 
         for N in [0, 13]:
             for grid_type in [LinearGrid, QuadratureGrid]:
                 test(N, grid_type)
+
+        plt.xlabel("epsilon")
+        plt.ylabel("Effective trapped fraction $f_t$")
+        plt.legend(loc=0)
+        return fig
 
     @pytest.mark.unit
     def test_Redl_second_pass(self):
@@ -466,13 +474,21 @@ class TestBootstrapCompute:
         )
 
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(
+        remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
+    )
     def test_Redl_figures_2_3(self):
         """Recreate plots to verify correctness.
 
         Make sure the implementation here can roughly recover the plots
         from figures 2 and 3 in the Redl paper.
         """
-        for Zeff in [1, 1.8]:
+        fig = plt.figure(figsize=(7, 8))
+        nrows = 3
+        ncols = 2
+        xlim = [-0.05, 1.05]
+
+        for j_Zeff, Zeff in enumerate([1, 1.8]):
             target_nu_e_star = 4.0e-5
             target_nu_i_star = 1.0e-5
             # Make up some profiles
@@ -534,50 +550,6 @@ class TestBootstrapCompute:
             }
             J_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
 
-            # Change False to True in the next line to plot the data for debugging.
-            if False:
-                # Make a plot, matching the axis ranges of Redl's
-                # figures 2 and 3 as best as possible.
-                import matplotlib.pyplot as plt
-
-                plt.figure(figsize=(6.5, 5.5))
-                nrows = 2
-                ncols = 2
-                xlim = [-0.05, 1.05]
-
-                plt.subplot(nrows, ncols, 1)
-                plt.semilogy(f_t, J_dot_B_data["nu_e_star"], label=r"$\nu_{e*}$")
-                plt.semilogy(f_t, J_dot_B_data["nu_i_star"], label=r"$\nu_{i*}$")
-                plt.xlabel("f_t")
-                plt.legend(loc=0, fontsize=8)
-
-                plt.subplot(nrows, ncols, 2)
-                plt.plot(f_t, J_dot_B_data["L31"], "g")
-                plt.title("L31")
-                plt.xlabel("f_t")
-                plt.xlim(xlim)
-                plt.ylim(-0.05, 1.05)
-
-                plt.subplot(nrows, ncols, 3)
-                plt.plot(f_t, J_dot_B_data["L32"], "g")
-                plt.title("L32")
-                plt.xlabel("f_t")
-                plt.xlim(xlim)
-                if Zeff == 1:
-                    plt.ylim(-0.25, 0.025)
-                else:
-                    plt.ylim(-0.2, 0.05)
-
-                plt.subplot(nrows, ncols, 4)
-                plt.plot(f_t, J_dot_B_data["alpha"], "g")
-                plt.title("alpha")
-                plt.xlabel("f_t")
-                plt.xlim(xlim)
-                plt.ylim(-1.25, 0.04)
-
-                plt.tight_layout()
-                plt.show()
-
             # Make sure L31, L32, and alpha are within the right range:
             np.testing.assert_array_less(J_dot_B_data["L31"], 1.05)
             np.testing.assert_array_less(0, J_dot_B_data["L31"])
@@ -599,14 +571,52 @@ class TestBootstrapCompute:
                 assert J_dot_B_data["alpha"][0] < -0.9
             assert J_dot_B_data["alpha"][-1] > -0.1
 
+            # Make a plot, matching the axis ranges of Redl's
+            # figures 2 and 3 as best as possible.
+            Zeff_str = f" for Zeff = {Zeff}"
+
+            plt.subplot(nrows, ncols, 1 + j_Zeff)
+            plt.plot(f_t, J_dot_B_data["L31"], "g")
+            plt.title("L31" + Zeff_str)
+            plt.xlabel("f_t")
+            plt.xlim(xlim)
+            plt.ylim(-0.05, 1.05)
+
+            plt.subplot(nrows, ncols, 3 + j_Zeff)
+            plt.plot(f_t, J_dot_B_data["L32"], "g")
+            plt.title("L32" + Zeff_str)
+            plt.xlabel("f_t")
+            plt.xlim(xlim)
+            if Zeff == 1:
+                plt.ylim(-0.25, 0.025)
+            else:
+                plt.ylim(-0.2, 0.05)
+
+            plt.subplot(nrows, ncols, 5 + j_Zeff)
+            plt.plot(f_t, J_dot_B_data["alpha"], "g")
+            plt.title("alpha" + Zeff_str)
+            plt.xlabel("f_t")
+            plt.xlim(xlim)
+            plt.ylim(-1.25, 0.04)
+
+        return fig
+
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(
+        remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
+    )
     def test_Redl_figures_4_5(self):
         """Recreate plots to verify correctness.
 
         Make sure the implementation here can roughly recover the plots
         from figures 4 and 5 in the Redl paper.
         """
-        for Zeff in [1, 1.8]:
+        fig = plt.figure(figsize=(7, 8))
+        nrows = 3
+        ncols = 2
+        xlim = [3.0e-5, 1.5e4]
+
+        for j_Zeff, Zeff in enumerate([1, 1.8]):
             n_nu_star = 30
             n_f_t = 3
             target_nu_stars = 10.0 ** np.linspace(-4, 4, n_nu_star)
@@ -689,55 +699,44 @@ class TestBootstrapCompute:
                     J_dot_B_data["nu_i_star"], target_nu_i_star, rtol=0.2
                 )
 
-            # Change False to True in the next line to plot the data for debugging.
-            if False:
-                # Make a plot, matching the axis ranges of Redl's
-                # figures 4 and 5 as best as possible.
-                import matplotlib.pyplot as plt
+            # Make a plot, matching the axis ranges of Redl's
+            # figures 4 and 5 as best as possible.
 
-                plt.figure(figsize=(6.5, 5.5))
-                nrows = 2
-                ncols = 2
-                xlim = [3.0e-5, 1.5e4]
+            plt.subplot(nrows, ncols, 1 + j_Zeff)
+            for j in range(n_f_t):
+                plt.semilogx(nu_e_stars[:, j], L31s[:, j], label=f"f_t={f_ts[j]}")
+            plt.legend(loc=0, fontsize=8)
+            plt.title(f"L31, Zeff={Zeff}")
+            plt.xlabel("nu_{*e}")
+            plt.xlim(xlim)
+            if Zeff == 1:
+                plt.ylim(-0.05, 0.85)
+            else:
+                plt.ylim(-0.05, 0.75)
 
-                plt.subplot(nrows, ncols, 2)
-                for j in range(n_f_t):
-                    plt.semilogx(nu_e_stars[:, j], L31s[:, j], label=f"f_t={f_ts[j]}")
-                plt.legend(loc=0, fontsize=8)
-                plt.title(f"L31, Zeff={Zeff}")
-                plt.xlabel("nu_{*e}")
-                plt.xlim(xlim)
-                if Zeff == 1:
-                    plt.ylim(-0.05, 0.85)
-                else:
-                    plt.ylim(-0.05, 0.75)
+            plt.subplot(nrows, ncols, 3 + j_Zeff)
+            for j in range(n_f_t):
+                plt.semilogx(nu_e_stars[:, j], L32s[:, j], label=f"f_t={f_ts[j]}")
+            plt.legend(loc=0, fontsize=8)
+            plt.title(f"L32, Zeff={Zeff}")
+            plt.xlabel("nu_{*e}")
+            plt.xlim(xlim)
+            if Zeff == 1:
+                plt.ylim(-0.26, 0.21)
+            else:
+                plt.ylim(-0.18, 0.2)
 
-                plt.subplot(nrows, ncols, 3)
-                for j in range(n_f_t):
-                    plt.semilogx(nu_e_stars[:, j], L32s[:, j], label=f"f_t={f_ts[j]}")
-                plt.legend(loc=0, fontsize=8)
-                plt.title(f"L32, Zeff={Zeff}")
-                plt.xlabel("nu_{*e}")
-                plt.xlim(xlim)
-                if Zeff == 1:
-                    plt.ylim(-0.26, 0.21)
-                else:
-                    plt.ylim(-0.18, 0.2)
-
-                plt.subplot(nrows, ncols, 4)
-                for j in range(n_f_t):
-                    plt.semilogx(nu_i_stars[:, j], alphas[:, j], label=f"f_t={f_ts[j]}")
-                plt.legend(loc=0, fontsize=8)
-                plt.title(f"alpha, Zeff={Zeff}")
-                plt.xlabel("nu_{*i}")
-                plt.xlim(xlim)
-                if Zeff == 1:
-                    plt.ylim(-1.1, 2.2)
-                else:
-                    plt.ylim(-1.1, 2.35)
-
-                plt.tight_layout()
-                plt.show()
+            plt.subplot(nrows, ncols, 5 + j_Zeff)
+            for j in range(n_f_t):
+                plt.semilogx(nu_i_stars[:, j], alphas[:, j], label=f"f_t={f_ts[j]}")
+            plt.legend(loc=0, fontsize=8)
+            plt.title(f"alpha, Zeff={Zeff}")
+            plt.xlabel("nu_{*i}")
+            plt.xlim(xlim)
+            if Zeff == 1:
+                plt.ylim(-1.1, 2.2)
+            else:
+                plt.ylim(-1.1, 2.35)
 
             # Make sure L31, L32, and alpha are within the right range:
             if Zeff == 1:
@@ -779,13 +778,19 @@ class TestBootstrapCompute:
                 np.testing.assert_array_less(L31s[0, 2], 0.66)
                 assert L31s[0, 2] > 0.63
 
+        return fig
+
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(
+        remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
+    )
     def test_Redl_sfincs_tokamak_benchmark(self):
         """Compare the Redl <J*B> to a SFINCS calculation for a model tokamak.
 
         The SFINCS calculation is on Matt Landreman's laptop in
         /Users/mattland/Box/work21/20211225-01-sfincs_tokamak_bootstrap_for_Redl_benchmark
         """
+        fig = plt.figure()
         s_surfaces = np.linspace(0.01, 0.99, 99)
         rho = np.sqrt(s_surfaces)
         helicity = (1, 0)
@@ -910,23 +915,21 @@ class TestBootstrapCompute:
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
-        # Use True in this "if" statement to plot the bootstrap
-        # current profiles:
-        if False:
-            import matplotlib.pyplot as plt
-
-            plt.plot(rho, J_dot_B_Redl, "+-", label="Redl")
-            plt.plot(rho, J_dot_B_sfincs, ".-", label="sfincs")
-            plt.xlabel("rho")
-            plt.title("<J*B> [T A / m^2]")
-            plt.legend(loc=0)
-            plt.show()
-
         # The relative error is a bit larger at the boundary, where the
         # absolute magnitude is quite small, so drop those points.
         np.testing.assert_allclose(J_dot_B_Redl[:-5], J_dot_B_sfincs[:-5], rtol=0.1)
 
+        plt.plot(rho, J_dot_B_Redl, "+-", label="Redl")
+        plt.plot(rho, J_dot_B_sfincs, ".-", label="sfincs")
+        plt.xlabel("rho")
+        plt.title("<J*B> [T A / m^2]")
+        plt.legend(loc=0)
+        return fig
+
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(
+        remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
+    )
     def test_Redl_sfincs_QA(self):
         """Compare the Redl <J*B> to a SFINCS calculation for reactor-scale QA.
 
@@ -938,6 +941,7 @@ class TestBootstrapCompute:
         /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226
         -01-012_QA_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
         """
+        fig = plt.figure()
         helicity = (1, 0)
         filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
@@ -1002,24 +1006,23 @@ class TestBootstrapCompute:
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
-        # Use True in this "if" statement to plot the bootstrap
-        # current profiles, reproducing figure 1.a of Landreman Buller
-        # Drevlak, Physics of Plasmas 29, 082501 (2022)
-        # https://doi.org/10.1063/5.0098166
-        if False:
-            import matplotlib.pyplot as plt
-
-            plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
-            plt.plot(rho**2, J_dot_B_sfincs, ".-", label="sfincs")
-            plt.legend(loc=0)
-            plt.xlabel(r"$\rho^2 = s$")
-            plt.ylabel("<J*B> [T A / m^2]")
-            plt.xlim([0, 1])
-            plt.show()
-
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
 
+        # This plot below reproduces figure 1.a of Landreman Buller
+        # Drevlak, Physics of Plasmas 29, 082501 (2022)
+        # https://doi.org/10.1063/5.0098166
+        plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
+        plt.plot(rho**2, J_dot_B_sfincs, ".-r", label="sfincs")
+        plt.legend(loc=0)
+        plt.xlabel(r"$\rho^2 = s$")
+        plt.ylabel("<J*B> [T A / m^2]")
+        plt.xlim([0, 1])
+        return fig
+
     @pytest.mark.unit
+    @pytest.mark.mpl_image_compare(
+        remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
+    )
     def test_Redl_sfincs_QH(self):
         """Compare the Redl <J*B> to a SFINCS calculation for a reactor-scale QH.
 
@@ -1031,6 +1034,7 @@ class TestBootstrapCompute:
         /ptmp/mlan/20211226-01-sfincs_for_precise_QS_for_Redl_benchmark/20211226
         -01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
         """
+        fig = plt.figure()
         helicity = (1, -4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
@@ -1096,22 +1100,18 @@ class TestBootstrapCompute:
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
-        # Use True in this "if" statement to plot the bootstrap
-        # current profiles, reproducing figure 1.b of Landreman Buller
+        np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
+
+        # The plot below reproduces figure 1.b of Landreman Buller
         # Drevlak, Physics of Plasmas 29, 082501 (2022)
         # https://doi.org/10.1063/5.0098166
-        if False:
-            import matplotlib.pyplot as plt
-
-            plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
-            plt.plot(rho**2, J_dot_B_sfincs, ".-", label="sfincs")
-            plt.legend(loc=0)
-            plt.xlabel(r"$\rho^2 = s$")
-            plt.ylabel("<J*B> [T A / m^2]")
-            plt.xlim([0, 1])
-            plt.show()
-
-        np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
+        plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
+        plt.plot(rho**2, J_dot_B_sfincs, ".-r", label="sfincs")
+        plt.legend(loc=0)
+        plt.xlabel(r"$\rho^2 = s$")
+        plt.ylabel("<J*B> [T A / m^2]")
+        plt.xlim([0, 1])
+        return fig
 
 
 class TestBootstrapObjectives:
@@ -1196,23 +1196,6 @@ class TestBootstrapObjectives:
             1.1e3 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
         )
         eq.atomic_number = 1.4
-
-        # Set to True to plot the profiles of <J*B>
-        if False:
-            grid = LinearGrid(L=eq.L, M=eq.M, N=0, axis=False)
-            data = eq.compute(
-                ["<J*B>", "<J*B> Redl", "rho"],
-                grid=grid,
-                helicity=helicity,
-            )
-            import matplotlib.pyplot as plt
-
-            plt.plot(data["rho"], data["<J*B>"], label="MHD")
-            plt.plot(data["rho"], data["<J*B> Redl"], label="Redl")
-            plt.xlabel("rho")
-            plt.title("<J*B>")
-            plt.legend(loc=0)
-            plt.show()
 
         def test(grid_type, kwargs, L, M, N):
             grid = grid_type(

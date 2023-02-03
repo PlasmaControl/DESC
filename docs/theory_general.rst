@@ -26,7 +26,7 @@ The computational domain is the curvilinear coordinate system :math:`(\rho, \the
 These curvilinear coordinates are related to the straight field-line coordinates :math:`(\rho, \vartheta, \zeta)` through the stream function :math:`\lambda(\rho,\theta,\zeta)`.
 [Note: the original publication used :math:`\zeta=-\phi` and used :math:`\vartheta` in the computational domain instead of introducing :math:`\lambda` on all flux surfaces.]
 This particular choice of flux coordinates is also used by the PEST code, and should not be confused with other choices such as Boozer or Hamada coordinates.
-The flux surface label :math:`\rho` is chosen to be the square root of the normalized toroidal flux, which is proportional to the minor radius.
+The flux surface label :math:`\rho` is chosen to be the square root of the normalized toroidal flux :math:`\psi_N`, which is proportional to the minor radius.
 This is different from the default radial coordinate in VMEC of the normalized toroidal flux.
 
 .. image:: _static/images/coordinates.png
@@ -45,8 +45,13 @@ DESC solves for the map between the cylindrical and flux coordinate systems thro
 .. math::
   R(\rho, \theta, \zeta) \\ \\ Z(\rho, \theta, \zeta) \\ \\ \lambda(\rho, \theta, \zeta)
 
-It assumes the flux functions for the pressure :math:`p(\rho)` and rotational transform :math:`\iota(\rho)` profiles are given, in addition to the total toroidal flux through the plasma volume :math:`\psi_a`.
+It assumes the flux functions for the pressure profile :math:`p(\rho)` and either the rotational transform :math:`\iota(\rho)` or toroidal current :math:`I(\rho)` profile are given.
+Additionally, it needs the total toroidal magnetic flux through the plasma volume :math:`\Psi_a`, where :math:`\psi_N = \frac{\Psi}{\Psi_a}` and :math:`\psi = \frac{\Psi}{2\pi}`.
 The shape of the last closed flux surface :math:`R^b(\theta,\phi)`, :math:`Z^b(\theta,\phi)` is also required to specify the fixed-boundary.
+
+The poloidal angle :math:`\theta` increases clockwise so that the curvilinear coordinate system is always right-handed (:math:`\sqrt{g} > 0`).
+If boundary conditions are input with the opposite convention, DESC will internally flip the orientation to ensure a positive Jacobian.
+[Note: older versions of the code did not check the input orientation and allowed solutions with a negative Jacobian.]
 
 Magnetic Field & Current Density
 ********************************

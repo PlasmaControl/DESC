@@ -141,6 +141,11 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # remove deltas that are zero
     deltas = {key: val for key, val in deltas.items() if np.any(val)}
 
+    # make sure things are at least 1D for np.concatenate later
+    # in case only a single delta is being passed
+    for key in deltas.keys():
+        deltas[key] = np.atleast_1d(deltas[key])
+
     if not objective.built:
         objective.build(eq, verbose=verbose)
     for constraint in constraints:

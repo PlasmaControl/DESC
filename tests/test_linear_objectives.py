@@ -143,6 +143,7 @@ def test_factorize_linear_constraints_asserts():
     constraints[3].bounds = (0, 1)  # bounds on FixPsi
 
     from desc.objectives.utils import factorize_linear_constraints
+
     with pytest.raises(ValueError):
         xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             constraints, arg_order

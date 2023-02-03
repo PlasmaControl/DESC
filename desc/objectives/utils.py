@@ -174,6 +174,8 @@ def factorize_linear_constraints(constraints, objective_args):
     for obj in constraints:
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
+        if obj.bounds is not None:
+            raise ValueError("Linear constraints must use target instead of bounds.")
         arg = obj.args[0]
         if arg not in objective_args:
             continue
@@ -185,7 +187,7 @@ def factorize_linear_constraints(constraints, objective_args):
             unfixed_args.append(arg)
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute(jnp.zeros(obj.dimensions[arg]))
+            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
             else:
@@ -228,7 +230,7 @@ def factorize_linear_constraints(constraints, objective_args):
         arg = con.args[0]
         if arg not in objective_args:
             continue
-        res = con.compute(**xp_dict)
+        res = con.compute_scaled(**xp_dict)
         x = xp_dict[arg]
         # stuff like density is O(1e19) so need some adjustable tolerance here.
         atol = max(1e-8, np.finfo(x).eps * np.linalg.norm(x) / x.size)

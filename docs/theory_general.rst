@@ -46,7 +46,7 @@ DESC solves for the map between the cylindrical and flux coordinate systems thro
   R(\rho, \theta, \zeta) \\ \\ Z(\rho, \theta, \zeta) \\ \\ \lambda(\rho, \theta, \zeta)
 
 It assumes the flux functions for the pressure profile :math:`p(\rho)` and either the rotational transform :math:`\iota(\rho)` or toroidal current :math:`I(\rho)` profile are given.
-Additionally, it needs the total toroidal magnetic flux through the plasma volume :math:`\Psi_a`, where :math:`\psi_N = \frac{\Psi}{2\pi\Psi_a}`.
+Additionally, it needs the total toroidal magnetic flux through the plasma volume :math:`\Psi_a`, where :math:`\psi_N = \frac{\Psi}{\Psi_a}` and :math:`\psi = \frac{\Psi}{2\pi}`.
 The shape of the last closed flux surface :math:`R^b(\theta,\phi)`, :math:`Z^b(\theta,\phi)` is also required to specify the fixed-boundary.
 
 The poloidal angle :math:`\theta` increases clockwise so that the curvilinear coordinate system is always right-handed (:math:`\sqrt{g} > 0`).

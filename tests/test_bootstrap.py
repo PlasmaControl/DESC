@@ -803,7 +803,11 @@ class TestBootstrapCompute:
             8e3 * np.array([1, -1]), modes=[0, 2]
         )
         eq.ion_temperature = PowerSeriesProfile(8e3 * np.array([1, -1]), modes=[0, 2])
-        J_dot_B_sfincs = np.array(
+        # Flip sign of sfincs data, since it was computed for a
+        # configuration with iota>0 in vmec's left-handed coordinate
+        # system, whereas here we use a config with iota>0 in desc's
+        # right-handed system.
+        J_dot_B_sfincs = -np.array(
             [
                 -577720.30718026,
                 -737097.14851563,
@@ -1035,7 +1039,7 @@ class TestBootstrapCompute:
         -01-019_QH_Ntheta25_Nzeta39_Nxi60_Nx7_manySurfaces
         """
         fig = plt.figure()
-        helicity = (1, -4)
+        helicity = (1, 4)
         filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
         eq = desc.io.load(filename)
         eq.electron_density = PowerSeriesProfile(

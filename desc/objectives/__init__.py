@@ -13,6 +13,7 @@ from ._geometry import (
     AspectRatio,
     Elongation,
     MeanCurvature,
+    PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
 )

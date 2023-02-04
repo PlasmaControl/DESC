@@ -37,7 +37,7 @@ from desc.objectives import (
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
-pytest_mpl_tol = 8
+pytest_mpl_tol = 7.8
 pytest_mpl_remove_text = True
 
 

@@ -215,9 +215,7 @@ class BootstrapRedlConsistency(_Objective):
             (data["<J*B>"] + data["<J*B> Redl"]) ** 2 * self.grid.weights
         ) / (4 * jnp.pi * jnp.pi)
 
-        residuals = compress(
+        return compress(
             self.grid,
             (data["<J*B>"] - data["<J*B> Redl"]),
         ) * jnp.sqrt(rho_weights / denominator)
-
-        return self._shift_scale(residuals)

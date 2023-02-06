@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -21,6 +22,7 @@ from desc.objectives import (
     FixPressure,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -129,6 +131,23 @@ def test_constrain_asserts():
         eqi.solve(constraints=(FixCurrent(), FixIota()))
     with pytest.raises(ValueError):
         eqi.solve(constraints=(FixPressure(target=2), FixPressure(target=1)))
+
+
+@pytest.mark.unit
+def test_factorize_linear_constraints_asserts():
+    """Test error checking for factorize_linear_constraints."""
+    eq = Equilibrium()
+    constraints = get_fixed_boundary_constraints(iota=False)
+    for con in constraints:
+        con.build(eq, verbose=0)
+    constraints[3].bounds = (0, 1)  # bounds on FixPsi
+
+    from desc.objectives.utils import factorize_linear_constraints
+
+    with pytest.raises(ValueError):
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, arg_order
+        )
 
 
 @pytest.mark.unit

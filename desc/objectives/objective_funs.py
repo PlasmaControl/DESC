@@ -204,7 +204,7 @@ class ObjectiveFunction(IOAble):
         kwargs = self.unpack_state(x)
         f = jnp.concatenate(
             [
-                obj.compute(*self._kwargs_to_args(kwargs, obj.args))
+                obj.compute_scaled(*self._kwargs_to_args(kwargs, obj.args))
                 for obj in self.objectives
             ]
         )
@@ -447,12 +447,21 @@ class _Objective(IOAble, ABC):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray
-        Target value(s) of the objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     name : str
         Name of the objective function.
 
@@ -472,16 +481,19 @@ class _Objective(IOAble, ABC):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         name=None,
     ):
 
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
+        assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         self._target = target
+        self._bounds = bounds
         self._weight = weight
         self._normalize = normalize
         self._normalize_target = normalize_target
@@ -511,7 +523,7 @@ class _Objective(IOAble, ABC):
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
                 self._derivatives["jac"][arg] = Derivative(
-                    self.compute,
+                    self.compute_scaled,
                     argnum=self.args.index(arg),
                     mode="fwd",
                 )
@@ -540,9 +552,9 @@ class _Objective(IOAble, ABC):
         """Apply JIT to compute methods, or re-apply after updating self."""
         # doing str name type checking to avoid importing weird jax private stuff
         # for proper isinstance check
-        if "CompiledFunction" in str(type(self.compute)):
-            del self.compute
-        self.compute = jit(self.compute)
+        if "CompiledFunction" in str(type(self.compute_scaled)):
+            del self.compute_scaled
+        self.compute_scaled = jit(self.compute_scaled)
         if "CompiledFunction" in str(type(self.compute_scalar)):
             del self.compute_scalar
         self.compute_scalar = jit(self.compute_scalar)
@@ -553,11 +565,20 @@ class _Objective(IOAble, ABC):
                 self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
 
     def _check_dimensions(self):
-        """Check that len(target) = len(weight) = dim_f."""
-        self._target = np.asarray(self._target)
+        """Check that len(target) = len(bounds) = len(weight) = dim_f."""
+        if self.bounds is not None:  # must be a tuple of length 2
+            self._bounds = tuple([np.asarray(bound) for bound in self._bounds])
+            for bound in self.bounds:
+                if not is_broadcastable((self.dim_f,), bound.shape):
+                    raise ValueError("len(bounds) != dim_f")
+            if np.any(self.bounds[1] - self.bounds[0] < 0):
+                raise ValueError("bounds must be: (lower bound, upper bound)")
+        else:  # target only gets used if bounds is None
+            self._target = np.asarray(self._target)
+            if not is_broadcastable((self.dim_f,), self.target.shape):
+                raise ValueError("len(target) != dim_f")
+
         self._weight = np.asarray(self._weight)
-        if not is_broadcastable((self.dim_f,), self.target.shape):
-            raise ValueError("len(target) != dim_f")
         if not is_broadcastable((self.dim_f,), self.weight.shape):
             raise ValueError("len(weight) != dim_f")
 
@@ -590,37 +611,51 @@ class _Objective(IOAble, ABC):
     def compute(self, *args, **kwargs):
         """Compute the objective function."""
 
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        f = self.compute(*args, **kwargs)
+        f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
+
+        if self.bounds is not None:  # using lower/upper bounds instead of target
+            if self._normalize_target:
+                bounds = tuple([bound / self.normalization for bound in self.bounds])
+            else:
+                bounds = self.bounds
+            f_target = jnp.where(  # where f is within target bounds, return 0 error
+                jnp.logical_and(f_norm >= bounds[0], f_norm <= bounds[1]),
+                jnp.zeros_like(f_norm),
+                jnp.where(  # otherwise return error = f - bound
+                    jnp.abs(f_norm - bounds[0]) < jnp.abs(f_norm - bounds[1]),
+                    f_norm - bounds[0],  # errors below lower bound are negative
+                    f_norm - bounds[1],  # errors above upper bound are positive
+                ),
+            )
+        else:  # using target instead of lower/upper bounds
+            if self._normalize_target:
+                target = self.target / self.normalization
+            else:
+                target = self.target
+            f_target = f_norm - target
+
+        return f_target * self.weight  # weighting
+
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
-            f = self.compute(*args, **kwargs)
+            f = self.compute_scaled(*args, **kwargs)
         else:
-            f = jnp.sum(self.compute(*args, **kwargs) ** 2) / 2
+            f = jnp.sum(self.compute_scaled(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(self.compute(*args, **kwargs))
-        print(self._print_value_fmt.format(jnp.linalg.norm(x)) + self._units)
+        f = self.compute(*args, **kwargs)
+        print(self._print_value_fmt.format(jnp.linalg.norm(f)) + self._units)
         if self._normalize:
             print(
-                self._print_value_fmt.format(jnp.linalg.norm(x / self.normalization))
+                self._print_value_fmt.format(jnp.linalg.norm(f / self.normalization))
                 + "(normalized)"
             )
-
-    def _shift_scale(self, x):
-        """Apply target and weighting."""
-        target = (
-            self.target / self.normalization if self._normalize_target else self.target
-        )
-        return (jnp.atleast_1d(x) / self.normalization - target) * self.weight
-
-    def _unshift_unscale(self, x):
-        """Undo target and weighting."""
-        target = (
-            self.target / self.normalization if self._normalize_target else self.target
-        )
-        return (x / self.weight + target) * self.normalization
 
     def xs(self, eq):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
@@ -652,6 +687,17 @@ class _Objective(IOAble, ABC):
     @target.setter
     def target(self, target):
         self._target = np.atleast_1d(target)
+        self._check_dimensions()
+
+    @property
+    def bounds(self):
+        """tuple: Lower and upper bounds of the objective."""
+        return self._bounds
+
+    @bounds.setter
+    def bounds(self, bounds):
+        assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
+        self._bounds = bounds
         self._check_dimensions()
 
     @property

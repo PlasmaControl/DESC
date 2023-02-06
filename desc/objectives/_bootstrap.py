@@ -11,38 +11,16 @@ from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
+from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
 
 class BootstrapRedlConsistency(_Objective):
-    r"""Promote consistency of the bootstrap current for axisymmetry or quasisymmetry.
+    """Promote consistency of the bootstrap current for axisymmetry or quasisymmetry.
 
-    The scalar objective is defined as in eq (15) of
-    Landreman, Buller, & Drevlak, Physics of Plasmas 29, 082501 (2022)
-    https://doi.org/10.1063/5.0098166
-    except with an integral in rho instead of s = rho**2, and with a factor of
-    1/2 for consistency with desc conventions.
-
-    f_{boot} = numerator / denominator
-
-    where
-
-    numerator = (1/2) \int_0^1 d\rho [<J \cdot B>_{MHD} - <J \cdot B>_{Redl}]^2
-
-    denominator = \int_0^1 d\rho [<J \cdot B>_{MHD} + <J \cdot B>_{Redl}]^2
-
-    <J \cdot B>_{MHD} is the parallel current profile of the MHD equilibrium, and
-
-    <J \cdot B>_{Redl} is the parallel current profile from drift-kinetic physics
-
-    The denominator serves as a normalization so f_{boot} is dimensionless, and
-    f_{boot} = 1/2 when either <J \cdot B>_{MHD} or <J \cdot B>_{Redl} vanishes. Note
-    that the scalar objective is approximately independent of grid resolution.
-
-    The objective is treated as a sum of Nr least-squares terms, where Nr is the number
-    of rho grid points. In other words, the contribution to the numerator from each rho
-    grid point is returned as a separate entry in the returned vector of residuals,
-    each weighted by the square root of the denominator.
+    This objective function penalizes the difference between the MHD
+    and neoclassical profiles of parallel current, using the Redl
+    formula for the boostrap current.
 
     Parameters
     ----------
@@ -64,21 +42,19 @@ class BootstrapRedlConsistency(_Objective):
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: Has no effect for this objective.
     normalize_target : bool
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
-        this should also be set to True. Note: Has no effect for this objective.
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
-
     """
 
     _scalar = False
     _linear = False
-    _units = "(dimensionless)"
+    _units = "(T A m^{-2})"
     _print_value_fmt = "Bootstrap current self-consistency: {:10.3e} "
 
     def __init__(
@@ -88,8 +64,8 @@ class BootstrapRedlConsistency(_Objective):
         target=0,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="Bootstrap current self-consistency (Redl)",
     ):
@@ -190,6 +166,10 @@ class BootstrapRedlConsistency(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["J"] / jnp.sqrt(self._dim_f)
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -213,13 +193,11 @@ class BootstrapRedlConsistency(_Objective):
             **extra_kwargs,
         )
 
-        rho_weights = compress(self.grid, self.grid.spacing[:, 0])
-
-        denominator = jnp.sum(
-            (data["<J*B>"] + data["<J*B> Redl"]) ** 2 * self.grid.weights
-        ) / (4 * jnp.pi * jnp.pi)
-
         return compress(
-            self.grid,
-            (data["<J*B>"] - data["<J*B> Redl"]),
-        ) * jnp.sqrt(rho_weights / denominator)
+            self.grid, data["<J*B>"] - data["<J*B> Redl"], surface_label="rho"
+        )
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return super().compute_scaled(*args, **kwargs) * w

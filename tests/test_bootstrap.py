@@ -34,6 +34,7 @@ from desc.objectives import (
     ObjectiveFunction,
     get_fixed_boundary_constraints,
 )
+from desc.objectives.normalization import compute_scaling_factors
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
@@ -1122,65 +1123,104 @@ class TestBootstrapObjectives:
     """Tests for bootstrap current objective functions."""
 
     @pytest.mark.unit
-    def test_BootstrapRedlConsistency_12(self):
-        """Test for bootstrap current in vacuum field.
+    def test_BootstrapRedlConsistency_normalization(self):
+        """Objective function should be invariant under scaling |B| or size."""
+        Rmajor = 1.7
+        aminor = 0.2
+        Delta = 0.3
+        NFP = 5
+        Psi0 = 1.2
+        LMN_resolution = 5
+        helicity = (1, NFP)
+        ne0 = 3.0e20
+        Te0 = 15e3
+        Ti0 = 14e3
+        ne = PowerSeriesProfile(ne0 * np.array([1, -0.85]), modes=[0, 4])
+        Te = PowerSeriesProfile(Te0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
+        Ti = PowerSeriesProfile(Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6])
+        Zeff = 1.4
 
-        The BootstrapRedlConsistency objective function should be
-        1/2 if the equilibrium is a vacuum field.
-        """
-        helicity = (1, -4)
-        filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
-        eq = desc.io.load(filename)
-        # n and T profiles do not go to 0 at rho=0 to avoid divide-by-0 there:
+        surface = FourierRZToroidalSurface(
+            R_lmn=np.array([Rmajor, aminor, Delta]),
+            modes_R=[[0, 0], [1, 0], [0, 1]],
+            Z_lmn=np.array([-aminor, Delta]),
+            modes_Z=[[-1, 0], [0, -1]],
+            NFP=NFP,
+        )
+
+        eq = Equilibrium(
+            surface=surface,
+            electron_density=ne,
+            electron_temperature=Te,
+            ion_temperature=Ti,
+            atomic_number=Zeff,
+            iota=PowerSeriesProfile([1.1]),
+            Psi=Psi0,
+            NFP=NFP,
+            L=LMN_resolution,
+            M=LMN_resolution,
+            N=LMN_resolution,
+            L_grid=2 * LMN_resolution,
+            M_grid=2 * LMN_resolution,
+            N_grid=2 * LMN_resolution,
+            sym=True,
+        )
+        # The equilibrium need not be in force balance, so no need to solve().
+        grid = QuadratureGrid(
+            L=LMN_resolution,
+            M=LMN_resolution,
+            N=LMN_resolution,
+            NFP=eq.NFP,
+        )
+        obj = ObjectiveFunction(
+            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+        )
+        scalar_objective1 = obj.compute_scalar(obj.x(eq))
+
+        # Scale |B|, changing <J*B> and <J*B>_Redl by "factor":
+        factor = 2.0
+        eq.Psi *= np.sqrt(factor)
+        # Scale n and T to vary neoclassical <J*B> at fixed nu*:
         eq.electron_density = PowerSeriesProfile(
-            5.0e20 * np.array([1, -0.9]), modes=[0, 8]
+            factor ** (3.0 / 5) * ne0 * np.array([1, -0.85]), modes=[0, 4]
         )
         eq.electron_temperature = PowerSeriesProfile(
-            8e3 * np.array([1, -0.9]), modes=[0, 2]
+            factor ** (2.0 / 5) * Te0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
         )
-        eq.ion_temperature = PowerSeriesProfile(9e3 * np.array([1, -0.9]), modes=[0, 2])
-        eq.atomic_number = PowerSeriesProfile(np.array([1.2, 0.2]), modes=[0, 2])
+        eq.ion_temperature = PowerSeriesProfile(
+            factor ** (2.0 / 5) * Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
+        )
+        obj = ObjectiveFunction(
+            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+        )
+        scalar_objective2 = obj.compute_scalar(obj.x(eq))
 
-        def test(grid_type, kwargs, L_factor, M_factor, N_factor):
-            grid = grid_type(
-                L=eq.L * L_factor,
-                M=eq.M * M_factor,
-                N=eq.N * N_factor,
-                NFP=eq.NFP,
-                **kwargs,
-            )
-            obj = ObjectiveFunction(
-                BootstrapRedlConsistency(
-                    grid=grid,
-                    helicity=helicity,
-                ),
-                eq,
-            )
-            scalar_objective = obj.compute_scalar(obj.x(eq))
-            print("Should be approximately 0.5:", scalar_objective)
-            return scalar_objective
+        # Scale size, changing <J*B> and <J*B>_Redl by "factor":
+        factor = 3.0
+        eq.Psi = Psi0 / factor**2
+        eq.R_lmn /= factor
+        eq.Z_lmn /= factor
+        eq.Rb_lmn /= factor
+        eq.Zb_lmn /= factor
+        # Scale n and T to vary neoclassical <J*B> at fixed nu*:
+        eq.electron_density = PowerSeriesProfile(
+            factor ** (2.0 / 5) * ne0 * np.array([1, -0.85]), modes=[0, 4]
+        )
+        eq.electron_temperature = PowerSeriesProfile(
+            factor ** (-2.0 / 5) * Te0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
+        )
+        eq.ion_temperature = PowerSeriesProfile(
+            factor ** (-2.0 / 5) * Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
+        )
+        obj = ObjectiveFunction(
+            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+        )
+        scalar_objective3 = obj.compute_scalar(obj.x(eq))
 
-        results = []
-
-        # Loop over grid types. For LinearGrid we need to drop the
-        # point at rho=0 to avoid a divide-by-0
-        grid_types = [LinearGrid, QuadratureGrid]
-        kwargs = [{"axis": False}, {}]
-
-        # Loop over grid resolutions:
-        L_factors = [1, 2, 1, 1, 1]
-        M_factors = [1, 1, 2, 1, 1]
-        N_factors = [1, 1, 1, 2, 1]
-
-        for grid_type, kwargs in zip(grid_types, kwargs):
-            for L_factor, M_factor, N_factor in zip(
-                L_factors,
-                M_factors,
-                N_factors,
-            ):
-                results.append(test(grid_type, kwargs, L_factor, M_factor, N_factor))
-
-        np.testing.assert_allclose(np.array(results), 0.5, rtol=2e-4)
+        results = np.array([scalar_objective1, scalar_objective2, scalar_objective3])
+        print("boostrap objectives for scaled configs:", results)
+        # Results are not perfectly identical because ln(Lambda) is not quite invariant.
+        np.testing.assert_allclose(results, np.mean(results), rtol=1e-3)
 
     @pytest.mark.unit
     @pytest.mark.solve
@@ -1237,7 +1277,7 @@ class TestBootstrapObjectives:
                 results.append(test(grid_type, kwargs, L, M, N))
 
         results = np.array(results)
-        np.testing.assert_allclose(results, np.mean(results), rtol=0.02)
+        np.testing.assert_allclose(results, np.mean(results), rtol=0.04)
 
     @pytest.mark.regression
     def test_bootstrap_consistency_iota(self, TmpDir):

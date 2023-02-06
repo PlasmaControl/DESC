@@ -135,7 +135,7 @@ class Optimizer(IOAble):
         wrapper, method = _parse_method(self.method)
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
-        objective = _maybe_wrap_nonlinear_constraints(
+        objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
             objective, nonlinear_constraint, self.method, options
         )
         if len(linear_constraints):
@@ -279,8 +279,8 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             warnings.warn(
                 f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
             )
-        return objective
-    if wrapper is None:
+        return objective, nonlinear_constraint
+    if wrapper is None and not optimizers[method]["equality_constraints"]:
         warnings.warn(
             FutureWarning(
                 f"""
@@ -302,7 +302,8 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             perturb_options=perturb_options,
             solve_options=solve_options,
         )
-    return objective
+        nonlinear_constraint = None
+    return objective, nonlinear_constraint
 
 
 def _get_default_tols(

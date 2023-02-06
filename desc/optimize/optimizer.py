@@ -288,7 +288,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
                 nonlinear constraints. Defaulting to method "proximal-{method}"
                 In the future this will raise an error. To ignore this warnging, specify
                 a wrapper "proximal-" to convert the nonlinearly constrained problem
-                into an unconstrained one,
+                into an unconstrained one.
                 """
             )
         )

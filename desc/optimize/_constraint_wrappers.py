@@ -26,11 +26,11 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     Given a problem of the form
 
-    min_x f(x)  subject to Ax=b
+    min_x f(x)  subject to A*x=b
 
-    We can write any feasible x=xp + Zx_reduced where xp is a particular solution to
+    We can write any feasible x=xp + Z*x_reduced where xp is a particular solution to
     Ax=b (taken to be the least norm solution), Z is a representation for the null
-    space of A (AZ=0) and x_reduced is conconstrained. This transforms the problem into
+    space of A (A*Z=0) and x_reduced is conconstrained. This transforms the problem into
 
     min_x_reduced f(x_reduced)
 

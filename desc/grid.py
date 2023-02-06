@@ -146,7 +146,6 @@ class Grid(IOAble):
         temp_spacing[:, 1] /= dtheta_scale
         # scale weights sum to full volume
         temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
-
         self._weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.

@@ -834,7 +834,30 @@ class InputReader:
         pres_scale = 1.0
         curr_tor = None
 
-        for line in vmec_file:
+        # Loop which makes multi-line inputs a single line
+        vmeclines_no_multiline = []
+
+        for line in vmec_file.readlines():
+            comment = line.find("!")
+            line = (line.strip() + " ")[0:comment].strip()
+            # ignore blank lines or leftover comment !'s
+            if line.isspace() or line == "" or line == r"!":
+                continue
+            if line.find("&INDATA") != -1:
+                continue
+            elif line.find("&") != -1:  # only care about the INDATA section
+                break
+            if line.find("=") != -1:
+                vmeclines_no_multiline.append(line)
+            else:  # is a multi-line input,append the line to the previous
+                vmeclines_no_multiline[-1] += " " + line
+
+        # Some bool flags to ensure that if a line is duplicate in
+        # the VMEC file, we do not add it twice to the inputs
+        RAXIS_already_read = False
+        ZAXIS_already_read = False
+
+        for line in vmeclines_no_multiline:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
 
@@ -1019,7 +1042,8 @@ class InputReader:
             match = re.search(
                 r"RAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match:
+            if match and not RAXIS_already_read:
+                RAXIS_already_read = True
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -1057,7 +1081,8 @@ class InputReader:
             match = re.search(
                 r"ZAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match:
+            if match and not ZAXIS_already_read:
+                ZAXIS_already_read = True
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))

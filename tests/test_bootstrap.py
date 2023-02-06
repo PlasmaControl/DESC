@@ -34,7 +34,6 @@ from desc.objectives import (
     ObjectiveFunction,
     get_fixed_boundary_constraints,
 )
-from desc.objectives.normalization import compute_scaling_factors
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
 

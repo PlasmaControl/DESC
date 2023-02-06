@@ -20,6 +20,9 @@ from desc.utils import equals
 @pytest.mark.unit
 def test_vmec_input(tmpdir_factory):
     """Test converting VMEC to DESC input file."""
+    # input.DSHAPE has multi-line inputs and
+    # a duplicate AXIS input line as well, so
+    # exercises full VMEC capability of input reader
     input_path = "./tests/inputs/input.DSHAPE"
     tmpdir = tmpdir_factory.mktemp("desc_inputs")
     tmp_path = tmpdir.join("input.DSHAPE")
@@ -39,48 +42,6 @@ def test_vmec_input(tmpdir_factory):
     assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
 
     correct_file_path = ".//tests//inputs//input.DSHAPE_desc"
-
-    # check DESC input file matches known correct one line-by-line
-    with open(correct_file_path) as f:
-        lines_correct = f.readlines()
-    with open(path) as f:
-        lines_direct = f.readlines()
-    with open(path_converted_file) as f:
-        lines_converted = f.readlines()
-    # skip first 3 lines as they have date and pwd info
-    for line1, line2 in zip(lines_correct[3:], lines_converted[3:]):
-        assert line1.strip() == line2.strip()
-    # skip first 4 here as the directly written file lacks a header
-    for line1, line2 in zip(lines_correct[4:], lines_direct):
-        assert line1.strip() == line2.strip()
-
-
-@pytest.mark.unit
-def test_vmec_input_multi_line_and_duplicate_lines(tmpdir_factory):
-    """Test converting VMEC input with multi-line and duplicates to DESC input file."""
-    # duplicates meaning that the RAXIS an ZAXIS lines are given twice,
-    # which before PR ... would result in the axis coefficients being doubled
-    # when read-in by DESC
-
-    input_path = "./tests/inputs/input.n3are_R7.75B5.7"
-    tmpdir = tmpdir_factory.mktemp("desc_inputs")
-    tmp_path = tmpdir.join("input.n3are_R7.75B5.7")
-    shutil.copyfile(input_path, tmp_path)
-    ir = InputReader(cl_args=[str(tmp_path)])
-    vmec_inputs = ir.inputs
-    # ir makes a VMEC file automatically
-    path_converted_file = tmpdir.join("input.n3are_R7.75B5.7_desc")
-    # also test making a DESC file from the ir.inputs manually
-    path = tmpdir.join("input.n3are_R7.75B5.7_desc_written")
-    ir.write_desc_input(path, ir.inputs)
-    ir2 = InputReader(cl_args=[str(path)])
-    desc_inputs = ir2.inputs
-    for d, v in zip(desc_inputs, vmec_inputs):
-        d.pop("output_path")
-        v.pop("output_path")
-    assert all([equals(in1, in2) for in1, in2 in zip(vmec_inputs, desc_inputs)])
-
-    correct_file_path = ".//tests//inputs//input.n3are_R7.75B5.7_desc"
 
     # check DESC input file matches known correct one line-by-line
     with open(correct_file_path) as f:

@@ -856,6 +856,8 @@ class InputReader:
         # the VMEC file, we do not add it twice to the inputs
         RAXIS_already_read = False
         ZAXIS_already_read = False
+        RAXIS_CS_already_read = False
+        ZAXIS_CS_already_read = False
 
         for line in vmeclines_no_multiline:
             comment = line.find("!")
@@ -1062,7 +1064,8 @@ class InputReader:
             match = re.search(
                 r"RAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match:
+            if match and not RAXIS_CS_already_read:
+                RAXIS_CS_already_read = False
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -1101,7 +1104,8 @@ class InputReader:
             match = re.search(
                 r"ZAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match:
+            if match and not ZAXIS_CS_already_read:
+                ZAXIS_CS_already_read = True
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))

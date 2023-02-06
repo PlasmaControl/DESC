@@ -117,9 +117,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(  # noqa: C901
-    constraints, objective_args, dimensions=None
-):
+def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -133,8 +131,6 @@ def factorize_linear_constraints(  # noqa: C901
         linear objectives/constraints to factorize for projection method.
     objective_args : list of str
         names of all arguments used by the desired objective.
-    dimensions : dict, optional
-        Dictionary mapping arg names to arg sizes
 
     Returns
     -------
@@ -160,8 +156,7 @@ def factorize_linear_constraints(  # noqa: C901
     args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
     args = [arg for arg in arg_order if arg in args]
-    if dimensions is None:
-        dimensions = constraints[0].dimensions
+    dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
     for arg in objective_args:
@@ -179,6 +174,8 @@ def factorize_linear_constraints(  # noqa: C901
     for obj in constraints:
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
+        if obj.bounds is not None:
+            raise ValueError("Linear constraints must use target instead of bounds.")
         arg = obj.args[0]
         if arg not in objective_args:
             continue
@@ -190,7 +187,7 @@ def factorize_linear_constraints(  # noqa: C901
             unfixed_args.append(arg)
             A_ = obj.derivatives["jac"][arg](jnp.zeros(dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute(jnp.zeros(dimensions[arg]))
+            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
             else:
@@ -233,7 +230,7 @@ def factorize_linear_constraints(  # noqa: C901
         arg = con.args[0]
         if arg not in objective_args:
             continue
-        res = con.compute(**xp_dict)
+        res = con.compute_scaled(**xp_dict)
         x = xp_dict[arg]
         # stuff like density is O(1e19) so need some adjustable tolerance here.
         atol = max(1e-8, np.finfo(x).eps * np.linalg.norm(x) / x.size)

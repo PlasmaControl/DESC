@@ -105,7 +105,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._constraints,
             self._objective.args,
-            self._objective.dimensions,
         )
         self._dim_x = self._Z.shape[1]
         self._dim_x_full = self._objective.dim_x

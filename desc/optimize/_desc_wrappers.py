@@ -58,6 +58,7 @@ def _optimize_desc_least_squares(  # noqa: C901 - FIXME: simplify this
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_radius", 1e-3)
@@ -132,6 +133,7 @@ def _optimize_desc_fmin_scalar(  # noqa: C901 - FIXME: simplify this
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     hess = objective.hess if "bfgs" in method else "bfgs"
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
@@ -209,6 +211,7 @@ def _optimize_desc_stochastic(  # noqa: C901 - FIXME: simplify this
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     result = sgd(
         objective.compute_scalar,

@@ -78,6 +78,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     x_scale = 1 if x_scale == "auto" else x_scale
     if isinstance(x_scale, str):
@@ -284,6 +285,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     x_scale = "jac" if x_scale == "auto" else x_scale
     fun, jac = objective.compute, objective.jac

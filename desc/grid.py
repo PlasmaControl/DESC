@@ -146,6 +146,7 @@ class Grid(IOAble):
         temp_spacing[:, 1] /= dtheta_scale
         # scale weights sum to full volume
         temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+
         self._weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -161,6 +162,7 @@ class Grid(IOAble):
         # duplicates nodes are scaled down properly regardless of which two columns
         # span the surface.
 
+        # scale areas sum to full area
         # The following operation is not a general solution to return the weight
         # removed from the duplicate nodes back to the unique nodes.
         # For this reason, duplicates should typically be deleted rather that rescaled.
@@ -560,6 +562,10 @@ class LinearGrid(Grid):
                     dz[-1] *= 2
             else:
                 dz = np.array([2 * np.pi])
+
+        self._endpoint = (t[0] == 0 and t[-1] == 2 * np.pi) and (
+            z[0] == 0 and z[-1] == 2 * np.pi / self.NFP
+        )
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()

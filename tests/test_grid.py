@@ -45,6 +45,7 @@ class TestGrid:
         np.testing.assert_equal(g.num_rho, L + 1)
         np.testing.assert_equal(g.num_theta, 2 * M + 1)
         np.testing.assert_equal(g.num_zeta, 2 * N + 1)
+        assert g.endpoint == endpoint
 
         nodes = np.stack(
             [
@@ -275,6 +276,7 @@ class TestGrid:
             axis=axis,
             endpoint=not endpoint,  # incorrect marker should have no effect
         )
+        assert lg_3.endpoint == endpoint
         test(lg_1)
         test(lg_1_sym)
         # The test below might fail for theta and zeta surfaces only if nrho > 1.

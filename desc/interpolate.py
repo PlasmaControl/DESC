@@ -583,6 +583,7 @@ def _make_periodic(xq, x, period, axis, *arrs):
 
 def _get_t_der(t, derivative, dxi):
     """Get arrays of [1,t,t^2,t^3] for cubic interpolation."""
+    assert int(derivative) == derivative, "derivative must be an integer"
     if derivative == 0 or derivative is None:
         tt = jnp.array([jnp.ones_like(t), t, t**2, t**3]).T
     elif derivative == 1:

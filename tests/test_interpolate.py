@@ -35,6 +35,9 @@ class TestInterp1D:
         fq = interp1d(x, xp, fp, method="catmull-rom")
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
 
+        fq = interp1d(x, xp, fp, method="monotonic")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
+
     @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):
         """Test extrapolation and periodic BC of 1d interpolation."""

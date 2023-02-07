@@ -14,7 +14,7 @@ from .stochastic import sgd
     stochastic=False,
     hessian=False,
 )
-def _optimize_desc_least_squares(  # noqa: C901 - FIXME: simplify this
+def _optimize_desc_least_squares(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for desc.optimize.lsqtr.
@@ -89,7 +89,7 @@ def _optimize_desc_least_squares(  # noqa: C901 - FIXME: simplify this
     stochastic=False,
     hessian=[True, True, False, False],
 )
-def _optimize_desc_fmin_scalar(  # noqa: C901 - FIXME: simplify this
+def _optimize_desc_fmin_scalar(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for desc.optimize.fmintr.
@@ -135,7 +135,7 @@ def _optimize_desc_fmin_scalar(  # noqa: C901 - FIXME: simplify this
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    hess = objective.hess if "bfgs" in method else "bfgs"
+    hess = objective.hess if "bfgs" not in method else "bfgs"
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
@@ -167,7 +167,7 @@ def _optimize_desc_fmin_scalar(  # noqa: C901 - FIXME: simplify this
     stochastic=True,
     hessian=False,
 )
-def _optimize_desc_stochastic(  # noqa: C901 - FIXME: simplify this
+def _optimize_desc_stochastic(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for desc.optimize.sgd.

@@ -1,7 +1,5 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import warnings
-
 import numpy as np
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
@@ -164,11 +162,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     max_dx = options.pop("max_dx", np.inf)
 
     auto_scale = str(x_scale) == "auto"
-    hess_scale = str(x_scale) == "hess" or (auto_scale and not bfgs)
-    if hess_scale and bfgs:
-        warnings.warn("Hessian scaling is not compatible with BFGS, using unscaled x")
-        hess_scale = False
-        x_scale = 1
+    x_scale = 1 if auto_scale and bfgs else "hess"
+    hess_scale = str(x_scale) == "hess"
+    assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:

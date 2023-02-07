@@ -137,10 +137,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         """Recover the full state vector from the reduced optimization vector."""
         return self._recover(x_reduced)
 
-    def make_feasible(self, x):
-        """Project out the infeasible parts of x, returning a feasible x."""
-        return self.recover(self.project(x))
-
     def x(self, eq):
         """Return the reduced state vector from the Equilibrium eq."""
         x = self._objective.x(eq)

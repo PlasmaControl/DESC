@@ -1,5 +1,7 @@
 """Objectives for targeting quasisymmetry."""
 
+import warnings
+
 import numpy as np
 
 from desc.backend import jnp
@@ -70,6 +72,7 @@ class QuasisymmetryBoozer(_Objective):
     ):
 
         assert len(helicity) == 2
+        assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self.grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
@@ -205,6 +208,7 @@ class QuasisymmetryBoozer(_Objective):
                 + "{:10.3e} "
                 + units
             )
+        warnings.warn("Re-build objective after changing the helicity!")
 
 
 class QuasisymmetryTwoTerm(_Objective):

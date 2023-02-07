@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
+from scipy.constants import mu_0
 
 from desc.backend import sign
 from desc.basis import DoubleFourierSeries
@@ -16,7 +17,7 @@ from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
 from desc.objectives.utils import factorize_linear_constraints
-from desc.profiles import PowerSeriesProfile
+from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer
 from desc.vmec_utils import (
@@ -55,6 +56,11 @@ class VMECIO:
         -------
         eq: Equilibrium
             Equilibrium that resembles the VMEC data.
+
+        Notes
+        -----
+        To ensure compatibiltiy with different profile representations in VMEC,
+        the resulting equilibrium will always have SplineProfile types for all profiles
 
         """
         assert profile in ["iota", "current"]
@@ -99,43 +105,16 @@ class VMECIO:
             inputs["sym"] = True
 
         # profiles
-        preset = file.dimensions["preset"].size
-        pmass_type = "".join(file.variables["pmass_type"][:].astype(str)).strip()
-        if pmass_type != "power_series":
-            warnings.warn("Pressure is not a power series!")
-        p0 = file.variables["presf"][0] / file.variables["am"][0]
-        inputs["pressure"] = np.zeros((preset, 2))
-        inputs["pressure"][:, 0] = np.arange(0, 2 * preset, 2)
-        inputs["pressure"][:, 1] = file.variables["am"][:] * p0
+        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:]))
+        pres = file.variables["presf"][:]
+        inputs["pressure"] = SplineProfile(r, pres, name="pressure")
         if profile == "iota":
-            piota_type = "".join(file.variables["piota_type"][:].astype(str)).strip()
-            if piota_type != "power_series":
-                warnings.warn("Iota is not a power series!")
-            inputs["iota"] = np.zeros((preset, 2))
-            inputs["iota"][:, 0] = np.arange(0, 2 * preset, 2)
-            inputs["iota"][:, 1] = file.variables["ai"][:]
+            iota = file.variables["iotaf"][:]
+            inputs["iota"] = SplineProfile(r, iota, name="iota")
             inputs["current"] = None
         if profile == "current":
-            pcurr_type = "".join(file.variables["pcurr_type"][:].astype(str)).strip()
-            if pcurr_type != "power_series":
-                warnings.warn("Current is not a power series!")
-            inputs["current"] = np.zeros((preset, 2))
-            inputs["current"][:, 0] = np.arange(0, 2 * preset, 2)
-            inputs["current"][:, 1] = file.variables["ac"][:]
-            # integrate current profile wrt s=rho^2
-            inputs["current"] = np.pad(
-                np.vstack(
-                    (
-                        inputs["current"][:, 0] + 2,
-                        inputs["current"][:, 1] * 2 / (inputs["current"][:, 0] + 2),
-                    )
-                ).T,
-                ((1, 0), (0, 0)),
-            )
-            # scale total current to correct value
-            inputs["current"][:, 1] *= (
-                file.variables["ctor"][:] / (np.sum(inputs["current"][:, 1]) or 1),
-            )
+            curr = 2 * np.pi / mu_0 * file.variables["buco"][:]
+            inputs["current"] = SplineProfile(r, curr, name="current")
             inputs["iota"] = None
 
         file.close()

@@ -30,12 +30,19 @@ def get(name, data=None):
 
     """
     assert data in {None, "all", "boundary", "pressure", "iota", "current"}
-    here = os.path.abspath(os.path.dirname(__file__)) + "/"
-    path = here + name + "_output.h5"
-    if os.path.exists(path):
-        eqf = desc.io.load(path)
-    else:
-        raise ValueError("example {} not found".format(path))
+    here = os.path.abspath(os.path.dirname(__file__))
+    h5s = [f for f in os.listdir(here) if f.endswith(".h5")]
+    h5s_lower = [f.lower() for f in h5s]
+    filename = name.lower() + "_output.h5"
+    try:
+        idx = h5s_lower.index(filename)
+    except ValueError:
+        raise ValueError("example {} not found".format(name))
+    path = here + "/" + h5s[idx]
+    assert os.path.exists(path)
+
+    eqf = desc.io.load(path)
+
     if data is None:
         return eqf[-1]
     if data == "all":

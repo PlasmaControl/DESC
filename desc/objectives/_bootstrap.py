@@ -16,7 +16,7 @@ from .objective_funs import _Objective
 
 
 class BootstrapRedlConsistency(_Objective):
-    """Promote consistency of the bootstrap current for axisymmetry or quasisymmetry.
+    """Promote consistency of the bootstrap current for axisymmetry or quasi-symmetry.
 
     This objective function penalizes the difference between the MHD
     and neoclassical profiles of parallel current, using the Redl
@@ -24,11 +24,6 @@ class BootstrapRedlConsistency(_Objective):
 
     Parameters
     ----------
-    helicity : 2-element tuple
-        First entry must be 1. Second entry is the toroidal mode number of
-        quasisymmetry, used for evaluating the Redl bootstrap current
-        formula. Set to 0 for axisymmetry or quasi-axisymmetry; set to +/- NFP for
-        quasi-helical symmetry.
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
@@ -48,6 +43,11 @@ class BootstrapRedlConsistency(_Objective):
         this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+    helicity : tuple, optional
+        Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
+        First entry must be M=1. Second entry is the toroidal mode number N,
+        used for evaluating the Redl bootstrap current formula. Set to 0 for axisymmetry
+        or quasi-axisymmetry; set to +/-NFP for quasi-helical symmetry.
     name : str
         Name of the objective function.
     """
@@ -59,7 +59,6 @@ class BootstrapRedlConsistency(_Objective):
 
     def __init__(
         self,
-        helicity=(1, 0),
         eq=None,
         target=0,
         bounds=None,
@@ -67,13 +66,14 @@ class BootstrapRedlConsistency(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
+        helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",
     ):
+
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
-
-        self.helicity = helicity
         self.grid = grid
+        self.helicity = helicity
         super().__init__(
             eq=eq,
             target=target,
@@ -182,15 +182,12 @@ class BootstrapRedlConsistency(_Objective):
 
         """
         params = self._parse_args(*args, **kwargs)
-        extra_kwargs = {
-            "helicity": self.helicity,
-        }
         data = compute_fun(
             self._data_keys,
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
-            **extra_kwargs,
+            helicity=self.helicity,
         )
 
         return compress(
@@ -201,3 +198,27 @@ class BootstrapRedlConsistency(_Objective):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
         return super().compute_scaled(*args, **kwargs) * w
+
+    @property
+    def helicity(self):
+        """tuple: Type of quasi-symmetry (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
+        self._helicity = helicity
+        if hasattr(self, "_print_value_fmt"):
+            units = "(T)"
+            self._print_value_fmt = (
+                "Quasi-symmetry ({},{}) Boozer error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+                + "{:10.3e} "
+                + units
+            )

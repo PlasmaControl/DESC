@@ -10,8 +10,8 @@ from .utils import compress, expand, surface_averages
 
 @register_compute_fun(
     name="trapped fraction",
-    label="1 - \\frac{3}{4} \\left< B^2 \\right> \\int_0^{1/Bmax} "
-    "\\frac{\\lambda\\; d\\lambda}{\\left< \\sqrt{1 - \\lambda B} \\right>}",
+    label="1 - \\frac{3}{4} \\langle B^2 \\rangle \\int_0^{1/Bmax} "
+    "\\frac{\\lambda\\; d\\lambda}{\\langle \\sqrt{1 - \\lambda B} \\rangle}",
     units="~",
     units_long="None",
     description="Neoclassical effective trapped particle fraction",
@@ -21,6 +21,7 @@ from .utils import compress, expand, surface_averages
     profiles=[],
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<B^2>", "max_tz |B|"],
+    n_gauss="n_gauss",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     r"""
@@ -31,35 +32,31 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     ``f_t`` has a standard definition in neoclassical theory:
 
     .. math::
-        f_t = 1 - \frac{3}{4} \left< B^2 \right> \int_0^{1/Bmax}
-            \frac{\lambda\; d\lambda}{\left< \sqrt{1 - \lambda B} \right>}
+        f_t = 1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax}
+            \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}
 
-    where :math:`\left< \ldots \right>` is a flux surface average.
+    where :math:`\langle \ldots \rangle` is a flux surface average.
     """
     # Get nodes and weights for Gauss-Legendre integration:
     n_gauss = kwargs.get("n_gauss", 20)
     base_nodes, base_weights = roots_legendre(n_gauss)
     # Rescale for integration on [0, 1], not [-1, 1]:
-    lambd = (base_nodes + 1) * 0.5
-    lambda_weights = base_weights * 0.5
+    lambd = jnp.asarray((base_nodes + 1) * 0.5)
+    lambda_weights = jnp.asarray(base_weights * 0.5)
 
     grid = transforms["grid"]
     Bmax = data["max_tz |B|"]
     modB_over_Bmax = data["|B|"] / Bmax
     sqrt_g = jnp.abs(data["sqrt(g)"])
-    denominator = data["V_r(r)"]
     Bmax_squared = compress(grid, Bmax * Bmax)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
-    lambd = jnp.asarray(lambd)
-    lambda_weights = jnp.asarray(lambda_weights)
-
     def body_fun(jlambda, lambda_integral):
         flux_surf_avg_term = surface_averages(
             grid,
             jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
             sqrt_g,
-            denominator=denominator,
+            denominator=data["V_r(r)"],
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
             Bmax_squared * compress(grid, flux_surf_avg_term)
@@ -79,7 +76,7 @@ def j_dot_B_Redl(
 ):
     r"""Compute the bootstrap current.
 
-    (specifically :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
+    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
     Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.
@@ -345,11 +342,12 @@ def j_dot_B_Redl(
         "Ti_r",
         "Zeff",
     ],
+    helicity="helicity",
 )
 def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     r"""Compute the bootstrap current.
 
-    (specifically :math:`\left<\vec{J}\cdot\vec{B}\right>`) using the formulae in
+    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
     Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
     the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
     and quasi-helical symmetry, but not in other stellarators.

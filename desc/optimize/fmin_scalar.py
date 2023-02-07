@@ -162,7 +162,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     max_dx = options.pop("max_dx", np.inf)
 
     auto_scale = str(x_scale) == "auto"
-    x_scale = 1 if auto_scale and bfgs else "hess"
+    x_scale = 1 if auto_scale and bfgs else ("hess" if auto_scale else x_scale)
     hess_scale = str(x_scale) == "hess"
     assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
     if hess_scale:

@@ -132,7 +132,7 @@ class TestObjectiveFunction:
             iota = obj.compute(*obj.xs(eq))
             iota_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
-            np.testing.assert_allclose(iota_scaled, -2 / 3)
+            np.testing.assert_allclose(iota_scaled, -2 / np.sqrt(3))
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -146,7 +146,7 @@ class TestObjectiveFunction:
             I = obj.compute(*obj.xs(eq))
             I_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(I, 0)
-            np.testing.assert_allclose(I_scaled, -2 / 3)
+            np.testing.assert_allclose(I_scaled, -2 / np.sqrt(3))
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))

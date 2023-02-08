@@ -1127,6 +1127,7 @@ class _Configuration(IOAble, ABC):
         # TODO: use get_params method? need to break up compute functions first
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+
         if params is None:
             params = get_params(names, eq=self)
         if profiles is None:

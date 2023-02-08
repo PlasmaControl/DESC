@@ -213,12 +213,3 @@ class BootstrapRedlConsistency(_Objective):
         )
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
         self._helicity = helicity
-        if hasattr(self, "_print_value_fmt"):
-            units = "(T)"
-            self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) Boozer error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
-                + "{:10.3e} "
-                + units
-            )

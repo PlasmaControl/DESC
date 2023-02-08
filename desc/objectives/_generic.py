@@ -158,7 +158,7 @@ class ToroidalCurrent(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(A)"
     _print_value_fmt = "Toroidal current: {:10.3e} "

@@ -130,6 +130,11 @@ class BootstrapRedlConsistency(_Objective):
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=self.grid)["rho"]
+        if jnp.any(eq.electron_density(rho) > 1e22):
+            warnings.warn(
+                "Electron density is surprisingly high. It should have units of "
+                "1/meters^3"
+            )
         if jnp.any(eq.electron_temperature(rho) > 50e3):
             warnings.warn(
                 "Electron temperature is surprisingly high. It should have units of eV"

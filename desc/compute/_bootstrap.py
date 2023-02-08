@@ -47,7 +47,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     Bmax = data["max_tz |B|"]
     modB_over_Bmax = data["|B|"] / Bmax
-    sqrt_g = jnp.abs(data["sqrt(g)"])
+    sqrt_g = data["sqrt(g)"]
     Bmax_squared = compress(grid, Bmax * Bmax)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.

@@ -3,6 +3,7 @@
 import numpy as np
 
 from desc.backend import jnp, put, sign
+from desc.interpolate import interp1d
 
 from .data_index import register_compute_fun
 
@@ -395,9 +396,7 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
         .basis.modes[:, 2]
         .reshape((transforms["zeta"].basis.N + 1, -1))
     )
-    QI_m0 = jnp.sum(
-        QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
-    )
+    QI_m0 = jnp.sum(QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
     QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
 
     # theta is being used as a placeholder for alpha (field-line label)
@@ -423,15 +422,12 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
     data=["zeta-bar_QI"],
 )
 def _qi_B(params, transforms, profiles, data, **kwargs):
-    # sort to ensure monotonicity
-    QI_l = jnp.sort(params["QI_l"])
-
-    # |B|_QI is only a function of zeta-bar_QI
-    step = jnp.pi / 2 / (params["QI_l"].size - 1)
-    x = jnp.arange(-jnp.pi / 2, jnp.pi / 2 + step, step)
-    y = jnp.concatenate((jnp.flip(QI_l[:-1]), QI_l))
-
-    data["|B|_QI"] = jnp.interp(data["zeta-bar_QI"], x, y)
+    B = jnp.sort(params["QI_l"])  # sort to ensure monotonicity
+    zeta_bar = jnp.linspace(0, jnp.pi / 2, num=B.size)
+    # |B|_QI is an even function so B(-zeta_bar) = B(+zeta_bar)
+    data["|B|_QI"] = interp1d(
+        jnp.abs(data["zeta-bar_QI"]), zeta_bar, B, method="monotonic-0"
+    )
     return data
 
 

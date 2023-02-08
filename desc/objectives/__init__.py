@@ -43,9 +43,8 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
-    FixQiScale,
-    FixQiShape,
-    FixQiShift,
+    FixQIShape,
+    FixQIShift,
     FixR,
     FixZ,
 )

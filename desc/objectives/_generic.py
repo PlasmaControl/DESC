@@ -468,6 +468,8 @@ class MirrorRatio(_Objective):
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
         Note: has no effect for this objective.
+    grid : Grid, optional
+        Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
 
@@ -481,14 +483,16 @@ class MirrorRatio(_Objective):
     def __init__(
         self,
         eq=None,
-        target=None,
+        target=1,
         bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
+        grid=None,
         name="mirror ratio",
     ):
 
+        self.grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -512,20 +516,44 @@ class MirrorRatio(_Objective):
             Level of output.
 
         """
-        self._dim_f = 1
+        if self.grid is None:
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
-        if None in self.target:
-            self.target = (eq.B_mag[1] - eq.B_mag[0]) / (eq.B_mag[0] + eq.B_mag[1])
+        self._dim_f = self.grid.num_rho
+        self._data_keys = ["min_tz |B|", "max_tz |B|"]
+        self._args = get_params(self._data_keys)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, B_mag, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute mirror ratio.
 
         Parameters
         ----------
-        B_mag : ndarray
-            Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
 
         Returns
         -------
@@ -533,4 +561,13 @@ class MirrorRatio(_Objective):
             Mirror ratio, dimensionless.
 
         """
-        return (B_mag[1] - B_mag[0]) / (B_mag[0] + B_mag[1])
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        B_min = data["min_tz |B|"]
+        B_max = data["max_tz |B|"]
+        return (B_max - B_min) / (B_min + B_max)

@@ -537,9 +537,9 @@ class QuasiIsodynamic(_Objective):
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
     M_zeta : int, optional
-        Poloidal resolution of shift_mn parameters.
+        Poloidal resolution of QI_mn parameters.
     N_zeta : int, optional
-        Toroidal resolution of shift_mn parameters.
+        Toroidal resolution of QI_mn parameters.
     name : str
         Name of the objective function.
 
@@ -603,7 +603,7 @@ class QuasiIsodynamic(_Objective):
         if self.N_booz is None:
             self.N_booz = 2 * eq.N
         # FIXME: this default assumes M_zeta=N_zeta
-        n = int(np.sqrt(eq.shift_mn.size - 1) / np.sqrt(2))
+        n = int(np.sqrt(eq.QI_mn.size - 1) / np.sqrt(2))
         if self.M_zeta is None:
             self.M_zeta = n
         if self.N_zeta is None:
@@ -659,12 +659,10 @@ class QuasiIsodynamic(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
-        B_mag : ndarray
-            Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
-        shape_i : ndarray
+        QI_l : ndarray
             Magnetic well shaping parameters. Inverse roots of the derivative of the
             even polynomial B(zeta_bar), shifted by pi/2.
-        shift_mn : ndarray
+        QI_mn : ndarray
             Magnetic well shifting parameters.
             Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
 

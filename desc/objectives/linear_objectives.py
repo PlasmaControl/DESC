@@ -389,7 +389,7 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "lambda gauge error: {:10.3e} "
 
     def __init__(
@@ -1405,18 +1405,23 @@ class FixPsi(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
+        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -1502,16 +1507,23 @@ class FixR(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
+        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -1527,6 +1539,7 @@ class FixR(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -1536,6 +1549,7 @@ class FixR(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1595,16 +1609,23 @@ class FixZ(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
     normalize_target : bool
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
+        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -1620,6 +1641,7 @@ class FixZ(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -1629,6 +1651,7 @@ class FixZ(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1688,8 +1711,15 @@ class FixLambda(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
         Note: has no effect for this objective.
@@ -1698,8 +1728,6 @@ class FixLambda(_Objective):
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
         Note: has no effect for this objective.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
     name : str
         Name of the objective function.
 
@@ -1708,13 +1736,14 @@ class FixLambda(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _units = "(radians)"
+    _units = "(rad)"
     _print_value_fmt = "Fixed-lambda error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -1724,6 +1753,7 @@ class FixLambda(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1772,84 +1802,30 @@ class FixLambda(_Objective):
         return "L_lmn"
 
 
-class FixQiScale(_Objective):
-    """Fixes QI magnetic well scale parameters.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
-    weight : float, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = False
-    _linear = True
-    _fixed = True
-
-    def __init__(self, eq=None, target=None, weight=1, name="fixed QI scale"):
-
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Fixed QI scale error: {:10.3e} (T)"
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        self._dim_f = eq.B_mag.size
-
-        if None in self.target:
-            self.target = eq.B_mag
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, B_mag, **kwargs):
-        """Compute fixed QI scale error.
-
-        Parameters
-        ----------
-        B_mag : ndarray
-            Minimum & maximum values of magnetic field strength, |B| (T). [B_min, B_max]
-
-        Returns
-        -------
-        f : ndarray
-            Total QI magnetic well shape error.
-
-        """
-        return self._shift_scale(B_mag)
-
-    @property
-    def target_arg(self):
-        """str: Name of argument corresponding to the target."""
-        return "B_mag"
-
-
-class FixQiShape(_Objective):
+class FixQIShape(_Objective):
     """Fixes QI magnetic well shape parameters.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
-    weight : float, optional
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -1858,11 +1834,31 @@ class FixQiShape(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(T)"
+    _print_value_fmt = "Fixed QI shape error: {:10.3e} "
 
-    def __init__(self, eq=None, target=None, weight=1, indices=True, name="fixed QI shape"):
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="fixed QI shape",
+    ):
 
         self._indices = indices
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
         self._print_value_fmt = "Fixed QI shape error: {:10.3e}"
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -1882,7 +1878,7 @@ class FixQiShape(_Objective):
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
         elif self._indices is True:  # all indices of Profile.params
-            self._idx = np.arange(np.size(eq.shape_i))
+            self._idx = np.arange(np.size(eq.QI_l))
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
 
@@ -1890,16 +1886,16 @@ class FixQiShape(_Objective):
 
         # use profile parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = eq.shape_i[self._idx]
+            self.target = eq.QI_l[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, shape_i, **kwargs):
+    def compute(self, QI_l, **kwargs):
         """Compute fixed QI shape error.
 
         Parameters
         ----------
-        shape_i : ndarray
+        QI_l : ndarray
             Magnetic well shaping parameters.
             Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
 
@@ -1909,25 +1905,38 @@ class FixQiShape(_Objective):
             Total QI magnetic well shape error.
 
         """
-        return self._shift_scale(shape_i[self._idx])
+        return self._shift_scale(QI_l[self._idx])
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "shape_i"
+        return "QI_l"
 
 
-class FixQiShift(_Objective):
+class FixQIShift(_Objective):
     """Fixes QI magnetic well shift parameters.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, optional
-        Target value(s) of the objective. If None, uses Equilibrium value.
-    weight : float, optional
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -1936,12 +1945,31 @@ class FixQiShift(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
+    _units = "(rad)"
+    _print_value_fmt = "Fixed QI shift error: {:10.3e} "
 
-    def __init__(self, eq=None, target=None, weight=1, indices=True, name="fixed QI shift"):
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        indices=True,
+        name="fixed QI shift",
+    ):
 
         self._indices = indices
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "Fixed QI shift error: {:10.3e}"
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1960,7 +1988,7 @@ class FixQiShift(_Objective):
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
         elif self._indices is True:  # all indices of Profile.params
-            self._idx = np.arange(np.size(eq.shift_mn))
+            self._idx = np.arange(np.size(eq.QI_mn))
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
 
@@ -1968,16 +1996,16 @@ class FixQiShift(_Objective):
 
         # use profile parameters as target if needed
         if None in self.target or self.target.size != self.dim_f:
-            self.target = eq.shift_mn[self._idx]
+            self.target = eq.QI_mn[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, shift_mn, **kwargs):
+    def compute(self, QI_mn, **kwargs):
         """Compute fixed QI shift error.
 
         Parameters
         ----------
-        shift_mn : ndarray
+        QI_mn : ndarray
             Magnetic well shifting parameters.
             Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
 
@@ -1987,9 +2015,9 @@ class FixQiShift(_Objective):
             Total QI magnetic well shift error.
 
         """
-        return self._shift_scale(shift_mn[self._idx])
+        return self._shift_scale(QI_mn[self._idx])
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "shift_mn"
+        return "QI_mn"

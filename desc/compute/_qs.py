@@ -382,28 +382,28 @@ def _qi_zeta_bar(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Boozer toroidal angular coordinate to make the field quasi-isodynamic",
     dim=1,
-    params=["shift_mn"],
+    params=["QI_mn"],
     transforms={"zeta": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["rho", "theta", "zeta-bar_QI"],
 )
 def _qi_zeta(params, transforms, profiles, data, **kwargs):
-    shift_mn_arr = params["shift_mn"].reshape((transforms["zeta"].basis.N, -1))
+    QI_mn_arr = params["QI_mn"].reshape((transforms["zeta"].basis.N, -1))
     nn = (
         transforms["zeta"]
         .basis.modes[:, 2]
         .reshape((transforms["zeta"].basis.N + 1, -1))
     )
-    shift_m0 = jnp.sum(
-        shift_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
+    QI_m0 = jnp.sum(
+        QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0
     )
-    shift_mn = jnp.concatenate((shift_m0, params["shift_mn"]))
+    QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
 
     # theta is being used as a placeholder for alpha (field-line label)
     nodes = jnp.array([data["rho"], data["theta"], data["zeta-bar_QI"]]).T
     zeta_bar = data["zeta-bar_QI"] + jnp.matmul(
-        transforms["zeta"].basis.evaluate(nodes), shift_mn
+        transforms["zeta"].basis.evaluate(nodes), QI_mn
     )
     data["zeta_QI"] = (2 * zeta_bar + jnp.pi) / transforms["zeta"].basis.NFP
     return data
@@ -416,29 +416,22 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of quasi-isodynamic magnetic field",
     dim=1,
-    params=["B_mag", "shape_i"],
+    params=["QI_l"],
     transforms={},
     profiles=[],
     coordinates="z",
     data=["zeta-bar_QI"],
 )
 def _qi_B(params, transforms, profiles, data, **kwargs):
-    # TODO: remove B_mag, redundant with shape_i
-    # |B|_QI is only a function of zeta-bar_QI
-    step = jnp.pi / 2 / (params["shape_i"].size + 1)
-    x = jnp.arange(-jnp.pi / 2, jnp.pi / 2 + step, step)
-    y = jnp.concatenate(
-        (
-            jnp.atleast_1d(params["B_mag"][1]),
-            jnp.flip(jnp.atleast_1d(params["shape_i"])),
-            jnp.atleast_1d(params["B_mag"][0]),
-            jnp.atleast_1d(params["shape_i"]),
-            jnp.atleast_1d(params["B_mag"][1]),
-        )
-    )
-    B = jnp.interp(data["zeta-bar_QI"], x, y)
+    # sort to ensure monotonicity
+    QI_l = jnp.sort(params["QI_l"])
 
-    data["|B|_QI"] = B
+    # |B|_QI is only a function of zeta-bar_QI
+    step = jnp.pi / 2 / (params["QI_l"].size + 1)
+    x = jnp.arange(-jnp.pi / 2, jnp.pi / 2 + step, step)
+    y = jnp.concatenate((jnp.flip(QI_l[:-1]), QI_l))
+
+    data["|B|_QI"] = jnp.interp(data["zeta-bar_QI"], x, y)
     return data
 
 

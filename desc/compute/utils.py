@@ -23,9 +23,8 @@ arg_order = (
     "ne_l",
     "Ti_l",
     "Zeff_l",
-    "B_mag",
-    "shape_i",
-    "shift_mn",
+    "QI_l",
+    "QI_mn",
     "Rb_lmn",
     "Zb_lmn",
 )
@@ -319,7 +318,7 @@ def get_transforms(keys, eq, grid, **kwargs):
         )
     if "zeta" in derivs:
         # FIXME: this default assumes M_zeta=N_zeta
-        n = int((np.sqrt(8 * eq.shift_mn.size + 1) - 1) / 4)
+        n = int((np.sqrt(8 * eq.QI_mn.size + 1) - 1) / 4)
         transforms["zeta"] = Transform(
             grid,
             DoubleFourierSeries(

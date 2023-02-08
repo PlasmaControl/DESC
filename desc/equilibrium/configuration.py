@@ -109,11 +109,10 @@ class _Configuration(IOAble, ABC):
         "_electron_density",
         "_ion_temperature",
         "_atomic_number",
+        "_QI_l",
+        "_QI_mn",
         "_spectral_indexing",
         "_bdry_mode",
-        "_B_mag",
-        "_shape_i",
-        "_shift_mn",
     ]
 
     def __init__(  # noqa: C901 - FIXME: break this up into simpler pieces
@@ -418,9 +417,8 @@ class _Configuration(IOAble, ABC):
             self.L_lmn = kwargs.pop("L_lmn")
 
         # FIXME: default QI parameters for initialization
-        self._B_mag = np.array([0.5, 1.5])
-        self._shape_i = np.array([1])
-        self._shift_mn = np.array([0, 0, 0])
+        self._QI_l = np.array([1, 2])
+        self._QI_mn = np.array([0, 0, 0])
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -1061,31 +1059,22 @@ class _Configuration(IOAble, ABC):
         return self._L_basis
 
     @property
-    def B_mag(self):
-        """Magnetic well scaling parameters [B_min, B_max]."""
-        return self._B_mag
-
-    @B_mag.setter
-    def B_mag(self, B_mag):
-        self._B_mag = B_mag
-
-    @property
-    def shape_i(self):
+    def QI_l(self):
         """Magnetic well shaping parameters."""
-        return self._shape_i
+        return self._QI_l
 
-    @shape_i.setter
-    def shape_i(self, shape_i):
-        self._shape_i = shape_i
+    @QI_l.setter
+    def QI_l(self, QI_l):
+        self._QI_l = QI_l
 
     @property
-    def shift_mn(self):
+    def QI_mn(self):
         """Magnetic well shifting parameters."""
-        return self._shift_mn
+        return self._QI_mn
 
-    @shift_mn.setter
-    def shift_mn(self, shift_mn):
-        self._shift_mn = shift_mn
+    @QI_mn.setter
+    def QI_mn(self, QI_mn):
+        self._QI_mn = QI_mn
 
     def compute(
         self,

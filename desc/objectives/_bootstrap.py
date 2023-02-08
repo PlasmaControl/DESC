@@ -16,11 +16,19 @@ from .objective_funs import _Objective
 
 
 class BootstrapRedlConsistency(_Objective):
-    """Promote consistency of the bootstrap current for axisymmetry or quasi-symmetry.
+    """
+    Promote consistency of the bootstrap current for axisymmetry or quasi-symmetry.
 
     This objective function penalizes the difference between the MHD
     and neoclassical profiles of parallel current, using the Redl
-    formula for the boostrap current.
+    formula for the boostrap current. The scalar objective is defined as
+
+    f = ½ ∫dρ [(⟨J⋅B⟩_MHD - ⟨J⋅B⟩_Redl) / (J_ref B_ref)]²
+
+    where J_ref and B_ref are the reference magnitudes of current
+    density and magnetic field strength.  This objective is treated as
+    a sum of Nρ least-squares terms, where Nρ is the number of rho
+    grid points.
 
     Parameters
     ----------
@@ -130,6 +138,11 @@ class BootstrapRedlConsistency(_Objective):
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
         rho = eq.compute("rho", grid=self.grid)["rho"]
+        if jnp.any(eq.electron_density(rho) > 1e22):
+            warnings.warn(
+                "Electron density is surprisingly high. It should have units of "
+                "1/meters^3"
+            )
         if jnp.any(eq.electron_temperature(rho) > 50e3):
             warnings.warn(
                 "Electron temperature is surprisingly high. It should have units of eV"
@@ -168,7 +181,7 @@ class BootstrapRedlConsistency(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] * scales["J"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"] * scales["J"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -197,7 +210,31 @@ class BootstrapRedlConsistency(_Objective):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * w
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
 
     @property
     def helicity(self):

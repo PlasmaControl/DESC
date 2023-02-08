@@ -6,6 +6,7 @@ from desc.backend import jnp
 
 from .data_index import register_compute_fun
 from .utils import (
+    cross,
     dot,
     expand,
     surface_averages,
@@ -2256,6 +2257,35 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="grad(|B|)",
+    label="\\nabla |\\mathbf{B}|",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meters",
+    description="Gradient of magnetic field magnitude",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "|B|_r",
+        "|B|_t",
+        "|B|_z",
+        "e^rho",
+        "e^theta",
+        "e^zeta",
+    ],
+)
+def _grad_B(params, transforms, profiles, data, **kwargs):
+    data["grad(|B|)"] = (
+        data["|B|_r"] * data["e^rho"].T
+        + data["|B|_t"] * data["e^theta"].T
+        + data["|B|_z"] * data["e^zeta"].T
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="<|B|>_vol",
     label="\\langle |B| \\rangle_{vol}",
     units="T",
@@ -2877,4 +2907,61 @@ def _effective_r_over_R0(params, transforms, profiles, data, **kwargs):
     """
     w = data["max_tz |B|"] / data["min_tz |B|"]
     data["effective r/R0"] = (w - 1) / (w + 1)
+    return data
+
+
+@register_compute_fun(
+    name="kappa",
+    label="\\kappa",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Curvature vector of magnetic field lines",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "|B|", "b", "grad(|B|)"],
+)
+def _kappa(params, transforms, profiles, data, **kwargs):
+    data["kappa"] = -(
+        cross(data["b"], mu_0 * data["J"] + cross(data["b"], data["grad(|B|)"])).T
+        / data["|B|"]
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="kappa_n",
+    label="\\kappa_n",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Normal curvature vector of magnetic field lines",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["kappa", "n"],
+)
+def _kappa_n(params, transforms, profiles, data, **kwargs):
+    data["kappa_n"] = dot(data["kappa"], data["n"])
+    return data
+
+
+@register_compute_fun(
+    name="kappa_g",
+    label="\\kappa_g",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Geodesic curvature vector of magnetic field lines",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["kappa", "n", "b"],
+)
+def _kappa_g(params, transforms, profiles, data, **kwargs):
+    data["kappa_g"] = dot(data["kappa"], cross(data["n"], data["b"]))
     return data

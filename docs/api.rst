@@ -125,8 +125,11 @@ Objective Functions
     desc.objectives.get_equilibrium_objective
     desc.objectives.HelicalForceBalance
     desc.objectives.MagneticWell
+    desc.objectives.MeanCurvature
     desc.objectives.MercierStability
     desc.objectives.ObjectiveFunction
+    desc.objectives.PlasmaVesselDistance
+    desc.objectives.PrincipalCurvature
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct

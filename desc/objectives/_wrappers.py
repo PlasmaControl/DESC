@@ -6,7 +6,6 @@ from desc.backend import jnp
 from desc.compute import arg_order
 
 from ._equilibrium import CurrentDensity
-from ._qs import QuasiIsodynamic
 from .objective_funs import ObjectiveFunction
 from .utils import (
     align_jacobian,
@@ -74,7 +73,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._eq_objective = get_equilibrium_objective()
         self._constraints = get_fixed_boundary_constraints(
             iota=not isinstance(self._eq_objective.objectives[0], CurrentDensity)
-            and self._eq.iota is not None
+            and self._eq.iota is not None,
+            kinetic=eq.electron_temperature is not None,
         )
 
         self._objective.build(self._eq, verbose=verbose)
@@ -90,26 +90,42 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._scalar = False
 
         # set_state_vector
-        self._args = ["p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn"]
-        if isinstance(self._eq_objective.objectives[0], CurrentDensity):
-            self._args.remove("p_l")
-        if isinstance(self._objective.objectives[0], QuasiIsodynamic):  # FIXME: hacky
-            self._args.extend(["B_mag", "shape_i", "shift_mn"])
-        self._full_args = np.concatenate((self.args, self._eq_objective.args))
+
+        # this is everything taken by either objective
+        self._full_args = self._eq_objective.args + self._objective.args
         self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        # remove constraints that aren't necessary
+        self._constraints = tuple(
+            [con for con in self._constraints if con.args[0] in self._eq_objective.args]
+        )
+
+        # arguments being optimized are all args, but with internal degrees of freedom
+        # replaced by boundary terms
+        self._args = self._full_args.copy()
+        if "L_lmn" in self._args:
+            self._args.remove("L_lmn")
+        if "R_lmn" in self._args:
+            self._args.remove("R_lmn")
+            if "Rb_lmn" not in self._args:
+                self._args.append("Rb_lmn")
+        if "Z_lmn" in self._args:
+            self._args.remove("Z_lmn")
+            if "Zb_lmn" not in self._args:
+                self._args.append("Zb_lmn")
+
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}
         for arg in self.args:
             self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
             self._dim_x += self.dimensions[arg]
-        self._dim_full_x = 0
-        self._full_x_idx = {}
+        self._dim_x_full = 0
+        self._x_idx_full = {}
         for arg in self._full_args:
-            self._full_x_idx[arg] = np.arange(
-                self._dim_full_x, self._dim_full_x + self.dimensions[arg]
+            self._x_idx_full[arg] = np.arange(
+                self._dim_x_full, self._dim_x_full + self.dimensions[arg]
             )
-            self._dim_full_x += self.dimensions[arg]
+            self._dim_x_full += self.dimensions[arg]
 
         (
             xp,
@@ -120,8 +136,32 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._constraints, self._eq_objective.args)
+        ) = factorize_linear_constraints(self._constraints, self._full_args)
 
+        # dx/dc - goes from the full state to optimization variables
+        x_idx = np.concatenate(
+            [
+                self._x_idx_full[arg]
+                for arg in self._args
+                if arg not in ["Rb_lmn", "Zb_lmn"]
+            ]
+        )
+        x_idx.sort(kind="mergesort")
+        self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
+        if "Rb_lmn" in self._args:
+            dxdRb = (
+                np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]]
+                @ self._Ainv["R_lmn"]
+            )
+            self._dxdc = np.hstack((self._dxdc, dxdRb))
+        if "Zb_lmn" in self._args:
+            dxdZb = (
+                np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]]
+                @ self._Ainv["Z_lmn"]
+            )
+            self._dxdc = np.hstack((self._dxdc, dxdZb))
+
+        # history and caching
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
             self._x_old[self.x_idx[arg]] = getattr(eq, arg)
@@ -130,7 +170,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._allxopt = [self._objective.x(eq)]
         self._allxeq = [self._eq_objective.x(eq)]
         self.history = {}
-        for arg in self._full_args:
+        for arg in arg_order:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
@@ -161,18 +201,11 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         else:
             x_dict = self.unpack_state(x)
             x_dict_old = self.unpack_state(self._x_old)
-            deltas = {
-                "d" + str(key).split("_")[0]: x_dict[key] - x_dict_old[key]
-                for key in x_dict
-            }
-            # update equilibrium with new QI parameters
-            for arg in ["B_mag", "shape_i", "shift_mn"]:
-                dx = deltas.pop("d" + str(arg).split("_")[0])
-                setattr(self._eq, arg, getattr(self._eq, arg) + dx)
+            deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
             self._eq = self._eq.perturb(
                 objective=self._eq_objective,
                 constraints=self._constraints,
-                **deltas,
+                deltas=deltas,
                 **self._perturb_options
             )
             self._eq.solve(
@@ -193,17 +226,21 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             xed = self._eq_objective.unpack_state(xeq)
             xd.update(xod)
             xd.update(xed)
-            for arg in self._full_args:
-                val = xd[arg]
+            for arg in arg_order:
+                val = xd.get(arg, self.history[arg][-1])
                 self.history[arg] += [np.asarray(val).copy()]
                 # ensure eq has correct values if we didn't go into else block above.
                 if val.size:
                     setattr(self._eq, arg, val)
+            for con in self._constraints:
+                con.update_target(self._eq)
         else:
-            for arg in self._full_args:
+            for arg in arg_order:
                 val = self.history[arg][-1].copy()
                 if val.size:
                     setattr(self._eq, arg, val)
+            for con in self._constraints:
+                con.update_target(self._eq)
         return xopt, xeq
 
     def compute(self, x):
@@ -257,35 +294,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         """
         xg, xf = self._update_equilibrium(x, store=True)
 
-        # dx/dc
-        x_idx = np.concatenate(
-            [
-                self._full_x_idx[arg]
-                for arg in ["p_l", "i_l", "c_l", "Psi"]
-                if arg in self._full_args
-            ]
-        )
-        x_idx.sort(kind="mergesort")
-        dxdc = np.eye(self._dim_full_x)[:, x_idx]
-        dxdRb = (
-            np.eye(self._dim_full_x)[:, self._full_x_idx["R_lmn"]] @ self._Ainv["R_lmn"]
-        )
-        dxdc = np.hstack((dxdc, dxdRb))
-        dxdZb = (
-            np.eye(self._dim_full_x)[:, self._full_x_idx["Z_lmn"]] @ self._Ainv["Z_lmn"]
-        )
-        dxdc = np.hstack((dxdc, dxdZb))
-        qi_idx = np.concatenate(
-            [
-                self._full_x_idx[arg]
-                for arg in ["B_mag", "shape_i", "shift_mn"]
-                if arg in self._full_args
-            ]
-        )
-        qi_idx.sort(kind="mergesort")
-        dxdqi = np.eye(self._dim_full_x)[:, qi_idx]
-        dxdc = np.hstack((dxdc, dxdqi))
-
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
         Gx = self._objective.jac(xg)
@@ -296,8 +304,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
         Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
         Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
-        Fc = Fx @ dxdc
-        Gc = Gx @ dxdc
+        Fc = Fx @ self._dxdc
+        Gc = Gx @ self._dxdc
 
         # FIXME (@f0uriest): need to import here to avoid circular dependencies
         from desc.optimize.utils import compute_jac_scale

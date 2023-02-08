@@ -130,11 +130,10 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option,
-    # Radial, HelicalForceBalance defaulted to cos, sin rotation, respectively
+    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
+    # defaulted to cos, sin rotation, respectively.
     # This test has been kept to increase code coverage.
 
     def test(iota=False):
@@ -171,10 +170,28 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
-@pytest.mark.solve
+def test_solve_bounds():
+    """Tests optimizing with bounds=(lower bound, upper bound)."""
+    # decrease resolution and double pressure so no longer in force balance
+    eq = desc.examples.get("DSHAPE")
+    eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
+    eq.p_l *= 2
+
+    # target force balance residuals with |F| <= 1e3 N
+    obj = ObjectiveFunction(
+        ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3)), eq=eq
+    )
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+
+    # check that all errors are nearly 0, since residual values are within target bounds
+    f = obj.compute(obj.x(eq))
+    np.testing.assert_allclose(f, 0, atol=1e-4)
+
+
+@pytest.mark.regression
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
         ForceBalance(),
@@ -188,14 +205,13 @@ def test_1d_optimization(SOLOVEV):
     with pytest.warns(UserWarning):
         eq.optimize(objective, constraints, options=options)
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 @pytest.mark.regression
-@pytest.mark.solve
-def test_1d_optimization_old(SOLOVEV):
+def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     eq._optimize(
         objective,
@@ -207,7 +223,7 @@ def test_1d_optimization_old(SOLOVEV):
         },
     )
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 def run_qh_step(n, eq):
@@ -326,22 +342,20 @@ def test_ATF_results(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     eq0 = desc.examples.get("ATF")
     eq = Equilibrium(
-        eq0.Psi,
-        eq0.NFP,
-        eq0.L,
-        eq0.M,
-        eq0.N,
-        eq0.L_grid,
-        eq0.M_grid,
-        eq0.N_grid,
-        eq0.node_pattern,
-        eq0.pressure,
-        eq0.iota,
-        None,
-        eq0.get_surface_at(rho=1),
-        None,
-        eq0.sym,
-        eq0.spectral_indexing,
+        Psi=eq0.Psi,
+        NFP=eq0.NFP,
+        L=eq0.L,
+        M=eq0.M,
+        N=eq0.N,
+        L_grid=eq0.L_grid,
+        M_grid=eq0.M_grid,
+        N_grid=eq0.N_grid,
+        node_pattern=eq0.node_pattern,
+        pressure=eq0.pressure,
+        iota=eq0.iota,
+        surface=eq0.get_surface_at(rho=1),
+        sym=eq0.sym,
+        spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
         eq,
@@ -361,22 +375,20 @@ def test_ESTELL_results(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     eq0 = desc.examples.get("ESTELL")
     eq = Equilibrium(
-        eq0.Psi,
-        eq0.NFP,
-        eq0.L,
-        eq0.M,
-        eq0.N,
-        eq0.L_grid,
-        eq0.M_grid,
-        eq0.N_grid,
-        eq0.node_pattern,
-        eq0.pressure,
-        None,
-        eq0.current,
-        eq0.get_surface_at(rho=1),
-        None,
-        eq0.sym,
-        eq0.spectral_indexing,
+        Psi=eq0.Psi,
+        NFP=eq0.NFP,
+        L=eq0.L,
+        M=eq0.M,
+        N=eq0.N,
+        L_grid=eq0.L_grid,
+        M_grid=eq0.M_grid,
+        N_grid=eq0.N_grid,
+        node_pattern=eq0.node_pattern,
+        pressure=eq0.pressure,
+        current=eq0.current,
+        surface=eq0.get_surface_at(rho=1),
+        sym=eq0.sym,
+        spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
         eq,

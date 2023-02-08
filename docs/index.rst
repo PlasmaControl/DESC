@@ -45,6 +45,7 @@
 
    compute
    objectives
+   notebooks/dev_guide/grid.ipynb
 
 .. toctree::
    :maxdepth: 1

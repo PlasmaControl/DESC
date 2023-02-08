@@ -32,12 +32,20 @@ Name,Label,Units,Description,Module
 ``e^rho``,:math:`\mathbf{e}^{\rho}`,inverse meters,Contravariant radial basis vector,``desc.compute._basis_vectors``
 ``e^theta``,:math:`\mathbf{e}^{\theta}`,inverse meters,Contravariant poloidal basis vector,``desc.compute._basis_vectors``
 ``e^zeta``,:math:`\mathbf{e}^{\zeta}`,inverse meters,Contravariant toroidal basis vector,``desc.compute._basis_vectors``
-``trapped fraction``,:math:`1 - \frac{3}{4} \left< B^2 \right> \int_0^{1/Bmax} \frac{\lambda\; d\lambda}{\left< \sqrt{1 - \lambda B} \right>}`,None,Neoclassical effective trapped particle fraction,``desc.compute._bootstrap``
+``b``,:math:`\hat{b}`,None,Unit vector along magnetic field,``desc.compute._basis_vectors``
+``n``,:math:`\hat{n}`,None,Unit vector normal to flux surface,``desc.compute._basis_vectors``
+``grad(alpha)``,:math:`\nabla \alpha`,Inverse meters,Unit vector normal to flux surface,``desc.compute._basis_vectors``
+``trapped fraction``,:math:`1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax} \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}`,None,Neoclassical effective trapped particle fraction,``desc.compute._bootstrap``
 ``<J*B> Redl``,:math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle_{Redl}`,Tesla Ampere / meter^2,"Bootstrap current profile, Redl model for quasisymmetry",``desc.compute._bootstrap``
 ``0``,:math:`0`,None,Zeros,``desc.compute._core``
 ``rho``,:math:`\rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux",``desc.compute._core``
 ``theta``,:math:`\theta`,radians,"Poloidal angular coordinate (geometric, not magnetic)",``desc.compute._core``
 ``zeta``,:math:`\zeta`,radians,"Toroidal angular coordinate, equal to the geometric toroidal angle",``desc.compute._core``
+``theta_sfl``,:math:`\vartheta`,radians,PEST straight field line poloidal angular coordinate,``desc.compute._core``
+``alpha``,:math:`\alpha`,None,Field line label,``desc.compute._core``
+``alpha_r``,:math:`\partial_\rho \alpha`,None,"Field line label, derivative wrt radial coordinate",``desc.compute._core``
+``alpha_t``,:math:`\partial_\theta \alpha`,None,"Field line label, derivative wrt poloidal coordinate",``desc.compute._core``
+``alpha_z``,:math:`\partial_\zeta \alpha`,None,"Field line label, derivative wrt toroidal coordinate",``desc.compute._core``
 ``R``,:math:`R`,meters,Major radius in lab frame,``desc.compute._core``
 ``R_r``,:math:`\partial_{\rho} R`,meters,"Major radius in lab frame, first radial derivative",``desc.compute._core``
 ``R_t``,:math:`\partial_{\theta} R`,meters,"Major radius in lab frame, first poloidal derivative",``desc.compute._core``
@@ -210,6 +218,7 @@ Name,Label,Units,Description,Module
 ``|B|_rt``,:math:`\partial_{\rho\theta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate and poloidal angle",``desc.compute._field``
 ``|B|_tz``,:math:`\partial_{\theta\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt poloidal and toroidal angles",``desc.compute._field``
 ``|B|_rz``,:math:`\partial_{\rho\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
+``grad(|B|)``,:math:`\nabla |\mathbf{B}|`,Tesla / meters,Gradient of magnetic field magnitude,``desc.compute._field``
 ``<|B|>_vol``,:math:`\langle |B| \rangle_{vol}`,Tesla,Volume average magnetic field,``desc.compute._field``
 ``<|B|>_rms``,:math:`\langle |B| \rangle_{rms}`,Tesla,"Volume average magnetic field, root mean square",``desc.compute._field``
 ``<|B|>``,:math:`\langle |B| \rangle`,Tesla,Flux surface average magnetic field,``desc.compute._field``
@@ -236,6 +245,9 @@ Name,Label,Units,Description,Module
 ``max_tz |B|``,:math:`\max_{\theta \zeta} |B|`,Tesla,Maximum field strength on each flux surface,``desc.compute._field``
 ``min_tz |B|``,:math:`\min_{\theta \zeta} |B|`,Tesla,Minimum field strength on each flux surface,``desc.compute._field``
 ``effective r/R0``,:math:`(r / R_0)_{effective}`,None,"Effective local inverse aspect ratio, based on max and min |B|",``desc.compute._field``
+``kappa``,:math:`\kappa`,Inverse meters,Curvature vector of magnetic field lines,``desc.compute._field``
+``kappa_n``,:math:`\kappa_n`,Inverse meters,Normal curvature vector of magnetic field lines,``desc.compute._field``
+``kappa_g``,:math:`\kappa_g`,Inverse meters,Geodesic curvature vector of magnetic field lines,``desc.compute._field``
 ``V``,:math:`V`,cubic meters,Volume,``desc.compute._geometry``
 ``V(r)``,:math:`V(\rho)`,cubic meters,Volume enclosed by flux surfaces,``desc.compute._geometry``
 ``V_r(r)``,:math:`\partial_{\rho} V(\rho)`,cubic meters,"Volume enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._geometry``
@@ -293,6 +305,8 @@ Name,Label,Units,Description,Module
 ``grad(psi)``,:math:`\nabla\psi`,Webers per meter,Toroidal flux gradient (normalized by 2pi),``desc.compute._profiles``
 ``|grad(psi)|^2``,:math:`|\nabla\psi|^{2}`,Webers squared per square meter,Toroidal flux gradient (normalized by 2pi) magnitude squared,``desc.compute._profiles``
 ``|grad(psi)|``,:math:`|\nabla\psi|`,Webers per meter,Toroidal flux gradient (normalized by 2pi) magnitude,``desc.compute._profiles``
+``chi_r``,:math:`\partial_{\rho} \chi`,Webers,"Poloidal flux (normalized by 2pi), first radial derivative",``desc.compute._profiles``
+``chi``,:math:`\chi`,Webers,Poloidal flux (normalized by 2pi),``desc.compute._profiles``
 ``Te``,:math:`T_e`,electron-Volts,Electron temperature,``desc.compute._profiles``
 ``Te_r``,:math:`\partial_{\rho} T_e`,electron-Volts,"Electron temperature, first radial derivative",``desc.compute._profiles``
 ``ne``,:math:`n_e`,1 / cubic meters,Electron density,``desc.compute._profiles``

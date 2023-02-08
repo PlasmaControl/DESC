@@ -164,7 +164,7 @@ class Grid(IOAble):
         # scale areas sum to full area
         # The following operation is not a general solution to return the weight
         # removed from the duplicate nodes back to the unique nodes.
-        # For this reason, duplicates should typically be deleted rather that rescaled.
+        # For this reason, duplicates should typically be deleted rather than rescaled.
         # Note we multiply each column by duplicates^(1/6) to account for the extra
         # division by duplicates^(1/2) in one of the columns above.
         self._spacing *= (
@@ -507,15 +507,14 @@ class LinearGrid(Grid):
                     # to be half the weight of the other nodes.
                     if not self.sym:
                         # However, scale_weights() is not aware of this, so we
-                        # multiply by 2 to counteract the reduction that will be
-                        # done there.
-                        dt[0] *= 2
-                        dt[-1] *= 2
+                        # counteract the reduction that will be done there.
+                        dt[0] += dt[-1]
+                        dt[-1] = dt[0]
                     else:
                         # Symmetry deletion will delete the duplicate node at 2pi.
                         # Need to move weight from non-duplicate nodes back to the
                         # node at theta = 0 pi.
-                        dt[0] *= 2
+                        dt[0] += dt[-1]
                         dt *= (t.size - 1) / t.size
             else:
                 dt = np.array([2 * np.pi])
@@ -555,10 +554,10 @@ class LinearGrid(Grid):
                 if z[0] == 0 and z[-1] == SUP:
                     # The cyclic distance algorithm above correctly weights
                     # the duplicate node spacing at zeta = 0 and 2pi / NFP.
-                    # However, scale_weights() is not aware of this, so we multiply
-                    # by 2 to counteract the reduction that will be done there.
-                    dz[0] *= 2
-                    dz[-1] *= 2
+                    # However, scale_weights() is not aware of this, so we
+                    # counteract the reduction that will be done there.
+                    dz[0] += dz[-1]
+                    dz[-1] = dz[0]
             else:
                 dz = np.array([2 * np.pi])
 

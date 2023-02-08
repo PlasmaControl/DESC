@@ -599,7 +599,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
     #     In grid.py, we multiply by 1/n the areas of surfaces with
     # duplicity n. This prevents the area of that surface from being
     # double-counted, as surfaces with the same node value are combined
-    # into 1 integral, which  sums their areas. Thus, if the zeta=pi
+    # into 1 integral, which sums their areas. Thus, if the zeta=pi
     # cross-section has duplicity 2, we ensure that the area on the zeta=pi
     # surface will have the correct total area of pi+pi = 2pi.
     #     An edge case exists if the duplicate surface has nodes with

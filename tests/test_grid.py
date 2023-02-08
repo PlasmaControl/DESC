@@ -86,8 +86,8 @@ class TestGrid:
             if sym:
                 # When users supply nodes and set symmetry to true, they need
                 # to ensure their nodes are placed symmetrically.
-                # Here we change the array to match the effect of line 481
-                # in grid.py, so the nodes are actually symmetric.
+                # Here we change the array to match the effect done in grid.py,
+                # so the nodes are actually symmetric.
                 theta += theta[1] / 2
                 if endpoint:
                     # We have to manually delete last node because the addition

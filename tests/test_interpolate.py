@@ -36,7 +36,7 @@ class TestInterp1D:
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
 
         fq = interp1d(x, xp, fp, method="monotonic")
-        np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
 
     @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):

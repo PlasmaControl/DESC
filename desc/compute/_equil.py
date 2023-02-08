@@ -461,5 +461,5 @@ def _W(params, transforms, profiles, data, **kwargs):
     data=["W_p", "W_B"],
 )
 def _beta_vol(params, transforms, profiles, data, **kwargs):
-    data["<beta>_vol"] = -data["W_p"] / data["W_B"]
+    data["<beta>_vol"] = jnp.abs(data["W_p"] / data["W_B"])
     return data

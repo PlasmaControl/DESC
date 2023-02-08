@@ -634,7 +634,7 @@ def surface_averages(
 
 
 def surface_max(grid, x, surface_label="rho"):
-    """Get the max of x for all surfaces in the grid.
+    """Get the max of x for each surface in the grid.
 
     Parameters
     ----------
@@ -643,7 +643,7 @@ def surface_max(grid, x, surface_label="rho"):
     x : ndarray
         Quantity to find max.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
+        The surface label of rho, theta, or zeta to compute max over.
 
     Returns
     -------
@@ -664,7 +664,7 @@ def surface_max(grid, x, surface_label="rho"):
 
 
 def surface_min(grid, x, surface_label="rho"):
-    """Get the min of x for all surfaces in the grid.
+    """Get the min of x for each surface in the grid.
 
     Parameters
     ----------
@@ -673,7 +673,7 @@ def surface_min(grid, x, surface_label="rho"):
     x : ndarray
         Quantity to find min.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
+        The surface label of rho, theta, or zeta to compute min over.
 
     Returns
     -------

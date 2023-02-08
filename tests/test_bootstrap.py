@@ -1219,7 +1219,8 @@ class TestBootstrapObjectives:
 
         results = np.array([scalar_objective1, scalar_objective2, scalar_objective3])
 
-        # Compute the expected objective from ½∫(<J*B>_MHD - <J*B>_Redl)² dρ:
+        # Compute the expected objective from
+        # ½ ∫dρ [(⟨J⋅B⟩_MHD - ⟨J⋅B⟩_Redl) / (J_ref B_ref)]²
         scales = compute_scaling_factors(eq)
         data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
         integrand = (data["<J*B>"] - data["<J*B> Redl"]) / (scales["B"] * scales["J"])

@@ -16,11 +16,19 @@ from .objective_funs import _Objective
 
 
 class BootstrapRedlConsistency(_Objective):
-    """Promote consistency of the bootstrap current for axisymmetry or quasi-symmetry.
+    """
+    Promote consistency of the bootstrap current for axisymmetry or quasi-symmetry.
 
     This objective function penalizes the difference between the MHD
     and neoclassical profiles of parallel current, using the Redl
-    formula for the boostrap current.
+    formula for the boostrap current. The scalar objective is defined as
+
+    f = ½ ∫dρ [(⟨J⋅B⟩_MHD - ⟨J⋅B⟩_Redl) / (J_ref B_ref)]²
+
+    where J_ref and B_ref are the reference magnitudes of current
+    density and magnetic field strength.  This objective is treated as
+    a sum of Nρ least-squares terms, where Nρ is the number of rho
+    grid points.
 
     Parameters
     ----------

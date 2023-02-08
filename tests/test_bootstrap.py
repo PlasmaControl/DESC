@@ -34,6 +34,7 @@ from desc.objectives import (
     ObjectiveFunction,
     get_fixed_boundary_constraints,
 )
+from desc.objectives.normalization import compute_scaling_factors
 from desc.optimize import Optimizer
 from desc.profiles import PowerSeriesProfile, SplineProfile
 
@@ -1217,9 +1218,18 @@ class TestBootstrapObjectives:
         scalar_objective3 = obj.compute_scalar(obj.x(eq))
 
         results = np.array([scalar_objective1, scalar_objective2, scalar_objective3])
-        print("boostrap objectives for scaled configs:", results)
+
+        # Compute the expected objective from ½∫(<J*B>_MHD - <J*B>_Redl)² dρ:
+        scales = compute_scaling_factors(eq)
+        data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
+        integrand = (data["<J*B>"] - data["<J*B> Redl"]) / (scales["B"] * scales["J"])
+        expected = 0.5 * sum(grid.weights * integrand**2) / (4 * np.pi**2)
+        print(
+            "boostrap objectives for scaled configs:", results, " expected:", expected
+        )
+
         # Results are not perfectly identical because ln(Lambda) is not quite invariant.
-        np.testing.assert_allclose(results, np.mean(results), rtol=1e-3)
+        np.testing.assert_allclose(results, expected, rtol=2e-3)
 
     @pytest.mark.unit
     @pytest.mark.solve

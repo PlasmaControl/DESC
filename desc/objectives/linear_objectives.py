@@ -1594,7 +1594,7 @@ class FixR(_Objective):
             Total flux surface error (m).
 
         """
-        return self._shift_scale(R_lmn)
+        return R_lmn
 
     @property
     def target_arg(self):
@@ -1696,7 +1696,7 @@ class FixZ(_Objective):
             Total flux surface error (m).
 
         """
-        return self._shift_scale(Z_lmn)
+        return Z_lmn
 
     @property
     def target_arg(self):
@@ -1794,7 +1794,7 @@ class FixLambda(_Objective):
             Total lambda error (rad).
 
         """
-        return self._shift_scale(L_lmn)
+        return L_lmn
 
     @property
     def target_arg(self):
@@ -1905,7 +1905,7 @@ class FixQIShape(_Objective):
             Total QI magnetic well shape error.
 
         """
-        return self._shift_scale(QI_l[self._idx])
+        return QI_l[self._idx]
 
     @property
     def target_arg(self):
@@ -2015,7 +2015,7 @@ class FixQIShift(_Objective):
             Total QI magnetic well shift error.
 
         """
-        return self._shift_scale(QI_mn[self._idx])
+        return QI_mn[self._idx]
 
     @property
     def target_arg(self):

@@ -427,7 +427,7 @@ def _qi_B(params, transforms, profiles, data, **kwargs):
     QI_l = jnp.sort(params["QI_l"])
 
     # |B|_QI is only a function of zeta-bar_QI
-    step = jnp.pi / 2 / (params["QI_l"].size + 1)
+    step = jnp.pi / 2 / (params["QI_l"].size - 1)
     x = jnp.arange(-jnp.pi / 2, jnp.pi / 2 + step, step)
     y = jnp.concatenate((jnp.flip(QI_l[:-1]), QI_l))
 

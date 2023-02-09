@@ -30,17 +30,20 @@ class MercierStability(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -56,7 +59,8 @@ class MercierStability(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=(0, np.inf),
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -67,6 +71,7 @@ class MercierStability(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -129,13 +134,21 @@ class MercierStability(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -150,40 +163,40 @@ class MercierStability(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = compress(self.grid, data["D_Mercier"], surface_label="rho")
+        return compress(self.grid, data["D_Mercier"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(f) * w
+        return super().compute_scaled(*args, **kwargs) * w
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(
-            self.compute(*args, **kwargs)
-            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        f = self.compute(*args, **kwargs)
+        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(f))
+            + self._units
         )
-        logging.info(
-            "Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units
+        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(f))
+            + self._units
         )
-        logging.info(
-            "Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units
-        )
-        logging.info(
-            "Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units
+        logging.info("Average " + self._print_value_fmt.format(jnp.mean(f))
+            + self._units
         )
 
         if self._normalize:
             logging.info(
                 "Maximum "
-                + self._print_value_fmt.format(jnp.max(x / self.normalization))
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
                 + "(normalized)"
             )
             logging.info(
                 "Minimum "
-                + self._print_value_fmt.format(jnp.min(x / self.normalization))
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
                 + "(normalized)"
             )
             logging.info(
                 "Average "
-                + self._print_value_fmt.format(jnp.mean(x / self.normalization))
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"
             )
 
@@ -204,19 +217,21 @@ class MagneticWell(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
+        Note: Has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True. Note: Has no effect for this objective.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -232,10 +247,11 @@ class MagneticWell(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=(0, np.inf),
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="Magnetic Well",
     ):
@@ -243,6 +259,7 @@ class MagneticWell(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -300,13 +317,21 @@ class MagneticWell(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -321,22 +346,22 @@ class MagneticWell(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = compress(self.grid, data["magnetic well"], surface_label="rho")
+        return compress(self.grid, data["magnetic well"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(f) * w
+        return super().compute_scaled(*args, **kwargs) * w
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        x = self._unshift_unscale(
-            self.compute(*args, **kwargs)
-            / compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        f = self.compute(*args, **kwargs)
+        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(f))
+            + self._units
         )
-        logging.info(
-            "Maximum " + self._print_value_fmt.format(jnp.max(x)) + self._units
+        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(f))
+            + self._units
         )
-        logging.info(
-            "Minimum " + self._print_value_fmt.format(jnp.min(x)) + self._units
-        )
-        logging.info(
-            "Average " + self._print_value_fmt.format(jnp.mean(x)) + self._units
+        logging.info("Average " + self._print_value_fmt.format(jnp.mean(f))
+            + self._units
         )

@@ -30,6 +30,9 @@ class FixBoundaryR(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Boundary surface coefficients to fix. If None, uses surface coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -69,6 +72,7 @@ class FixBoundaryR(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -85,6 +89,7 @@ class FixBoundaryR(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -179,8 +184,7 @@ class FixBoundaryR(_Objective):
             x = kwargs.get(self.args[0], args[0])
         else:
             x = kwargs.get(self.args[0])
-        Rb = jnp.dot(self._A, x)
-        return self._shift_scale(Rb)
+        return jnp.dot(self._A, x)
 
     @property
     def target_arg(self):
@@ -197,6 +201,9 @@ class FixBoundaryZ(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Boundary surface coefficients to fix. If None, uses surface coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -236,6 +243,7 @@ class FixBoundaryZ(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -252,6 +260,7 @@ class FixBoundaryZ(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -345,8 +354,7 @@ class FixBoundaryZ(_Objective):
             x = kwargs.get(self.args[0], args[0])
         else:
             x = kwargs.get(self.args[0])
-        Zb = jnp.dot(self._A, x)
-        return self._shift_scale(Zb)
+        return jnp.dot(self._A, x)
 
     @property
     def target_arg(self):
@@ -363,6 +371,9 @@ class FixLambdaGauge(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Value to fix lambda to at rho=0 and (theta=0,zeta=0)
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -389,6 +400,7 @@ class FixLambdaGauge(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -398,6 +410,7 @@ class FixLambdaGauge(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -505,8 +518,7 @@ class FixLambdaGauge(_Objective):
             Lambda gauge symmetry errors.
 
         """
-        f = jnp.dot(self._A, L_lmn)
-        return self._shift_scale(f)
+        return jnp.dot(self._A, L_lmn)
 
 
 class _FixProfile(_Objective, ABC):
@@ -521,6 +533,9 @@ class _FixProfile(_Objective, ABC):
         len(target) = len(weight) = len(modes). If None, uses Profile.params.
         e.g. for PowerSeriesProfile these are profile coefficients, and for
         SplineProfile they are values at knots.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -551,6 +566,7 @@ class _FixProfile(_Objective, ABC):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -564,6 +580,7 @@ class _FixProfile(_Objective, ABC):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -617,6 +634,9 @@ class FixPressure(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -649,6 +669,7 @@ class FixPressure(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -660,6 +681,7 @@ class FixPressure(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -683,6 +705,11 @@ class FixPressure(_FixProfile):
             * 2  : display progress and timing info during iterations
 
         """
+        if eq.pressure is None:
+            raise RuntimeError(
+                "Attempting to fix pressure on an equilibrium with no "
+                + "pressure profile assigned"
+            )
         profile = eq.pressure
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -695,7 +722,7 @@ class FixPressure(_FixProfile):
         Parameters
         ----------
         p_l : ndarray
-            parameters of the pressure profile.
+            parameters of the pressure profile (Pa).
 
         Returns
         -------
@@ -703,8 +730,7 @@ class FixPressure(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = p_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return p_l[self._idx]
 
     @property
     def target_arg(self):
@@ -722,6 +748,9 @@ class FixIota(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -756,6 +785,7 @@ class FixIota(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=False,
         normalize_target=False,
@@ -767,6 +797,7 @@ class FixIota(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -812,8 +843,7 @@ class FixIota(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = i_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return i_l[self._idx]
 
     @property
     def target_arg(self):
@@ -831,6 +861,9 @@ class FixCurrent(_FixProfile):
     target : tuple, float, ndarray, optional
         Target value(s) of the objective.
         len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(target) = len(weight) = len(modes)
@@ -863,6 +896,7 @@ class FixCurrent(_FixProfile):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -874,6 +908,7 @@ class FixCurrent(_FixProfile):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -914,6 +949,453 @@ class FixCurrent(_FixProfile):
         Parameters
         ----------
         c_l : ndarray
+            parameters of the current profile (A).
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        return c_l[self._idx]
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "c_l"
+
+
+class FixElectronTemperature(_FixProfile):
+    """Fixes electron temperature profile coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(eV)"
+    _print_value_fmt = "Fixed-electron-temperature profile error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        profile=None,
+        indices=True,
+        name="fixed-electron-temperature",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if eq.electron_temperature is None:
+            raise RuntimeError(
+                "Attempting to fix electron temperature on an equilibrium with no "
+                + "electron temperature profile assigned"
+            )
+        profile = eq.electron_temperature
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["T"]
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, Te_l, **kwargs):
+        """Compute fixed electron temperature errors.
+
+        Parameters
+        ----------
+        Te_l : ndarray
+            parameters of the electron temperature profile (eV).
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        return Te_l[self._idx]
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Te_l"
+
+
+class FixElectronDensity(_FixProfile):
+    """Fixes electron density profile coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(m^-3)"
+    _print_value_fmt = "Fixed-electron-density profile error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        profile=None,
+        indices=True,
+        name="fixed-electron-density",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if eq.electron_density is None:
+            raise RuntimeError(
+                "Attempting to fix electron density on an equilibrium with no "
+                + "electron density profile assigned"
+            )
+        profile = eq.electron_density
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["n"]
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, ne_l, **kwargs):
+        """Compute fixed electron density errors.
+
+        Parameters
+        ----------
+        ne_l : ndarray
+            parameters of the electron density profile (1/m^3).
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        return ne_l[self._idx]
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "ne_l"
+
+
+class FixIonTemperature(_FixProfile):
+    """Fixes ion temperature profile coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(eV)"
+    _print_value_fmt = "Fixed-ion-temperature profile error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        profile=None,
+        indices=True,
+        name="fixed-ion-temperature",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if eq.ion_temperature is None:
+            raise RuntimeError(
+                "Attempting to fix ion temperature on an equilibrium with no "
+                + "ion temperature profile assigned"
+            )
+        profile = eq.ion_temperature
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["T"]
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, Ti_l, **kwargs):
+        """Compute fixed ion temperature errors.
+
+        Parameters
+        ----------
+        Ti_l : ndarray
+            parameters of the ion temperature profile (eV).
+
+        Returns
+        -------
+        f : ndarray
+            Fixed profile errors.
+
+        """
+        return Ti_l[self._idx]
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Ti_l"
+
+
+class FixAtomicNumber(_FixProfile):
+    """Fixes effective atomic number profile coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
+    profile : Profile, optional
+        Profile containing the radial modes to evaluate at.
+    indices : ndarray or bool, optional
+        indices of the Profile.params array to fix.
+        (e.g. indices corresponding to modes for a PowerSeriesProfile or indices
+        corresponding to knots for a SplineProfile).
+        Must have len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the Profile.params indices.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(dimensionless)"
+    _print_value_fmt = "Fixed-atomic-number profile error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        profile=None,
+        indices=True,
+        name="fixed-atomic-number",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            profile=profile,
+            indices=indices,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if eq.atomic_number is None:
+            raise RuntimeError(
+                "Attempting to fix atomic number on an equilibrium with no "
+                + "atomic number profile assigned"
+            )
+        profile = eq.atomic_number
+        super().build(eq, profile, use_jit, verbose)
+
+    def compute(self, Zeff_l, **kwargs):
+        """Compute fixed atomic number errors.
+
+        Parameters
+        ----------
+        Zeff_l : ndarray
             parameters of the current profile.
 
         Returns
@@ -922,13 +1404,12 @@ class FixCurrent(_FixProfile):
             Fixed profile errors.
 
         """
-        fixed_params = c_l[self._idx]
-        return self._shift_scale(fixed_params)
+        return Zeff_l[self._idx]
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "c_l"
+        return "Zeff_l"
 
 
 class FixPsi(_Objective):
@@ -940,6 +1421,8 @@ class FixPsi(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, optional
         Target value(s) of the objective. If None, uses Equilibrium value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
@@ -963,6 +1446,7 @@ class FixPsi(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -972,6 +1456,7 @@ class FixPsi(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -1018,7 +1503,7 @@ class FixPsi(_Objective):
             Total toroidal magnetic flux error (Wb).
 
         """
-        return self._shift_scale(Psi)
+        return Psi
 
     @property
     def target_arg(self):

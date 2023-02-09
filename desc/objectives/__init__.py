@@ -12,6 +12,7 @@ from ._geometry import (
     AspectRatio,
     Elongation,
     MeanCurvature,
+    PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
 )
@@ -19,9 +20,13 @@ from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryT
 from ._stability import MagneticWell, MercierStability
 from ._wrappers import WrappedEquilibriumObjective
 from .linear_objectives import (
+    FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixPressure,

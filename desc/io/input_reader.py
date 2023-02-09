@@ -1385,9 +1385,9 @@ class InputReader:
                 inputs_arr[i]["N"] = 0
                 inputs_arr[i]["N_grid"] = 0
                 inputs_arr[i]["pres_ratio"] = 0.0
-                inputs_arr[i]["curr_ratio"] = 0
+                inputs_arr[i]["curr_ratio"] = 0.0
                 if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0
+                    inputs_arr[i]["bdry_ratio"] = 0.0
                 else:
                     inputs_arr[i]["bdry_ratio"] = 1.0
             elif i < (res_steps + pres_steps):
@@ -1397,7 +1397,7 @@ class InputReader:
                 inputs_arr[i]["curr_ratio"] = (i - res_steps + 1) * pres_step
                 inputs_arr[i]["pert_order"] = 2
                 if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0
+                    inputs_arr[i]["bdry_ratio"] = 0.0
                 else:
                     inputs_arr[i]["bdry_ratio"] = 1.0
             else:

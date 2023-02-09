@@ -23,8 +23,11 @@ class GenericObjective(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -32,10 +35,9 @@ class GenericObjective(_Objective):
         Whether to compute the error in physical units or non-dimensionalize.
         Note: has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -53,9 +55,10 @@ class GenericObjective(_Objective):
         f,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="generic",
     ):
@@ -65,6 +68,7 @@ class GenericObjective(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -125,7 +129,7 @@ class GenericObjective(_Objective):
         f = data[self.f]
         if not self.scalar:
             f = (f.T * self.grid.weights).flatten()
-        return self._shift_scale(f)
+        return f
 
 
 class ToroidalCurrent(_Objective):
@@ -135,19 +139,21 @@ class ToroidalCurrent(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Profile, float, ndarray, optional
-        Target value(s) of the objective.
-        If a Profile, target the values of that profile at nodes specified by grid.
-        If an array, len(target) must be equal to Objective.dim_f == grid.num_rho
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f == grid.num_rho
+        len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -164,6 +170,7 @@ class ToroidalCurrent(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -175,6 +182,7 @@ class ToroidalCurrent(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -260,9 +268,12 @@ class ToroidalCurrent(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        I = compress(self.grid, data["current"], surface_label="rho")
+        return compress(self.grid, data["current"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(I) * w
+        return super().compute_scaled(*args, **kwargs) * w
 
 
 class RotationalTransform(_Objective):
@@ -272,25 +283,28 @@ class RotationalTransform(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Profile, float, ndarray, optional
-        Target value(s) of the objective.
-        If a Profile, target the values of that profile at nodes specified by grid.
-        If an array, len(target) must be equal to Objective.dim_f == grid.num_rho
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f == grid.num_rho
+        len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
         Note: has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
         Note: has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -302,6 +316,7 @@ class RotationalTransform(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -313,6 +328,7 @@ class RotationalTransform(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -384,6 +400,7 @@ class RotationalTransform(_Objective):
         -------
         iota : ndarray
             rotational transform on specified flux surfaces.
+
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
@@ -392,6 +409,9 @@ class RotationalTransform(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        iota = compress(self.grid, data["iota"], surface_label="rho")
+        return compress(self.grid, data["iota"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(iota) * w
+        return super().compute_scaled(*args, **kwargs) * w

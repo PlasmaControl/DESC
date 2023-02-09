@@ -292,17 +292,14 @@ def test_magwell_print(TmpDir):
     # Test magnetic well stability print functions
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
-    magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
-    magwell_obj = MagneticWell(eq=eq, grid=grid)
-    w = compress(magwell_obj.grid, magwell_obj.grid.spacing[:, 0], surface_label="rho")
-    np.testing.assert_allclose(
-        magwell_obj.compute(*magwell_obj.xs(eq)), magwell * w, atol=1e-16
-    )
+    obj = MagneticWell(eq=eq, grid=grid)
 
-    # Can't compare print statement against the magwell calc from eq.compute due to
-    # some tiny roundoff errors, the printed values are slightly different
-    magwell_vals = magwell_obj.compute(*magwell_obj.xs(eq)) / w
-    magwell_obj.print_value(*magwell_obj.xs(eq))
+    magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
+    f = obj.compute(*obj.xs(eq))
+    np.testing.assert_allclose(f, magwell)
+
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
 
     # Read and compare logfile to expected output
     logconnection = open(logfile_path)
@@ -311,16 +308,16 @@ def test_magwell_print(TmpDir):
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
-        + magwell_obj._print_value_fmt.format(np.max(magwell_vals))
-        + magwell_obj._units
+        + obj._print_value_fmt.format(np.max(magwell))
+        + obj._units
         + "\n"
         + "Minimum "
-        + magwell_obj._print_value_fmt.format(np.min(magwell_vals))
-        + magwell_obj._units
+        + obj._print_value_fmt.format(np.min(magwell))
+        + obj._units
         + "\n"
         + "Average "
-        + magwell_obj._print_value_fmt.format(np.mean(magwell_vals))
-        + magwell_obj._units
+        + obj._print_value_fmt.format(np.mean(magwell))
+        + obj._units
         + "\n"
     )
     assert out == corr_out

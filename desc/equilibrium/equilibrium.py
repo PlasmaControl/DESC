@@ -66,6 +66,20 @@ class Equilibrium(_Configuration, IOAble):
     current : Profile or ndarray shape(k,2) (optional)
         Toroidal current profile or array of mode numbers and spectral coefficients
         Default is a PowerSeriesProfile with zero toroidal current
+    electron_temperature : Profile or ndarray shape(k,2) (optional)
+        Electron temperature (eV) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding density.
+        Cannot specify both kinetic profiles and pressure.
+    electron_density : Profile or ndarray shape(k,2) (optional)
+        Electron density (m^-3) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding temperature.
+        Cannot specify both kinetic profiles and pressure.
+    ion_temperature : Profile or ndarray shape(k,2) (optional)
+        Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
+        Default is to assume electrons and ions have the same temperature.
+    atomic_number : Profile or ndarray shape(k,2) (optional)
+        Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
+        coefficients. Default is 1
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -102,6 +116,10 @@ class Equilibrium(_Configuration, IOAble):
         pressure=None,
         iota=None,
         current=None,
+        electron_temperature=None,
+        electron_density=None,
+        ion_temperature=None,
+        atomic_number=None,
         surface=None,
         axis=None,
         sym=None,
@@ -118,6 +136,10 @@ class Equilibrium(_Configuration, IOAble):
             pressure,
             iota,
             current,
+            electron_temperature,
+            electron_density,
+            ion_temperature,
+            atomic_number,
             surface,
             axis,
             sym,
@@ -448,7 +470,8 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and self.iota is not None
+                iota=objective != "vacuum" and self.iota is not None,
+                kinetic=self.electron_temperature is not None,
             )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
@@ -502,7 +525,7 @@ class Equilibrium(_Configuration, IOAble):
 
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value[-1].size:
+            if value[-1].size:
                 setattr(eq, key, value[-1])
 
         logging.info("End of solver")
@@ -573,7 +596,10 @@ class Equilibrium(_Configuration, IOAble):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
+            constraints = get_fixed_boundary_constraints(
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
             constraints = (ForceBalance(), *constraints)
 
         if copy:
@@ -606,7 +632,7 @@ class Equilibrium(_Configuration, IOAble):
 
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value[-1].size:
+            if value[-1].size:
                 setattr(eq, key, value[-1])
 
         logging.info("End of solver")
@@ -615,7 +641,7 @@ class Equilibrium(_Configuration, IOAble):
         eq.solved = result["success"]
         return eq, result
 
-    def _optimize(
+    def _optimize(  # noqa: C901
         self,
         objective,
         constraint=None,
@@ -776,22 +802,15 @@ class Equilibrium(_Configuration, IOAble):
             return eq
         else:
             for attr in self._io_attrs_:
-                setattr(self, attr, getattr(eq, attr))
+                val = getattr(eq, attr)
+                setattr(self, attr, val)
             return self
 
     def perturb(
         self,
+        deltas,
         objective=None,
         constraints=None,
-        dR=None,
-        dZ=None,
-        dL=None,
-        dRb=None,
-        dZb=None,
-        dp=None,
-        di=None,
-        dc=None,
-        dPsi=None,
         order=2,
         tr_ratio=0.1,
         weight="auto",
@@ -807,10 +826,10 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to satisfy. Default = force balance.
         constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
-        dR, dZ, dL, dRb, dZb, dp, di, dc, dPsi : ndarray or float
-            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, toroidal current, and total toroidal magnetic flux.
-            Setting to None or zero ignores that term in the expansion.
+        deltas : dict of ndarray
+            Deltas for perturbations. Keys should names of Equilibrium attributes
+            ("p_l",  "Rb_lmn", "L_lmn" etc.) and values of arrays of desired change in
+            the attribute.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
         tr_ratio : float or array of float
@@ -856,7 +875,10 @@ class Equilibrium(_Configuration, IOAble):
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
+            constraints = get_fixed_boundary_constraints(
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
 
         if not objective.built:
             objective.build(self)
@@ -875,15 +897,7 @@ class Equilibrium(_Configuration, IOAble):
             self,
             objective,
             constraints,
-            dR=dR,
-            dZ=dZ,
-            dL=dL,
-            dRb=dRb,
-            dZb=dZb,
-            dp=dp,
-            di=di,
-            dc=dc,
-            dPsi=dPsi,
+            deltas,
             order=order,
             tr_ratio=tr_ratio,
             weight=weight,

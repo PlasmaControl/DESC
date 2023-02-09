@@ -709,7 +709,7 @@ def surface_max(grid, x, surface_label="rho"):
         Maximum of x over each surface in grid.
 
     """
-    _, unique_idx, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
+    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     maxs = -jnp.inf * jnp.ones(unique_idx.size)
@@ -739,7 +739,7 @@ def surface_min(grid, x, surface_label="rho"):
         Minimum of x over each surface in grid.
 
     """
-    _, unique_idx, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
+    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     mins = jnp.inf * jnp.ones(unique_idx.size)

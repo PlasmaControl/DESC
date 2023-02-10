@@ -326,7 +326,7 @@ def test_overstepping():
         options={
             "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0},
-            "solve_options": {"verbose": 0}
+            "solve_options": {"verbose": 0},
         },
     )
 

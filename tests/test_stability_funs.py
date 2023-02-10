@@ -5,7 +5,6 @@ import logging
 import numpy as np
 from netCDF4 import Dataset
 
-import logging
 import desc.examples
 import desc.io
 from desc.compute.utils import compress
@@ -299,7 +298,6 @@ def test_magwell_print(TmpDir):
     np.testing.assert_allclose(f, magwell)
 
     obj.print_value(*obj.xs(eq))
-    out = capsys.readouterr()
 
     # Read and compare logfile to expected output
     logconnection = open(logfile_path)

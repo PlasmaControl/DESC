@@ -39,7 +39,9 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1):
+    def __init__(
+        self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
+    ):
 
         if not isinstance(objectives, tuple):
             objectives = (objectives,)

@@ -207,7 +207,7 @@ class Elongation(_Objective):
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.        
+            Whether to just-in-time compile the objective and derivatives.
         verbose : integer, optional
             * 0  : work silently.
             * 1  : display a termination report

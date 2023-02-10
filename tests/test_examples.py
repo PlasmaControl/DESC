@@ -216,7 +216,7 @@ def test_1d_optimization_old():
     eq._optimize(
         objective,
         copy=False,
-        solve_options={"verbose":0},
+        solve_options={"verbose": 0},
         perturb_options={
             "dZb": True,
             "subspace": vmec_boundary_subspace(eq, ZBS=[0, 1]),

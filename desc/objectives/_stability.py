@@ -173,14 +173,14 @@ class MercierStability(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(f))
-            + self._units
+        logging.info(
+            "Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units
         )
-        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(f))
-            + self._units
+        logging.info(
+            "Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units
         )
-        logging.info("Average " + self._print_value_fmt.format(jnp.mean(f))
-            + self._units
+        logging.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
         )
 
         if self._normalize:
@@ -356,12 +356,12 @@ class MagneticWell(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        logging.info("Maximum " + self._print_value_fmt.format(jnp.max(f))
-            + self._units
+        logging.info(
+            "Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units
         )
-        logging.info("Minimum " + self._print_value_fmt.format(jnp.min(f))
-            + self._units
+        logging.info(
+            "Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units
         )
-        logging.info("Average " + self._print_value_fmt.format(jnp.mean(f))
-            + self._units
+        logging.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
         )

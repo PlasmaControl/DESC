@@ -482,7 +482,7 @@ class HelicalForceBalance(_Objective):
             # local quantity, want to divide by number of nodes
             self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
 
-        super().build(eq=eq, use_jit=use_jit, verbose=vebose)
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
         """Compute helical MHD force balance errors.

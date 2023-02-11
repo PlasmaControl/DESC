@@ -196,9 +196,9 @@ def _optimize_scipy_minimize(
         )
     if verbose > 0:
         if result["success"]:
-            print(result["message"])
+            print(result["message"][0])
         else:
-            print("Warning: " + result["message"])
+            print("Warning: " + result["message"][0])
         print("         Current function value: {:.3e}".format(result["fun"]))
         print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))

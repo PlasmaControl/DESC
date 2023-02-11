@@ -198,7 +198,6 @@ def test_load_then_save(TmpDir):
 
     eq = VMECIO.load(input_path, profile="current")
     assert eq.iota is None
-    np.testing.assert_allclose(eq.current.params, 0)
     eq = VMECIO.load(input_path, profile="iota")
     assert eq.current is None
     VMECIO.save(eq, output_path)

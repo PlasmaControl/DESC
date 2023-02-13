@@ -475,7 +475,7 @@ class MirrorRatio(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(dimensionless)"
     _print_value_fmt = "Mirror ratio: {:10.3e} "
@@ -520,7 +520,7 @@ class MirrorRatio(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_rho
-        self._data_keys = ["min_tz |B|", "max_tz |B|"]
+        self._data_keys = ["mirror ratio"]
         self._args = get_params(self._data_keys)
 
         timer = Timer()
@@ -568,6 +568,9 @@ class MirrorRatio(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        B_min = data["min_tz |B|"]
-        B_max = data["max_tz |B|"]
-        return (B_max - B_min) / (B_min + B_max)
+        return compress(self.grid, data["mirror ratio"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)

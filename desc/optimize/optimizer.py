@@ -133,9 +133,7 @@ class Optimizer(IOAble):
         if method not in Optimizer._all_methods:
             raise NotImplementedError(
                 colored(
-                    "method must be one of {}".format(
-                        ".".join([Optimizer._all_methods])
-                    ),
+                    "method must be one of {}".format(".".join(Optimizer._all_methods)),
                     "red",
                 )
             )

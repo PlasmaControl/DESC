@@ -8,10 +8,12 @@ from scipy.optimize import BFGS, rosen, rosen_der
 import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
+from desc.equilibrium import Equilibrium
 from desc.objectives import (
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCurrent,
     FixIota,
     FixPressure,
     FixPsi,
@@ -381,13 +383,26 @@ def test_scipy_fail_message():
         FixBoundaryR(fixed_boundary=True),
         FixBoundaryZ(fixed_boundary=True),
         FixPressure(),
-        FixIota(),
+        FixCurrent(),
         FixPsi(),
     )
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+    eq = Equilibrium()
+    # should fail on maxiter, and should NOT throw an error
+    for opt in ["scipy-trf"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
     objectives = Energy()
     obj = ObjectiveFunction(objectives)
-    eq = desc.examples.get("SOLOVEV")
-    # should fail on maxiter, and should NOT throw an error
     for opt in ["scipy-trust-exact"]:
         eq, result = eq.solve(
             maxiter=3,
@@ -398,4 +413,12 @@ def test_scipy_fail_message():
             xtol=1e-12,
             gtol=1e-12,
         )
+        # result["message"] is a list for scipy-trust-exact but a string for scipy-trf
+        # why?
         assert "Maximum number of iterations has been exceeded" in result["message"][0]
+
+
+def test_not_implemented_error():
+    """Test NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        Optimizer("not-a-method")

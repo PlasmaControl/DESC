@@ -9,6 +9,7 @@ import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.objectives import (
+    Energy,
     FixBoundaryR,
     FixBoundaryZ,
     FixIota,
@@ -370,3 +371,31 @@ def test_maxiter_1_and_0_solve():
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt
         )
         assert result["nfev"] <= 1
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_scipy_fail_message():
+    """Test that scipy fail message does not cause an error (see PR #434)."""
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+    )
+    objectives = Energy()
+    obj = ObjectiveFunction(objectives)
+    eq = desc.examples.get("SOLOVEV")
+    # should fail on maxiter, and should NOT throw an error
+    for opt in ["scipy-trust-exact"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"][0]

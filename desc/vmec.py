@@ -1341,7 +1341,7 @@ class VMECIO:
         return out.x
 
     @classmethod
-    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, **kwargs):
+    def compute_coord_surfaces(cls, equil, vmec_data, Nr=10, Nt=8, Nz=None, **kwargs):
         """Compute points on surfaces of constant rho, vartheta for both DESC and VMEC.
 
         Parameters
@@ -1354,6 +1354,9 @@ class VMECIO:
             number of rho contours
         Nt : int, optional
             number of vartheta contours
+        Nz : int, optional
+            Number of zeta planes to compare. If None, use 1 plane for axisymmetric
+            cases or 6 for non-axisymmetric.
 
         Returns
         -------
@@ -1365,9 +1368,9 @@ class VMECIO:
         if isinstance(vmec_data, (str, os.PathLike)):
             vmec_data = cls.read_vmec_output(vmec_data)
 
-        if equil.N == 0:
+        if Nz is None and equil.N == 0:
             Nz = 1
-        else:
+        elif Nz is None:
             Nz = 6
 
         num_theta = kwargs.get("num_theta", 180)

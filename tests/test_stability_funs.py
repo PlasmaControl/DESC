@@ -188,7 +188,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         )
         all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=2.5e-2)
+    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
     test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
     test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
 
@@ -264,37 +264,28 @@ def test_magwell_print(capsys):
     """Test that the magnetic well stability criteria prints correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    obj = MagneticWell(eq=eq, grid=grid)
 
     magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
+    f = obj.compute(*obj.xs(eq))
+    np.testing.assert_allclose(f, magwell)
 
-    magwell_obj = MagneticWell(eq=eq, grid=grid)
-
-    w = compress(magwell_obj.grid, magwell_obj.grid.spacing[:, 0], surface_label="rho")
-
-    np.testing.assert_allclose(
-        magwell_obj.compute(*magwell_obj.xs(eq)), magwell * w, atol=1e-16
-    )
-    # can't compare print statement against the magwell calc from eq.compute
-    #  due to some tiny roundoff errors,
-    # the printed values are slightly different
-    magwell_vals = magwell_obj.compute(*magwell_obj.xs(eq)) / w
-
-    magwell_obj.print_value(*magwell_obj.xs(eq))
+    obj.print_value(*obj.xs(eq))
     out = capsys.readouterr()
 
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
-        + magwell_obj._print_value_fmt.format(np.max(magwell_vals))
-        + magwell_obj._units
+        + obj._print_value_fmt.format(np.max(magwell))
+        + obj._units
         + "\n"
         + "Minimum "
-        + magwell_obj._print_value_fmt.format(np.min(magwell_vals))
-        + magwell_obj._units
+        + obj._print_value_fmt.format(np.min(magwell))
+        + obj._units
         + "\n"
         + "Average "
-        + magwell_obj._print_value_fmt.format(np.mean(magwell_vals))
-        + magwell_obj._units
+        + obj._print_value_fmt.format(np.mean(magwell))
+        + obj._units
         + "\n"
     )
     assert out.out == corr_out

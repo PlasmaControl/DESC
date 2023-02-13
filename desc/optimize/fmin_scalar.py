@@ -159,6 +159,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
+    max_dx = options.pop("max_dx", np.inf)
 
     hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
     assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
@@ -191,7 +192,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     trust_radius *= tr_ratio
 
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
-    min_trust_radius = options.pop("min_trust_radius", 0)
+    min_trust_radius = options.pop("min_trust_radius", np.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
@@ -240,6 +241,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             max_ngev,
             nhev,
             max_nhev,
+            min_trust_radius=min_trust_radius,
+            dx_total=np.linalg.norm(x - x0),
+            max_dx=max_dx,
         )
         if success is not None:
             break
@@ -323,6 +327,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
                 max_ngev,
                 nhev,
                 max_nhev,
+                min_trust_radius=min_trust_radius,
+                dx_total=np.linalg.norm(x - x0),
+                max_dx=max_dx,
             )
             if success is not None:
                 break

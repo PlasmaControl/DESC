@@ -7,6 +7,7 @@ from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
+from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -20,19 +21,23 @@ class QuasisymmetryBoozer(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+        Must be a LinearGrid with a single flux surface and sym=False.
     helicity : tuple, optional
         Type of quasi-symmetry (M, N). Default = quasi-axisymmetry (1, 0).
     M_booz : int, optional
@@ -53,6 +58,7 @@ class QuasisymmetryBoozer(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -63,6 +69,7 @@ class QuasisymmetryBoozer(_Objective):
         name="QS Boozer",
     ):
 
+        assert len(helicity) == 2
         self.grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
@@ -70,6 +77,7 @@ class QuasisymmetryBoozer(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -107,6 +115,9 @@ class QuasisymmetryBoozer(_Objective):
         self._data_keys = ["|B|_mn"]
         self._args = get_params(self._data_keys)
 
+        assert self.grid.sym is False
+        assert self.grid.num_rho == 1
+
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
@@ -120,27 +131,15 @@ class QuasisymmetryBoozer(_Objective):
             M_booz=self.M_booz,
             N_booz=self.N_booz,
         )
+        self._matrix, self._modes, self._idx = ptolemy_linear_transform(
+            self._transforms["B"].basis.modes,
+            helicity=self.helicity,
+            NFP=self._transforms["B"].basis.NFP,
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
-
-        M = self.helicity[0]
-        N = self.helicity[1] / eq.NFP
-        self._idx_00 = np.where(
-            (self._transforms["B"].basis.modes == [0, 0, 0]).all(axis=1)
-        )[0]
-        if N == 0:
-            self._idx_MN = np.where(self._transforms["B"].basis.modes[:, 2] == 0)[0]
-        else:
-            self._idx_MN = np.where(
-                self._transforms["B"].basis.modes[:, 1]
-                / self._transforms["B"].basis.modes[:, 2]
-                == M / N
-            )[0]
-        self._idx = np.ones((self._transforms["B"].basis.num_modes,), bool)
-        self._idx[self._idx_00] = False
-        self._idx[self._idx_MN] = False
 
         self._dim_f = np.sum(self._idx)
 
@@ -181,10 +180,8 @@ class QuasisymmetryBoozer(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        b_mn = data["|B|_mn"]
-        b_mn = b_mn[self._idx]
-
-        return self._shift_scale(b_mn)
+        B_mn = self._matrix @ data["|B|_mn"]
+        return B_mn[self._idx]
 
     @property
     def helicity(self):
@@ -218,17 +215,20 @@ class QuasisymmetryTwoTerm(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
@@ -247,6 +247,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -260,6 +261,7 @@ class QuasisymmetryTwoTerm(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -343,9 +345,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=self._profiles,
             helicity=self.helicity,
         )
-        f = data["f_C"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return data["f_C"] * self.grid.weights
 
     @property
     def helicity(self):
@@ -379,17 +379,20 @@ class QuasisymmetryTripleProduct(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+       Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -406,6 +409,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -417,6 +421,7 @@ class QuasisymmetryTripleProduct(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -494,6 +499,4 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = data["f_T"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return data["f_T"] * self.grid.weights

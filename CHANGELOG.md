@@ -1,6 +1,36 @@
 Changelog
 =========
 
+v0.7.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
+
+What's Changed
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+symmetric due to different Fourier series conventions.
+* Improve speed of functions for converting between VMEC and DESC Fourier representations.
+* Add objectives for penalizing strong shaping.
+    - `MeanCurvature` targets values for the mean curvature of the flux surfaces
+    (average of principal curvatures)
+    - `PrincipalCurvature` penalizes the largest magnitude of the principal curvatures
+* Improve default tolerances when converting input file from VMEC to DESC
+
+v0.7.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.0...v0.7.1)
+
+What's Changed
+- Allow targets for `RotationalTransform` and `ToroidalCurrent` objectives to be Profile
+  objects rather than just arrays.
+- Document how to add new compute functions and objectives.
+- Add objective for targeting elongation.
+- Fix bug in `plot_qs_error` causing the same value to be plotted for each value of rho.
+- Fix bug sometimes causing the wrong equilibrium to be returned after optimization.
+- Improve numerical stability of perturbations and optimization.
+
+
 v0.7.0
 ------
 

@@ -6,7 +6,7 @@ Created on Wed Jul 13 10:39:48 2022
 """
 
 import numpy as np
-from scipy.optimize import OptimizeResult
+from scipy.optimize import OptimizeResult, minimize
 
 from desc.backend import jnp
 from desc.derivatives import Derivative
@@ -57,8 +57,8 @@ def fmin_lag_stel(
     if maxiter is None:
         maxiter = N * 100
 
-    mu = options.pop("mu", 0.1)
-    lmbda = options.pop("lmbda", 0.01 * jnp.ones(eq_dim + ineq_dim))
+    mu = options.pop("mu", 10000.0)
+    lmbda = options.pop("lmbda", 1.0 * jnp.ones(eq_dim + ineq_dim))
     bounds = options.pop("bounds", jnp.zeros(eq_dim + ineq_dim))
 
     def recover(x):
@@ -91,35 +91,52 @@ def fmin_lag_stel(
     f = fun(recover(x))
     fold = f
     cv = L.compute_constraints(x)
+    lmbda = lmbda - mu * cv
+    print("f is " + str(f))
+    print("lmbda term is " + str(np.dot(lmbda, cv)))
+    print("mu term is " + str(mu / 2 * np.dot(cv, cv)))
 
     while iteration < maxiter:
-        xk = fmintr(
+        # xk = fmintr(
+        #    L.compute,
+        #    x,
+        #    grad=gradL,
+        #    hess=hessL,
+        #    args=(
+        #        lmbda,
+        #        mu,
+        #    ),
+        #    gtol=gtolk,
+        #    maxiter=20,
+        #    verbose=2,
+        # )
+        xk = minimize(
             L.compute,
             x,
-            grad=gradL,
+            args=(lmbda, mu),
+            method="trust-exact",
+            jac=gradL,
             hess=hessL,
-            args=(
-                lmbda,
-                mu,
-            ),
-            gtol=gtolk,
-            maxiter=20,
-            verbose=2,
+            options={"maxiter": 20},
         )
         x = xk["x"]
         f = fun(recover(x))
+        print("f is " + str(f))
         cv = L.compute_constraints(x)
-        c = np.max(cv)
+        print("lmbda term is " + str(np.dot(lmbda, cv)))
+        print("mu term is " + str(mu / 2 * np.dot(cv, cv)))
+        print("\n")
+        c = np.linalg.norm(cv)
 
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")
             break
 
-        if (np.linalg.norm(f) - np.linalg.norm(fold)) / np.linalg.norm(fold) > 0.1:
-            mu = mu / 2
-            print("Decreasing mu. mu is now " + str(np.mean(mu)))
+        # if (np.linalg.norm(f) - np.linalg.norm(fold)) / np.linalg.norm(fold) > 0.1:
+        #    mu = mu / 2
+        #    print("Decreasing mu. mu is now " + str(np.mean(mu)))
 
-        elif c < ctolk:
+        if c < ctolk:
             if c < ctol and gradL(x, lmbda, mu) < gtol:
                 break
 
@@ -129,8 +146,8 @@ def fmin_lag_stel(
                 ctolk = ctolk / (mu ** (0.9))
                 gtolk = gtolk / (mu)
         else:
-            mu = 5.0 * mu
-            ctolk = ctolk / (mu ** (0.1))
+            mu = 10 * mu
+            ctolk = c / (mu ** (0.1))
             gtolk = gtolk / mu
 
         iteration = iteration + 1

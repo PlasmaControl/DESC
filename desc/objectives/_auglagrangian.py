@@ -1,3 +1,4 @@
+import jax
 import numpy as np
 
 from desc.backend import jnp
@@ -66,6 +67,9 @@ class AugLagrangian(ObjectiveFunction):
     def compute(self, x, lmbda, mu):
         L = self.func(x)
         c = self.compute_constraints(x)
+        # jax.debug.print("lmbda term is " + str(jnp.dot(lmbda,c)))
+        # jax.debug.print("mu term is " + str(mu/2*jnp.dot(c,c)))
+        # jax.debug.print("L is " + str(L))
         return L - jnp.dot(lmbda, c) + mu / 2 * jnp.dot(c, c)
 
     def compute_scalar(self, x, lmbda, mu):

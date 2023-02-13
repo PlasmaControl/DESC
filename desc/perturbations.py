@@ -197,7 +197,9 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         )
     # all other perturbations besides the boundary
     other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
-    if len([arg for arg in other_args if arg in deltas.keys()]):
+    if len(
+        [arg for arg in other_args if arg in deltas.keys() and arg in objective.args]
+    ):
         dc = np.concatenate(
             [
                 deltas[arg]

@@ -476,3 +476,55 @@ def test_principal_curvature():
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()
+
+
+@pytest.mark.unit
+def test_objective_print(capsys):
+    """Test that the profile objectives prints correctly."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+
+    def test(obj, values, normalize=False):
+
+        obj.print_value(*obj.xs(eq))
+        out = capsys.readouterr()
+
+        corr_out = str(
+            "Precomputing transforms\n"
+            + "Maximum "
+            + obj._print_value_fmt.format(np.max(values))
+            + obj._units
+            + "\n"
+            + "Minimum "
+            + obj._print_value_fmt.format(np.min(values))
+            + obj._units
+            + "\n"
+            + "Average "
+            + obj._print_value_fmt.format(np.mean(values))
+            + obj._units
+            + "\n"
+        )
+        if normalize:
+            corr_out += str(
+                "Maximum "
+                + obj._print_value_fmt.format(np.max(values / obj.normalization))
+                + "(normalized)"
+                + "\n"
+                + "Minimum "
+                + obj._print_value_fmt.format(np.min(values / obj.normalization))
+                + "(normalized)"
+                + "\n"
+                + "Average "
+                + obj._print_value_fmt.format(np.mean(values / obj.normalization))
+                + "(normalized)"
+                + "\n"
+            )
+
+        assert out.out == corr_out
+
+    iota = eq.compute("iota", grid=grid)["iota"]
+    obj = RotationalTransform(eq=eq, grid=grid)
+    test(obj, iota)
+    curr = eq.compute("current", grid=grid)["current"]
+    obj = ToroidalCurrent(eq=eq, grid=grid)
+    test(obj, curr, normalize=True)

@@ -258,7 +258,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             Objective function value(s).
 
         """
-        xopt, _ = self._update_equilibrium(x, store=False)
+        xopt, _ = self._update_equilibrium(x, store=True)
         return self._objective.compute(xopt)
 
     def grad(self, x):
@@ -279,6 +279,77 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         return f.T @ J
 
     def jac(self, x):
+        """Compute Jacobian of the vector objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        xg, xf = self._update_equilibrium(x, store=True)
+
+        # dx/dc
+        x_idx = np.concatenate(
+            [
+                self._eq_objective.x_idx[arg]
+                for arg in ["p_l", "i_l", "c_l", "Psi"]
+                if arg in self._eq_objective.args
+            ]
+        )
+        x_idx.sort(kind="mergesort")
+        dxdc = np.eye(self._eq_objective.dim_x)[:, x_idx]
+        dxdRb = (
+            np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["R_lmn"]]
+            @ self._Ainv["R_lmn"]
+        )
+        dxdc = np.hstack((dxdc, dxdRb))
+        dxdZb = (
+            np.eye(self._eq_objective.dim_x)[:, self._eq_objective.x_idx["Z_lmn"]]
+            @ self._Ainv["Z_lmn"]
+        )
+        dxdc = np.hstack((dxdc, dxdZb))
+
+        # Jacobian matrices wrt combined state vectors
+        Fx = self._eq_objective.jac(xf)
+        Gx = self._objective.jac(xg)
+        Fx = align_jacobian(Fx, self._eq_objective, self._objective)
+        Gx = align_jacobian(Gx, self._objective, self._eq_objective)
+
+        # projections onto optimization space
+        # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z
+        Fx_reduced = Fx[:, self._unfixed_idx] @ self._Z
+        Gx_reduced = Gx[:, self._unfixed_idx] @ self._Z
+        Fc = Fx @ dxdc
+        Gc = Gx @ dxdc
+
+        # FIXME (@f0uriest): need to import here to avoid circular dependencies
+        from desc.optimize.utils import compute_jac_scale
+
+        # some scaling to improve conditioning
+        wf, _ = compute_jac_scale(Fx_reduced)
+        wg, _ = compute_jac_scale(Gx_reduced)
+        wx = wf + wg
+        Fxh = Fx_reduced * wx
+        Gxh = Gx_reduced * wx
+
+        cutoff = np.finfo(Fxh.dtype).eps * np.max(Fxh.shape)
+        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+        sf += sf[-1]  # add a tiny bit of regularization
+        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+
+        # TODO: make this more efficient for finite differences etc. Can probably
+        # reduce the number of operations and tangents
+        LHS = Gxh @ (Fxh_inv @ Fc) - Gc
+        return -LHS
+
+
+    def jac_old(self, x):
         """Compute Jacobian of the vector objective function.
 
         Parameters
@@ -419,7 +490,7 @@ class GXWrapper(_Objective):
     _units = "Q"
     _print_value_fmt = "Total heat flux: {:10.3e} "
  
-    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False, path='/home/pk2354/src/gx',path_in='/scratch/gpfs/pk2354/DESC/GX/gx_nl',path_geo='/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap'):
+    def __init__(self, eq=None, target=0, weight=1, grid=None, name="GK", npol=1, nzgrid=32, alpha=0, psi=0.5, equality=True, lb=False, path='/home/pk2354/src/gx',path_in='/scratch/gpfs/pk2354/DESC/GX/gx_nl',path_geo='/scratch/gpfs/pk2354/DESC/GX/gxinput_wrap',t=3):
         self.eq = eq
         self.npol = npol
         self.nzgrid = nzgrid
@@ -437,6 +508,7 @@ class GXWrapper(_Objective):
         self.path = path
         self.path_in = path_in
         self.path_geo = path_geo
+        self.t = t
 
     def build(self, eq, use_jit=False, verbose=1):
         if self.grid is None:
@@ -664,7 +736,7 @@ class GXWrapper(_Objective):
 
         self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn)
         #t = str(time.time())
-        t = str(3)
+        t = str(self.t)
         path_geo_old = self.path_geo + '.out'
         path_in_old = self.path_in + '.in'
         path_geo_new = self.path_geo + '_' + t + '.out'
@@ -817,7 +889,6 @@ class GXWrapper(_Objective):
         return geo_array_gx
 
     def get_gx_arrays(self,zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn):
-        
         dzeta = zeta[1] - zeta[0]
         dzeta_pi = np.pi / self.nzgrid
         index_of_middle = self.nzgrid
@@ -839,7 +910,7 @@ class GXWrapper(_Objective):
         for i in range(2*self.nzgrid+1):
             z_on_theta_grid[i] = temp_grid[i] - temp_grid[index_of_middle]
         desired_gradpar = np.pi/np.abs(z_on_theta_grid[0])
-
+        
         for i in range(2*self.nzgrid+1):
             z_on_theta_grid[i] = z_on_theta_grid[i] * desired_gradpar
             gradpar_temp[i] = desired_gradpar

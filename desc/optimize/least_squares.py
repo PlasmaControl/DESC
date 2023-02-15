@@ -243,7 +243,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         )
 
         while actual_reduction <= 0 and nfev <= max_nfev:
-            print("NFEV IS " + str(nfev))
             # Solve the sub-problem.
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
@@ -359,7 +358,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             actual_reduction = 0
         
         iteration += 1
-        print("ITERATION IS " + str(iteration))
     message = None
     result = OptimizeResult(
         x=x,

@@ -533,25 +533,17 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
         df = objective.jac(x)
         return df[:, unfixed_idx] @ Z
 
-    def grad_fd(x_reduced):
+    def grad_fd(x_reduced,x0):
         x = recover(x_reduced)
         fx = objective.compute(x)
-        dx = 0.2*x_reduced
+        dx = 0.1*np.abs(x0)
         tang = np.eye(len(dx))
-        jac = []
+        jac = np.zeros((len(fx),len(tang)))
         for i in range(len(tang)):
             tang[i][i] = dx[i]
         for i in range(len(tang)):
-            print("shapes are " + str(x_reduced.shape))
-            print("shapes are " + str(tang[:,i].T.shape))
             df = (objective.compute(recover(x_reduced+tang[:,i].T))-fx)/np.linalg.norm(recover(tang[:,i].T))
-            df = df.reshape(len(df),1)
-            print("df is " + str(df))
-            jac = np.hstack((jac,df))
-            print("jac is " + str(jac))
-        print("shape of fx is " + str(fx.shape))
-        print("shape of jac is " + str(jac.shape))
-        print("shape of Z is " + str(Z.shape))
+            jac[:,i] = df
         return fx.T @ jac
 
     return (

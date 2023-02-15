@@ -290,7 +290,7 @@ class QuasisymmetryTwoTerm(_Objective):
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
-        self._data_keys = ["f_C"]
+        self._data_keys = ["f_C","F"]
         self._args = get_params(self._data_keys)
 
         timer = Timer()

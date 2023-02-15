@@ -108,12 +108,7 @@ def sgd(
     v = np.zeros_like(x)
     f = fun(x, *args)
     nfev += 1
-    print("x is " + str(x))
-    #tang = diags(0.01*x).toarray() 
-    dx = 0.20*x
-    #g = jnp.atleast_1d(calc_grad(fun,x,dx))
-    g = grad(x, *args)
-    print("g is " + str(g))
+    g = grad(x,x0)
     while np.linalg.norm(g) > 5000:
         print("DECREASING g")
         g = g / 10
@@ -165,19 +160,15 @@ def sgd(
         )
         if success is not None:
             break
-
+        
+#        print("g is " + str(g))
         v = beta * v + (1 - beta) * g
-        print("alpha is " + str(alpha))
-        print("v is "  + str(v))
+#        print("v is " + str(v))
         x = x - alpha * v
+#        print("x is " + str(x))
         fnew = fun(x, *args)
-        print("new f is " + str(fnew))
-        print("x is " + str(x))
-        #tang = diags(np.squeeze(0.01*x)).toarray() 
-        dx = 0.20*x
-        #g = jnp.atleast_1d(calc_grad(fun,x,dx))
-        g = grad(x, *args)
-        print("g is " + str(g))
+#        print("new f is " + str(fnew))
+        g = grad(x,x0)
         while np.linalg.norm(g) > 5000:
             print("DECREASING g")
             g = g / 10
@@ -202,7 +193,10 @@ def sgd(
                 message = STATUS_MESSAGES["callback"]
 
         iteration += 1
-
+    flast = fun(x,*args)
+    xlast = x
+    success = True
+    message = STATUS_MESSAGES["success"]
     result = OptimizeResult(
         x=x,
         success=success,

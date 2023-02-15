@@ -13,8 +13,9 @@ import numpy as np
 from termcolor import colored
 
 from desc import set_device
-from desc import set_logfile_logging, set_console_logging
-
+from desc import set_logfile_logging
+from desc import set_console_logging
+from desc import stop_logfile_logging
 
 class InputReader:
     """Reads command line arguments and parses input files.
@@ -119,21 +120,24 @@ class InputReader:
         else:
             set_device("cpu")
 
+        # Unless quiet flag is actively set, assumes medium verbosity
+        if args.verbose is None:
+            if args.quiet is True:
+                args.verbose = 0
+            else:
+                args.verbose = 1
+
         if args.verbose == 0:
-            pass
-        if args.verbose == 1:
+            set_console_logging("CRITICAL", "stdout")
+        elif args.verbose == 1:
             set_console_logging("INFO", "stdout")
-        if args.verbose == 2:
+        elif args.verbose == 2:
             set_console_logging("DEBUG", "stdout")
 
-        if args.quiet == 1:
-            set_console_logging("CRITICAL", "stdout")
-            set_console_logging("CRITICAL", "sterr")
-
-        if args.logging == 0:
-            pass
-        if args.logging == 1:
-            set_logfile_logging("INFO", "desc.log")
+        if args.disable_logging == True:
+            stop_logfile_logging()
+        if args.disable_logging == False:
+            set_logfile_logging("DEBUG", "desc.log")
 
         return args
 
@@ -202,18 +206,8 @@ class InputReader:
         pres_flag = False
         curr_flag = False
         inputs["output_path"] = self.output_path
-
-        if self.args is not None and self.args.quiet:
-            inputs["verbose"] = 0
-        elif self.args is not None:
-            inputs["verbose"] = self.args.verbose
-        else:
-            inputs["verbose"] = 0
-
-        if self.args is not None:
-            inputs["logging"] = self.args.logging
-        else:
-            inputs["logging"] = 2
+        inputs["verbose"] = self.args.verbose
+        inputs["disable_logging"] = self.args.disable_logging
 
         # open files, unless they are already open files
         if not isinstance(fname, io.IOBase):
@@ -1468,11 +1462,11 @@ def get_parser():
         "--version", action="store_true", help="Display version number and exit."
     )
     parser.add_argument(
-        "-l",
-        "--logging",
+        "-d",
+        "--disable_logging",
         action="store_true",
-        help="Display detailed iteration and timing information to 'desc.log' logfile"
-        + "using base python logging module.",
+        help="Disable automatic writing of detailed progress and timing information "
+        + "to 'desc.log' logfile.",
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -1486,7 +1480,6 @@ def get_parser():
         "-v",
         "--verbose",
         action="count",
-        default=0,
         help="Display detailed progress information to stdout. Twice to include"
         + " iteration and timing information.",
     )

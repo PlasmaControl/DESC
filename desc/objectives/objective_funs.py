@@ -181,7 +181,10 @@ class ObjectiveFunction(IOAble):
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
-            logging.info("Building objective: ", objective.name)
+            if objective.name:
+                logging.info("Building objective: ", objective.name)
+            else:
+                logging.info("Building objective")
             objective.build(eq, use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
@@ -654,7 +657,7 @@ class _Objective(IOAble, ABC):
         f = self.compute(*args, **kwargs)
         logging.info(self._print_value_fmt.format(jnp.linalg.norm(f)) + self._units)
         if self._normalize:
-            print(
+            logging.info(
                 self._print_value_fmt.format(jnp.linalg.norm(f / self.normalization))
                 + "(normalized)"
             )

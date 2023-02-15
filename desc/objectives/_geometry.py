@@ -109,10 +109,6 @@ class AspectRatio(_Objective):
         timer.stop("Precomputing transforms")
         timer.disp("Precomputing transforms")
 
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["V"]
-
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):

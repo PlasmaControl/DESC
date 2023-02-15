@@ -181,7 +181,7 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3)), eq=eq
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=2)
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute(obj.x(eq))

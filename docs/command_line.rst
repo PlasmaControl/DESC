@@ -16,4 +16,4 @@ with timing output and save the solution to the file `solution.h5`:
 
 .. code-block:: console
 
-   python -m desc --gpu -vvv -o solution.h5 examples/DESC/SOLOVEV
+   python -m desc --gpu -vv -o solution.h5 examples/DESC/SOLOVEV

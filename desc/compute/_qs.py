@@ -445,7 +445,7 @@ def _qi_B(params, transforms, profiles, data, **kwargs):
     data=["|B|_mn", "|B|_QI", "rho", "theta", "zeta_QI", "iota"],
 )
 def _f_QI(params, transforms, profiles, data, **kwargs):
-    nodes = jnp.array(  # alpha = theta_B + iota * zeta_B
+    nodes = jnp.array(  # alpha = theta_B - iota * zeta_B
         [data["rho"], data["theta"] + data["iota"] * data["zeta_QI"], data["zeta_QI"]]
     ).T
     B = jnp.matmul(transforms["B"].basis.evaluate(nodes), data["|B|_mn"])

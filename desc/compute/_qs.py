@@ -3,6 +3,7 @@
 import numpy as np
 
 from desc.backend import jnp, put, sign
+from desc.vmec_utils import ptolemy_linear_transform
 
 from .data_index import register_compute_fun
 
@@ -292,6 +293,41 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     data["B modes"] = transforms["B"].basis.modes
     return data
 
+
+@register_compute_fun(
+    name="|B|_mn symmetrized",
+    label="B_{mn}^{Boozer}",
+    units="T",
+    units_long="Tesla",
+    description="Boozer harmonics of magnetic field, keeping only quasisymmetric modes",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn"],
+    helicity="helicity",
+)
+def _B_mn_symmetrized(params, transforms, profiles, data, **kwargs):
+    matrix, modes, indices_of_nonsymmetric_modes = ptolemy_linear_transform(
+            transforms["B"].basis.modes,
+            helicity=kwargs.get("helicity", (1, 0)),
+            NFP=transforms["B"].basis.NFP,
+        )
+    print("Condition number:", jnp.linalg.cond(matrix))
+    #print("NFP:", transforms["B"].basis.NFP)
+    #print("matrix shape:", matrix.shape)
+    #print("matrix:\n",matrix)
+    #print("helicity:", kwargs.get("helicity", (1, 0)))
+    #print("modes:\n", modes)
+    #print("indices_of_nonsymmetric_modes:", indices_of_nonsymmetric_modes)
+    filter = jnp.ones(transforms["B"].basis.num_modes)
+    filter = put(filter, indices_of_nonsymmetric_modes, 0)
+    #print("filter:", filter)
+    matrix_inv = jnp.linalg.inv(matrix)
+    #print("matrix_inv:\n", matrix_inv)
+    data["|B|_mn symmetrized"] = matrix_inv @ (filter * (matrix @ data["|B|_mn"]))
+    return data
 
 @register_compute_fun(
     name="f_C",

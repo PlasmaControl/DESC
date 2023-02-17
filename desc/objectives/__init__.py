@@ -1,6 +1,6 @@
 """Classes defining objectives for equilibrium and optimization."""
 
-from ._bootstrap import BootstrapRedlConsistency
+from ._bootstrap import BootstrapRedlConsistency, BootstrapRedlBoozerConsistency
 from ._equilibrium import (
     CurrentDensity,
     Energy,

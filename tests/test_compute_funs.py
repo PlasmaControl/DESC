@@ -1048,6 +1048,147 @@ def test_compare_quantities_to_vmec():
     # Drop first point since desc gives NaN:
     np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
 
+@pytest.mark.unit
+def test_Bmn_symmetrized1():
+    """Test calculation of |B|_mn symmetrized."""
+    
+    # For an axisymmetric configuration, symmetrizing should have no effect:
+    filename = ".//tests//inputs//circular_model_tokamak_output.h5"
+    #print(filename)
+    eq = EquilibriaFamily.load(filename)[-1]
+    grid = LinearGrid(rho=[1], M=eq.M*4, N=eq.N*4, NFP=eq.NFP)
+    data = eq.compute("|B|_mn symmetrized", grid=grid)
+    #print("|B|_mn:            ", data["|B|_mn"])
+    #print("|B|_mn symmetrized:", data["|B|_mn symmetrized"])
+    #print("Max diff 1:        ", np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])))
+    np.testing.assert_allclose(data["|B|_mn"], data["|B|_mn symmetrized"], rtol=1e-14, atol=1e-14)
+    
+    filename = ".//tests//inputs//LandremanPaul2022_QA_reactorScale_lowRes.h5"
+    #print(filename)
+    eq = Equilibrium.load(filename)
+    grid = LinearGrid(rho=[1], M=eq.M*4, N=eq.N*4, NFP=eq.NFP)
+
+    # For a QA configuration, symmetrizing with respect to QA should have a tiny but
+    # nonzero effect:
+    data = eq.compute("|B|_mn symmetrized", grid=grid)
+    #print("|B|_mn:            ", data["|B|_mn"])
+    #print("|B|_mn symmetrized:", data["|B|_mn symmetrized"])
+    #print("Max diff 2:        ", np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])))
+    assert np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])) > 0
+    np.testing.assert_allclose(data["|B|_mn"], data["|B|_mn symmetrized"], rtol=1e-14, atol=0.003)
+
+    # Symmetrizing a QA with respect to QH modes should cause a big difference:
+    data = eq.compute("|B|_mn symmetrized", grid=grid, helicity=(1, 2))
+    #print("|B|_mn:            ", data["|B|_mn"])
+    #print("|B|_mn symmetrized:", data["|B|_mn symmetrized"])
+    #print("Max diff 3:", np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])))
+    assert np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])) > 0.6
+
+    # For a QH configuration, symmetrizing with respect to QH should have a tiny but
+    # nonzero effect:
+    filename = ".//tests//inputs//LandremanPaul2022_QH_reactorScale_lowRes.h5"
+    #print(filename)
+    eq = Equilibrium.load(filename)
+    grid = LinearGrid(rho=[1], M=eq.M*4, N=eq.N*4, NFP=eq.NFP)
+    data = eq.compute("|B|_mn symmetrized", grid=grid, helicity=(1, 4))
+    #print("|B|_mn:            ", data["|B|_mn"])
+    #print("|B|_mn symmetrized:", data["|B|_mn symmetrized"])
+    #print("Max diff 4:", np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])))
+    assert np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])) > 0
+    np.testing.assert_allclose(data["|B|_mn"], data["|B|_mn symmetrized"], rtol=1e-14, atol=0.003)
+
+    # Symmetrizing a QH with respect to QA modes should cause a big difference:
+    data = eq.compute("|B|_mn symmetrized", grid=grid, helicity=(1, 0))
+    #print("|B|_mn:            ", data["|B|_mn"])
+    #print("|B|_mn symmetrized:", data["|B|_mn symmetrized"])
+    #print("Max diff 5:", np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])))
+    assert np.max(np.abs(data["|B|_mn"] - data["|B|_mn symmetrized"])) > 0.9
+
+@pytest.mark.unit
+def test_Bmn_symmetrized2():
+    """Test calculation of |B|_mn symmetrized."""
+
+    NFP = 4
+    eq = Equilibrium(L=3, M=3, N=4, NFP=NFP)
+    grid = LinearGrid(rho=[1], M=eq.M*4, N=eq.N*4, NFP=eq.NFP)
+    data = eq.compute(["|B|_mn", "B modes"], grid=grid)
+    #p = np.zeros_like(data["|B|_mn"])
+    #q = np.zeros_like(data["|B|_mn"])
+    Bmn_initial = np.zeros_like(data["|B|_mn"])
+    Bmn_QA = np.zeros_like(data["|B|_mn"])
+    Bmn_QH_plus = np.zeros_like(data["|B|_mn"])
+    Bmn_QH_minus = np.zeros_like(data["|B|_mn"])
+    modes = data["B modes"]
+    print("B modes:\n", modes)
+    m_desc = modes[:, 1]
+    n_desc = modes[:, 2]
+    """
+    sym_mask = (m * n >= 0)
+    p = (0.1 + 1.2 * np.abs(m)) * sym_mask
+    q = (0.14 + 0.13 * np.abs(n)) * sym_mask
+    """
+
+    mmax = modes[-1, 1]
+    nmax = modes[-1, 2]
+    # Loop over modes of the cos(m theta - n zeta) basis:
+    for m in range(mmax + 1):
+        nmin = -nmax
+        if m == 0:
+            nmin = 0
+        for n in range(nmin, nmax + 1):
+            amplitude = 0.14 + 0.4 * m + 0.13 * n
+            amplitude_signed = amplitude
+            if n < 0:
+                amplitude_signed = -amplitude
+            # Find corresponding indices of the desc basis:
+            index1 = np.nonzero(np.logical_and(m_desc == m, n_desc == abs(n)))[0][0]
+            index2 = np.nonzero(np.logical_and(m_desc == -m, n_desc == -abs(n)))[0][0]
+            assert len(np.nonzero(np.logical_and(m_desc == m, n_desc == abs(n)))[0]) == 1
+            assert len(np.nonzero(np.logical_and(m_desc == -m, n_desc == -abs(n)))[0]) == 1
+            print(f"m {m}  n {n}  amp {amplitude} amp2 {amplitude_signed}  idx1 {index1}  idx2 {index2}")
+            Bmn_initial[index1] += amplitude
+            Bmn_initial[index2] += amplitude_signed
+            if n == 0:
+                Bmn_QA[index1] += amplitude
+                Bmn_QA[index2] += amplitude_signed
+            if n == m:
+                Bmn_QH_plus[index1] += amplitude
+                Bmn_QH_plus[index2] += amplitude_signed
+            if n == -m:
+                Bmn_QH_minus[index1] += amplitude
+                Bmn_QH_minus[index2] += amplitude_signed
+
+
+    """
+    for j in range(len(p)):
+        m = modes[j, 1]
+        n = modes[j, 2]
+        if m * n < 0:
+            continue
+        p[j] = 0.1 + 1.2 * m
+        q[j] = 0.14 + 0.13 * n
+    """
+    data["|B|_mn"] = Bmn_initial
+    data2 = eq.compute("|B|_mn symmetrized", data=data.copy(), helicity=(1, 0), grid=grid)
+    np.testing.assert_allclose(data2["|B|_mn"], Bmn_initial)
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_initial)) > 0.1
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_QH_plus)) > 0.1
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_QH_minus)) > 0.1
+    np.testing.assert_allclose(data2["|B|_mn symmetrized"], Bmn_QA)
+
+    data2 = eq.compute("|B|_mn symmetrized", data=data.copy(), helicity=(1, NFP), grid=grid)
+    np.testing.assert_allclose(data2["|B|_mn"], Bmn_initial)
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_initial)) > 0.1
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_QA)) > 0.1
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_QH_minus)) > 0.1
+    np.testing.assert_allclose(data2["|B|_mn symmetrized"], Bmn_QH_plus)
+
+    data2 = eq.compute("|B|_mn symmetrized", data=data.copy(), helicity=(1, -NFP), grid=grid)
+    np.testing.assert_allclose(data2["|B|_mn"], Bmn_initial)
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_initial)) > 0.1
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_QH_plus)) > 0.1
+    assert np.max(np.abs(data2["|B|_mn symmetrized"] - Bmn_QA)) > 0.1
+    np.testing.assert_allclose(data2["|B|_mn symmetrized"], Bmn_QH_minus)
 
 @pytest.mark.unit
 def test_compute_everything():

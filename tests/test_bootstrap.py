@@ -22,6 +22,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives import (
     BootstrapRedlConsistency,
+    BootstrapRedlBoozerConsistency,
     FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
@@ -1621,3 +1622,18 @@ def test_bootstrap_objective_build():
     np.testing.assert_allclose(
         obj.grid.nodes[obj.grid.unique_rho_idx, 0], np.array([0.2, 0.4, 0.6, 0.8, 1.0])
     )
+
+@pytest.mark.unit
+def test_BootstrapRedlBoozerConsistency():
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=0,
+        NFP=1,
+        electron_temperature=1e3,
+        ion_temperature=1e3,
+        electron_density=1e20,
+    )
+    grid = LinearGrid(rho=1, M=eq.M * 4, N=0)
+    obj = ObjectiveFunction(BootstrapRedlBoozerConsistency(grid=grid), eq)
+    print(obj.compute_scalar(obj.x(eq)))

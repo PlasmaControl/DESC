@@ -339,8 +339,8 @@ class RotationalTransform(_Objective):
         target=0,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         grid=None,
         name="rotational transform",
     ):
@@ -486,8 +486,8 @@ class MirrorRatio(_Objective):
         target=1,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         grid=None,
         name="mirror ratio",
     ):

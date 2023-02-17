@@ -243,8 +243,8 @@ class MagneticWell(_Objective):
         target=None,
         bounds=(0, np.inf),
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         grid=None,
         name="Magnetic Well",
     ):

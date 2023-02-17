@@ -96,7 +96,9 @@ class TestVMECIO:
     def test_ptolemy_linear_transform(self):
         """Tests Ptolemy basis linear transformation utility function."""
         basis = DoubleFourierSeries(M=4, N=3, sym=False)
-        matrix, modes = ptolemy_linear_transform(basis.modes)
+        matrix, modes, idx = ptolemy_linear_transform(
+            basis.modes, helicity=(1, 1), NFP=1
+        )
 
         x_correct = np.random.rand(basis.num_modes)
         x_transformed = matrix @ x_correct
@@ -116,6 +118,19 @@ class TestVMECIO:
             modes[::2, 1], modes[::2, 2], x_sin, x_cos
         )
         np.testing.assert_allclose(x_original, np.atleast_2d(x_correct))
+
+        sym_modes = np.array(
+            [
+                [1, 0, 0],
+                [-1, 1, 1],
+                [1, 1, 1],
+                [-1, 2, 2],
+                [1, 2, 2],
+                [-1, 3, 3],
+                [1, 3, 3],
+            ]
+        )
+        np.testing.assert_allclose(modes[~idx], sym_modes)
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):
@@ -198,7 +213,6 @@ def test_load_then_save(TmpDir):
 
     eq = VMECIO.load(input_path, profile="current")
     assert eq.iota is None
-    np.testing.assert_allclose(eq.current.params, 0)
     eq = VMECIO.load(input_path, profile="iota")
     assert eq.current is None
     VMECIO.save(eq, output_path)

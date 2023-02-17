@@ -67,7 +67,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         if eq is not None:
             self.build(eq, verbose=verbose)
 
-    # TODO: add timing and verbose statements
     def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
 

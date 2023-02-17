@@ -260,11 +260,7 @@ def _parse_constraints(constraints):
             + "constrained simultaneously."
         )
     # make sure any nonlinear constraints are combined into a single ObjectiveFunction
-    if len(nonlinear_constraints) == 1 and isinstance(
-        nonlinear_constraints[0], ObjectiveFunction
-    ):
-        nonlinear_constraints = nonlinear_constraints[0]
-    elif len(nonlinear_constraints):
+    if len(nonlinear_constraints):
         nonlinear_constraints = ObjectiveFunction(nonlinear_constraints)
     else:
         nonlinear_constraints = None

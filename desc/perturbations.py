@@ -6,7 +6,6 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-
 from desc import set_console_logging
 from desc.backend import put, use_jax
 from desc.compute import arg_order, profile_names
@@ -17,6 +16,8 @@ from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
 from desc.utils import Timer
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
+
+logger = logging.getLogger("DESC_logger")
 
 
 def get_deltas(things1, things2):
@@ -127,7 +128,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Perturbed equilibrium.
 
     """
-
     if verbose == 0:
         set_console_logging(console_log_level="CRITICAL")
     if verbose == 1:
@@ -171,12 +171,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         )
 
     if verbose > 0:
-        logging.info("Perturbing {}".format(", ".join(deltas.keys())))
+        logger.info("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
 
-    logging.info("Factorizing linear constraints")
+    logger.info("Factorizing linear constraints")
     timer.start("linear constraint factorize")
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.args
@@ -256,7 +256,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         scale = np.linalg.inv(scale_inv)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
-        logging.info("Computing df")
+        logger.info("Computing df")
         timer.start("df computation")
         Jx = objective.jac(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
@@ -267,7 +267,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.stop("df computation")
         timer.disp("df computation")
 
-        logging.info("Factoring df")
+        logger.info("Factoring df")
         timer.start("df/dx factorization")
         u, s, vt = np.linalg.svd(Jx_reduced, full_matrices=False)
         timer.stop("df/dx factorization")
@@ -290,7 +290,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 1:
 
         # 2nd partial derivatives wrt both state vector (x) and input parameters (c)
-        logging.info("Computing d^2f")
+        logger.info("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
         RHS2 = 0.5 * objective.jvp((tangents, tangents), x)
@@ -314,7 +314,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if order > 2:
 
         # 3rd partial derivatives wrt both state vector (x) and input parameters (c)
-        logging.info("Computing d^3f")
+        logger.info("Computing d^3f")
         timer.start("d^3f computation")
         RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
         RHS3 += objective.jvp((dx2, tangents), x)
@@ -366,7 +366,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
-    logging.info("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+    logger.info("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
     timer.disp("Total perturbation")
 
     return eq_new
@@ -502,10 +502,10 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         deltas["Zb_lmn"] = dZb
 
     if not len(deltas):
-        logging.error("At least one input must be a free variable for optimization.")
+        logger.error("At least one input must be a free variable for optimization.")
         raise ValueError("At least one input must be a free variable for optimization.")
 
-    logging.info("Perturbing {}".format(", ".join(deltas.keys())))
+    logger.info("Perturbing {}".format(", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
@@ -523,9 +523,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dim_c, dim_opt = subspace.shape
 
     if dim_c != c.size:
-        logging.error("Number of parameters: {}", dim_opt)
-        logging.error("Number of objectives: {}", objective_g.dim_f)
-        logging.error("Invalid dimension: opt_subspace must have {} rows.", c.size)
+        logger.error("Number of parameters: {}", dim_opt)
+        logger.error("Number of objectives: {}", objective_g.dim_f)
+        logger.error("Invalid dimension: opt_subspace must have {} rows.", c.size)
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )
@@ -591,7 +591,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         g = objective_g.compute(xg)
 
         # 1st partial derivatives of f objective wrt both x and c
-        logging.info("Computing df")
+        logger.info("Computing df")
         timer.start("df computation")
         Fx = objective_f.jac(xf)
         Fx = align_jacobian(Fx, objective_f, objective_g)
@@ -599,7 +599,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.disp("df computation")
 
         # 1st partial derivatives of g objective wrt both x and c
-        logging.info("Computing dg")
+        logger.info("Computing dg")
         timer.start("dg computation")
         Gx = objective_g.jac(xg)
         Gx = align_jacobian(Gx, objective_g, objective_f)
@@ -637,7 +637,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         # restrict to optimization subspace
         LHS_opt = LHSh @ subspace
 
-        logging.info("Factoring LHS")
+        logger.info("Factoring LHS")
         timer.start("LHS factorization")
         ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
         timer.stop("LHS factorization")
@@ -682,7 +682,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dxf_dxg = np.delete(np.eye(objective_f.dim_x), idx, 1)
 
         # 2nd partial derivatives of f objective wrt both x and c
-        logging.info("Computing d^2f")
+        logger.info("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
         RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), xf)
@@ -690,7 +690,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         timer.disp("d^2f computation")
 
         # 2nd partial derivatives of g objective wrt both x and c
-        logging.info("Computing d^2g")
+        logger.info("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
         RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
@@ -763,8 +763,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
-    logging.info("||dc||/||c|| = {:10.3e}", np.linalg.norm(dc) / c_norm)
-    logging.info("||dx||/||x|| = {:10.3e}", np.linalg.norm(dx_reduced) / x_norm)
+    logger.info("||dc||/||c|| = {:10.3e}", np.linalg.norm(dc) / c_norm)
+    logger.info("||dx||/||x|| = {:10.3e}", np.linalg.norm(dx_reduced) / x_norm)
     timer.disp("Total perturbation")
 
     return eq_new, predicted_reduction, dc_opt, dc, np.linalg.norm(c), bound_hit

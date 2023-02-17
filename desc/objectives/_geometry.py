@@ -1,5 +1,6 @@
 """Objectives for targeting geometrical quantities."""
 
+import logging
 import warnings
 
 import numpy as np
@@ -14,7 +15,7 @@ from desc.utils import Timer
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
-import logging
+logger = logging.getLogger("DESC_logger")
 
 
 class AspectRatio(_Objective):
@@ -100,7 +101,7 @@ class AspectRatio(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -220,7 +221,7 @@ class Elongation(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

@@ -2,8 +2,8 @@
 
 import logging
 import warnings
-import numpy as np
 
+import numpy as np
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
@@ -22,6 +22,8 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
+
+logger = logging.getLogger("DESC_logger")
 
 
 def lsqtr(  # noqa: C901 - FIXME: simplify this
@@ -376,13 +378,13 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         message=message,
     )
     if result["success"]:
-        logging.info(result["message"])
+        logger.info(result["message"])
     else:
         warnings.warn("Warning: " + result["message"])
-    logging.info("         Current function value: {:.3e}".format(result["cost"]))
-    logging.info("         Iterations: {:d}".format(result["nit"]))
-    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.info("         Jacobian evaluations: {:d}".format(result["njev"]))
+    logger.info("         Current function value: {:.3e}".format(result["cost"]))
+    logger.info("         Iterations: {:d}".format(result["nit"]))
+    logger.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logger.info("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     if return_all:
         result["allx"] = allx

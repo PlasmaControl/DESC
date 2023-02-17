@@ -210,12 +210,12 @@ class TestInputReader:
         """Test setting of logfile options."""
         ir = InputReader(self.argv2)
         assert (
-            ir.inputs[0]["disable_logging"] == False
+            ir.inputs[0]["disable_logging"] is False
         ), "value of inputs['disable_logging'] incorrect on no arguments"
         argv = self.argv2 + ["--disable_logging"]
         ir = InputReader(argv)
         assert (
-            ir.inputs[0]["disable_logging"] == True
+            ir.inputs[0]["disable_logging"] is True
         ), "value of inputs['disable_logging'] incorrect on disable_logging argument"
 
     @pytest.mark.unit
@@ -230,222 +230,222 @@ class TestInputReader:
         assert "current" in ir.inputs[0].keys()
 
 
-#class MockObject:
-#    """Example object for saving/loading tests."""
+class MockObject:
+    """Example object for saving/loading tests."""
 
-#    def __init__(self):
-#        self._io_attrs_ = ["a", "b", "c"]
-
-
-#@pytest.mark.unit
-#def test_writer_given_filename(writer_test_file):
-#    """Test writing to a given file by filename."""
-#    writer = hdf5Writer(writer_test_file, "w")
-#    assert writer.check_type(writer.target) is False
-#    assert writer.check_type(writer.base) is True
-#    assert writer._close_base_ is True
-#    writer.close()
-#    assert writer._close_base_ is False
+    def __init__(self):
+        self._io_attrs_ = ["a", "b", "c"]
 
 
-#@pytest.mark.unit
-#def test_writer_given_file(writer_test_file):
-#    """Test writing to given file instance."""
-#    f = h5py.File(writer_test_file, "w")
-#    writer = hdf5Writer(f, "w")
-#    assert writer.check_type(writer.target) is True
-#    assert writer.check_type(writer.base) is True
-#    assert writer._close_base_ is False
-#    assert writer._close_base_ is False
-#    f.close()
+@pytest.mark.unit
+def test_writer_given_filename(writer_test_file):
+    """Test writing to a given file by filename."""
+    writer = hdf5Writer(writer_test_file, "w")
+    assert writer.check_type(writer.target) is False
+    assert writer.check_type(writer.base) is True
+    assert writer._close_base_ is True
+    writer.close()
+    assert writer._close_base_ is False
 
 
-#@pytest.mark.unit
-#def test_writer_close_on_delete(writer_test_file):
-#    """Test that files are closed when writer is deleted."""
-#    writer = hdf5Writer(writer_test_file, "w")
-#    with pytest.raises(OSError):
-#        newwriter = hdf5Writer(writer_test_file, "w")
-#    del writer
-#    newwriter = hdf5Writer(writer_test_file, "w")
-#    del newwriter
+@pytest.mark.unit
+def test_writer_given_file(writer_test_file):
+    """Test writing to given file instance."""
+    f = h5py.File(writer_test_file, "w")
+    writer = hdf5Writer(f, "w")
+    assert writer.check_type(writer.target) is True
+    assert writer.check_type(writer.base) is True
+    assert writer._close_base_ is False
+    assert writer._close_base_ is False
+    f.close()
 
 
-#@pytest.mark.unit
-#def test_writer_write_dict(writer_test_file):
-#    """Test writing dictionary to hdf5 file."""
-#    thedict = {"1": 1, "2": 2, "3": 3}
-#    writer = hdf5Writer(writer_test_file, "w")
-#    writer.write_dict(thedict)
-#    with pytest.raises(SyntaxError):
-#        writer.write_dict(thedict, where="not a writable type")
-#    writer.close()
-#    f = h5py.File(writer_test_file, "r")
-#    for key in thedict.keys():
-#        assert key in f.keys()
-#        assert f[key][()] == thedict[key]
-#    f.close()
-#    reader = hdf5Reader(writer_test_file)
-
-#    dict1 = reader.read_dict()
-#    assert dict1 == thedict
-#    reader.close()
+@pytest.mark.unit
+def test_writer_close_on_delete(writer_test_file):
+    """Test that files are closed when writer is deleted."""
+    writer = hdf5Writer(writer_test_file, "w")
+    with pytest.raises(OSError):
+        newwriter = hdf5Writer(writer_test_file, "w")
+    del writer
+    newwriter = hdf5Writer(writer_test_file, "w")
+    del newwriter
 
 
-#@pytest.mark.unit
-#def test_writer_write_list(writer_test_file):
-#    """Test writing list to hdf5 file."""
-#    thelist = ["1", 1, "2", 2, "3", 3]
-#    writer = hdf5Writer(writer_test_file, "w")
-#    writer.write_list(thelist)
-#    with pytest.raises(SyntaxError):
-#        writer.write_list(thelist, where="not a writable type")
-#    writer.close()
-#    reader = hdf5Reader(writer_test_file)
+@pytest.mark.unit
+def test_writer_write_dict(writer_test_file):
+    """Test writing dictionary to hdf5 file."""
+    thedict = {"1": 1, "2": 2, "3": 3}
+    writer = hdf5Writer(writer_test_file, "w")
+    writer.write_dict(thedict)
+    with pytest.raises(SyntaxError):
+        writer.write_dict(thedict, where="not a writable type")
+    writer.close()
+    f = h5py.File(writer_test_file, "r")
+    for key in thedict.keys():
+        assert key in f.keys()
+        assert f[key][()] == thedict[key]
+    f.close()
+    reader = hdf5Reader(writer_test_file)
 
-#    list1 = reader.read_list()
-#    assert list1 == thelist
-#    reader.close()
-
-
-#@pytest.mark.unit
-#def test_writer_write_obj(writer_test_file):
-#    """Test writing objects to hdf5 file."""
-#    mo = MockObject()
-#    writer = hdf5Writer(writer_test_file, "w")
-#    # writer should throw runtime warning if any save_attrs are undefined
-#    with pytest.warns(RuntimeWarning):
-#        writer.write_obj(mo)
-#    writer.close()
-#    writer = hdf5Writer(writer_test_file, "w")
-#    for name in mo._io_attrs_:
-#        setattr(mo, name, name)
-#    writer.write_obj(mo)
-#    groupname = "initial"
-#    writer.write_obj(mo, where=writer.sub(groupname))
-#    writer.close()
-#    f = h5py.File(writer_test_file, "r")
-#    for key in mo._io_attrs_:
-#        assert key in f.keys()
-#    assert groupname in f.keys()
-#    initial = f[groupname]
-#    for key in mo._io_attrs_:
-#        assert key in initial.keys()
-#    f.close()
+    dict1 = reader.read_dict()
+    assert dict1 == thedict
+    reader.close()
 
 
-#@pytest.mark.unit
-#def test_reader_given_filename(reader_test_file):
-#    """Test opening a reader with a given filename."""
-#    reader = hdf5Reader(reader_test_file)
-#    assert reader.check_type(reader.target) is False
-#    assert reader.check_type(reader.base) is True
-#    assert reader._close_base_ is True
-#    reader.close()
-#    assert reader._close_base_ is False
+@pytest.mark.unit
+def test_writer_write_list(writer_test_file):
+    """Test writing list to hdf5 file."""
+    thelist = ["1", 1, "2", 2, "3", 3]
+    writer = hdf5Writer(writer_test_file, "w")
+    writer.write_list(thelist)
+    with pytest.raises(SyntaxError):
+        writer.write_list(thelist, where="not a writable type")
+    writer.close()
+    reader = hdf5Reader(writer_test_file)
+
+    list1 = reader.read_list()
+    assert list1 == thelist
+    reader.close()
 
 
-#@pytest.mark.unit
-#def test_reader_given_file(reader_test_file):
-#    """Test opening a reader from a given file instance."""
-#    f = h5py.File(reader_test_file, "r")
-#    reader = hdf5Reader(f)
-#    assert reader.check_type(reader.target) is True
-#    assert reader.check_type(reader.base) is True
-#    assert reader._close_base_ is False
-#    assert reader._close_base_ is False
-#    f.close()
+@pytest.mark.unit
+def test_writer_write_obj(writer_test_file):
+    """Test writing objects to hdf5 file."""
+    mo = MockObject()
+    writer = hdf5Writer(writer_test_file, "w")
+    # writer should throw runtime warning if any save_attrs are undefined
+    with pytest.warns(RuntimeWarning):
+        writer.write_obj(mo)
+    writer.close()
+    writer = hdf5Writer(writer_test_file, "w")
+    for name in mo._io_attrs_:
+        setattr(mo, name, name)
+    writer.write_obj(mo)
+    groupname = "initial"
+    writer.write_obj(mo, where=writer.sub(groupname))
+    writer.close()
+    f = h5py.File(writer_test_file, "r")
+    for key in mo._io_attrs_:
+        assert key in f.keys()
+    assert groupname in f.keys()
+    initial = f[groupname]
+    for key in mo._io_attrs_:
+        assert key in initial.keys()
+    f.close()
 
 
-#@pytest.mark.unit
-#def test_reader_read_obj(reader_test_file):
-#    """Test reading an object from hdf5 file."""
-#    mo = MockObject()
-#    reader = hdf5Reader(reader_test_file)
-#    reader.read_obj(mo)
-#    mo._io_attrs_ += "4"
-#    with pytest.warns(RuntimeWarning):
-#        reader.read_obj(mo)
-#    del mo._io_attrs_[-1]
-#    submo = MockObject()
-#    reader.read_obj(submo, where=reader.sub("subgroup"))
-#    for key in mo._io_attrs_:
-#        assert hasattr(mo, key)
-#        assert hasattr(submo, key)
+@pytest.mark.unit
+def test_reader_given_filename(reader_test_file):
+    """Test opening a reader with a given filename."""
+    reader = hdf5Reader(reader_test_file)
+    assert reader.check_type(reader.target) is False
+    assert reader.check_type(reader.base) is True
+    assert reader._close_base_ is True
+    reader.close()
+    assert reader._close_base_ is False
 
 
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_pickle_io(DSHAPE_current, tmpdir_factory):
-#    """Test saving and loading equilibrium in pickle format."""
-#    tmpdir = tmpdir_factory.mktemp("desc_inputs")
-#    tmp_path = tmpdir.join("solovev_test.pkl")
-#    eqf = load(load_from=str(DSHAPE_current["desc_h5_path"]))
-#    eqf.save(tmp_path, file_format="pickle")
-#    peqf = load(tmp_path, file_format="pickle")
-#    assert equals(eqf, peqf)
+@pytest.mark.unit
+def test_reader_given_file(reader_test_file):
+    """Test opening a reader from a given file instance."""
+    f = h5py.File(reader_test_file, "r")
+    reader = hdf5Reader(f)
+    assert reader.check_type(reader.target) is True
+    assert reader.check_type(reader.base) is True
+    assert reader._close_base_ is False
+    assert reader._close_base_ is False
+    f.close()
 
 
-#@pytest.mark.unit
-#@pytest.mark.solve
-#def test_ascii_io(DSHAPE_current, tmpdir_factory):
-#    """Test saving and loading equilibrium in ASCII format."""
-#    tmpdir = tmpdir_factory.mktemp("desc_inputs")
-#    tmp_path = tmpdir.join("solovev_test.txt")
-#    eq1 = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-#    eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
-#        sym=True
-#    )
-#    write_ascii(tmp_path, eq1)
-#    with pytest.warns(UserWarning):
-#        eq2 = read_ascii(tmp_path)
-#    assert np.allclose(eq1.R_lmn, eq2.R_lmn)
-#    assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
-#    assert np.allclose(eq1.L_lmn, eq2.L_lmn)
+@pytest.mark.unit
+def test_reader_read_obj(reader_test_file):
+    """Test reading an object from hdf5 file."""
+    mo = MockObject()
+    reader = hdf5Reader(reader_test_file)
+    reader.read_obj(mo)
+    mo._io_attrs_ += "4"
+    with pytest.warns(RuntimeWarning):
+        reader.read_obj(mo)
+    del mo._io_attrs_[-1]
+    submo = MockObject()
+    reader.read_obj(submo, where=reader.sub("subgroup"))
+    for key in mo._io_attrs_:
+        assert hasattr(mo, key)
+        assert hasattr(submo, key)
 
 
-#@pytest.mark.unit
-#def test_copy():
-#    """Test thing.copy() method of IOAble objects."""
-#    basis = FourierZernikeBasis(2, 2, 2)
-#    grid = LinearGrid(2, 2, 2)
-#    transform1 = Transform(grid, basis, method="direct1")
-#    transform2 = transform1.copy(deepcopy=False)
-
-#    assert transform1.basis is transform2.basis
-#    np.testing.assert_allclose(
-#        transform1.matrices["direct1"][0][0][0],
-#        transform2.matrices["direct1"][0][0][0],
-#        rtol=1e-10,
-#        atol=1e-10,
-#    )
-
-#    transform3 = transform1.copy(deepcopy=True)
-#    assert transform1.basis is not transform3.basis
-#    assert transform1.basis.eq(transform3.basis)
-#    np.testing.assert_allclose(
-#        transform1.matrices["direct1"][0][0][0],
-#        transform3.matrices["direct1"][0][0][0],
-#        rtol=1e-10,
-#        atol=1e-10,
-#    )
+@pytest.mark.unit
+@pytest.mark.solve
+def test_pickle_io(DSHAPE_current, tmpdir_factory):
+    """Test saving and loading equilibrium in pickle format."""
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("solovev_test.pkl")
+    eqf = load(load_from=str(DSHAPE_current["desc_h5_path"]))
+    eqf.save(tmp_path, file_format="pickle")
+    peqf = load(tmp_path, file_format="pickle")
+    assert equals(eqf, peqf)
 
 
-#@pytest.mark.unit
-#def test_save_none(tmpdir_factory):
-#    """Test that None attributes are saved/loaded correctly."""
-#    tmpdir = tmpdir_factory.mktemp("none_test")
-#    eq = Equilibrium()
-#    eq._iota = None
-#    eq.save(tmpdir + "none_test.h5")
-#    eq1 = load(tmpdir + "none_test.h5")
-#    assert eq1.iota is None
+@pytest.mark.unit
+@pytest.mark.solve
+def test_ascii_io(DSHAPE_current, tmpdir_factory):
+    """Test saving and loading equilibrium in ASCII format."""
+    tmpdir = tmpdir_factory.mktemp("desc_inputs")
+    tmp_path = tmpdir.join("solovev_test.txt")
+    eq1 = load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+    eq1.iota = eq1.get_profile("iota", grid=LinearGrid(30, 16, 0)).to_powerseries(
+        sym=True
+    )
+    write_ascii(tmp_path, eq1)
+    with pytest.warns(UserWarning):
+        eq2 = read_ascii(tmp_path)
+    assert np.allclose(eq1.R_lmn, eq2.R_lmn)
+    assert np.allclose(eq1.Z_lmn, eq2.Z_lmn)
+    assert np.allclose(eq1.L_lmn, eq2.L_lmn)
 
 
-#@pytest.mark.unit
-#def test_load_eq_without_current():
-#    """Test that loading an eq from DESC < 0.6.0 works correctly."""
-#    desc_no_current_path = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
-#    with pytest.warns(RuntimeWarning):
-#        eq = load(desc_no_current_path)[-1]
-#    assert eq.current is None
+@pytest.mark.unit
+def test_copy():
+    """Test thing.copy() method of IOAble objects."""
+    basis = FourierZernikeBasis(2, 2, 2)
+    grid = LinearGrid(2, 2, 2)
+    transform1 = Transform(grid, basis, method="direct1")
+    transform2 = transform1.copy(deepcopy=False)
+
+    assert transform1.basis is transform2.basis
+    np.testing.assert_allclose(
+        transform1.matrices["direct1"][0][0][0],
+        transform2.matrices["direct1"][0][0][0],
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+    transform3 = transform1.copy(deepcopy=True)
+    assert transform1.basis is not transform3.basis
+    assert transform1.basis.eq(transform3.basis)
+    np.testing.assert_allclose(
+        transform1.matrices["direct1"][0][0][0],
+        transform3.matrices["direct1"][0][0][0],
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+
+@pytest.mark.unit
+def test_save_none(tmpdir_factory):
+    """Test that None attributes are saved/loaded correctly."""
+    tmpdir = tmpdir_factory.mktemp("none_test")
+    eq = Equilibrium()
+    eq._iota = None
+    eq.save(tmpdir + "none_test.h5")
+    eq1 = load(tmpdir + "none_test.h5")
+    assert eq1.iota is None
+
+
+@pytest.mark.unit
+def test_load_eq_without_current():
+    """Test that loading an eq from DESC < 0.6.0 works correctly."""
+    desc_no_current_path = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+    with pytest.warns(RuntimeWarning):
+        eq = load(desc_no_current_path)[-1]
+    assert eq.current is None

@@ -1,12 +1,13 @@
 """DESC: a 3D MHD equilibrium solver and stellarator optimization suite."""
 
+import logging
+import logging.handlers
 import os
 import re
 import sys
 import warnings
-import logging
-import logging.handlers
 from logging.handlers import RotatingFileHandler
+
 import colorama
 from termcolor import colored
 
@@ -114,17 +115,16 @@ def set_device(kind="cpu"):
 
 
 logging.getLogger().addHandler(logging.NullHandler())
-# Standard practice is to give the logging module a NullHandler such that no
-# output is generated without user intending it.  However, as DESC evolves we
-# have a logger automatically set up to save crash data- can be turned
-# off with a call to set_logfile_logging(log_activated = False)
+# DESC automatically configures it's own logger, not the root logger, so we give the
+# root logger a NullHandler.  DESC's logger config can be changed with the following
+# functions, or with flags passed to any input-reading desc function as desired, with
+# the 'quiet' (-q), or 'disable_logging' (-d) flags to prevent messages propogating
+# into your own logging solution.  'disable logging' will toggle logfile logging off,
+# and the 'quiet' command will turn off console logging.
 
 
 def stop_logfile_logging():
-
-    """Quickly stops logging to specified file if it is being handled by a
-    rotating file handler.   Non-global version of the stop_logfile_logging
-    function from __init__.py for internal use.
+    """Quickly stops logfile logging to DESC logger.
 
     Returns
     -------
@@ -132,25 +132,22 @@ def stop_logfile_logging():
             Returns True if logfile logger was successfully turned off.
     """
     logger = logging.getLogger("DESC_logger")
-    for handler in logger.handlers:
-        if isinstance(handler, logging.handlers.RotatingFileHandler):
-            logger.removeHandler(handler)
-            return True
-    warnings.warn(colored("No DESC logger has been found.", "yellow"))
-    return False
+    if logger.handlers is not None:
+        for handler in logger.handlers:
+            if isinstance(handler, logging.handlers.RotatingFileHandler):
+                handler.setLevel(1)
+                return True
+            else:
+                warnings.warn(
+                    colored("No DESC logfile logger has been found.", "yellow")
+                )
+    else:
+        warnings.warn(colored("No DESC logger has been found.", "yellow"))
+        return False
 
 
 def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
-
-    """Quickly adds a logfile handler to the root logger.
-
-    Arguments allow basic configuration of the logger, but this is not meant to
-    be a replacement for setting up logging when using DESC in the context of a
-    larger project- primarily meant for debugging.  Selecting a lower level of
-    logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
-    "ERROR" and "CRITICAL" logs would be displayed in the same location as well.
-    Accepts numeric inputs as well- levels "DEBUG", "INFO", "WARNING", "ERROR",
-    "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.
+    """Quickly adds a logfile handler to the DESC logger.
 
     Parameters
     ----------
@@ -163,13 +160,17 @@ def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
 
     Returns
     -------
-    bool :
-        Returns True if logging is set up, or stopped successfully.
+    logger : Logger object
+        Returns Logger object if successfully configured
     """
+    # Creates logger that accepts DEBUG level logs and up
+    logger = logging.getLogger("DESC_logger")
+    logger.setLevel(logfile_level)
 
-    # Creates(or overwrites) logger that accepts DEBUG level logs and up
-    logfile_logger = logging.getLogger("DESC_logger")
-    logfile_logger.setLevel(logfile_level)
+    if logger.hasHandlers:
+        for handler in logger.handlers:
+            if isinstance(handler, logging.handlers.RotatingFileHandler):
+                logger.removeHandler(handler)
 
     # Create file handler
     logfile_handler = logging.handlers.RotatingFileHandler(
@@ -186,37 +187,27 @@ def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
             + "use 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL', or an integer"
             + "value from 0 to 50"
         )
-
-        return False
+        return
 
     # Set log formatting
     logfile_formatter = logging.Formatter(
-        "%(asctime)s  ::  "
-        + "%(name)s  ::  %(levelname)s ::  "
-        + "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  :: %(message)s ",
-        datefmt="%Y-%m-%d %H:%M:%S.uuu",
+        "%(asctime)s.%(msecs)03d :: "
+        + "%(name)s :: %(levelname)s ::  "
+        + "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  ::  %(message)s ",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     # Assign formatter to handler
     logfile_handler.setFormatter(logfile_formatter)
 
     # Assign handler to root logger
-    logfile_logger.addHandler(logfile_handler)
+    logger.addHandler(logfile_handler)
     logging.captureWarnings(True)
-    return True
+    return logger
 
 
 def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     """Quickly adds console handlers to python's root logger.
-
-    Arguments allow basic configuration of the logger, but this is not meant to
-    be a replacement for setting up logging when using DESC in the context of a
-    larger project- primarily meant for debugging.  Selecting a lower level of
-    logging- e.g. "INFO"- will print logs of "INFO" level or higher- "WARNING",
-    "ERROR" and "CRITICAL" logs would be displayed in the same location as well.
-    Accepts numeric inputs as well- levels "DEBUG", "INFO", "WARNING", "ERROR",
-    "CRITICAL" correspond to 10, 20, 30, 40, and 50 respectively.  DESC only
-    uses DEBUG and INFO currently.
 
     Parameters
     ----------
@@ -227,13 +218,16 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
         output logging to console with either "stdout" or "stderr"
     Returns
     -------
-    bool :
-        Returns True if logging setup successfully
+    logger : Logger object
+        Returns Logger object if successfully configured
     """
-
     # Create logger that accepts DEBUG level logs and up
     logger = logging.getLogger("DESC_logger")
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel("DEBUG")
+    if logger.hasHandlers():
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                logger.removeHandler(handler)
 
     # Create console handler
     console_log_output = console_log_output.lower()
@@ -248,16 +242,14 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     # Set console log level
     try:
         console_handler.setLevel(console_log_level.upper())
-    except:
+    except ValueError:
         print("Console logging setup failed: invalid level: '%s'" % console_log_level)
-        return False
+        return
 
     # Set log formatting
     console_formatter = logging.Formatter(
-        "%(asctime)s  ::  "
-        + "%(name)s  ::  %(levelname)s ::  "
-        + "File: %(module)s  Func: %(funcName)s  Line: %(lineno)s  :: %(message)s ",
-        datefmt="%Y-%m-%d %H:%M:%S.uuu",
+        +"%(name)s :: %(levelname)s :: "
+        + "File: %(module)s Func: %(funcName)s Line: %(lineno)s ::  %(message)s ",
     )
 
     console_handler.setFormatter(console_formatter)
@@ -265,10 +257,10 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     # Assign handlers to logger
     logger.addHandler(console_handler)
     logging.captureWarnings(True)
-    return True
+    return logger
 
 
-set_logfile_logging()
-set_console_logging()
+logger = set_logfile_logging()
+logger = set_console_logging()
 
 del RotatingFileHandler

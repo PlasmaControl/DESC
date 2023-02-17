@@ -11,6 +11,8 @@ from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
 from desc.utils import Timer
 
+logger = logging.getLogger("DESC_logger")
+
 
 def solve_continuation_automatic(  # noqa: C901
     eq,
@@ -207,7 +209,7 @@ def solve_continuation_automatic(  # noqa: C901
             )
             objective_i = get_equilibrium_objective(objective)
         if len(deltas) > 0:
-            logging.info("Perturbing equilibrium")
+            logger.info("Perturbing equilibrium")
             eqi.perturb(
                 objective=objective_i,
                 constraints=constraints_i,
@@ -236,7 +238,7 @@ def solve_continuation_automatic(  # noqa: C901
         eqfam.append(eqi)
 
         if checkpoint_path is not None:
-            logging.info("Saving latest iteration")
+            logger.info("Saving latest iteration")
             eqfam.save(checkpoint_path)
         timer.stop("Iteration {} total".format(ii + 1))
         timer.disp("Iteration {} total".format(ii + 1))
@@ -247,13 +249,13 @@ def solve_continuation_automatic(  # noqa: C901
     eq.L_lmn = eqi.L_lmn
     eqfam[-1] = eq
     timer.stop("Total time")
-    logging.info("====================")
-    logging.info("Done")
+    logger.info("====================")
+    logger.info("Done")
     timer.disp("Total time")
     if checkpoint_path is not None:
-        logging.info("Output written to {}".format(checkpoint_path))
+        logger.info("Output written to {}".format(checkpoint_path))
         eqfam.save(checkpoint_path)
-    logging.info("====================")
+    logger.info("====================")
 
     return eqfam
 
@@ -375,7 +377,7 @@ def solve_continuation(  # noqa: C901
                 )
 
         if len(deltas) > 0:
-            logging.info("Perturbing equilibrium")
+            logger.info("Perturbing equilibrium")
             # TODO: pass Jx if available
             eqp = eqfam[ii - 1].copy()
             eqp.change_resolution(**eqi.resolution)
@@ -412,20 +414,20 @@ def solve_continuation(  # noqa: C901
             stop = True
 
         if checkpoint_path is not None:
-            logging.info("Saving latest iteration")
+            logger.info("Saving latest iteration")
             eqfam.save(checkpoint_path)
         timer.stop("Iteration {} total".format(ii + 1))
         timer.disp("Iteration {} total".format(ii + 1))
         ii += 1
 
     timer.stop("Total time")
-    logging.info("====================")
-    logging.info("Done")
+    logger.info("====================")
+    logger.info("Done")
     timer.disp("Total time")
     if checkpoint_path is not None:
-        logging.info("Output written to {}".format(checkpoint_path))
+        logger.info("Output written to {}".format(checkpoint_path))
         eqfam.save(checkpoint_path)
-    logging.info("====================")
+    logger.info("====================")
     return eqfam
 
 
@@ -460,23 +462,23 @@ def _print_iteration_summary(
     optimizer,
     **kwargs,
 ):
-    logging.debug("================")
-    logging.debug("Step {}/{}".format(ii + 1, nn))
-    logging.debug("================")
+    logger.debug("================")
+    logger.debug("Step {}/{}".format(ii + 1, nn))
+    logger.debug("================")
     eq.resolution_summary()
-    logging.debug("Boundary ratio = {}".format(bdry_ratio))
-    logging.debug("Pressure ratio = {}".format(pres_ratio))
+    logger.debug("Boundary ratio = {}".format(bdry_ratio))
+    logger.debug("Pressure ratio = {}".format(pres_ratio))
     if eq.current is not None:
-        logging.debug("Current ratio = {}".format(curr_ratio))
-    logging.debug("Perturbation Order = {}".format(pert_order))
-    logging.debug(
+        logger.debug("Current ratio = {}".format(curr_ratio))
+    logger.debug("Perturbation Order = {}".format(pert_order))
+    logger.debug(
         "Objective: {}".format(
             objective if isinstance(objective, str) else objective.objectives[0].name
         )
     )
-    logging.debug(
+    logger.debug(
         "Optimizer: {}".format(
             optimizer if isinstance(optimizer, str) else optimizer.method
         )
     )
-    logging.debug("================")
+    logger.debug("================")

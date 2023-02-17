@@ -364,8 +364,6 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
     eq._solved = True
-    VMECIO.save(
-        eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:]
-    )
+    VMECIO.save(eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:])
     desc = Dataset(str(SOLOVEV["desc_nc_path"]), mode="r")
     return vmec, desc

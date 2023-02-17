@@ -1,7 +1,9 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import numpy as np
+
 import logging
+
+import numpy as np
 from scipy.optimize import OptimizeResult
 
 from .utils import (
@@ -10,6 +12,8 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
+
+logger = logging.getLogger("DESC_logger")
 
 
 def sgd(
@@ -175,13 +179,13 @@ def sgd(
         message=message,
     )
     if result["success"]:
-        logging.info(result["message"])
+        logger.info(result["message"])
     else:
-        logging.error("Warning: " + result["message"])
-    logging.info("         Current function value: {:.3e}".format(result["fun"]))
-    logging.info("         Iterations: {:d}".format(result["nit"]))
-    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
+        logger.error("Warning: " + result["message"])
+    logger.info("         Current function value: {:.3e}".format(result["fun"]))
+    logger.info("         Iterations: {:d}".format(result["nit"]))
+    logger.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logger.info("         Gradient evaluations: {:d}".format(result["ngev"]))
     if return_all:
         result["allx"] = allx
     return result

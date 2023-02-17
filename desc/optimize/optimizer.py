@@ -6,11 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-
 from desc import set_console_logging
-from desc.optimize.utils import redirect_stdout
-from io import StringIO
-from termcolor import colored
 from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
@@ -30,6 +26,8 @@ from ._scipy_wrappers import _optimize_scipy_least_squares, _optimize_scipy_mini
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
+
+logger = logging.getLogger("DESC_logger")
 
 
 class Optimizer(IOAble):
@@ -263,7 +261,7 @@ class Optimizer(IOAble):
                 )
             )
 
-        logging.info("Factorizing linear constraints")
+        logger.info("Factorizing linear constraints")
         timer.start("linear constraint factorize")
         (
             compute_wrapped,
@@ -288,10 +286,10 @@ class Optimizer(IOAble):
             options,
         )
 
-        logging.info("Number of parameters: {}", x0_reduced.size)
-        logging.info("Number of objectives: {}", objective.dim_f)
+        logger.info("Number of parameters: {}", x0_reduced.size)
+        logger.info("Number of objectives: {}", objective.dim_f)
 
-        logging.info("Starting optimization")
+        logger.info("Starting optimization")
         timer.start("Solution time")
 
         if self.method in Optimizer._scipy_scalar_methods:

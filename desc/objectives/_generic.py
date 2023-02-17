@@ -1,5 +1,7 @@
 """Generic objectives that don't belong anywhere else."""
 
+import logging
+
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -7,10 +9,11 @@ from desc.compute.utils import compress, get_params, get_profiles, get_transform
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import Profile
 from desc.utils import Timer
-import logging
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+
+logger = logging.getLogger("DESC_logger")
 
 
 class GenericObjective(_Objective):
@@ -222,7 +225,7 @@ class ToroidalCurrent(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -367,7 +370,7 @@ class RotationalTransform(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

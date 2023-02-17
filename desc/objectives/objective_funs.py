@@ -1,9 +1,9 @@
 """Base classes for objectives."""
 
+import logging
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
-import logging
 import numpy as np
 
 from desc import set_console_logging
@@ -12,6 +12,8 @@ from desc.compute import arg_order
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable
+
+logger = logging.getLogger("DESC_logger")
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
@@ -182,9 +184,9 @@ class ObjectiveFunction(IOAble):
         self._dim_f = 0
         for objective in self.objectives:
             if objective.name:
-                logging.info("Building objective: ", objective.name)
+                logger.info("Building objective: ", objective.name)
             else:
-                logging.info("Building objective")
+                logger.info("Building objective")
             objective.build(eq, use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
@@ -254,7 +256,7 @@ class ObjectiveFunction(IOAble):
             f = self.compute_scalar(x)
         else:
             f = jnp.sum(self.compute(x) ** 2) / 2
-        logging.info("Total (sum of squares): {:10.3e}, ".format(f))
+        logger.info("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
             obj.print_value(**kwargs)
@@ -358,7 +360,7 @@ class ObjectiveFunction(IOAble):
         # variable values are irrelevant for compilation
         x = np.zeros((self.dim_x,))
 
-        logging.info("Compiling objective function and derivatives")
+        logger.info("Compiling objective function and derivatives")
         timer.start("Total compilation time")
 
         if mode in ["scalar", "all"]:
@@ -655,9 +657,9 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        logging.info(self._print_value_fmt.format(jnp.linalg.norm(f)) + self._units)
+        logger.info(self._print_value_fmt.format(jnp.linalg.norm(f)) + self._units)
         if self._normalize:
-            logging.info(
+            logger.info(
                 self._print_value_fmt.format(jnp.linalg.norm(f / self.normalization))
                 + "(normalized)"
             )

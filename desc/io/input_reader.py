@@ -2,20 +2,25 @@
 
 import argparse
 import io
+import logging
 import os
 import pathlib
 import re
-import logging
 import warnings
 from datetime import datetime
 
 import numpy as np
 from termcolor import colored
 
-from desc import set_device
-from desc import set_logfile_logging
-from desc import set_console_logging
-from desc import stop_logfile_logging
+from desc import (
+    set_console_logging,
+    set_device,
+    set_logfile_logging,
+    stop_logfile_logging,
+)
+
+logger = logging.getLogger("DESC_logger")
+
 
 class InputReader:
     """Reads command line arguments and parses input files.
@@ -63,7 +68,7 @@ class InputReader:
         """Path to output file."""
         return self._output_path
 
-    def parse_args(self, cl_args=None):
+    def parse_args(self, cl_args=None):  # noqa: C901 too complex, simplify
         """Parse command line arguments.
 
         Parameters
@@ -120,23 +125,31 @@ class InputReader:
         else:
             set_device("cpu")
 
-        # Unless quiet flag is actively set, assumes medium verbosity
+        logger = logging.getLogger("DESC_logger")
+        # Sets verbosity to default of 1 on no argument unless 'quiet' flag has been
+        # set or the DESC logger has been silenced or had its handler removed
         if args.verbose is None:
             if args.quiet is True:
                 args.verbose = 0
             else:
-                args.verbose = 1
+                if logger.hasHandlers():
+                    for handler in logger.handlers:
+                        if isinstance(handler, logging.StreamHandler):
+                            if handler.level < 10:
+                                args.verbose = 0
+                        else:
+                            args.verbose = 0
 
         if args.verbose == 0:
-            set_console_logging("CRITICAL", "stdout")
+            set_console_logging(1, "stdout")
         elif args.verbose == 1:
             set_console_logging("INFO", "stdout")
         elif args.verbose == 2:
             set_console_logging("DEBUG", "stdout")
 
-        if args.disable_logging == True:
+        if args.disable_logging is True:
             stop_logfile_logging()
-        if args.disable_logging == False:
+        if args.disable_logging is False:
             set_logfile_logging("DEBUG", "desc.log")
 
         return args

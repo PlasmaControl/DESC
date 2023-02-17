@@ -14,6 +14,8 @@ from desc.utils import Timer
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
+logger = logging.getLogger("DESC_logger")
+
 
 class ForceBalance(_Objective):
     """Radial and helical MHD force balance.
@@ -130,7 +132,7 @@ class ForceBalance(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -301,7 +303,7 @@ class RadialForceBalance(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -468,7 +470,7 @@ class HelicalForceBalance(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -648,7 +650,7 @@ class Energy(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -821,7 +823,7 @@ class CurrentDensity(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

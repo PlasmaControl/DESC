@@ -1,7 +1,6 @@
 """Classes for 2D surfaces embedded in 3D space."""
 
 import numbers
-import logging
 import warnings
 
 import numpy as np

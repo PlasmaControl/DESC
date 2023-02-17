@@ -11,6 +11,8 @@ from desc.grid import ConcentricGrid
 
 from .data_index import data_index
 
+logger = logging.getLogger("DESC_logger")
+
 # defines the order in which objective arguments get concatenated into the state vector
 arg_order = (
     "R_lmn",
@@ -563,7 +565,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
 
     """
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
-        logging.warnings(
+        logger.warnings(
             colored(
                 "Integrals over constant theta surfaces are poorly defined for "
                 + "ConcentricGrid.",

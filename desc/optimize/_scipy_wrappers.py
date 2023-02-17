@@ -1,8 +1,9 @@
 """Functions for wrapping scipy.optimize methods and handle custom stopping criteria."""
 
+import logging
+
 import numpy as np
 import scipy.optimize
-import logging
 from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
@@ -15,6 +16,8 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
+
+logger = logging.getLogger("DESC_logger")
 
 
 def _optimize_scipy_minimize(
@@ -190,17 +193,17 @@ def _optimize_scipy_minimize(
             allx=allx,
         )
     if result["success"]:
-        logging.info(result["message"])
+        logger.info(result["message"])
     else:
-        logging.info("Warning: " + result["message"])
-        logging.info("         Current function value: {:.3e}".format(result["fun"]))
-        logging.info(
+        logger.info("Warning: " + result["message"])
+        logger.info("         Current function value: {:.3e}".format(result["fun"]))
+        logger.info(
             "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))
         )
-        logging.info("         Iterations: {:d}".format(result["nit"]))
-        logging.info("         Function evaluations: {:d}".format(result["nfev"]))
-        logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
-        logging.info("         Hessian evaluations: {:d}".format(result["nhev"]))
+        logger.info("         Iterations: {:d}".format(result["nit"]))
+        logger.info("         Function evaluations: {:d}".format(result["nfev"]))
+        logger.info("         Gradient evaluations: {:d}".format(result["ngev"]))
+        logger.info("         Hessian evaluations: {:d}".format(result["nhev"]))
 
     return result
 
@@ -363,15 +366,15 @@ def _optimize_scipy_least_squares(fun, jac, x0, method, x_scale, stoptol, option
         )
 
     if result["success"]:
-        logging.info(result["message"])
+        logger.info(result["message"])
     else:
-        logging.info("Warning: " + result["message"])
-        logging.info("         Current function value: {:.3e}".format(result["cost"]))
-        logging.info(
+        logger.info("Warning: " + result["message"])
+        logger.info("         Current function value: {:.3e}".format(result["cost"]))
+        logger.info(
             "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))
         )
-        logging.info("         Iterations: {:d}".format(result["nit"]))
-        logging.info("         Function evaluations: {:d}".format(result["nfev"]))
-        logging.info("         Jacobian evaluations: {:d}".format(result["njev"]))
+        logger.info("         Iterations: {:d}".format(result["nit"]))
+        logger.info("         Function evaluations: {:d}".format(result["nfev"]))
+        logger.info("         Jacobian evaluations: {:d}".format(result["njev"]))
 
     return result

@@ -1,8 +1,10 @@
 """Tests for Mercier stability functions."""
 
-import pytest
+
 import logging
+
 import numpy as np
+import pytest
 from netCDF4 import Dataset
 
 import desc.examples
@@ -218,7 +220,6 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
 @pytest.mark.unit
 def test_mercier_print(TmpDir):
     """Test that the Mercier stability criteria prints correctly."""
-
     # Create temporary logfile to capture outputs
     logfile_path = str(TmpDir.join("/DESC_test_mercier_print.log"))
     log_connection = open(logfile_path, "x")
@@ -276,7 +277,6 @@ def test_mercier_print(TmpDir):
 
 def test_magwell_print(TmpDir):
     """Test that the magnetic well stability criteria prints correctly."""
-
     # Create temporary logfile to capture outputs
     logfile_path = str(TmpDir.join("/DESC_test_magwell_print.log"))
     log_connection = open(logfile_path, "x")

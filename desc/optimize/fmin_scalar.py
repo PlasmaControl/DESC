@@ -2,8 +2,8 @@
 
 import logging
 import warnings
-import numpy as np
 
+import numpy as np
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
@@ -22,6 +22,8 @@ from .utils import (
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
+
+logger = logging.getLogger("DESC_logger")
 
 
 def fmintr(  # noqa: C901 - FIXME: simplify this
@@ -387,17 +389,17 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         message=message,
     )
     if result["success"]:
-        logging.info(str(result["message"]))
+        logger.info(str(result["message"]))
     else:
         warnings.warn("Warning: " + str(result["message"]))
-    logging.info("         Current function value: {:.3e}".format(result["fun"]))
-    logging.info(
+    logger.info("         Current function value: {:.3e}".format(result["fun"]))
+    logger.info(
         "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))
     )
-    logging.info("         Iterations: {:d}".format(result["nit"]))
-    logging.info("         Function evaluations: {:d}".format(result["nfev"]))
-    logging.info("         Gradient evaluations: {:d}".format(result["ngev"]))
-    logging.info("         Hessian evaluations: {:d}".format(result["nhev"]))
+    logger.info("         Iterations: {:d}".format(result["nit"]))
+    logger.info("         Function evaluations: {:d}".format(result["nfev"]))
+    logger.info("         Gradient evaluations: {:d}".format(result["ngev"]))
+    logger.info("         Hessian evaluations: {:d}".format(result["nhev"]))
     if return_all:
         result["allx"] = allx
     if return_tr:

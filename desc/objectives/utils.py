@@ -117,7 +117,9 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(
+    constraints, objective_args
+):  # noqa: C901, E501 too complex, simplify
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp

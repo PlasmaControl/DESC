@@ -1,7 +1,9 @@
 """Objectives for targeting MHD stability."""
 
-import numpy as np
+
 import logging
+
+import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
@@ -12,6 +14,8 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+
+logger = logging.getLogger("DESC_logger")
 
 
 class MercierStability(_Objective):
@@ -107,7 +111,7 @@ class MercierStability(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -173,28 +177,24 @@ class MercierStability(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        logging.info(
-            "Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units
-        )
-        logging.info(
-            "Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units
-        )
-        logging.info(
+        logger.info("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        logger.info("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        logger.info(
             "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
         )
 
         if self._normalize:
-            logging.info(
+            logger.info(
                 "Maximum "
                 + self._print_value_fmt.format(jnp.max(f / self.normalization))
                 + "(normalized)"
             )
-            logging.info(
+            logger.info(
                 "Minimum "
                 + self._print_value_fmt.format(jnp.min(f / self.normalization))
                 + "(normalized)"
             )
-            logging.info(
+            logger.info(
                 "Average "
                 + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"
@@ -294,7 +294,7 @@ class MagneticWell(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -356,12 +356,8 @@ class MagneticWell(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        logging.info(
-            "Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units
-        )
-        logging.info(
-            "Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units
-        )
-        logging.info(
+        logger.info("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        logger.info("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        logger.info(
             "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
         )

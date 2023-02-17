@@ -1,8 +1,8 @@
 """Core class representing MHD equilibrium."""
 
+import logging
 import numbers
 import warnings
-import logging
 from collections.abc import MutableSequence
 
 import numpy as np
@@ -26,8 +26,9 @@ from desc.perturbations import perturb
 from desc.transform import Transform
 from desc.utils import Timer
 
-
 from .configuration import _Configuration
+
+logger = logging.getLogger("DESC_logger")
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -248,12 +249,12 @@ class Equilibrium(_Configuration, IOAble):
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
-        logging.debug("Spectral indexing: {}".format(self.spectral_indexing))
-        logging.debug(
+        logger.debug("Spectral indexing: {}".format(self.spectral_indexing))
+        logger.debug(
             "Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N)
         )
-        logging.debug("Node pattern: {}".format(self.node_pattern))
-        logging.debug(
+        logger.debug("Node pattern: {}".format(self.node_pattern))
+        logger.debug(
             "Node resolution (L,M,N)=({},{},{})".format(
                 self.L_grid, self.M_grid, self.N_grid
             )
@@ -520,7 +521,7 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        logging.info("Start of solver")
+        logger.info("Start of solver")
         objective.print_value(objective.x(eq))
 
         for key, value in result["history"].items():
@@ -528,7 +529,7 @@ class Equilibrium(_Configuration, IOAble):
             if value[-1].size:
                 setattr(eq, key, value[-1])
 
-        logging.info("End of solver")
+        logger.info("End of solver")
         objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
@@ -627,7 +628,7 @@ class Equilibrium(_Configuration, IOAble):
             options=options,
         )
 
-        logging.info("Start of solver")
+        logger.info("Start of solver")
         objective.print_value(objective.x(eq))
 
         for key, value in result["history"].items():
@@ -635,7 +636,7 @@ class Equilibrium(_Configuration, IOAble):
             if value[-1].size:
                 setattr(eq, key, value[-1])
 
-        logging.info("End of solver")
+        logger.info("End of solver")
         objective.print_value(objective.x(eq))
 
         eq.solved = result["success"]
@@ -723,10 +724,10 @@ class Equilibrium(_Configuration, IOAble):
         while success is None:
 
             timer.start("Step {} time".format(iteration))
-            logging.debug("====================")
-            logging.debug("Optimization Step {}".format(iteration))
-            logging.debug("====================")
-            logging.debug("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            logger.debug("====================")
+            logger.debug("Optimization Step {}".format(iteration))
+            logger.debug("====================")
+            logger.debug("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
 
             # perturb + solve
             (
@@ -760,8 +761,8 @@ class Equilibrium(_Configuration, IOAble):
 
             timer.stop("Step {} time".format(iteration))
             objective.print_value(objective.x(eq_new))
-            logging.debug("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-            logging.debug("Reduction Ratio = {:+.3f}".format(ratio))
+            logger.debug("Predicted Reduction = {:10.3e}".format(predicted_reduction))
+            logger.debug("Reduction Ratio = {:+.3f}".format(ratio))
             timer.disp("Step {} time".format(iteration))
 
             # stopping criteria
@@ -793,9 +794,9 @@ class Equilibrium(_Configuration, IOAble):
             iteration += 1
 
         timer.stop("Total time")
-        logging.info("====================")
-        logging.info("Done")
-        logging.info(message)
+        logger.info("====================")
+        logger.info("Done")
+        logger.info(message)
         timer.disp("Total time")
 
         if copy:
@@ -1027,46 +1028,46 @@ class EquilibriaFamily(IOAble, MutableSequence):
     ):
         """Solve for an equilibrium using an automatic continuation method.
 
-            By default, the method first solves for a no pressure tokamak, then a finite
-            beta tokamak, then a finite beta stellarator. Currently hard coded to take a
-            fixed number of perturbation steps based on conservative estimates and testing.
-            In the future, continuation stepping will be done adaptively.
+        By default, the method first solves for a no pressure tokamak, then a finite
+        beta tokamak, then a finite beta stellarator. Currently hard coded to take a
+        fixed number of perturbation steps based on conservative estimates and testing.
+        In the future, continuation stepping will be done adaptively.
 
-            Parameters
-            ----------
-            eq : Equilibrium
-                Unsolved Equilibrium with the final desired boundary, profiles, resolution.
-            objective : str or ObjectiveFunction (optional)
-                function to solve for equilibrium solution
-            optimizer : str or Optimzer (optional)
-                optimizer to use
-            pert_order : int
-                order of perturbations to use.
-            ftol, xtol, gtol : float
-                stopping tolerances for subproblem at each step. `None` will use defaults
-                for given optimizer.
-            nfev : int
-                maximum number of function evaluations in each equilibrium subproblem.
+        Parameters
+        ----------
+        eq : Equilibrium
+            Unsolved Equilibrium with the final desired boundary, profiles, resolution.
+        objective : str or ObjectiveFunction (optional)
+            function to solve for equilibrium solution
+        optimizer : str or Optimzer (optional)
+            optimizer to use
+        pert_order : int
+            order of perturbations to use.
+        ftol, xtol, gtol : float
+            stopping tolerances for subproblem at each step. `None` will use defaults
+            for given optimizer.
+        nfev : int
+            maximum number of function evaluations in each equilibrium subproblem.
         verbose : integer, optional
             * 0  : work silently.
             * 1  : display a termination report
             * 2  : display progress and timing info during iterations
-            checkpoint_path : str or path-like
-                file to save checkpoint data (Default value = None)
-            **kwargs : control continuation step sizes
+        checkpoint_path : str or path-like
+            file to save checkpoint data (Default value = None)
+        **kwargs : control continuation step sizes
 
-                Valid keyword arguments are:
+            Valid keyword arguments are:
 
-                mres_step: int, the amount to increase Mpol by at each continuation step
-                pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
-                                at each continuation step
-                bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
-                                at each continuation step
-            Returns
-            -------
-            eqfam : EquilibriaFamily
-                family of equilibria for the intermediate steps, where the last member is
-                the final desired configuration,
+            mres_step: int, the amount to increase Mpol by at each continuation step
+            pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
+                            at each continuation step
+            bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
+                            at each continuation step
+        Returns
+        -------
+        eqfam : EquilibriaFamily
+            family of equilibria for the intermediate steps, where the last member is
+            the final desired configuration,
 
         """
         from desc.continuation import solve_continuation_automatic

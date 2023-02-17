@@ -1,8 +1,8 @@
 """Backend functions for DESC, with options for JAX or regular numpy."""
 
+import logging
 import os
 import warnings
-import logging
 
 import numpy as np
 from termcolor import colored
@@ -11,11 +11,13 @@ import desc
 from desc import config as desc_config
 from desc import set_device
 
+logger = logging.getLogger("DESC_logger")
+
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np
     use_jax = False
     set_device(kind="cpu")
-    logging.info(
+    logger.info(
         "DESC version {}, using numpy backend, version={}, dtype={}".format(
             desc.__version__, np.__version__, np.linspace(0, 1).dtype
         )
@@ -33,7 +35,7 @@ else:
 
             jax_config.update("jax_enable_x64", True)
             if desc_config.get("kind") == "gpu" and len(jax.devices("gpu")) == 0:
-                logging.warning(
+                logger.warning(
                     "JAX failed to detect GPU, are you sure you "
                     + "installed JAX with GPU support?"
                 )
@@ -41,7 +43,7 @@ else:
             x = jnp.linspace(0, 5)
             y = jnp.exp(x)
         use_jax = True
-        logging.info(
+        logger.info(
             f"DESC version {desc.__version__},"
             + f"using JAX backend, jax version={jax.__version__}, "
             + f"jaxlib version={jaxlib.__version__}, dtype={y.dtype}"
@@ -53,13 +55,13 @@ else:
         y = jnp.exp(x)
         use_jax = False
         set_device(kind="cpu")
-        logging.warning(colored("Failed to load JAX", "red"))
-        logging.info(
+        logger.warning(colored("Failed to load JAX", "red"))
+        logger.info(
             "DESC version {}, using NumPy backend, version={}, dtype={}".format(
                 desc.__version__, np.__version__, y.dtype
             )
         )
-logging.info(
+logger.info(
     "Using device: {}, with {:.2f} GB available memory".format(
         desc_config.get("device"), desc_config.get("avail_mem")
     )

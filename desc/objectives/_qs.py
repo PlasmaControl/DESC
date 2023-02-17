@@ -1,7 +1,8 @@
 """Objectives for targeting quasisymmetry."""
 
-import numpy as np
 import logging
+
+import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
@@ -12,6 +13,8 @@ from desc.vmec_utils import ptolemy_linear_transform
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+
+logger = logging.getLogger("DESC_logger")
 
 
 class QuasisymmetryBoozer(_Objective):
@@ -122,7 +125,7 @@ class QuasisymmetryBoozer(_Objective):
         assert self.grid.num_rho == 1
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -299,7 +302,7 @@ class QuasisymmetryTwoTerm(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
@@ -452,7 +455,7 @@ class QuasisymmetryTripleProduct(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        logging.info("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)

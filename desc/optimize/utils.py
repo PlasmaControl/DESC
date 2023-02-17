@@ -1,12 +1,12 @@
 """Utility functions used in optimization problems."""
 
-import contextlib
 import logging
-import sys
 
 import numpy as np
 
 from desc.backend import cond, jit, jnp
+
+logger = logging.getLogger("DESC_logger")
 
 
 @jit
@@ -194,7 +194,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
 
 def print_header_nonlinear():
     """Print a pretty header."""
-    logging.info(
+    logger.info(
         "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
             "Iteration",
             "Total nfev",
@@ -204,16 +204,6 @@ def print_header_nonlinear():
             "Optimality",
         )
     )
-
-
-@contextlib.contextmanager
-def redirect_stdout(io_stream):
-    try:
-        _stdout = sys.stdout
-        sys.stdout = io_stream
-        yield
-    finally:
-        sys.stdout = _stdout
 
 
 def print_iteration_nonlinear(
@@ -250,7 +240,7 @@ def print_iteration_nonlinear(
     else:
         optimality = "{:^15.2e}".format(optimality)
 
-    logging.debug(
+    logger.debug(
         "{0}{1}{2}{3}{4}{5}",
         iteration,
         nfev,

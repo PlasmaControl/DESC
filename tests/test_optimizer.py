@@ -21,7 +21,14 @@ from desc.objectives import (
     ObjectiveFunction,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.optimize import Optimizer, fmintr, lsqtr, sgd
+from desc.optimize import (
+    LinearConstraintProjection,
+    Optimizer,
+    ProximalProjection,
+    fmintr,
+    lsqtr,
+    sgd,
+)
 
 
 @jit
@@ -413,12 +420,53 @@ def test_scipy_fail_message():
             xtol=1e-12,
             gtol=1e-12,
         )
-        # result["message"] is a list for scipy-trust-exact but a string for scipy-trf
-        # why?
-        assert "Maximum number of iterations has been exceeded" in result["message"][0]
+        assert "Maximum number of iterations has been exceeded" in result["message"]
 
 
 def test_not_implemented_error():
     """Test NotImplementedError."""
     with pytest.raises(NotImplementedError):
         Optimizer("not-a-method")
+
+
+@pytest.mark.unit
+def test_wrappers():
+    """Tests for using wrapped objectives."""
+    eq = desc.examples.get("SOLOVEV")
+    con = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+    con_nl = (ForceBalance(),)
+    obj = ForceBalance()
+    with pytest.raises(AssertionError):
+        _ = LinearConstraintProjection(obj, con)
+    with pytest.raises(ValueError):
+        _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    assert ob.built
+
+    con = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+    con_nl = (ForceBalance(),)
+    obj = ForceBalance()
+    with pytest.raises(AssertionError):
+        _ = ProximalProjection(obj, con[0])
+    with pytest.raises(AssertionError):
+        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1])
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con[1]))
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(
+            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl)
+        )
+    ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
+    assert ob.built

@@ -6,6 +6,7 @@ from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
 
+from .optimizer import register_optimizer
 from .utils import (
     check_termination,
     evaluate_quadratic_form_hess,
@@ -16,19 +17,35 @@ from .utils import (
 )
 
 
-def _optimize_scipy_minimize(
-    fun, grad, hess, x0, method, x_scale, verbose, stoptol, options=None
+@register_optimizer(
+    name=[
+        "scipy-bfgs",
+        "scipy-lbfgs",
+        "scipy-CG",
+        "scipy-TNC",
+        "scipy-Newton-CG",
+        "scipy-dogleg",
+        "scipy-trust-exact",
+        "scipy-trust-ncg",
+        "scipy-trust-krylov",
+    ],
+    scalar=True,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=False,
+    hessian=[False, False, False, False, True, True, True, True, True],
+)
+def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
 
     Parameters
     ----------
-    fun : callable
+    objective : ObjectiveFunction
         Function to minimize.
-    grad : callable
-        Gradient of fun.
-    hess : callable
-        Hessian of fun.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
     method : str
@@ -42,8 +59,8 @@ def _optimize_scipy_minimize(
         on the cost function.
     verbose : int
         * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -61,7 +78,13 @@ def _optimize_scipy_minimize(
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+    x_scale = 1 if x_scale == "auto" else x_scale
+    if isinstance(x_scale, str):
+        raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
+    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+
     # need to use some "global" variables here
     allx = []
     func_allx = []
@@ -128,7 +151,7 @@ def _optimize_scipy_minimize(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
+        if verbose > 1:
             print_iteration_nonlinear(
                 len(allx), len(func_allx), f1, df, dx_norm, g_norm
             )
@@ -158,13 +181,14 @@ def _optimize_scipy_minimize(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 1:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
             x0=x0,
             args=(),
-            method=method,
+            method=method.replace("scipy-", ""),
             jac=grad_wrapped,
             hess=hess_wrapped,
             tol=EPS,
@@ -191,14 +215,14 @@ def _optimize_scipy_minimize(
             ngev=len(grad_allx),
             nhev=len(hess_allx),
             nit=len(allx),
-            message=message,
+            message=message[0],
             allx=allx,
         )
     if verbose > 0:
         if result["success"]:
-            print(result["message"][0])
+            print(result["message"])
         else:
-            print("Warning: " + result["message"][0])
+            print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
         print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
@@ -209,17 +233,25 @@ def _optimize_scipy_minimize(
     return result
 
 
-def _optimize_scipy_least_squares(
-    fun, jac, x0, method, x_scale, verbose, stoptol, options=None
+@register_optimizer(
+    name=["scipy-trf", "scipy-lm", "scipy-dogbox"],
+    scalar=False,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=False,
+    hessian=False,
+)
+def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
 
     Parameters
     ----------
-    fun : callable
+    objective : ObjectiveFunction
         Function to minimize.
-    jac : callable
-        Jacobian of fun.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
     method : str
@@ -234,8 +266,8 @@ def _optimize_scipy_least_squares(
         the inverse norms of the columns of the Jacobian matrix.
     verbose : int
         * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -243,6 +275,8 @@ def _optimize_scipy_least_squares(
         Dictionary of optional keyword arguments to override default solver
         settings. See the code for more details.
 
+    Returns
+    -------
     res : OptimizeResult
        The optimization result represented as a ``OptimizeResult`` object.
        Important attributes are: ``x`` the solution array, ``success`` a
@@ -251,7 +285,10 @@ def _optimize_scipy_least_squares(
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+    x_scale = "jac" if x_scale == "auto" else x_scale
+    fun, jac = objective.compute, objective.jac
     # need to use some "global" variables here
     fun_allx = []
     fun_allf = []
@@ -303,7 +340,7 @@ def _optimize_scipy_least_squares(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
+        if verbose > 1:
             print_iteration_nonlinear(
                 len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
             )
@@ -333,14 +370,15 @@ def _optimize_scipy_least_squares(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 1:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.least_squares(
             fun_wrapped,
             x0=x0,
             args=(),
             jac=jac_wrapped,
-            method=method,
+            method=method.replace("scipy-", ""),
             x_scale=x_scale,
             ftol=EPS,
             xtol=EPS,

@@ -484,27 +484,27 @@ class VMECIO:
         # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = "Mercier stability criterion magnetic shear term"
-        DShear.units = "None"
+        DShear.units = "1/Wb^2"
         DShear[:] = compress(grid, data["D_shear"])
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
         DCurr.long_name = "Mercier stability criterion toroidal current term"
-        DCurr.units = "None"
+        DCurr.units = "1/Wb^2"
         DCurr[:] = compress(grid, data["D_current"])
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
         DWell.long_name = "Mercier stability criterion magnetic well term"
-        DWell.units = "None"
+        DWell.units = "1/Wb^2"
         DWell[:] = compress(grid, data["D_well"])
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
         DGeod.long_name = "Mercier stability criterion geodesic curvature term"
-        DGeod.units = "None"
+        DGeod.units = "1/Wb^2"
         DGeod[:] = compress(grid, data["D_geodesic"])
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
         DMerc.long_name = "Mercier stability criterion"
-        DMerc.units = "None"
+        DMerc.units = "1/Wb^2"
         DMerc[:] = compress(grid, data["D_Mercier"])
 
         timer.stop("parameters")

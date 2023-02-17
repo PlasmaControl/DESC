@@ -1191,6 +1191,34 @@ def test_Bmn_symmetrized2():
     np.testing.assert_allclose(data2["|B|_mn symmetrized"], Bmn_QH_minus)
 
 @pytest.mark.unit
+def test_B_symmetrized():
+    filename = ".//tests//inputs//precise_QH_step0.h5"
+    #print(filename)
+    eq = Equilibrium.load(filename)[-1]
+    grid = LinearGrid(rho=[1], M=eq.M*4, N=eq.N*4, NFP=eq.NFP)
+    #helicity = (1, 0)
+    #helicity = (1, eq.NFP)
+    helicity = (1, -eq.NFP)
+    data = eq.compute(["|B| Boozer", "|B| Boozer symmetrized"], grid=grid, helicity=helicity)
+
+    modB = data["|B| Boozer"].reshape((grid.num_theta, grid.num_zeta), order="F")
+    modB_sym = data["|B| Boozer symmetrized"].reshape((grid.num_theta, grid.num_zeta), order="F")
+
+    import matplotlib.pyplot as plt
+    nrows = 1
+    ncols = 2
+    plt.figure(figsize=(14.5, 6))
+    plt.subplot(nrows, ncols, 1)
+    plt.contourf(modB)
+    plt.title("|B| vs Boozer angles, no filtering")
+    plt.colorbar()
+    plt.subplot(nrows, ncols, 2)
+    plt.contourf(modB_sym)
+    plt.title("|B| vs Boozer angles, filtered")
+    plt.colorbar()
+    plt.show()
+
+@pytest.mark.unit
 def test_compute_everything():
     """Make sure we can compute everything without errors."""
     eq = Equilibrium(1, 1, 1)

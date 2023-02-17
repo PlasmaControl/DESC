@@ -3,7 +3,9 @@
 import numpy as np
 from scipy.linalg import block_diag, null_space
 
-from desc.backend import sign
+#from desc.backend import sign
+from desc.backend import non_jax_sign as sign
+#from numpy import sign
 from desc.basis import zernike_radial
 
 
@@ -241,7 +243,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         assert NFP is not None, "NFP must be supplied when specifying helicity"
         assert isinstance(helicity, tuple) and len(helicity) == 2
         M = np.abs(helicity[0])
-        N = np.abs(helicity[1]) / NFP * sign(np.prod(helicity))
+        N = int(np.abs(helicity[1]) / NFP * sign(np.prod(helicity)))
         idx = np.ones((vmec_modes.shape[0],), bool)
         idx[0] = False  # m=0,n=0 mode
         if N == 0:

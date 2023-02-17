@@ -2909,6 +2909,80 @@ def _effective_r_over_R0(params, transforms, profiles, data, **kwargs):
     data["effective r/R0"] = (w - 1) / (w + 1)
     return data
 
+@register_compute_fun(
+    name="max_tz |B| symmetrized",
+    label="\\max_{\\theta \\zeta} |B|, symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Maximum field strength on each flux surface, after filtering"
+    "out non-quasi-symmetric modes",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B| Boozer symmetrized"],
+)
+def _max_tz_modB_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["max_tz |B| symmetrized"] = expand(
+        transforms["grid"], surface_max(transforms["grid"], data["|B| Boozer symmetrized"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="min_tz |B| symmetrized",
+    label="\\min_{\\theta \\zeta} |B|, symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Minimum field strength on each flux surface, after filtering"
+    "out non-quasi-symmetric modes",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B| Boozer symmetrized"],
+)
+def _min_tz_modB_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["min_tz |B| symmetrized"] = expand(
+        transforms["grid"], surface_min(transforms["grid"], data["|B| Boozer symmetrized"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="effective r/R0 symmetrized",
+    label="(r / R_0)_{effective}, symmetrized",
+    units="~",
+    units_long="None",
+    description="Effective local inverse aspect ratio, based on max and min |B|"
+    "after filtering out non-quasi-symmetric modes",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["max_tz |B| symmetrized", "min_tz |B| symmetrized"],
+)
+def _effective_r_over_R0_symmetrized(params, transforms, profiles, data, **kwargs):
+    r"""
+    Compute an effective local inverse aspect ratio.
+
+    This effective local inverse aspect ratio epsilon is defined by
+
+    .. math::
+        \frac{Bmax}{Bmin} = \frac{1 + \epsilon}{1 - \epsilon}
+
+    This definition is motivated by the fact that this formula would
+    be true in the case of circular cross-section surfaces in
+    axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
+    \epsilon \cos\theta) R_0`.
+    """
+    w = data["max_tz |B| symmetrized"] / data["min_tz |B| symmetrized"]
+    data["effective r/R0 symmetrized"] = (w - 1) / (w + 1)
+    return data
+
 
 @register_compute_fun(
     name="kappa",

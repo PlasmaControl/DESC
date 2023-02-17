@@ -270,3 +270,21 @@ else:
         while cond_fun(val):
             val = body_fun(val)
         return val
+
+def non_jax_sign(x):
+        """Sign function, but returns 1 for x==0.
+
+        Parameters
+        ----------
+        x : array-like
+            array of input values
+
+        Returns
+        -------
+        y : array-like
+            1 where x>=0, -1 where x<0
+
+        """
+        x = np.atleast_1d(x)
+        y = np.where(x == 0, 1, np.sign(x))
+        return y

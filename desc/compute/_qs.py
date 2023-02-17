@@ -296,7 +296,7 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|B|_mn symmetrized",
-    label="B_{mn}^{Boozer}",
+    label="B_{mn}^{Boozer} symmetrized",
     units="T",
     units_long="Tesla",
     description="Boozer harmonics of magnetic field, keeping only quasisymmetric modes",
@@ -315,18 +315,55 @@ def _B_mn_symmetrized(params, transforms, profiles, data, **kwargs):
             NFP=transforms["B"].basis.NFP,
         )
     print("Condition number:", jnp.linalg.cond(matrix))
-    #print("NFP:", transforms["B"].basis.NFP)
-    #print("matrix shape:", matrix.shape)
-    #print("matrix:\n",matrix)
-    #print("helicity:", kwargs.get("helicity", (1, 0)))
-    #print("modes:\n", modes)
-    #print("indices_of_nonsymmetric_modes:", indices_of_nonsymmetric_modes)
+    print("NFP:", transforms["B"].basis.NFP)
+    print("matrix shape:", matrix.shape)
+    print("matrix:\n",matrix)
+    print("helicity:", kwargs.get("helicity", (1, 0)))
+    print("modes:\n", modes)
+    print("indices_of_nonsymmetric_modes:", indices_of_nonsymmetric_modes)
     filter = jnp.ones(transforms["B"].basis.num_modes)
     filter = put(filter, indices_of_nonsymmetric_modes, 0)
-    #print("filter:", filter)
-    matrix_inv = jnp.linalg.inv(matrix)
+    print("filter:", filter)
+    #matrix_inv = jnp.linalg.inv(matrix)
     #print("matrix_inv:\n", matrix_inv)
-    data["|B|_mn symmetrized"] = matrix_inv @ (filter * (matrix @ data["|B|_mn"]))
+    #data["|B|_mn symmetrized"] = matrix_inv @ (filter * (matrix @ data["|B|_mn"]))
+    data["|B|_mn symmetrized"] = jnp.linalg.solve(matrix, filter * (matrix @ data["|B|_mn"]))
+    return data
+
+
+@register_compute_fun(
+    name="|B| Boozer",
+    label="|B| Boozer",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field as function of the Boozer angles",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn"],
+)
+def _B_Boozer(params, transforms, profiles, data, **kwargs):
+    data["|B| Boozer"] = transforms["B"].transform(data["|B|_mn"])
+    return data
+
+@register_compute_fun(
+    name="|B| Boozer symmetrized",
+    label="|B| Boozer symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field as function of the Boozer angles, keeping only quasisymmetric modes",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_mn symmetrized"],
+    helicity="helicity",
+)
+def _B_Boozer_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["|B| Boozer symmetrized"] = transforms["B"].transform(data["|B|_mn symmetrized"])
     return data
 
 @register_compute_fun(

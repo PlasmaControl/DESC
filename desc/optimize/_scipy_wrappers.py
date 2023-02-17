@@ -215,7 +215,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             ngev=len(grad_allx),
             nhev=len(hess_allx),
             nit=len(allx),
-            message=message,
+            message=message[0],
             allx=allx,
         )
     if verbose > 0:

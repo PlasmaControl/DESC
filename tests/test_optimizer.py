@@ -8,9 +8,12 @@ from scipy.optimize import BFGS, rosen, rosen_der
 import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
+from desc.equilibrium import Equilibrium
 from desc.objectives import (
+    Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCurrent,
     FixIota,
     FixPressure,
     FixPsi,
@@ -377,6 +380,53 @@ def test_maxiter_1_and_0_solve():
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt
         )
         assert result["nfev"] <= 1
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_scipy_fail_message():
+    """Test that scipy fail message does not cause an error (see PR #434)."""
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixPressure(),
+        FixCurrent(),
+        FixPsi(),
+    )
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+    eq = Equilibrium()
+    # should fail on maxiter, and should NOT throw an error
+    for opt in ["scipy-trf"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
+    objectives = Energy()
+    obj = ObjectiveFunction(objectives)
+    for opt in ["scipy-trust-exact"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
+
+
+def test_not_implemented_error():
+    """Test NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        Optimizer("not-a-method")
 
 
 @pytest.mark.unit

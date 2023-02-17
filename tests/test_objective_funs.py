@@ -192,13 +192,19 @@ class TestObjectiveFunction:
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
+        matrix, modes, idx = ptolemy_linear_transform(
+            transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
+        )
         data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
         B_mn = matrix @ data["|B|_mn"]
         idx_B = np.argsort(np.abs(B_mn))
 
-        # check that objective returns the lowest amplitude modes, since example is QH
-        np.testing.assert_allclose(f[idx_f], B_mn[idx_B[: obj.dim_f]])
+        # check that largest amplitudes are the QH modes
+        np.testing.assert_allclose(B_mn[idx_B[-3:]], np.flip(B_mn[~idx][:3]))
+        # check that these QH modes are not returned by the objective
+        assert [b not in f for b in B_mn[idx_B[-3:]]]
+        # check that the objective returns the lowest amplitudes
+        np.testing.assert_allclose(f[idx_f][:131], B_mn[idx_B][:131])
 
     @pytest.mark.unit
     def test_qs_twoterm(self):

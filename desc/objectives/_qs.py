@@ -620,7 +620,7 @@ class QuasiIsodynamic(_Objective):
         if self.QI_l is None:
             data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=self.grid)
             self._QI_l = np.linspace(
-                data["min_tz |B|"][0], data["max_tz |B|"][0], num=self.L_QI
+                min(data["min_tz |B|"]), max(data["max_tz |B|"]), num=self.L_QI
             )
         if self.QI_mn is None:
             self._QI_mn = np.zeros(((2 * self.M_QI + 1) * self.N_QI,))

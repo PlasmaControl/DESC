@@ -344,7 +344,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # update perturbation attributes
     for key, value in deltas.items():
-        setattr(eq_new, key, getattr(eq_new, key) + value)
+        if key in arg_order:
+            setattr(eq_new, key, getattr(eq_new, key) + value)
     for constraint in constraints:
         constraint.update_target(eq_new)
     xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(

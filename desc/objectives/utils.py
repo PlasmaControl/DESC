@@ -237,7 +237,7 @@ def factorize_linear_constraints(constraints, objective_args, dimensions):
     return xp, A, Ainv, b, Z, unfixed_idx, project, recover
 
 
-def align_jacobian(Fx, objective, other_args):
+def align_jacobian(Fx, objective, other_args, dimensions):
     """Pad Jacobian with zeros in the right places so that the arguments line up.
 
     Parameters
@@ -262,12 +262,12 @@ def align_jacobian(Fx, objective, other_args):
 
     A = {arg: Fx.T[x_idx[arg]] for arg in args}
 
-    all_args = np.concatenate([objective.args, other_args])
+    all_args = list(set(np.concatenate([objective.args, other_args])))
     all_arg_order = arg_order + tuple([arg for arg in all_args if arg not in arg_order])
     all_args = [arg for arg in all_arg_order if arg in all_args]
     for arg in all_args:
         if arg not in A.keys():
-            A[arg] = jnp.zeros((objective.dimensions[arg],) + dim_f)
+            A[arg] = jnp.zeros((dimensions[arg],) + dim_f)
 
     A = jnp.concatenate([A[arg] for arg in all_args])
     return A.T

@@ -96,6 +96,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self._full_args = self._eq_objective.args + self._objective.args
         self._full_args = [arg for arg in arg_order if arg in self._full_args]
         self._full_args += self._other_args
+
         # remove constraints that aren't necessary
         self._constraints = tuple(
             [con for con in self._constraints if con.args[0] in self._eq_objective.args]
@@ -115,6 +116,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             if "Zb_lmn" not in self._args:
                 self._args.append("Zb_lmn")
 
+        self._QI_dict = self._objective._QI_dict
         self._dimensions = self._objective.dimensions
         self._dim_x = 0
         self._x_idx = {}
@@ -173,7 +175,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             else:
                 arg_name = arg.split(" ")
                 self._x_old[self.x_idx[arg]] = getattr(
-                    self._objective.objectives[self._objective._QI_dict[arg_name[1]]],
+                    self._objective.objectives[self._QI_dict[arg_name[1]]],
                     arg_name[0],
                 )
 
@@ -189,7 +191,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 np.asarray(
                     getattr(
                         self._objective.objectives[
-                            self._objective._QI_dict[arg_name[1]]
+                            self._QI_dict[arg_name[1]]
                         ],
                         arg_name[0],
                     )
@@ -320,8 +322,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # Jacobian matrices wrt combined state vectors
         Fx = self._eq_objective.jac(xf)
         Gx = self._objective.jac(xg)
-        Fx = align_jacobian(Fx, self._eq_objective, self._full_args)
-        Gx = align_jacobian(Gx, self._objective, self._full_args)
+        Fx = align_jacobian(Fx, self._eq_objective, self._full_args, self._dimensions)
+        Gx = align_jacobian(Gx, self._objective, self._full_args, self._dimensions)
 
         # projections onto optimization space
         # possibly better way: Gx @ np.eye(Gx.shape[1])[:,self._unfixed_idx] @ self._Z

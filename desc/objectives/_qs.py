@@ -715,9 +715,9 @@ class QuasiIsodynamic(_Objective):
         args = []
         for arg in self.args:
             if arg not in ["QI_l", "QI_mn"]:
-                args + getattr(eq, arg)
+                args.append(getattr(eq, arg))
             else:
-                args + getattr(self, arg)
+                args.append(getattr(self, arg))
         return tuple(args)
 
     def change_resolution(self, L_QI, M_QI, N_QI):

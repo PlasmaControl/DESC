@@ -533,14 +533,20 @@ class QuasiIsodynamic(_Objective):
         this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+    L_QI : int
+        Size of QI_l parameter. Default = 3.
+    M_QI : int
+        Poloidal resolution of QI_mn parameter. Default = 1.
+    N_QI : int
+        Toroidal resolution of QI_mn parameter. Default = 1.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
         Toroidal resolution of Boozer transformation. Default = 2 * eq.N.
-    M_zeta : int, optional
-        Poloidal resolution of QI_mn parameters.
-    N_zeta : int, optional
-        Toroidal resolution of QI_mn parameters.
+    QI_l : ndarray, optional
+        Initial parameters for QI well shape.
+    QI_mn : ndarray, optional
+        Initial parameters for QI well shift.
     name : str
         Name of the objective function.
 
@@ -567,6 +573,8 @@ class QuasiIsodynamic(_Objective):
         N_QI=1,
         M_booz=None,
         N_booz=None,
+        QI_l=None,
+        QI_mn=None,
         name="QI",
     ):
 
@@ -576,6 +584,8 @@ class QuasiIsodynamic(_Objective):
         self.N_QI = N_QI
         self.M_booz = M_booz
         self.N_booz = N_booz
+        self.QI_l = QI_l
+        self.QI_mn = QI_mn
         super().__init__(
             eq=eq,
             target=target,
@@ -607,12 +617,13 @@ class QuasiIsodynamic(_Objective):
             self.M_booz = 2 * eq.M
         if self.N_booz is None:
             self.N_booz = 2 * eq.N
-
-        data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=self.grid)
-        self._QI_l = np.linspace(
-            data["min_tz |B|"][0], data["max_tz |B|"][0], num=self.L_QI
-        )
-        self._QI_mn = np.zeros(((2 * self.M_QI + 1) * self.N_QI,))
+        if self.QI_l is None:
+            data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=self.grid)
+            self._QI_l = np.linspace(
+                data["min_tz |B|"][0], data["max_tz |B|"][0], num=self.L_QI
+            )
+        if self.QI_mn is None:
+            self._QI_mn = np.zeros(((2 * self.M_QI + 1) * self.N_QI,))
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["f_QI"]
@@ -709,8 +720,8 @@ class QuasiIsodynamic(_Objective):
                 args + getattr(self, arg)
         return tuple(args)
 
-    def change_resolution(self, eq, L_QI, M_QI, N_QI, M_booz, N_booz):
-        """asdf."""
+    def change_resolution(self, L_QI, M_QI, N_QI):
+        """Change resolution of QI params. Returns QI_l and QI_mn at new resolution."""
         if L_QI != self.L_QI:
             old_z = np.linspace(0, np.pi / 2, num=self.L_QI)
             new_z = np.linspace(0, np.pi / 2, num=L_QI)
@@ -728,17 +739,7 @@ class QuasiIsodynamic(_Objective):
             self.QI_mn = QI_mn
             self.M_QI = M_QI
             self.N_QI = N_QI
-        self.M_booz = M_booz
-        self.N_booz = N_booz
-        self._transforms = get_transforms(
-            self._data_keys,
-            eq=eq,
-            grid=self.grid,
-            M_booz=self.M_booz,
-            N_booz=self.N_booz,
-            M_QI=self.M_QI,
-            N_QI=self.N_QI,
-        )
+        return self.QI_l, self.QI_mn
 
     @property
     def QI_l(self):

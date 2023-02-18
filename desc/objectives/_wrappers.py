@@ -92,8 +92,10 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # set_state_vector
 
         # this is everything taken by either objective
+        self._other_args = [arg for arg in self._objective.args if arg not in arg_order]
         self._full_args = self._eq_objective.args + self._objective.args
         self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        self._full_args += self._other_args
         # remove constraints that aren't necessary
         self._constraints = tuple(
             [con for con in self._constraints if con.args[0] in self._eq_objective.args]
@@ -166,7 +168,14 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         # history and caching
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
-            self._x_old[self.x_idx[arg]] = getattr(eq, arg)
+            if arg in arg_order:
+                self._x_old[self.x_idx[arg]] = getattr(eq, arg)
+            else:
+                arg_name = arg.split(" ")
+                self._x_old[self.x_idx[arg]] = getattr(
+                    self._objective.objectives[self._objective._QI_dict[arg_name[1]]],
+                    arg_name[0],
+                )
 
         self._allx = [self._x_old]
         self._allxopt = [self._objective.x(eq)]
@@ -174,6 +183,18 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         self.history = {}
         for arg in arg_order:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
+        for arg in self._other_args:
+            arg_name = arg.split(" ")
+            self.history[arg] = [
+                np.asarray(
+                    getattr(
+                        self._objective.objectives[
+                            self._objective._QI_dict[arg_name[1]]
+                        ],
+                        arg_name[0],
+                    )
+                ).copy()
+            ]
 
         self._built = True
 

@@ -609,14 +609,14 @@ class QuasiIsodynamic(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
-                M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
-            )
         if self.M_booz is None:
             self.M_booz = 2 * eq.M
         if self.N_booz is None:
             self.N_booz = 2 * eq.N
+        if self.grid is None:
+            self.grid = LinearGrid(
+                M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
+            )
         if self.QI_l is None:
             data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=self.grid)
             self._QI_l = np.linspace(
@@ -735,7 +735,7 @@ class QuasiIsodynamic(_Objective):
             new_modes = DoubleFourierSeries(M=M_QI, N=N_QI, sym="cos(z)").modes
             idx = np.where((new_modes == old_modes[:, None]).all(-1))[1]
             QI_mn = np.zeros(((2 * M_QI + 1) * N_QI,))
-            QI_mn[idx] = self.QI_mn
+            QI_mn[idx[:2 * self.M_QI + 1]] = self.QI_mn
             self.QI_mn = QI_mn
             self.M_QI = M_QI
             self.N_QI = N_QI

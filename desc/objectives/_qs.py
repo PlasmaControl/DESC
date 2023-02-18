@@ -618,7 +618,7 @@ class QuasiIsodynamic(_Objective):
                 M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
             )
         if self.QI_l is None:
-            data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=self.grid)
+            data = eq.compute(["mirror ratio"], grid=self.grid)
             self._QI_l = np.linspace(
                 min(data["min_tz |B|"]), max(data["max_tz |B|"]), num=self.L_QI
             )
@@ -714,10 +714,11 @@ class QuasiIsodynamic(_Objective):
         """Return a tuple of args required by this objective from the Equilibrium eq."""
         args = []
         for arg in self.args:
-            if arg not in ["QI_l", "QI_mn"]:
-                args.append(getattr(eq, arg))
+            arg_name = arg.split(" ")[0]
+            if arg_name not in ["QI_l", "QI_mn"]:
+                args.append(getattr(eq, arg_name))
             else:
-                args.append(getattr(self, arg))
+                args.append(getattr(self, arg_name))
         return tuple(args)
 
     def change_resolution(self, L_QI, M_QI, N_QI):

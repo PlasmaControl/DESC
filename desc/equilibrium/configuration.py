@@ -109,8 +109,6 @@ class _Configuration(IOAble, ABC):
         "_electron_density",
         "_ion_temperature",
         "_atomic_number",
-        "_QI_l",
-        "_QI_mn",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -415,10 +413,6 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
-
-        # FIXME: default QI parameters for initialization
-        self._QI_l = np.array([1, 2])
-        self._QI_mn = np.array([0, 0, 0])
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -1057,24 +1051,6 @@ class _Configuration(IOAble, ABC):
     def L_basis(self):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
-
-    @property
-    def QI_l(self):
-        """Magnetic well shaping parameters."""
-        return self._QI_l
-
-    @QI_l.setter
-    def QI_l(self, QI_l):
-        self._QI_l = QI_l
-
-    @property
-    def QI_mn(self):
-        """Magnetic well shifting parameters."""
-        return self._QI_mn
-
-    @QI_mn.setter
-    def QI_mn(self, QI_mn):
-        self._QI_mn = QI_mn
 
     def compute(
         self,

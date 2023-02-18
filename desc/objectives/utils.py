@@ -117,7 +117,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(constraints, objective_args, dimensions):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -150,12 +150,8 @@ def factorize_linear_constraints(constraints, objective_args):
         and recovering x from y.
 
     """
+    all_args = arg_order + tuple([arg for arg in objective_args if arg not in arg_order])
     # set state vector
-    args = np.concatenate([obj.args for obj in constraints])
-    args = np.concatenate((args, objective_args))
-    # this is all args used by both constraints and objective
-    args = [arg for arg in arg_order if arg in args]
-    dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
     for arg in objective_args:
@@ -179,14 +175,14 @@ def factorize_linear_constraints(constraints, objective_args):
         if arg not in objective_args:
             continue
         constraint_args.append(arg)
-        if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
+        if obj.fixed and obj.dim_f == dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
-            A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
+            A_ = obj.derivatives["jac"][arg](jnp.zeros(dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
+            b_ = -obj.compute_scaled(jnp.zeros(dimensions[arg]))
             if A_.shape[0]:
                 Ainv_, Z_ = svd_inv_null(A_)
             else:
@@ -200,16 +196,16 @@ def factorize_linear_constraints(constraints, objective_args):
     for arg in x_idx.keys():
         if arg not in constraint_args:
             unfixed_args.append(arg)
-            A[arg] = jnp.zeros((1, constraints[0].dimensions[arg]))
+            A[arg] = jnp.zeros((1, dimensions[arg]))
             b[arg] = jnp.zeros((1,))
 
     # full A matrix for all unfixed constraints
     if len(A):
         unfixed_idx = jnp.concatenate(
-            [x_idx[arg] for arg in arg_order if arg in A.keys()]
+            [x_idx[arg] for arg in all_args if arg in A.keys()]
         )
-        A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-        b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+        A_full = block_diag(*[A[arg] for arg in all_args if arg in A.keys()])
+        b_full = jnp.concatenate([b[arg] for arg in all_args if arg in b.keys()])
         Ainv_full, Z = svd_inv_null(A_full)
         xp = put(xp, unfixed_idx, Ainv_full @ b_full)
 
@@ -266,11 +262,12 @@ def align_jacobian(Fx, objective, other_args):
 
     A = {arg: Fx.T[x_idx[arg]] for arg in args}
 
-    allargs = np.concatenate([objective.args, other_args])
-    allargs = [arg for arg in arg_order if arg in allargs]
-    for arg in allargs:
+    all_args = np.concatenate([objective.args, other_args])
+    all_arg_order = arg_order + tuple([arg for arg in all_args if arg not in arg_order])
+    all_args = [arg for arg in all_arg_order if arg in all_args]
+    for arg in all_args:
         if arg not in A.keys():
             A[arg] = jnp.zeros((objective.dimensions[arg],) + dim_f)
 
-    A = jnp.concatenate([A[arg] for arg in allargs])
+    A = jnp.concatenate([A[arg] for arg in all_args])
     return A.T

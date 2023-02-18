@@ -433,7 +433,7 @@ def _parse_constraints(constraints):
 def _wrap_objective_with_constraints(objective, linear_constraints, method):
     """Factorize constraints and make new functions that project/recover + evaluate."""
     _, _, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-        linear_constraints, objective.args
+        linear_constraints, objective.args, objective.dimensions
     )
 
     def compute_wrapped(x_reduced):

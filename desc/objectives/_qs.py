@@ -9,6 +9,7 @@ from desc.basis import DoubleFourierSeries
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
+from desc.interpolate import interp1d
 from desc.utils import Timer
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -545,6 +546,8 @@ class QuasiIsodynamic(_Objective):
 
     """
 
+    _io_attrs_ = _Objective._io_attrs_ + ["QI_l", "QI_mn"]
+
     _scalar = False
     _linear = False
     _units = "(T)"
@@ -559,18 +562,20 @@ class QuasiIsodynamic(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
+        L_QI=3,
+        M_QI=1,
+        N_QI=1,
         M_booz=None,
         N_booz=None,
-        M_zeta=None,
-        N_zeta=None,
         name="QI",
     ):
 
         self.grid = grid
+        self.L_QI = L_QI
+        self.M_QI = M_QI
+        self.N_QI = N_QI
         self.M_booz = M_booz
         self.N_booz = N_booz
-        self.M_zeta = M_zeta
-        self.N_zeta = N_zeta
         super().__init__(
             eq=eq,
             target=target,
@@ -602,16 +607,17 @@ class QuasiIsodynamic(_Objective):
             self.M_booz = 2 * eq.M
         if self.N_booz is None:
             self.N_booz = 2 * eq.N
-        # FIXME: this default assumes M_zeta=N_zeta
-        n = int(np.sqrt(eq.QI_mn.size - 1) / np.sqrt(2))
-        if self.M_zeta is None:
-            self.M_zeta = n
-        if self.N_zeta is None:
-            self.N_zeta = n
+
+        data = eq.compute(["min_tz |B|", "max_tz |B|"], grid=self.grid)
+        self._QI_l = np.linspace(
+            data["min_tz |B|"][0], data["max_tz |B|"][0], num=self.L_QI
+        )
+        self._QI_mn = np.zeros(((2 * self.M_QI + 1) * self.N_QI,))
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["f_QI"]
         self._args = get_params(self._data_keys)
+        self._args += ["QI_l {}".format(self.name), "QI_mn {}".format(self.name)]
 
         assert self.grid.sym is False
         assert self.grid.num_rho == 1
@@ -628,8 +634,8 @@ class QuasiIsodynamic(_Objective):
             grid=self.grid,
             M_booz=self.M_booz,
             N_booz=self.N_booz,
-            M_zeta=self.M_zeta,
-            N_zeta=self.N_zeta,
+            M_QI=self.M_QI,
+            N_QI=self.N_QI,
         )
 
         timer.stop("Precomputing transforms")
@@ -660,8 +666,8 @@ class QuasiIsodynamic(_Objective):
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
         QI_l : ndarray
-            Magnetic well shaping parameters. Inverse roots of the derivative of the
-            even polynomial B(zeta_bar), shifted by pi/2.
+            Magnetic well shaping parameters.
+            Values of |B| on a linearly spaced grid zeta_bar=[0,pi/2].
         QI_mn : ndarray
             Magnetic well shifting parameters.
             Fourier coefficients of zeta_Boozer(theta_Boozer,zeta_bar).
@@ -680,3 +686,74 @@ class QuasiIsodynamic(_Objective):
             profiles=self._profiles,
         )
         return data["f_QI"] * self.grid.weights
+
+    def _set_dimensions(self, eq):
+        """Set state vector component dimensions."""
+        super()._set_dimensions(eq)
+        self._dimensions["QI_l {}".format(self.name)] = self.L_QI
+        self._dimensions["QI_mn {}".format(self.name)] = (2 * self.M_QI + 1) * self.N_QI
+
+    def _parse_args(self, *args, **kwargs):
+        params = super()._parse_args(*args, **kwargs)
+        params["QI_l"] = params.pop("QI_l {}".format(self.name))
+        params["QI_mn"] = params.pop("QI_mn {}".format(self.name))
+        return params
+
+    def xs(self, eq):
+        """Return a tuple of args required by this objective from the Equilibrium eq."""
+        args = []
+        for arg in self.args:
+            if arg not in ["QI_l", "QI_mn"]:
+                args + getattr(eq, arg)
+            else:
+                args + getattr(self, arg)
+        return tuple(args)
+
+    def change_resolution(self, eq, L_QI, M_QI, N_QI, M_booz, N_booz):
+        """asdf."""
+        if L_QI != self.L_QI:
+            old_z = np.linspace(0, np.pi / 2, num=self.L_QI)
+            new_z = np.linspace(0, np.pi / 2, num=L_QI)
+            B = np.sort(self.QI_l)
+            self.QI_l = interp1d(new_z, old_z, B, method="monotonic-0")
+            self.L_QI = L_QI
+        if M_QI != self.M_QI or N_QI != self.N_QI:
+            old_modes = DoubleFourierSeries(
+                M=self.M_QI, N=self.N_QI, sym="cos(z)"
+            ).modes
+            new_modes = DoubleFourierSeries(M=M_QI, N=N_QI, sym="cos(z)").modes
+            idx = np.where((new_modes == old_modes[:, None]).all(-1))[1]
+            QI_mn = np.zeros(((2 * M_QI + 1) * N_QI,))
+            QI_mn[idx] = self.QI_mn
+            self.QI_mn = QI_mn
+            self.M_QI = M_QI
+            self.N_QI = N_QI
+        self.M_booz = M_booz
+        self.N_booz = N_booz
+        self._transforms = get_transforms(
+            self._data_keys,
+            eq=eq,
+            grid=self.grid,
+            M_booz=self.M_booz,
+            N_booz=self.N_booz,
+            M_QI=self.M_QI,
+            N_QI=self.N_QI,
+        )
+
+    @property
+    def QI_l(self):
+        """Magnetic well shaping parameters."""
+        return self._QI_l
+
+    @QI_l.setter
+    def QI_l(self, QI_l):
+        self._QI_l = QI_l
+
+    @property
+    def QI_mn(self):
+        """Magnetic well shifting parameters."""
+        return self._QI_mn
+
+    @QI_mn.setter
+    def QI_mn(self, QI_mn):
+        self._QI_mn = QI_mn

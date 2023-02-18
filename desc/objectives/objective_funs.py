@@ -59,7 +59,17 @@ class ObjectiveFunction(IOAble):
         self._args = np.concatenate([obj.args for obj in self.objectives])
         self._args = [arg for arg in arg_order if arg in self._args]
 
-        self._dimensions = self.objectives[0].dimensions
+        # args not in arg_order
+        self._QI_dict = {}
+        self._dimensions = {}
+        objective_names = [obj.name for obj in self.objectives]
+        for i, obj in enumerate(self.objectives):
+            assert objective_names.count(obj.name) == 1
+            self._dimensions.update(obj.dimensions)
+            if obj.__class__.__name__ in ["QuasiIsodynamic"]:
+                assert "QI_l {}".format(obj.name) not in self.args
+                self._args += ["QI_l {}".format(obj.name), "QI_mn {}".format(obj.name)]
+                self._QI_dict[obj.name] = i
 
         self._dim_x = 0
         self._x_idx = {}
@@ -125,6 +135,8 @@ class ObjectiveFunction(IOAble):
         # (ie, after updating attributes of self), we just need to delete the jax
         # CompiledFunction object, which will then leave the raw method in its place,
         # and then jit the raw method with the new self
+
+        self._compile_mode = "auto"  # make sure this gets set
 
         # doing str name type checking to avoid importing weird jax private stuff
         # for proper isinstance check
@@ -236,7 +248,7 @@ class ObjectiveFunction(IOAble):
             State vector.
 
         """
-        if self.compiled and self._compile_mode in {"scalar", "all"}:
+        if self.compiled and self._compile_mode in ["scalar", "all"]:
             f = self.compute_scalar(x)
         else:
             f = jnp.sum(self.compute(x) ** 2) / 2
@@ -280,7 +292,13 @@ class ObjectiveFunction(IOAble):
         """Return the full state vector from the Equilibrium eq."""
         x = np.zeros((self.dim_x,))
         for arg in self.args:
-            x[self.x_idx[arg]] = getattr(eq, arg)
+            if arg in arg_order:
+                x[self.x_idx[arg]] = getattr(eq, arg)
+            else:
+                arg_name = arg.split(" ")
+                x[self.x_idx[arg]] = getattr(
+                    self.objectives[self._QI_dict[arg_name[1]]], arg_name[0]
+                )
         return x
 
     def grad(self, x):
@@ -469,6 +487,7 @@ class _Objective(IOAble, ABC):
 
     _io_attrs_ = [
         "_target",
+        "_bounds",
         "_weight",
         "_name",
         "_args",

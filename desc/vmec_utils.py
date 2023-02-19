@@ -247,9 +247,7 @@ def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=Non
         if N == 0:
             idx_MN = np.nonzero(vmec_modes[:, 2] == 0)[0]
         else:
-            idx_MN = np.nonzero(
-                np.logical_and(vmec_modes[:, 1] == M, vmec_modes[:, 2] == N)
-            )[0]
+            idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
         idx[idx_MN] = False
 
         return matrix, vmec_modes, idx

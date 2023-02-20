@@ -287,8 +287,8 @@ def get_transforms(keys, eq, grid, **kwargs):
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    M_QI = kwargs.pop("M_QI")
-    N_QI = kwargs.pop("N_QI")
+    M_QI = kwargs.pop("M_QI", None)
+    N_QI = kwargs.pop("N_QI", None)
 
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys)

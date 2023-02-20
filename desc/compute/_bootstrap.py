@@ -466,3 +466,84 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     )
     data["<J*B> Redl"] = expand(grid, j_dot_B_data["<J*B>"])
     return data
+
+
+@register_compute_fun(
+    name="<J*B> Redl symmetrized",
+    label="\\langle\\mathbf{J}\\cdot\\mathbf{B}\\rangle_{Redl} symmetrized",
+    units="T A m^{-2}",
+    units_long="Tesla Ampere / meter^2",
+    description="Bootstrap current profile, Redl model for quasisymmetry, keeping only quasi-symmetric modes",
+    dim=1,
+    params=["Psi"],
+    transforms={"grid": []},
+    profiles=["atomic_number"],
+    coordinates="r",
+    data=[
+        "trapped fraction symmetrized",
+        "G",
+        "I",
+        "iota",
+        "<1/|B|> symmetrized",
+        "effective r/R0 symmetrized",
+        "ne",
+        "ne_r",
+        "Te",
+        "Te_r",
+        "Ti",
+        "Ti_r",
+        "Zeff",
+    ],
+    helicity="helicity",
+)
+def _compute_J_dot_B_Redl_symmetrized(params, transforms, profiles, data, **kwargs):
+    r"""Compute the bootstrap current.
+
+    (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
+    Redl et al, Physics of Plasmas 28, 022502 (2021). This formula for
+    the bootstrap current is valid in axisymmetry, quasi-axisymmetry,
+    and quasi-helical symmetry, but not in other stellarators.
+    """
+    grid = transforms["grid"]
+
+    # Note that the geom_data dictionary provided to j_dot_B_Redl()
+    # contains info only as a function of rho, not theta or zeta,
+    # i.e. on the compressed grid. In contrast, "data" contains
+    # quantities on a 3D grid even for quantities that are flux
+    # functions.
+    geom_data = {}
+    geom_data["f_t"] = compress(grid, data["trapped fraction symmetrized"])
+    geom_data["epsilon"] = compress(grid, data["effective r/R0 symmetrized"])
+    geom_data["G"] = compress(grid, data["G"])
+    geom_data["I"] = compress(grid, data["I"])
+    geom_data["iota"] = compress(grid, data["iota"])
+    geom_data["<1/|B|>"] = compress(grid, data["<1/|B|> symmetrized"])
+    geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
+        "<1/|B|>"
+    ]
+    geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
+
+    profile_data = {}
+    profile_data["rho"] = compress(grid, data["rho"])
+    profile_data["ne"] = compress(grid, data["ne"])
+    profile_data["ne_r"] = compress(grid, data["ne_r"])
+    profile_data["Te"] = compress(grid, data["Te"])
+    profile_data["Te_r"] = compress(grid, data["Te_r"])
+    profile_data["Ti"] = compress(grid, data["Ti"])
+    profile_data["Ti_r"] = compress(grid, data["Ti_r"])
+    if profiles["atomic_number"] is None:
+        Zeff = jnp.ones(grid.num_rho)
+    else:
+        Zeff = compress(grid, data["Zeff"])
+    profile_data["Zeff"] = Zeff
+
+    helicity = kwargs.get("helicity", (1, 0))
+    helicity_N = helicity[1]
+
+    j_dot_B_data = j_dot_B_Redl(
+        geom_data,
+        profile_data,
+        helicity_N,
+    )
+    data["<J*B> Redl symmetrized"] = expand(grid, j_dot_B_data["<J*B>"])
+    return data

@@ -470,7 +470,7 @@ def _B2_fsa_symmetrized(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=["sqrt(g) Boozer symmetrized", "|B| Boozer symmetrized", "V_r(r) symmetrized"],
 )
-def _1_over_B_fsa_Boozer_symmetrized(params, transforms, profiles, data, **kwargs):
+def _1_over_B_fsa_symmetrized(params, transforms, profiles, data, **kwargs):
     data["<1/|B|> symmetrized"] = surface_averages(
         transforms["grid"],
         1 / data["|B| Boozer symmetrized"],

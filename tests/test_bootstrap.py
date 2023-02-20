@@ -21,7 +21,7 @@ from desc.compute._field import (
 )
 from desc.compute._geometry import _V_r_of_r
 from desc.compute._qs import (
-    _1_over_B_fsa_Boozer_symmetrized,
+    _1_over_B_fsa_symmetrized,
     _B2_fsa_symmetrized,
     _effective_r_over_R0_symmetrized,
     _max_tz_modB_symmetrized,
@@ -93,7 +93,7 @@ def trapped_fraction_symmetrized(grid, modB, sqrt_g):
     profiles = None
     data = _V_r_of_r_symmetrized(params, transforms, profiles, data)
     data = _B2_fsa_symmetrized(params, transforms, profiles, data)
-    data = _1_over_B_fsa_Boozer_symmetrized(params, transforms, profiles, data)
+    data = _1_over_B_fsa_symmetrized(params, transforms, profiles, data)
     data = _max_tz_modB_symmetrized(params, transforms, profiles, data)
     data = _min_tz_modB_symmetrized(params, transforms, profiles, data)
     data = _effective_r_over_R0_symmetrized(params, transforms, profiles, data)
@@ -130,79 +130,48 @@ class TestBootstrapCompute:
             modB[mask] = modB_1[mask]
 
             f_t_data = trapped_fraction(grid, modB, sqrt_g)
-            # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
-            np.testing.assert_allclose(
-                f_t_data["<B^2>"],
-                expand(
-                    grid,
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
-                ),
-            )
-            np.testing.assert_allclose(
-                f_t_data["<1/|B|>"],
-                expand(
-                    grid,
-                    np.array(
-                        [
-                            1 / np.sqrt(13.0**2 - 2.6**2),
-                            1 / np.sqrt(9.0**2 - 3.7**2),
-                        ]
-                    ),
-                ),
-            )
-            np.testing.assert_allclose(
-                f_t_data["min_tz |B|"],
-                expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
-                rtol=1e-4,
-            )
-            np.testing.assert_allclose(
-                f_t_data["max_tz |B|"],
-                expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
-                rtol=1e-4,
-            )
-            np.testing.assert_allclose(
-                f_t_data["effective r/R0"],
-                expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
-                rtol=1e-3,
-            )
+            f_t_data_symmetrized = trapped_fraction_symmetrized(grid, modB, sqrt_g)
 
-            # Now repeat the tests using the symmetrized versions:
-            f_t_data = trapped_fraction_symmetrized(grid, modB, sqrt_g)
-            # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
-            np.testing.assert_allclose(
-                f_t_data["<B^2> symmetrized"],
-                expand(
-                    grid,
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
-                ),
-            )
-            np.testing.assert_allclose(
-                f_t_data["<1/|B|> symmetrized"],
-                expand(
-                    grid,
-                    np.array(
-                        [
-                            1 / np.sqrt(13.0**2 - 2.6**2),
-                            1 / np.sqrt(9.0**2 - 3.7**2),
-                        ]
+            for data, sym_str in zip(
+                [f_t_data, f_t_data_symmetrized], ["", " symmetrized"]
+            ):
+                # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
+                np.testing.assert_allclose(
+                    data["<B^2>" + sym_str],
+                    expand(
+                        grid,
+                        np.array(
+                            [13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]
+                        ),
                     ),
-                ),
-            )
-            np.testing.assert_allclose(
-                f_t_data["min_tz |B| symmetrized"],
-                expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
-                rtol=1e-4,
-            )
-            np.testing.assert_allclose(
-                f_t_data["max_tz |B| symmetrized"],
-                expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
-                rtol=1e-4,
-            )
-            np.testing.assert_allclose(
-                f_t_data["effective r/R0 symmetrized"],
-                expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
-                rtol=1e-3,
-            )
+                )
+                np.testing.assert_allclose(
+                    data["<1/|B|>" + sym_str],
+                    expand(
+                        grid,
+                        np.array(
+                            [
+                                1 / np.sqrt(13.0**2 - 2.6**2),
+                                1 / np.sqrt(9.0**2 - 3.7**2),
+                            ]
+                        ),
+                    ),
+                )
+                np.testing.assert_allclose(
+                    data["min_tz |B|" + sym_str],
+                    expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
+                    rtol=1e-4,
+                )
+                np.testing.assert_allclose(
+                    data["max_tz |B|" + sym_str],
+                    expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
+                    rtol=1e-4,
+                )
+                np.testing.assert_allclose(
+                    data["effective r/R0" + sym_str],
+                    expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
+                    rtol=1e-3,
+                )
 
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(
@@ -1001,19 +970,36 @@ class TestBootstrapCompute:
             ]
         )
 
-        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = LinearGrid(rho=rho, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         data = eq.compute(
             "<J*B> Redl",
             grid=grid,
             helicity=helicity,
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_Redl_symmetrized = np.zeros_like(J_dot_B_Redl)
+        for j, rho0 in enumerate(rho):
+            grid0 = LinearGrid(rho=rho0, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
+            data = eq.compute(
+                "<J*B> Redl symmetrized",
+                grid=grid0,
+                helicity=helicity,
+                M_booz=4,
+                N_booz=0,
+            )
+            J_dot_B_Redl_symmetrized[j] = compress(
+                grid0, data["<J*B> Redl symmetrized"]
+            )
 
         # The relative error is a bit larger at the boundary, where the
         # absolute magnitude is quite small, so drop those points.
         np.testing.assert_allclose(J_dot_B_Redl[:-5], J_dot_B_sfincs[:-5], rtol=0.1)
+        # The symmetrized and non-symmetrized calculations should agree
+        # closely in axisymmetry:
+        np.testing.assert_allclose(J_dot_B_Redl_symmetrized, J_dot_B_Redl, rtol=1e-3)
 
         plt.plot(rho, J_dot_B_Redl, "+-", label="Redl")
+        plt.plot(rho, J_dot_B_Redl_symmetrized, "x-", label="Redl symmetrized")
         plt.plot(rho, J_dot_B_sfincs, ".-", label="sfincs")
         plt.xlabel("rho")
         plt.title("<J*B> [T A / m^2]")

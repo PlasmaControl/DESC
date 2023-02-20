@@ -987,9 +987,7 @@ class TestBootstrapCompute:
                 M_booz=4,
                 N_booz=0,
             )
-            J_dot_B_Redl_symmetrized[j] = compress(
-                grid0, data["<J*B> Redl symmetrized"]
-            )
+            J_dot_B_Redl_symmetrized[j] = data["<J*B> Redl symmetrized"][0]
 
         # The relative error is a bit larger at the boundary, where the
         # absolute magnitude is quite small, so drop those points.
@@ -998,9 +996,9 @@ class TestBootstrapCompute:
         # closely in axisymmetry:
         np.testing.assert_allclose(J_dot_B_Redl_symmetrized, J_dot_B_Redl, rtol=1e-3)
 
-        plt.plot(rho, J_dot_B_Redl, "+-", label="Redl")
-        plt.plot(rho, J_dot_B_Redl_symmetrized, "x-", label="Redl symmetrized")
-        plt.plot(rho, J_dot_B_sfincs, ".-", label="sfincs")
+        plt.plot(rho, J_dot_B_Redl, "+-g", label="Redl")
+        plt.plot(rho, J_dot_B_Redl_symmetrized, "x-b", label="Redl symmetrized")
+        plt.plot(rho, J_dot_B_sfincs, ".-r", label="sfincs")
         plt.xlabel("rho")
         plt.title("<J*B> [T A / m^2]")
         plt.legend(loc=0)
@@ -1078,20 +1076,33 @@ class TestBootstrapCompute:
             ]
         )
 
-        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = LinearGrid(rho=rho, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         data = eq.compute(
             "<J*B> Redl",
             grid=grid,
             helicity=helicity,
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_Redl_symmetrized = np.zeros_like(J_dot_B_Redl)
+        for j, rho0 in enumerate(rho):
+            grid0 = LinearGrid(rho=rho0, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
+            data = eq.compute(
+                "<J*B> Redl symmetrized",
+                grid=grid0,
+                helicity=helicity,
+                M_booz=4,
+                N_booz=4,
+            )
+            J_dot_B_Redl_symmetrized[j] = data["<J*B> Redl symmetrized"][0]
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
+        np.testing.assert_allclose(J_dot_B_Redl_symmetrized, J_dot_B_Redl, rtol=0.008)
 
         # This plot below reproduces figure 1.a of Landreman Buller
         # Drevlak, Physics of Plasmas 29, 082501 (2022)
         # https://doi.org/10.1063/5.0098166
-        plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
+        plt.plot(rho**2, J_dot_B_Redl, "+-g", label="Redl")
+        plt.plot(rho**2, J_dot_B_Redl_symmetrized, "x-b", label="Redl symmetrized")
         plt.plot(rho**2, J_dot_B_sfincs, ".-r", label="sfincs")
         plt.legend(loc=0)
         plt.xlabel(r"$\rho^2 = s$")
@@ -1172,20 +1183,33 @@ class TestBootstrapCompute:
             ]
         )
 
-        grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+        grid = LinearGrid(rho=rho, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         data = eq.compute(
             "<J*B> Redl",
             grid=grid,
             helicity=helicity,
         )
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_Redl_symmetrized = np.zeros_like(J_dot_B_Redl)
+        for j, rho0 in enumerate(rho):
+            grid0 = LinearGrid(rho=rho0, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
+            data = eq.compute(
+                "<J*B> Redl symmetrized",
+                grid=grid0,
+                helicity=helicity,
+                M_booz=4,
+                N_booz=4,
+            )
+            J_dot_B_Redl_symmetrized[j] = data["<J*B> Redl symmetrized"][0]
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
+        np.testing.assert_allclose(J_dot_B_Redl_symmetrized, J_dot_B_Redl, rtol=0.01)
 
         # The plot below reproduces figure 1.b of Landreman Buller
         # Drevlak, Physics of Plasmas 29, 082501 (2022)
         # https://doi.org/10.1063/5.0098166
-        plt.plot(rho**2, J_dot_B_Redl, "+-", label="Redl")
+        plt.plot(rho**2, J_dot_B_Redl, "+-g", label="Redl")
+        plt.plot(rho**2, J_dot_B_Redl_symmetrized, "x-b", label="Redl symmetrized")
         plt.plot(rho**2, J_dot_B_sfincs, ".-r", label="sfincs")
         plt.legend(loc=0)
         plt.xlabel(r"$\rho^2 = s$")

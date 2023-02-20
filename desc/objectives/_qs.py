@@ -628,7 +628,17 @@ class QuasiIsodynamic(_Objective):
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["f_QI"]
         self._args = get_params(self._data_keys)
-        self._args += ["QI_l {}".format(self.name), "QI_mn {}".format(self.name)]
+        self._args = list(
+            map(
+                lambda arg: arg.replace("QI_l", "QI_l {}".format(self.name)), self._args
+            )
+        )
+        self._args = list(
+            map(
+                lambda arg: arg.replace("QI_mn", "QI_mn {}".format(self.name)),
+                self._args,
+            )
+        )
 
         assert self.grid.sym is False
         assert self.grid.num_rho == 1
@@ -736,7 +746,7 @@ class QuasiIsodynamic(_Objective):
             new_modes = DoubleFourierSeries(M=M_QI, N=N_QI, sym="cos(z)").modes
             idx = np.where((new_modes == old_modes[:, None]).all(-1))[1]
             QI_mn = np.zeros(((2 * M_QI + 1) * N_QI,))
-            QI_mn[idx[:2 * self.M_QI + 1]] = self.QI_mn
+            QI_mn[idx[: 2 * self.M_QI + 1]] = self.QI_mn
             self.QI_mn = QI_mn
             self.M_QI = M_QI
             self.N_QI = N_QI

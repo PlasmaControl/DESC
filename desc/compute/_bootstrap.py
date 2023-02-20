@@ -5,7 +5,7 @@ from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import compress, expand, surface_averages
+from .utils import compress, expand, surface_averages, surface_integrals
 
 
 @register_compute_fun(
@@ -66,6 +66,77 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
 
     trapped_fraction = 1 - 0.75 * compress(grid, data["<B^2>"]) * lambda_integral
     data["trapped fraction"] = expand(grid, trapped_fraction)
+    return data
+
+
+@register_compute_fun(
+    name="trapped fraction symmetrized",
+    label="1 - \\frac{3}{4} \\langle B^2 \\rangle \\int_0^{1/Bmax} "
+    "\\frac{\\lambda\\; d\\lambda}{\\langle \\sqrt{1 - \\lambda B} \\rangle}",
+    units="~",
+    units_long="None",
+    description="Neoclassical effective trapped particle fraction",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "|B| Boozer symmetrized",
+        "max_tz |B| symmetrized",
+        "V_r(r) symmetrized",
+        "<B^2> symmetrized",
+        "sqrt(g) Boozer symmetrized",
+    ],
+    n_gauss="n_gauss",
+)
+def _trapped_fraction_symmetrized(params, transforms, profiles, data, **kwargs):
+    r"""
+    Evaluate the effective trapped particle fraction.
+
+    Compute the effective fraction of trapped particles, which enters
+    several formulae for neoclassical transport. The trapped fraction
+    ``f_t`` has a standard definition in neoclassical theory:
+
+    .. math::
+        f_t = 1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax}
+            \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}
+
+    where :math:`\langle \ldots \rangle` is a flux surface average.
+    """
+    # Get nodes and weights for Gauss-Legendre integration:
+    n_gauss = kwargs.get("n_gauss", 20)
+    base_nodes, base_weights = roots_legendre(n_gauss)
+    # Rescale for integration on [0, 1], not [-1, 1]:
+    lambd = jnp.asarray((base_nodes + 1) * 0.5)
+    lambda_weights = jnp.asarray(base_weights * 0.5)
+
+    grid = transforms["grid"]
+    Bmax = data["max_tz |B| symmetrized"]
+    modB_over_Bmax = data["|B| Boozer symmetrized"] / Bmax
+    # Note sqrt_g here is not the usual sqrt_g, but rather the Jacobian for
+    # Boozer coordinates, after dropping the non-QS modes.
+    sqrt_g = data["sqrt(g) Boozer symmetrized"]
+    Bmax_squared = compress(grid, Bmax * Bmax)
+
+    # Sum over the lambda grid points, using fori_loop for efficiency.
+    def body_fun(jlambda, lambda_integral):
+        flux_surf_avg_term = surface_averages(
+            grid,
+            jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
+            sqrt_g,
+            denominator=data["V_r(r) symmetrized"],
+        )
+        return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
+            Bmax_squared * compress(grid, flux_surf_avg_term)
+        )
+
+    lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
+
+    trapped_fraction = (
+        1 - 0.75 * compress(grid, data["<B^2> symmetrized"]) * lambda_integral
+    )
+    data["trapped fraction symmetrized"] = expand(grid, trapped_fraction)
     return data
 
 

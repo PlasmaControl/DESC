@@ -7,7 +7,11 @@ from scipy.constants import elementary_charge
 from scipy.integrate import quad
 
 import desc.io
-from desc.compute._bootstrap import _trapped_fraction, j_dot_B_Redl
+from desc.compute._bootstrap import (
+    _trapped_fraction,
+    _trapped_fraction_symmetrized,
+    j_dot_B_Redl,
+)
 from desc.compute._field import (
     _1_over_B_fsa,
     _B2_fsa,
@@ -16,6 +20,14 @@ from desc.compute._field import (
     _min_tz_modB,
 )
 from desc.compute._geometry import _V_r_of_r
+from desc.compute._qs import (
+    _1_over_B_fsa_Boozer_symmetrized,
+    _B2_fsa_symmetrized,
+    _effective_r_over_R0_symmetrized,
+    _max_tz_modB_symmetrized,
+    _min_tz_modB_symmetrized,
+    _V_r_of_r_symmetrized,
+)
 from desc.compute.utils import compress, expand
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
@@ -61,6 +73,31 @@ def trapped_fraction(grid, modB, sqrt_g):
     data = _min_tz_modB(params, transforms, profiles, data)
     data = _effective_r_over_R0(params, transforms, profiles, data)
     data = _trapped_fraction(params, transforms, profiles, data)
+    return data
+
+
+def trapped_fraction_symmetrized(grid, modB, sqrt_g):
+    """
+    Helper function to test trapped fraction calculation.
+
+    Function to help test the trapped fraction calculation on
+    analytic B fields rather than Equilibium objects.
+    """
+    data = {
+        "|B| Boozer symmetrized": modB,
+        "|B|^2 Boozer symmetrized": modB**2,
+        "sqrt(g) Boozer symmetrized": sqrt_g,
+    }
+    params = None
+    transforms = {"grid": grid}
+    profiles = None
+    data = _V_r_of_r_symmetrized(params, transforms, profiles, data)
+    data = _B2_fsa_symmetrized(params, transforms, profiles, data)
+    data = _1_over_B_fsa_Boozer_symmetrized(params, transforms, profiles, data)
+    data = _max_tz_modB_symmetrized(params, transforms, profiles, data)
+    data = _min_tz_modB_symmetrized(params, transforms, profiles, data)
+    data = _effective_r_over_R0_symmetrized(params, transforms, profiles, data)
+    data = _trapped_fraction_symmetrized(params, transforms, profiles, data)
     return data
 
 
@@ -129,6 +166,44 @@ class TestBootstrapCompute:
                 rtol=1e-3,
             )
 
+            # Now repeat the tests using the symmetrized versions:
+            f_t_data = trapped_fraction_symmetrized(grid, modB, sqrt_g)
+            # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
+            np.testing.assert_allclose(
+                f_t_data["<B^2> symmetrized"],
+                expand(
+                    grid,
+                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
+                ),
+            )
+            np.testing.assert_allclose(
+                f_t_data["<1/|B|> symmetrized"],
+                expand(
+                    grid,
+                    np.array(
+                        [
+                            1 / np.sqrt(13.0**2 - 2.6**2),
+                            1 / np.sqrt(9.0**2 - 3.7**2),
+                        ]
+                    ),
+                ),
+            )
+            np.testing.assert_allclose(
+                f_t_data["min_tz |B| symmetrized"],
+                expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
+                rtol=1e-4,
+            )
+            np.testing.assert_allclose(
+                f_t_data["max_tz |B| symmetrized"],
+                expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
+                rtol=1e-4,
+            )
+            np.testing.assert_allclose(
+                f_t_data["effective r/R0 symmetrized"],
+                expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
+                rtol=1e-3,
+            )
+
     @pytest.mark.unit
     @pytest.mark.mpl_image_compare(
         remove_text=pytest_mpl_remove_text, tolerance=pytest_mpl_tol
@@ -172,37 +247,13 @@ class TestBootstrapCompute:
             sqrt_g = 6.7 * (1 + epsilon_3D * np.cos(theta))
 
             f_t_data = trapped_fraction(grid, modB, sqrt_g)
+            f_t_data_symmetrized = trapped_fraction_symmetrized(grid, modB, sqrt_g)
 
             # Eq (C18) in Kim et al:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
-
-            np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], expand(grid, B0 / (1 + epsilon))
-            )
-            # Looser tolerance for Bmax since there is no grid point there:
             Bmax = B0 / (1 - epsilon)
-            np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], expand(grid, Bmax), rtol=0.001
-            )
-            np.testing.assert_allclose(
-                f_t_data["effective r/R0"], expand(grid, epsilon), rtol=1e-4
-            )
             # Eq (A8):
             fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
-            np.testing.assert_allclose(
-                f_t_data["<B^2>"],
-                expand(grid, fsa_B2),
-                rtol=1e-6,
-            )
-            np.testing.assert_allclose(
-                f_t_data["<1/|B|>"], expand(grid, (2 + epsilon**2) / (2 * B0))
-            )
-            # Note the loose tolerance for this next test since we do not expect precise
-            # agreement.
-            np.testing.assert_allclose(
-                f_t_data["trapped fraction"], expand(grid, f_t_Kim), rtol=0.1, atol=0.07
-            )
-
             # Now compute f_t numerically by a different algorithm:
             modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
             sqrt_g = sqrt_g.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
@@ -221,16 +272,53 @@ class TestBootstrapCompute:
                 integral = quad(integrand, 0, 1 / Bmax[jr])
                 f_t[jr] = 1 - 0.75 * fsa_B2[jr] * integral[0]
 
-            np.testing.assert_allclose(
-                compress(grid, f_t_data["trapped fraction"])[1:],
-                f_t[1:],
-                rtol=0.001,
-                atol=0.001,
-            )
+            for data, sym_str in zip(
+                [f_t_data, f_t_data_symmetrized], ["", " symmetrized"]
+            ):
+                np.testing.assert_allclose(
+                    data["min_tz |B|" + sym_str], expand(grid, B0 / (1 + epsilon))
+                )
+                # Looser tolerance for Bmax since there is no grid point there:
+                np.testing.assert_allclose(
+                    data["max_tz |B|" + sym_str], expand(grid, Bmax), rtol=0.001
+                )
+                np.testing.assert_allclose(
+                    data["effective r/R0" + sym_str], expand(grid, epsilon), rtol=1e-4
+                )
+                np.testing.assert_allclose(
+                    data["<B^2>" + sym_str],
+                    expand(grid, fsa_B2),
+                    rtol=1e-6,
+                )
+                np.testing.assert_allclose(
+                    data["<1/|B|>" + sym_str],
+                    expand(grid, (2 + epsilon**2) / (2 * B0)),
+                )
+                # Note the loose tolerance for this next test since we do not expect precise
+                # agreement.
+                np.testing.assert_allclose(
+                    data["trapped fraction" + sym_str],
+                    expand(grid, f_t_Kim),
+                    rtol=0.1,
+                    atol=0.07,
+                )
+
+                np.testing.assert_allclose(
+                    compress(grid, data["trapped fraction" + sym_str])[1:],
+                    f_t[1:],
+                    rtol=0.001,
+                    atol=0.001,
+                )
 
             plt.plot(epsilon, f_t_Kim, "b", label="Kim")
             plt.plot(
                 epsilon, compress(grid, f_t_data["trapped fraction"]), "r", label="desc"
+            )
+            plt.plot(
+                epsilon,
+                compress(grid, f_t_data_symmetrized["trapped fraction symmetrized"]),
+                "--y",
+                label="desc symmetrized",
             )
             plt.plot(epsilon, f_t, ":g", label="Alternative algorithm")
 
@@ -1622,6 +1710,7 @@ def test_bootstrap_objective_build():
     np.testing.assert_allclose(
         obj.grid.nodes[obj.grid.unique_rho_idx, 0], np.array([0.2, 0.4, 0.6, 0.8, 1.0])
     )
+
 
 @pytest.mark.unit
 def test_BootstrapRedlBoozerConsistency():

@@ -6,6 +6,7 @@ from desc.backend import jnp, put, sign
 from desc.vmec_utils import ptolemy_linear_transform
 
 from .data_index import register_compute_fun
+from .utils import expand, surface_averages, surface_integrals, surface_min, surface_max
 
 
 @register_compute_fun(
@@ -310,24 +311,26 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
 )
 def _B_mn_symmetrized(params, transforms, profiles, data, **kwargs):
     matrix, modes, indices_of_nonsymmetric_modes = ptolemy_linear_transform(
-            transforms["B"].basis.modes,
-            helicity=kwargs.get("helicity", (1, 0)),
-            NFP=transforms["B"].basis.NFP,
-        )
+        transforms["B"].basis.modes,
+        helicity=kwargs.get("helicity", (1, 0)),
+        NFP=transforms["B"].basis.NFP,
+    )
     print("Condition number:", jnp.linalg.cond(matrix))
     print("NFP:", transforms["B"].basis.NFP)
     print("matrix shape:", matrix.shape)
-    print("matrix:\n",matrix)
+    print("matrix:\n", matrix)
     print("helicity:", kwargs.get("helicity", (1, 0)))
     print("modes:\n", modes)
     print("indices_of_nonsymmetric_modes:", indices_of_nonsymmetric_modes)
     filter = jnp.ones(transforms["B"].basis.num_modes)
     filter = put(filter, indices_of_nonsymmetric_modes, 0)
     print("filter:", filter)
-    #matrix_inv = jnp.linalg.inv(matrix)
-    #print("matrix_inv:\n", matrix_inv)
-    #data["|B|_mn symmetrized"] = matrix_inv @ (filter * (matrix @ data["|B|_mn"]))
-    data["|B|_mn symmetrized"] = jnp.linalg.solve(matrix, filter * (matrix @ data["|B|_mn"]))
+    # matrix_inv = jnp.linalg.inv(matrix)
+    # print("matrix_inv:\n", matrix_inv)
+    # data["|B|_mn symmetrized"] = matrix_inv @ (filter * (matrix @ data["|B|_mn"]))
+    data["|B|_mn symmetrized"] = jnp.linalg.solve(
+        matrix, filter * (matrix @ data["|B|_mn"])
+    )
     return data
 
 
@@ -348,6 +351,7 @@ def _B_Boozer(params, transforms, profiles, data, **kwargs):
     data["|B| Boozer"] = transforms["B"].transform(data["|B|_mn"])
     return data
 
+
 @register_compute_fun(
     name="|B| Boozer symmetrized",
     label="|B| Boozer symmetrized",
@@ -360,11 +364,198 @@ def _B_Boozer(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["|B|_mn symmetrized"],
-    helicity="helicity",
 )
 def _B_Boozer_symmetrized(params, transforms, profiles, data, **kwargs):
-    data["|B| Boozer symmetrized"] = transforms["B"].transform(data["|B|_mn symmetrized"])
+    data["|B| Boozer symmetrized"] = transforms["B"].transform(
+        data["|B|_mn symmetrized"]
+    )
     return data
+
+
+@register_compute_fun(
+    name="|B|^2 Boozer symmetrized",
+    label="|B|^2 Boozer symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Squared magnitude of magnetic field as function of the Boozer angles, keeping only quasisymmetric modes",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B| Boozer symmetrized"],
+)
+def _B2_Boozer_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["|B|^2 Boozer symmetrized"] = data["|B| Boozer symmetrized"] ** 2
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g) Boozer symmetrized",
+    label="\\sqrt{g} Boozer symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Boozer-coordinate Jacobian, keeping only quasisymmetric modes",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|^2 Boozer symmetrized", "G", "iota", "I"],
+)
+def _sqrt_g_Boozer_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g) Boozer symmetrized"] = (data["G"] + data["iota"] * data["I"]) / data[
+        "|B|^2 Boozer symmetrized"
+    ]
+    return data
+
+
+@register_compute_fun(
+    name="V_r(r) symmetrized",
+    label="dV/d\\rho symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Derivative of flux surface volume with respect to radius, keeping only quasisymmetric modes",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g) Boozer symmetrized"],
+)
+def _V_r_of_r_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["V_r(r) symmetrized"] = surface_integrals(
+        transforms["grid"], jnp.abs(data["sqrt(g) Boozer symmetrized"])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="<B^2> symmetrized",
+    label="\\langle B^2 \\rangle",
+    units="T^2",
+    units_long="Tesla squared",
+    description="Flux surface average magnetic field squared",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=[
+        "sqrt(g) Boozer symmetrized",
+        "|B|^2 Boozer symmetrized",
+        "V_r(r) symmetrized",
+    ],
+)
+def _B2_fsa_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["<B^2> symmetrized"] = surface_averages(
+        transforms["grid"],
+        data["|B|^2 Boozer symmetrized"],
+        jnp.abs(data["sqrt(g) Boozer symmetrized"]),
+        denominator=data["V_r(r) symmetrized"],
+    )
+    return data
+
+
+@register_compute_fun(
+    name="<1/|B|> symmetrized",
+    label="\\langle 1/B \\rangle symmetrized",
+    units="T^{-1}",
+    units_long="1 / Tesla",
+    description="Flux surface averaged inverse field strength",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g) Boozer symmetrized", "|B| Boozer symmetrized", "V_r(r) symmetrized"],
+)
+def _1_over_B_fsa_Boozer_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["<1/|B|> symmetrized"] = surface_averages(
+        transforms["grid"],
+        1 / data["|B| Boozer symmetrized"],
+        jnp.abs(data["sqrt(g) Boozer symmetrized"]),
+        denominator=data["V_r(r) symmetrized"],
+    )
+    return data
+
+
+@register_compute_fun(
+    name="max_tz |B| symmetrized",
+    label="\\max_{\\theta \\zeta} |B|, symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Maximum field strength on each flux surface, after filtering"
+    "out non-quasi-symmetric modes",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B| Boozer symmetrized"],
+)
+def _max_tz_modB_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["max_tz |B| symmetrized"] = expand(
+        transforms["grid"],
+        surface_max(transforms["grid"], data["|B| Boozer symmetrized"]),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="min_tz |B| symmetrized",
+    label="\\min_{\\theta \\zeta} |B|, symmetrized",
+    units="T",
+    units_long="Tesla",
+    description="Minimum field strength on each flux surface, after filtering"
+    "out non-quasi-symmetric modes",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|B| Boozer symmetrized"],
+)
+def _min_tz_modB_symmetrized(params, transforms, profiles, data, **kwargs):
+    data["min_tz |B| symmetrized"] = expand(
+        transforms["grid"],
+        surface_min(transforms["grid"], data["|B| Boozer symmetrized"]),
+    )
+    return data
+
+
+@register_compute_fun(
+    name="effective r/R0 symmetrized",
+    label="(r / R_0)_{effective}, symmetrized",
+    units="~",
+    units_long="None",
+    description="Effective local inverse aspect ratio, based on max and min |B|"
+    "after filtering out non-quasi-symmetric modes",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["max_tz |B| symmetrized", "min_tz |B| symmetrized"],
+)
+def _effective_r_over_R0_symmetrized(params, transforms, profiles, data, **kwargs):
+    r"""
+    Compute an effective local inverse aspect ratio.
+
+    This effective local inverse aspect ratio epsilon is defined by
+
+    .. math::
+        \frac{Bmax}{Bmin} = \frac{1 + \epsilon}{1 - \epsilon}
+
+    This definition is motivated by the fact that this formula would
+    be true in the case of circular cross-section surfaces in
+    axisymmetry with :math:`B \propto 1/R` and :math:`R = (1 +
+    \epsilon \cos\theta) R_0`.
+    """
+    w = data["max_tz |B| symmetrized"] / data["min_tz |B| symmetrized"]
+    data["effective r/R0 symmetrized"] = (w - 1) / (w + 1)
+    return data
+
 
 @register_compute_fun(
     name="f_C",

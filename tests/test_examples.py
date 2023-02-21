@@ -258,7 +258,7 @@ def run_qh_step(n, eq):
         FixCurrent(),
         FixPsi(),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
@@ -466,7 +466,6 @@ def test_simsopt_QH_comparison():
         verbose=3,
         ftol=1e-8,
         constraints=get_fixed_boundary_constraints(profiles=False),
-        optimizer=Optimizer("lsq-exact"),
         objective=ObjectiveFunction(objectives=CurrentDensity()),
     )
     ##################################

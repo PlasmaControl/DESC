@@ -157,6 +157,60 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J_rho",
+    label="J_{\\rho}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant radial component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_rho"],
+)
+def _J_sub_rho(params, transforms, profiles, data, **kwargs):
+    data["J_rho"] = dot(data["J"], data["e_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="J_theta",
+    label="J_{\\theta}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_theta"],
+)
+def _J_sub_theta(params, transforms, profiles, data, **kwargs):
+    data["J_theta"] = dot(data["J"], data["e_theta"])
+    return data
+
+
+@register_compute_fun(
+    name="J_zeta",
+    label="J_{\\zeta}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant toroidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_zeta"],
+)
+def _J_sub_zeta(params, transforms, profiles, data, **kwargs):
+    data["J_zeta"] = dot(data["J"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
     name="J*B",
     label="\\mathbf{J} \\cdot \\mathbf{B}",
     units="N / m^{3}",

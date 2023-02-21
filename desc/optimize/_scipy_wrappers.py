@@ -20,9 +20,7 @@ from .utils import (
 @register_optimizer(
     name=[
         "scipy-bfgs",
-        "scipy-lbfgs",
         "scipy-CG",
-        "scipy-TNC",
         "scipy-Newton-CG",
         "scipy-dogleg",
         "scipy-trust-exact",
@@ -33,7 +31,7 @@ from .utils import (
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
-    hessian=[False, False, False, False, True, True, True, True, True],
+    hessian=[False, False, True, True, True, True, True],
 )
 def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
@@ -80,6 +78,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+    options.setdefault("maxiter", np.iinfo(np.int32).max)
     x_scale = 1 if x_scale == "auto" else x_scale
     if isinstance(x_scale, str):
         raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
@@ -140,10 +139,13 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             df = f2 - f1
             dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
-            H1 = f_where_x(x1, hess_allx, hess_allf)
+            if len(hess_allx):
+                H1 = f_where_x(x1, hess_allx, hess_allf)
+            else:
+                H1 = np.eye(x1.size) / dx_norm
             if not H1.size:
                 H1 = np.eye(x1.size) / dx_norm
-            predicted_reduction = f2 - evaluate_quadratic_form_hess(dx, f1, g1, H1)
+            predicted_reduction = -evaluate_quadratic_form_hess(dx, 0, g1, H1)
             if predicted_reduction > 0:
                 reduction_ratio = df / predicted_reduction
             elif predicted_reduction == df == 0:
@@ -203,7 +205,10 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         x = grad_allx[-1]
         f = f_where_x(x, func_allx, func_allf)
         g = f_where_x(x, grad_allx, grad_allf)
-        H = f_where_x(x, hess_allx, hess_allf)
+        if len(hess_allx):
+            H = f_where_x(x, hess_allx, hess_allf)
+        else:
+            H = None
         result = OptimizeResult(
             x=x,
             success=success[0],
@@ -383,7 +388,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             ftol=EPS,
             xtol=EPS,
             gtol=EPS,
-            max_nfev=np.inf,
+            max_nfev=np.iinfo(np.int32).max,
             verbose=0,
             **options,
         )

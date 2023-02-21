@@ -27,6 +27,7 @@ from desc.optimize import (
     ProximalProjection,
     fmintr,
     lsqtr,
+    optimizers,
     sgd,
 )
 
@@ -470,3 +471,27 @@ def test_wrappers():
         )
     ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
     assert ob.built
+
+
+def test_all_optimizers():
+    """Just tests that the optimizers run without error, eg tests for the wrappers."""
+    eq = desc.examples.get("SOLOVEV")
+    fobj = ObjectiveFunction(ForceBalance())
+    eobj = ObjectiveFunction(Energy())
+    fobj.build(eq)
+    eobj.build(eq)
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+
+    for opt in optimizers:
+        print("TESTING ", opt)
+        if optimizers[opt]["scalar"]:
+            obj = eobj
+        else:
+            obj = fobj
+        eq.solve(objective=obj, constraints=constraints, optimizer=opt, maxiter=5)

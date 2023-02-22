@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from scipy.signal import convolve2d
 
+import desc.examples
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -1022,3 +1023,19 @@ def test_compute_everything():
     for key in data_index.keys():
         data = eq.compute(key, grid=grid)
         assert key in data
+
+
+@pytest.mark.unit
+def test_compute_averages():
+    """Test that computing averages uses the correct grid."""
+    eq = desc.examples.get("HELIOTRON")
+    Vr = eq.get_profile("V_r(r)")
+    rho = np.linspace(0.01, 1, 20)
+    grid = LinearGrid(rho=rho, NFP=eq.NFP)
+    out = eq.compute("V_r(r)", grid=grid)
+    np.testing.assert_allclose(Vr(rho), out["V_r(r)"], rtol=1e-4)
+
+    eq = Equilibrium(1, 1, 1)
+    grid = LinearGrid(rho=[0.3], theta=[np.pi / 3], zeta=[0])
+    out = eq.compute("A", grid=grid)
+    np.testing.assert_allclose(out["A"], np.pi)

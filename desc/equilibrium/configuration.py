@@ -1120,6 +1120,7 @@ class _Configuration(IOAble, ABC):
                 M=self.M_grid,
                 N=self.N_grid,
                 NFP=self.NFP,
+                sym=self.sym,
             )
             data1d = compute_fun(
                 dep1d,

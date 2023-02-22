@@ -1859,7 +1859,7 @@ class FixQIShape(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = "Fixed QI shape error: {:10.3e}"
+        self._args = ["QI_l {}".format(self.name)]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -1906,7 +1906,7 @@ class FixQIShape(_Objective):
 
         """
         params = self._parse_args(*args, **kwargs)
-        return params["QI_mn"][self._idx]
+        return params["QI_l"][self._idx]
 
     @property
     def target_arg(self):
@@ -1976,6 +1976,7 @@ class FixQIShift(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
+        self._args = ["QI_mn {}".format(self.name)]
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.

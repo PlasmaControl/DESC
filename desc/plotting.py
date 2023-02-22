@@ -254,14 +254,6 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if (
-        eq.iota is None
-    ):  # avoid issue of plot grid needing to be used for computing FSAs
-        #     by making a temp eq with iota calculated already
-        compute_eq = eq.copy()
-        compute_eq.iota = compute_eq.get_profile("iota")
-    else:
-        compute_eq = eq
     if name not in data_index:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
@@ -280,7 +272,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
-        data = compute_eq.compute(name, grid=grid)[name]
+        data = eq.compute(name, grid=grid)[name]
 
     if data_index[name]["dim"] > 1:
         if component is None:

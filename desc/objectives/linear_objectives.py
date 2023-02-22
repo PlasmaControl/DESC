@@ -1878,7 +1878,7 @@ class FixQIShape(_Objective):
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
         elif self._indices is True:  # all indices of Profile.params
-            self._idx = np.arange(np.size(eq.QI_l))
+            self._idx = np.arange(np.size(self.target))
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
 
@@ -1890,7 +1890,7 @@ class FixQIShape(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, QI_l, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute fixed QI shape error.
 
         Parameters
@@ -1905,12 +1905,18 @@ class FixQIShape(_Objective):
             Total QI magnetic well shape error.
 
         """
-        return QI_l[self._idx]
+        params = self._parse_args(*args, **kwargs)
+        return params["QI_mn"][self._idx]
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "QI_l"
+        return "QI_l {}".format(self.name)
+
+    def _parse_args(self, *args, **kwargs):
+        params = super()._parse_args(*args, **kwargs)
+        params["QI_l"] = params.pop("QI_l {}".format(self.name))
+        return params
 
 
 class FixQIShift(_Objective):
@@ -1988,7 +1994,7 @@ class FixQIShift(_Objective):
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
         elif self._indices is True:  # all indices of Profile.params
-            self._idx = np.arange(np.size(eq.QI_mn))
+            self._idx = np.arange(np.size(self.target))
         else:  # specified indices
             self._idx = np.atleast_1d(self._indices)
 
@@ -2000,7 +2006,7 @@ class FixQIShift(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, QI_mn, **kwargs):
+    def compute(self, *args, **kwargs):
         """Compute fixed QI shift error.
 
         Parameters
@@ -2015,9 +2021,15 @@ class FixQIShift(_Objective):
             Total QI magnetic well shift error.
 
         """
-        return QI_mn[self._idx]
+        params = self._parse_args(*args, **kwargs)
+        return params["QI_mn"][self._idx]
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "QI_mn"
+        return "QI_mn {}".format(self.name)
+
+    def _parse_args(self, *args, **kwargs):
+        params = super()._parse_args(*args, **kwargs)
+        params["QI_mn"] = params.pop("QI_mn {}".format(self.name))
+        return params

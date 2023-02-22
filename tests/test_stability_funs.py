@@ -262,8 +262,8 @@ def test_mercier_print(capsys):
 @pytest.mark.unit
 def test_magwell_print(capsys):
     """Test that the magnetic well stability criteria prints correctly."""
-    eq = Equilibrium()
-    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    eq = desc.examples.get("HELIOTRON")
+    grid = LinearGrid(L=12, M=12, N=6, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
 
     magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])

@@ -564,24 +564,25 @@ class FourierRZToroidalSurface(Surface):
         a = major_radius * np.sqrt(elongation) / aspect_ratio  # major axis
         b = major_radius / (aspect_ratio * np.sqrt(elongation))  # minor axis
         epsilon = (1 - np.sqrt(1 - mirror_ratio**2)) / mirror_ratio
+        iota_sign = 2 * positive_iota - 1
 
         R_lmn = np.array(
             [
                 major_radius,
-                -(elongation + 1) * b / 2 * positive_iota,
+                -(elongation + 1) * b / 2 * iota_sign,
                 -major_radius / (1 + 4 * NFP**2),
-                a * epsilon * positive_iota,
-                -(elongation - 1) * b / 2 * positive_iota,
+                a * epsilon * iota_sign,
+                -(elongation - 1) * b / 2 * iota_sign,
                 -(elongation - 1) * b / 2,
             ]
         )
         Z_lmn = np.array(
             [
-                (elongation + 1) * b / 2 * positive_iota,
+                (elongation + 1) * b / 2 * iota_sign,
                 axis_Z,
-                -b * epsilon * positive_iota,
+                -b * epsilon * iota_sign,
                 (elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2 * positive_iota,
+                -(elongation - 1) * b / 2 * iota_sign,
             ]
         )
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])

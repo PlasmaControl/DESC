@@ -56,7 +56,7 @@ class TestObjectiveFunction:
                 "Psi": eq.Psi,
             }
             np.testing.assert_allclose(
-                obj.compute(**kwargs),
+                obj.compute_unscaled(**kwargs),
                 eq.compute(f, grid=obj.grid)[f] * obj.grid.weights,
             )
 
@@ -72,7 +72,7 @@ class TestObjectiveFunction:
             obj = Volume(
                 target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
-            V = obj.compute(eq.R_lmn, eq.Z_lmn)
+            V = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
             V_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
             V_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 20 * np.pi**2)
@@ -88,7 +88,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = AspectRatio(target=5, weight=1, eq=eq)
-            AR = obj.compute(eq.R_lmn, eq.Z_lmn)
+            AR = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
             AR_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(AR, 10)
             np.testing.assert_allclose(AR_scaled, 5)
@@ -102,7 +102,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Elongation(target=0, weight=2, eq=eq)
-            f = obj.compute(eq.R_lmn, eq.Z_lmn)
+            f = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
             f_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
@@ -115,7 +115,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Energy(target=0, weight=mu_0, eq=eq, normalize=False)
-            W = obj.compute(*obj.xs(eq))
+            W = obj.compute_unscaled(*obj.xs(eq))
             W_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(W, 10 / mu_0)
             np.testing.assert_allclose(W_scaled, 10)
@@ -129,7 +129,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = RotationalTransform(target=1, weight=2, eq=eq)
-            iota = obj.compute(*obj.xs(eq))
+            iota = obj.compute_unscaled(*obj.xs(eq))
             iota_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
             np.testing.assert_allclose(iota_scaled, -2 / 3)
@@ -143,7 +143,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
-            I = obj.compute(*obj.xs(eq))
+            I = obj.compute_unscaled(*obj.xs(eq))
             I_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(I, 0)
             np.testing.assert_allclose(I_scaled, -2 / 3)
@@ -157,7 +157,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
-            fb = obj.compute(*obj.xs(eq))
+            fb = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 
         test(Equilibrium(L=2, M=2, N=1, iota=PowerSeriesProfile(0)))
@@ -181,7 +181,7 @@ class TestObjectiveFunction:
             normalize=False,
             eq=eq,
         )
-        f = obj.compute(*obj.xs(eq))
+        f = obj.compute_unscaled(*obj.xs(eq))
         idx_f = np.argsort(np.abs(f))
 
         # compute all amplitudes in the Boozer spectrum
@@ -212,7 +212,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
-            fc = obj.compute(*obj.xs(eq))
+            fc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_allclose(fc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -224,7 +224,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
-            ft = obj.compute(*obj.xs(eq))
+            ft = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_allclose(ft, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -251,7 +251,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MercierStability(eq=eq)
-            DMerc = obj.compute(*obj.xs(eq))
+            DMerc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
@@ -264,7 +264,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MagneticWell(eq=eq)
-            magnetic_well = obj.compute(*obj.xs(eq))
+            magnetic_well = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
@@ -285,8 +285,11 @@ def test_derivative_modes():
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
     np.testing.assert_allclose(g1, g2, atol=1e-10)
-    J1 = obj1.jac(x)
-    J2 = obj2.jac(x)
+    J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-10)
+    J1 = obj1.jac_unscaled(x)
+    J2 = obj2.jac_unscaled(x)
     np.testing.assert_allclose(J1, J2, atol=1e-10)
     H1 = obj1.hess(x)
     H2 = obj2.hess(x)
@@ -312,7 +315,7 @@ def test_rejit():
     obj = DummyObjective(3)
     eq = Equilibrium()
     obj.build(eq)
-    assert obj.compute(4) == 8
+    assert obj.compute_unscaled(4) == 8
     assert obj.compute_scaled(4) == 8
     obj.target = 1
     obj.weight = 2
@@ -326,18 +329,18 @@ def test_rejit():
     objFun.build(eq)
     x = objFun.x(eq)
 
-    f = objFun.compute(x)
-    J = objFun.jac(x)
+    f = objFun.compute_scaled(x)
+    J = objFun.jac_scaled(x)
     np.testing.assert_allclose(f, [-5598, 402, 396])
     np.testing.assert_allclose(J, np.diag([-1800, 0, -18]))
     objFun.objectives[0].target = 3
     objFun.objectives[0].weight = 4
     objFun.objectives[0].y = 2
-    np.testing.assert_allclose(objFun.compute(x), f)
-    np.testing.assert_allclose(objFun.jac(x), J)
+    np.testing.assert_allclose(objFun.compute_scaled(x), f)
+    np.testing.assert_allclose(objFun.jac_scaled(x), J)
     objFun.jit()
-    np.testing.assert_allclose(objFun.compute(x), [-7164, 836, 828])
-    np.testing.assert_allclose(objFun.jac(x), J * 4 / 3)
+    np.testing.assert_allclose(objFun.compute_scaled(x), [-7164, 836, 828])
+    np.testing.assert_allclose(objFun.jac_scaled(x), J * 4 / 3)
 
 
 @pytest.mark.unit
@@ -356,7 +359,7 @@ def test_getter_setter():
     """Test getter and setter methods of Objectives."""
     eq = Equilibrium()
     obj = GenericObjective("R", eq=eq)
-    R = obj.compute(*obj.xs(eq))
+    R = obj.compute_unscaled(*obj.xs(eq))
 
     # target
     target = R - 0.5
@@ -423,7 +426,7 @@ def test_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    d = obj.compute(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq))
     np.testing.assert_allclose(d, a_s - a_p)
 
     # for unequal M, should have error of order M_spacing*a_p
@@ -432,7 +435,7 @@ def test_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    d = obj.compute(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
 
@@ -442,7 +445,7 @@ def test_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    d = obj.compute(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
 
@@ -460,13 +463,13 @@ def test_mean_curvature():
     # simple case like dshape should have mean curvature negative everywhere
     eq = get("DSHAPE")
     obj = MeanCurvature(eq=eq)
-    H = obj.compute(*obj.xs(eq))
+    H = obj.compute_unscaled(*obj.xs(eq))
     assert np.all(H <= 0)
 
     # more shaped case like NCSX should have some positive curvature
     eq = get("NCSX")
     obj = MeanCurvature(eq=eq)
-    H = obj.compute(*obj.xs(eq))
+    H = obj.compute_unscaled(*obj.xs(eq))
     assert np.any(H > 0)
 
 
@@ -476,9 +479,9 @@ def test_principal_curvature():
     eq1 = get("DSHAPE")
     eq2 = get("NCSX")
     obj1 = PrincipalCurvature(eq=eq1, normalize=False)
-    K1 = obj1.compute(*obj1.xs(eq1))
+    K1 = obj1.compute_unscaled(*obj1.xs(eq1))
     obj2 = PrincipalCurvature(eq=eq2, normalize=False)
-    K2 = obj2.compute(*obj2.xs(eq2))
+    K2 = obj2.compute_unscaled(*obj2.xs(eq2))
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()

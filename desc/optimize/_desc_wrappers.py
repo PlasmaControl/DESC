@@ -65,9 +65,9 @@ def _optimize_desc_least_squares(
         options.setdefault("max_trust_radius", 1.0)
 
     result = lsqtr(
-        objective.compute,
+        objective.compute_scaled,
         x0=x0,
-        jac=objective.jac,
+        jac=objective.jac_scaled,
         args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],

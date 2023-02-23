@@ -71,11 +71,24 @@ class ObjectiveFunction(IOAble):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
+        self._derivatives = {
+            "jac_scaled": {},
+            "jac_unscaled": {},
+            "grad": {},
+            "hess": {},
+        }
         for arg in self.args:
-            self._derivatives["jac"][arg] = lambda x, arg=arg: jnp.vstack(
+            self._derivatives["jac_scaled"][arg] = lambda x, arg=arg: jnp.vstack(
                 [
-                    obj.derivatives["jac"][arg](
+                    obj.derivatives["jac_scaled"][arg](
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                    )
+                    for obj in self.objectives
+                ]
+            )
+            self._derivatives["jac_unscaled"][arg] = lambda x, arg=arg: jnp.vstack(
+                [
+                    obj.derivatives["jac_unscaled"][arg](
                         *self._kwargs_to_args(self.unpack_state(x), obj.args)
                     )
                     for obj in self.objectives
@@ -108,8 +121,11 @@ class ObjectiveFunction(IOAble):
             self._grad = lambda x: jnp.concatenate(
                 [jnp.atleast_1d(self._derivatives["grad"][arg](x)) for arg in self.args]
             )
-            self._jac = lambda x: jnp.hstack(
-                [self._derivatives["jac"][arg](x) for arg in self.args]
+            self._jac_scaled = lambda x: jnp.hstack(
+                [self._derivatives["jac_scaled"][arg](x) for arg in self.args]
+            )
+            self._jac_unscaled = lambda x: jnp.hstack(
+                [self._derivatives["jac_unscaled"][arg](x) for arg in self.args]
             )
             self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
@@ -117,7 +133,8 @@ class ObjectiveFunction(IOAble):
         if self._deriv_mode == "batched":
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
-            self._jac = Derivative(self.compute, mode="fwd")
+            self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
+            self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
 
     def jit(self):
         """Apply JIT to compute methods, or re-apply after updating self."""
@@ -130,24 +147,33 @@ class ObjectiveFunction(IOAble):
 
         # doing str name type checking to avoid importing weird jax private stuff
         # for proper isinstance check
-        if "CompiledFunction" in str(type(self.compute)):
-            del self.compute
-        self.compute = jit(self.compute)
+        if "CompiledFunction" in str(type(self.compute_scaled)):
+            del self.compute_scaled
+        self.compute_scaled = jit(self.compute_scaled)
+        if "CompiledFunction" in str(type(self.compute_unscaled)):
+            del self.compute_unscaled
+        self.compute_unscaled = jit(self.compute_unscaled)
         if "CompiledFunction" in str(type(self.compute_scalar)):
             del self.compute_scalar
         self.compute_scalar = jit(self.compute_scalar)
-        if "CompiledFunction" in str(type(self.jac)):
-            del self.jac
-        self.jac = jit(self.jac)
+        if "CompiledFunction" in str(type(self.jac_scaled)):
+            del self.jac_scaled
+        self.jac_scaled = jit(self.jac_scaled)
+        if "CompiledFunction" in str(type(self.jac_unscaled)):
+            del self.jac_unscaled
+        self.jac_unscaled = jit(self.jac_unscaled)
         if "CompiledFunction" in str(type(self.hess)):
             del self.hess
         self.hess = jit(self.hess)
         if "CompiledFunction" in str(type(self.grad)):
             del self.grad
         self.grad = jit(self.grad)
-        if "CompiledFunction" in str(type(self.jvp)):
-            del self.jvp
-        self.jvp = jit(self.jvp)
+        if "CompiledFunction" in str(type(self.jvp_scaled)):
+            del self.jvp_scaled
+        self.jvp_scaled = jit(self.jvp_scaled)
+        if "CompiledFunction" in str(type(self.jvp_unscaled)):
+            del self.jvp_unscaled
+        self.jvp_unscaled = jit(self.jvp_unscaled)
 
     def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
@@ -189,8 +215,31 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Objective build")
 
-    def compute(self, x):
-        """Compute the objective function.
+    def compute_unscaled(self, x):
+        """Compute the unscaled form of the objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        kwargs = self.unpack_state(x)
+        f = jnp.concatenate(
+            [
+                obj.compute_unscaled(*self._kwargs_to_args(kwargs, obj.args))
+                for obj in self.objectives
+            ]
+        )
+        return f
+
+    def compute_scaled(self, x):
+        """Compute the objective function and apply weighting and bounds.
 
         Parameters
         ----------
@@ -226,7 +275,7 @@ class ObjectiveFunction(IOAble):
             Objective function scalar value.
 
         """
-        f = jnp.sum(self.compute(x) ** 2) / 2
+        f = jnp.sum(self.compute_scaled(x) ** 2) / 2
         return f
 
     def print_value(self, x):
@@ -241,7 +290,7 @@ class ObjectiveFunction(IOAble):
         if self.compiled and self._compile_mode in {"scalar", "all"}:
             f = self.compute_scalar(x)
         else:
-            f = jnp.sum(self.compute(x) ** 2) / 2
+            f = jnp.sum(self.compute_scaled(x) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
         for obj in self.objectives:
@@ -293,12 +342,18 @@ class ObjectiveFunction(IOAble):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
         return jnp.atleast_2d(self._hess(x).squeeze())
 
-    def jac(self, x):
+    def jac_scaled(self, x):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        return jnp.atleast_2d(self._jac(x).squeeze())
+        return jnp.atleast_2d(self._jac_scaled(x).squeeze())
 
-    def jvp(self, v, x):
+    def jac_unscaled(self, x):
+        """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
+        return jnp.atleast_2d(self._jac_unscaled(x).squeeze())
+
+    def jvp_scaled(self, v, x):
         """Compute Jacobian-vector product of the objective function.
+
+        Uses the scaled form of the objective.
 
         Parameters
         ----------
@@ -312,11 +367,40 @@ class ObjectiveFunction(IOAble):
         if not isinstance(v, tuple):
             v = (v,)
         if len(v) == 1:
-            return Derivative.compute_jvp(self.compute, 0, v[0], x)
+            return Derivative.compute_jvp(self.compute_scaled, 0, v[0], x)
         elif len(v) == 2:
-            return Derivative.compute_jvp2(self.compute, 0, 0, v[0], v[1], x)
+            return Derivative.compute_jvp2(self.compute_scaled, 0, 0, v[0], v[1], x)
         elif len(v) == 3:
-            return Derivative.compute_jvp3(self.compute, 0, 0, 0, v[0], v[1], v[2], x)
+            return Derivative.compute_jvp3(
+                self.compute_scaled, 0, 0, 0, v[0], v[1], v[2], x
+            )
+        else:
+            raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
+
+    def jvp_unscaled(self, v, x):
+        """Compute Jacobian-vector product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : tuple of ndarray
+            Vectors to right-multiply the Jacobian by.
+            The number of vectors given determines the order of derivative taken.
+        x : ndarray
+            Optimization variables.
+
+        """
+        if not isinstance(v, tuple):
+            v = (v,)
+        if len(v) == 1:
+            return Derivative.compute_jvp(self.compute_unscaled, 0, v[0], x)
+        elif len(v) == 2:
+            return Derivative.compute_jvp2(self.compute_unscaled, 0, 0, v[0], v[1], x)
+        elif len(v) == 3:
+            return Derivative.compute_jvp3(
+                self.compute_unscaled, 0, 0, 0, v[0], v[1], v[2], x
+            )
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
@@ -370,12 +454,12 @@ class ObjectiveFunction(IOAble):
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute(x).block_until_ready()
+            _ = self.compute_scaled(x).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            _ = self.jac(x).block_until_ready()
+            _ = self.jac_scaled(x).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -520,11 +604,21 @@ class _Objective(IOAble, ABC):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
-        self._derivatives = {"jac": {}, "grad": {}, "hess": {}}
+        self._derivatives = {
+            "jac_scaled": {},
+            "jac_unscaled": {},
+            "grad": {},
+            "hess": {},
+        }
 
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
-                self._derivatives["jac"][arg] = Derivative(
+                self._derivatives["jac_unscaled"][arg] = Derivative(
+                    self.compute_unscaled,
+                    argnum=self.args.index(arg),
+                    mode="fwd",
+                )
+                self._derivatives["jac_scaled"][arg] = Derivative(
                     self.compute_scaled,
                     argnum=self.args.index(arg),
                     mode="fwd",
@@ -540,7 +634,14 @@ class _Objective(IOAble, ABC):
                     mode="hess",
                 )
             else:  # these derivatives are always zero
-                self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["jac_unscaled"][
+                    arg
+                ] = lambda *args, **kwargs: jnp.zeros(
+                    (self.dim_f, self.dimensions[arg])
+                )
+                self._derivatives["jac_scaled"][
+                    arg
+                ] = lambda *args, **kwargs: jnp.zeros(
                     (self.dim_f, self.dimensions[arg])
                 )
                 self._derivatives["grad"][arg] = lambda *args, **kwargs: jnp.zeros(
@@ -557,6 +658,9 @@ class _Objective(IOAble, ABC):
         if "CompiledFunction" in str(type(self.compute_scaled)):
             del self.compute_scaled
         self.compute_scaled = jit(self.compute_scaled)
+        if "CompiledFunction" in str(type(self.compute_unscaled)):
+            del self.compute_unscaled
+        self.compute_unscaled = jit(self.compute_unscaled)
         if "CompiledFunction" in str(type(self.compute_scalar)):
             del self.compute_scalar
         self.compute_scalar = jit(self.compute_scalar)
@@ -573,7 +677,7 @@ class _Objective(IOAble, ABC):
             for bound in self.bounds:
                 if not is_broadcastable((self.dim_f,), bound.shape):
                     raise ValueError("len(bounds) != dim_f")
-            if np.any(self.bounds[1] - self.bounds[0] < 0):
+            if np.any(self.bounds[1] < self.bounds[0]):
                 raise ValueError("bounds must be: (lower bound, upper bound)")
         else:  # target only gets used if bounds is None
             self._target = np.asarray(self._target)
@@ -613,6 +717,10 @@ class _Objective(IOAble, ABC):
     def compute(self, *args, **kwargs):
         """Compute the objective function."""
 
+    def compute_unscaled(self, *args, **kwargs):
+        """Compute the unscaled version of the objective."""
+        return self.compute(*args, **kwargs)
+
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
@@ -651,7 +759,7 @@ class _Objective(IOAble, ABC):
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
-        f = self.compute(*args, **kwargs)
+        f = self.compute_unscaled(*args, **kwargs)
         print(self._print_value_fmt.format(jnp.linalg.norm(f)) + self._units)
         if self._normalize:
             print(

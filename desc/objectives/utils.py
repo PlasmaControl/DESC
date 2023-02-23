@@ -185,7 +185,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             unfixed_args.append(arg)
-            A_ = obj.derivatives["jac"][arg](jnp.zeros(dimensions[arg]))
+            A_ = obj.derivatives["jac_scaled"][arg](jnp.zeros(dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
             b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
             if A_.shape[0]:

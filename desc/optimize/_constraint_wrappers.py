@@ -159,8 +159,8 @@ class LinearConstraintProjection(ObjectiveFunction):
             x = self.recover(x)
         return self._objective.unpack_state(x)
 
-    def compute(self, x_reduced):
-        """Compute the objective function.
+    def compute_unscaled(self, x_reduced):
+        """Compute the unscaled form of the objective function.
 
         Parameters
         ----------
@@ -174,7 +174,25 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute(x)
+        f = self._objective.compute_unscaled(x)
+        return f
+
+    def compute_scaled(self, x_reduced):
+        """Compute the objective function and apply weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute_scaled(x)
         return f
 
     def compute_scalar(self, x_reduced):
@@ -228,8 +246,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.hess(x)
         return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
 
-    def jac(self, x_reduced):
-        """Compute Jacobian of the vector objective function.
+    def jac_unscaled(self, x_reduced):
+        """Compute Jacobian of the vector objective function without weighting / bounds.
 
         Parameters
         ----------
@@ -242,7 +260,24 @@ class LinearConstraintProjection(ObjectiveFunction):
             Jacobian matrix.
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac(x)
+        df = self._objective.jac_unscaled(x)
+        return df[:, self._unfixed_idx] @ self._Z
+
+    def jac_scaled(self, x_reduced):
+        """Compute Jacobian of the vector objective function with weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.jac_scaled(x)
         return df[:, self._unfixed_idx] @ self._Z
 
 
@@ -528,7 +563,7 @@ class ProximalProjection(ObjectiveFunction):
                 con.update_target(self._eq)
         return xopt, xeq
 
-    def compute(self, x):
+    def compute_scaled(self, x):
         """Compute the objective function.
 
         Parameters
@@ -543,7 +578,24 @@ class ProximalProjection(ObjectiveFunction):
 
         """
         xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute(xopt)
+        return self._objective.compute_scaled(xopt)
+
+    def compute_unscaled(self, x):
+        """Compute the objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_unscaled(xopt)
 
     def grad(self, x):
         """Compute gradient of the sum of squares of residuals.
@@ -559,11 +611,26 @@ class ProximalProjection(ObjectiveFunction):
             gradient vector.
         """
         f = jnp.atleast_1d(self.compute(x))
-        J = self.jac(x)
+        J = self.jac_scaled(x)
         return f.T @ J
 
-    def jac(self, x):
-        """Compute Jacobian of the vector objective function.
+    def jac_unscaled(self, x):
+        """Compute Jacobian of the vector objective function without weights / bounds.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
+
+    def jac_scaled(self, x):
+        """Compute Jacobian of the vector objective function with weights / bounds.
 
         Parameters
         ----------
@@ -578,8 +645,8 @@ class ProximalProjection(ObjectiveFunction):
         xg, xf = self._update_equilibrium(x, store=True)
 
         # Jacobian matrices wrt combined state vectors
-        Fx = self._constraint.jac(xf)
-        Gx = self._objective.jac(xg)
+        Fx = self._constraint.jac_scaled(xf)
+        Gx = self._objective.jac_scaled(xg)
         Fx = align_jacobian(Fx, self._constraint, self._objective)
         Gx = align_jacobian(Gx, self._objective, self._constraint)
 
@@ -624,5 +691,5 @@ class ProximalProjection(ObjectiveFunction):
         H : ndarray
             Hessian matrix.
         """
-        J = self.jac(x)
+        J = self.jac_scaled(x)
         return J.T @ J

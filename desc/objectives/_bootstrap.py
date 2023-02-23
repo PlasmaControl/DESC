@@ -249,6 +249,6 @@ class BootstrapRedlConsistency(_Objective):
             and (int(helicity[1]) == helicity[1])
         )
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
-        if self._helicity != helicity:
+        if hasattr(self, "_helicity") and self._helicity != helicity:
             self._built = False
         self._helicity = helicity

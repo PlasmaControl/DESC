@@ -117,7 +117,9 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(  # noqa: C901 - fxn too complex
+    constraints, objective_args
+):
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -272,3 +274,8 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def jax_softmin(arr, alpha):
+    """JAX softmin implementation with alpha=1."""
+    return jnp.sum(arr * jnp.exp(-alpha * arr)) / jnp.sum(jnp.exp(-alpha * arr))

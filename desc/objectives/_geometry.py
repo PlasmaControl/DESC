@@ -13,6 +13,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+from .utils import jax_softmin
 
 
 class AspectRatio(_Objective):
@@ -432,11 +433,13 @@ class PlasmaVesselDistance(_Objective):
         normalize_target=True,
         surface_grid=None,
         plasma_grid=None,
+        alpha=2,
         name="plasma vessel distance",
     ):
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
+        self._alpha = alpha
         super().__init__(
             eq=eq,
             target=target,
@@ -523,7 +526,9 @@ class PlasmaVesselDistance(_Objective):
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
-        return d.min(axis=0)
+
+        return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+        # maybe this try later return -jnp.sum(jax.nn.softmax(-d,axis=0)*d,axis=0)
 
 
 class MeanCurvature(_Objective):

@@ -529,6 +529,7 @@ class FourierRZToroidalSurface(Surface):
         axis_Z,
         NFP=1,
         sym=True,
+        positive_iota=True,
     ):
         """Create a surface from a near-axis model for quasi-poloidal/quasi-isodynamic.
 
@@ -550,6 +551,8 @@ class FourierRZToroidalSurface(Surface):
             Number of field periods.
         sym : bool (optional)
             Whether to enforce stellarator symmetry.
+        positive_iota : bool (optional)
+            Whether the rotational transform should be positive or negative.
 
         Returns
         -------
@@ -565,20 +568,20 @@ class FourierRZToroidalSurface(Surface):
         R_lmn = np.array(
             [
                 major_radius,
-                -(elongation + 1) * b / 2,
+                -(elongation + 1) * b / 2 * positive_iota,
                 -major_radius / (1 + 4 * NFP**2),
-                a * epsilon,
-                -(elongation - 1) * b / 2,
+                a * epsilon * positive_iota,
+                -(elongation - 1) * b / 2 * positive_iota,
                 -(elongation - 1) * b / 2,
             ]
         )
         Z_lmn = np.array(
             [
-                (elongation + 1) * b / 2,
+                (elongation + 1) * b / 2 * positive_iota,
                 axis_Z,
-                -b * epsilon,
+                -b * epsilon * positive_iota,
                 (elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                -(elongation - 1) * b / 2 * positive_iota,
             ]
         )
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])

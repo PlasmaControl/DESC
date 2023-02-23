@@ -198,6 +198,8 @@ class QuasisymmetryBoozer(_Objective):
             and (int(helicity[0]) == helicity[0])
             and (int(helicity[1]) == helicity[1])
         )
+        if self._helicity != helicity:
+            self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
             units = "(T)"
@@ -363,6 +365,8 @@ class QuasisymmetryTwoTerm(_Objective):
             and (int(helicity[0]) == helicity[0])
             and (int(helicity[1]) == helicity[1])
         )
+        if self._helicity != helicity:
+            self._built = False
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
             units = "(T^3)"

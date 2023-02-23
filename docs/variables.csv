@@ -115,6 +115,9 @@ Name,Label,Units,Description,Module
 ``J_phi``,:math:`J_{\phi}`,Amperes / square meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
 ``J_Z``,:math:`J_{Z}`,Amperes / square meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
 ``|J|``,:math:`|\mathbf{J}|`,Amperes / square meter,Magnitue of plasma current density,``desc.compute._equil``
+``J_rho``,:math:`J_{\rho}`,Amperes / meter,Covariant radial component of plasma current density,``desc.compute._equil``
+``J_theta``,:math:`J_{\theta}`,Amperes / meter,Covariant poloidal component of plasma current density,``desc.compute._equil``
+``J_zeta``,:math:`J_{\zeta}`,Amperes / meter,Covariant toroidal component of plasma current density,``desc.compute._equil``
 ``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current (note units are not Amperes),``desc.compute._equil``
 ``J_parallel``,:math:`\mathbf{J} \cdot \hat{\mathbf{b}}`,Amperes / square meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
 ``F_rho``,:math:`F_{\rho}`,Newtons / square meter,Covariant radial component of force balance error,``desc.compute._equil``

@@ -558,8 +558,8 @@ class FourierRZToroidalSurface(Surface):
 
         """
         assert mirror_ratio <= 1
-        a = np.sqrt(elongation) / aspect_ratio  # major axis
-        b = 1 / (aspect_ratio * np.sqrt(elongation))  # minor axis
+        a = major_radius * np.sqrt(elongation) / aspect_ratio  # major axis
+        b = major_radius / (aspect_ratio * np.sqrt(elongation))  # minor axis
         epsilon = (1 - np.sqrt(1 - mirror_ratio**2)) / mirror_ratio
 
         R_lmn = np.array(

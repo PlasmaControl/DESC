@@ -35,6 +35,8 @@ Name,Label,Units,Description,Module
 ``b``,:math:`\hat{b}`,None,Unit vector along magnetic field,``desc.compute._basis_vectors``
 ``n``,:math:`\hat{n}`,None,Unit vector normal to flux surface,``desc.compute._basis_vectors``
 ``grad(alpha)``,:math:`\nabla \alpha`,Inverse meters,Unit vector normal to flux surface,``desc.compute._basis_vectors``
+``trapped fraction``,:math:`1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax} \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}`,None,Neoclassical effective trapped particle fraction,``desc.compute._bootstrap``
+``<J*B> Redl``,:math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle_{Redl}`,Tesla Ampere / meter^2,"Bootstrap current profile, Redl model for quasisymmetry",``desc.compute._bootstrap``
 ``0``,:math:`0`,None,Zeros,``desc.compute._core``
 ``rho``,:math:`\rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux",``desc.compute._core``
 ``theta``,:math:`\theta`,radians,"Poloidal angular coordinate (geometric, not magnetic)",``desc.compute._core``
@@ -115,7 +117,8 @@ Name,Label,Units,Description,Module
 ``J_phi``,:math:`J_{\phi}`,Amperes / square meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
 ``J_Z``,:math:`J_{Z}`,Amperes / square meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
 ``|J|``,:math:`|\mathbf{J}|`,Amperes / square meter,Magnitue of plasma current density,``desc.compute._equil``
-``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,Bootstrap current (note units are not Amperes),``desc.compute._equil``
+``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,"Current density parallel to magnetic field, times field strength (note units are not Amperes)",``desc.compute._equil``
+``<J*B>``,:math:`\langle \mathbf{J} \cdot \mathbf{B} \rangle`,Newtons / cubic meter,Flux surface average of current density dotted into magnetic field,``desc.compute._equil``
 ``J_parallel``,:math:`\mathbf{J} \cdot \hat{\mathbf{b}}`,Amperes / square meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
 ``F_rho``,:math:`F_{\rho}`,Newtons / square meter,Covariant radial component of force balance error,``desc.compute._equil``
 ``F_theta``,:math:`F_{\theta}`,Newtons / square meter,Covariant poloidal component of force balance error,``desc.compute._equil``
@@ -217,8 +220,10 @@ Name,Label,Units,Description,Module
 ``|B|_rz``,:math:`\partial_{\rho\zeta} |\mathbf{B}|`,Tesla,"Magnitude of magnetic field, derivative wrt radial coordinate and toroidal angle",``desc.compute._field``
 ``grad(|B|)``,:math:`\nabla |\mathbf{B}|`,Tesla / meters,Gradient of magnetic field magnitude,``desc.compute._field``
 ``<|B|>_vol``,:math:`\langle |B| \rangle_{vol}`,Tesla,Volume average magnetic field,``desc.compute._field``
+``<|B|>_rms``,:math:`\langle |B| \rangle_{rms}`,Tesla,"Volume average magnetic field, root mean square",``desc.compute._field``
 ``<|B|>``,:math:`\langle |B| \rangle`,Tesla,Flux surface average magnetic field,``desc.compute._field``
 ``<B^2>``,:math:`\langle B^2 \rangle`,Tesla squared,Flux surface average magnetic field squared,``desc.compute._field``
+``<1/|B|>``,:math:`\langle 1/B \rangle`,1 / Tesla,Flux surface averaged inverse field strength,``desc.compute._field``
 ``<B^2>_r``,:math:`\partial_{\rho} \langle B^2 \rangle`,Tesla squared,"Flux surface average magnetic field squared, radial derivative",``desc.compute._field``
 ``grad(|B|^2)_rho``,:math:`(\nabla B^{2})_{\rho}`,Tesla squared,Covariant radial component of magnetic pressure gradient,``desc.compute._field``
 ``grad(|B|^2)_theta``,:math:`(\nabla B^{2})_{\theta}`,Tesla squared,Covariant poloidal component of magnetic pressure gradient,``desc.compute._field``
@@ -237,6 +242,9 @@ Name,Label,Units,Description,Module
 ``B*grad(|B|)``,:math:`\mathbf{B} \cdot \nabla B`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_t``,:math:`\partial_{\theta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_z``,:math:`\partial_{\zeta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
+``max_tz |B|``,:math:`\max_{\theta \zeta} |B|`,Tesla,Maximum field strength on each flux surface,``desc.compute._field``
+``min_tz |B|``,:math:`\min_{\theta \zeta} |B|`,Tesla,Minimum field strength on each flux surface,``desc.compute._field``
+``effective r/R0``,:math:`(r / R_0)_{effective}`,None,"Effective local inverse aspect ratio, based on max and min |B|",``desc.compute._field``
 ``kappa``,:math:`\kappa`,Inverse meters,Curvature vector of magnetic field lines,``desc.compute._field``
 ``kappa_n``,:math:`\kappa_n`,Inverse meters,Normal curvature vector of magnetic field lines,``desc.compute._field``
 ``kappa_g``,:math:`\kappa_g`,Inverse meters,Geodesic curvature vector of magnetic field lines,``desc.compute._field``

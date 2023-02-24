@@ -28,6 +28,7 @@ data : dict of ndarray
 
 from . import (
     _basis_vectors,
+    _bootstrap,
     _core,
     _equil,
     _field,

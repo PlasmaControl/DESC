@@ -6,14 +6,14 @@ from inspect import getfullargspec
 
 import numpy as np
 
-from desc import set_console_logging
+from desc import LogStyleAdapter, set_console_logging
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
@@ -184,7 +184,7 @@ class ObjectiveFunction(IOAble):
         self._dim_f = 0
         for objective in self.objectives:
             if objective.name:
-                logger.info("Building objective: ", objective.name)
+                logger.info("Building objective: {}", objective.name)
             else:
                 logger.info("Building objective")
             objective.build(eq, use_jit=self.use_jit, verbose=verbose)
@@ -492,7 +492,7 @@ class _Objective(IOAble, ABC):
         weight=1,
         normalize=True,
         normalize_target=True,
-        name=None,
+        name="Objective",
     ):
 
         assert np.all(np.asarray(weight) > 0)

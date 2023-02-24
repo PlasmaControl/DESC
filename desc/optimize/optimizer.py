@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc import set_console_logging
+from desc import LogStyleAdapter, set_console_logging
 from desc.backend import jnp
 from desc.io import IOAble
 from desc.objectives import (
@@ -27,7 +27,7 @@ from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .stochastic import sgd
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 class Optimizer(IOAble):

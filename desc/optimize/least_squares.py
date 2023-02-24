@@ -7,6 +7,7 @@ import numpy as np
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
+from desc import LogStyleAdapter
 from desc.backend import jnp
 
 from .tr_subproblems import (
@@ -23,7 +24,7 @@ from .utils import (
     print_iteration_nonlinear,
 )
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 def lsqtr(  # noqa: C901 - FIXME: simplify this

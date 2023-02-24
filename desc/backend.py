@@ -8,10 +8,11 @@ import numpy as np
 from termcolor import colored
 
 import desc
+from desc import LogStyleAdapter
 from desc import config as desc_config
 from desc import set_device
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 if os.environ.get("DESC_BACKEND") == "numpy":
     jnp = np

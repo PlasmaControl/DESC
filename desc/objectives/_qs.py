@@ -4,6 +4,7 @@ import logging
 
 import numpy as np
 
+from desc import LogStyleAdapter
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
@@ -14,7 +15,7 @@ from desc.vmec_utils import ptolemy_linear_transform
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 class QuasisymmetryBoozer(_Objective):

@@ -6,12 +6,13 @@ import logging
 import numpy as np
 from termcolor import colored
 
+from desc import LogStyleAdapter
 from desc.backend import jnp, put
 from desc.grid import ConcentricGrid
 
 from .data_index import data_index
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 # defines the order in which objective arguments get concatenated into the state vector
 arg_order = (

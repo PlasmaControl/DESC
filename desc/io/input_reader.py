@@ -13,13 +13,14 @@ import numpy as np
 from termcolor import colored
 
 from desc import (
+    LogStyleAdapter,
     set_console_logging,
     set_device,
     set_logfile_logging,
     stop_logfile_logging,
 )
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 class InputReader:
@@ -137,11 +138,15 @@ class InputReader:
                         if isinstance(handler, logging.StreamHandler):
                             if handler.level < 10:
                                 args.verbose = 0
+                            else:
+                                args.verbose = 1
                         else:
-                            args.verbose = 0
+                            args.verbose = 1
+                else:
+                    args.verbose = 1
 
         if args.verbose == 0:
-            set_console_logging(1, "stdout")
+            set_console_logging("1", "stdout")
         elif args.verbose == 1:
             set_console_logging("INFO", "stdout")
         elif args.verbose == 2:
@@ -219,9 +224,14 @@ class InputReader:
         pres_flag = False
         curr_flag = False
         inputs["output_path"] = self.output_path
-        inputs["verbose"] = self.args.verbose
-        inputs["disable_logging"] = self.args.disable_logging
-
+        if self.args is not None:
+            inputs["verbose"] = self.args.verbose
+        else:
+            inputs["verbose"] = 1
+        if self.args is not None:
+            inputs["disable_logging"] = self.args.disable_logging
+        else:
+            inputs["disable_logging"] = False
         # open files, unless they are already open files
         if not isinstance(fname, io.IOBase):
             file = open(fname)
@@ -1493,6 +1503,7 @@ def get_parser():
         "-v",
         "--verbose",
         action="count",
+        default=None,
         help="Display detailed progress information to stdout. Twice to include"
         + " iteration and timing information.",
     )

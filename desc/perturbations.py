@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc import set_console_logging
+from desc import LogStyleAdapter, set_console_logging
 from desc.backend import put, use_jax
 from desc.compute import arg_order, profile_names
 from desc.objectives import get_fixed_boundary_constraints
@@ -17,7 +17,7 @@ from desc.utils import Timer
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 def get_deltas(things1, things2):

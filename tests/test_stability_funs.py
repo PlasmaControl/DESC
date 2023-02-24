@@ -9,6 +9,7 @@ from netCDF4 import Dataset
 
 import desc.examples
 import desc.io
+from desc import LogStyleAdapter
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -223,13 +224,14 @@ def test_mercier_print(TmpDir):
     # Create temporary logfile to capture outputs
     logfile_path = str(TmpDir.join("/DESC_test_mercier_print.log"))
     log_connection = open(logfile_path, "x")
-    testlogger = logging.getLogger()
     logfile_formatter = logging.Formatter("%(message)s")
-    testlogger.setLevel(logging.DEBUG)
-    logfile_handler = logging.StreamHandler(log_connection)
-    logfile_handler.setLevel("INFO")
-    logfile_handler.setFormatter(logfile_formatter)
-    testlogger.addHandler(logfile_handler)
+    logger = logging.getLogger("DESC_logger")
+    logger.setLevel(logging.DEBUG)
+    test_logfile_handler = logging.StreamHandler(log_connection)
+    test_logfile_handler.setLevel("DEBUG")
+    test_logfile_handler.setFormatter(logfile_formatter)
+    logger.addHandler(test_logfile_handler)
+    logger = LogStyleAdapter(logger)
 
     # Test magnetic well stability print functions
     eq = Equilibrium()
@@ -280,13 +282,14 @@ def test_magwell_print(TmpDir):
     # Create temporary logfile to capture outputs
     logfile_path = str(TmpDir.join("/DESC_test_magwell_print.log"))
     log_connection = open(logfile_path, "x")
-    testlogger = logging.getLogger()
     logfile_formatter = logging.Formatter("%(message)s")
-    testlogger.setLevel(logging.DEBUG)
-    logfile_handler = logging.StreamHandler(log_connection)
-    logfile_handler.setLevel("INFO")
-    logfile_handler.setFormatter(logfile_formatter)
-    testlogger.addHandler(logfile_handler)
+    logger = logging.getLogger("DESC_logger")
+    logger.setLevel(logging.DEBUG)
+    test_logfile_handler = logging.StreamHandler(log_connection)
+    test_logfile_handler.setLevel("DEBUG")
+    test_logfile_handler.setFormatter(logfile_formatter)
+    logger.addHandler(test_logfile_handler)
+    logger = LogStyleAdapter(logger)
 
     # Test magnetic well stability print functions
     eq = Equilibrium()

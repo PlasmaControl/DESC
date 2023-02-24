@@ -10,7 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc import set_console_logging
+from desc import LogStyleAdapter, set_console_logging
 from desc.basis import FourierZernikeBasis
 from desc.geometry import FourierRZCurve
 from desc.grid import LinearGrid
@@ -28,7 +28,7 @@ from desc.utils import Timer
 
 from .configuration import _Configuration
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 class Equilibrium(_Configuration, IOAble):
@@ -847,10 +847,6 @@ class Equilibrium(_Configuration, IOAble):
             equation. Including this term can improve force balance if the perturbation
             step is large, but can result in too large a step if the perturbation
             is small.
-        verbose : integer, optional
-            * 0  : work silently.
-            * 1  : display a termination report
-            * 2  : display progress and timing info during iterations
         weight : ndarray, "auto", or None, optional
             1d or 2d array for weighted least squares. 1d arrays are turned into
             diagonal matrices. Default is to weight by (mode number)**2. None applies

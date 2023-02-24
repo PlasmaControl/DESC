@@ -6,6 +6,7 @@ import numpy as np
 import scipy.optimize
 from scipy.optimize import OptimizeResult
 
+from desc import LogStyleAdapter
 from desc.backend import jnp
 
 from .utils import (
@@ -17,7 +18,7 @@ from .utils import (
     print_iteration_nonlinear,
 )
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 def _optimize_scipy_minimize(
@@ -193,7 +194,7 @@ def _optimize_scipy_minimize(
             allx=allx,
         )
     if result["success"]:
-        logger.info(result["message"])
+        logger.info(str(result["message"]))
     else:
         logger.info("Warning: " + result["message"])
         logger.info("         Current function value: {:.3e}".format(result["fun"]))
@@ -366,9 +367,9 @@ def _optimize_scipy_least_squares(fun, jac, x0, method, x_scale, stoptol, option
         )
 
     if result["success"]:
-        logger.info(result["message"])
+        logger.info(str(result["message"]))
     else:
-        logger.info("Warning: " + result["message"])
+        logger.info("Warning: " + str(result["message"]))
         logger.info("         Current function value: {:.3e}".format(result["cost"]))
         logger.info(
             "         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"]))

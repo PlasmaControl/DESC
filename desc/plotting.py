@@ -14,6 +14,7 @@ from scipy.integrate import solve_ivp
 from scipy.interpolate import Rbf
 from termcolor import colored
 
+from desc import LogStyleAdapter
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
@@ -40,7 +41,7 @@ __all__ = [
     "plot_surfaces",
 ]
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 colorblind_colors = [
     (0.0000, 0.4500, 0.7000),  # blue

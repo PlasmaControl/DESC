@@ -4,9 +4,10 @@ import logging
 
 import numpy as np
 
+from desc import LogStyleAdapter
 from desc.backend import cond, jit, jnp
 
-logger = logging.getLogger("DESC_logger")
+logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
 
 @jit

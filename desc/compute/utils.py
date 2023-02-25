@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, put
+from desc.backend import fori_loop, jnp, put
 from desc.grid import ConcentricGrid
 
 from .data_index import data_index
@@ -438,6 +438,8 @@ def _get_grid_surface(grid, surface_label):
         The column in the grid corresponding to this surface_label's nodes.
     unique_idx : ndarray
         The indices of the unique values of the surface_label in grid.nodes.
+    inverse_idx : ndarray
+        Indexing array to go from unique values to full grid.
     ds : ndarray
         The differential elements (dtheta * dzeta for rho surface).
     max_surface_val : float
@@ -451,16 +453,19 @@ def _get_grid_surface(grid, surface_label):
     if surface_label == "rho":
         nodes = grid.nodes[:, 0]
         unique_idx = grid.unique_rho_idx
+        inverse_idx = grid.inverse_rho_idx
         ds = grid.spacing[:, 1:].prod(axis=1)
         max_surface_val = 1
     elif surface_label == "theta":
         nodes = grid.nodes[:, 1]
         unique_idx = grid.unique_theta_idx
+        inverse_idx = grid.inverse_theta_idx
         ds = grid.spacing[:, [0, 2]].prod(axis=1)
         max_surface_val = 2 * jnp.pi
     else:
         nodes = grid.nodes[:, 2]
         unique_idx = grid.unique_zeta_idx
+        inverse_idx = grid.inverse_zeta_idx
         ds = grid.spacing[:, :2].prod(axis=1)
         max_surface_val = 2 * jnp.pi / grid.NFP
 
@@ -470,7 +475,7 @@ def _get_grid_surface(grid, surface_label):
         and nodes[unique_idx[0]] == 0
         and nodes[unique_idx[-1]] == max_surface_val
     )
-    return nodes, unique_idx, ds, max_surface_val, has_endpoint_dupe
+    return nodes, unique_idx, inverse_idx, ds, max_surface_val, has_endpoint_dupe
 
 
 def compress(grid, x, surface_label="rho"):
@@ -572,7 +577,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
         )
 
     q = jnp.atleast_1d(q)
-    nodes, unique_idx, ds, max_surface_val, has_endpoint_dupe = _get_grid_surface(
+    nodes, unique_idx, _, ds, max_surface_val, has_endpoint_dupe = _get_grid_surface(
         grid, surface_label
     )
 
@@ -667,3 +672,63 @@ def surface_averages(
 
     averages = surface_integrals(grid, sqrt_g * q, surface_label) / denominator
     return averages
+
+
+def surface_max(grid, x, surface_label="rho"):
+    """Get the max of x for each surface in the grid.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    x : ndarray
+        Quantity to find max.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute max over.
+
+    Returns
+    -------
+    maxs : ndarray
+        Maximum of x over each surface in grid.
+
+    """
+    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
+    inverse_idx = jnp.asarray(inverse_idx)
+    x = jnp.asarray(x)
+    maxs = -jnp.inf * jnp.ones(unique_idx.size)
+
+    def body(i, maxs):
+        maxs = put(maxs, inverse_idx[i], jnp.maximum(x[i], maxs[inverse_idx[i]]))
+        return maxs
+
+    return fori_loop(0, len(inverse_idx), body, maxs)
+
+
+def surface_min(grid, x, surface_label="rho"):
+    """Get the min of x for each surface in the grid.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    x : ndarray
+        Quantity to find min.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute min over.
+
+    Returns
+    -------
+    mins : ndarray
+        Minimum of x over each surface in grid.
+
+    """
+    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
+    inverse_idx = jnp.asarray(inverse_idx)
+    x = jnp.asarray(x)
+    mins = jnp.inf * jnp.ones(unique_idx.size)
+
+    def body(i, mins):
+        mins = put(mins, inverse_idx[i], jnp.minimum(x[i], mins[inverse_idx[i]]))
+        return mins
+
+    return fori_loop(0, len(inverse_idx), body, mins)

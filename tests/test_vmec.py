@@ -339,6 +339,12 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         vmec.variables["volume_p"][:], desc.variables["volume_p"][:]
     )
+    np.testing.assert_allclose(
+        vmec.variables["volavgB"][:], desc.variables["volavgB"][:]
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-6
+    )
     # raxis_cc & zaxis_cs excluded b/c VMEC saves initial guess, not final solution
     np.testing.assert_allclose(
         vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
@@ -358,6 +364,11 @@ def test_vmec_save_1(VMEC_save):
         np.abs(vmec.variables["bvco"][20:100]),
         np.abs(desc.variables["bvco"][20:100]),
         rtol=3e-2,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jdotb"][20:100]),
+        np.abs(desc.variables["jdotb"][20:100]),
+        rtol=1e-6,
     )
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2

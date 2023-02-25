@@ -1084,6 +1084,7 @@ class _Configuration(IOAble, ABC):
             names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+
         if params is None:
             params = get_params(names, eq=self)
         if profiles is None:

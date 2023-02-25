@@ -2,13 +2,14 @@
 
 import numpy as np
 import pytest
+from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
 import desc.examples
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 
 # convolve kernel is reverse of FD coeffs
 FD_COEF_1_2 = np.array([-1 / 2, 0, 1 / 2])[::-1]
@@ -1013,6 +1014,40 @@ def test_compute_grad_p_volume_avg():
     eq = Equilibrium()  # default pressure profile is 0 pressure
     pres_grad_vol_avg = eq.compute("<|grad(p)|>_vol")["<|grad(p)|>_vol"]
     np.testing.assert_allclose(pres_grad_vol_avg, 0)
+
+
+@pytest.mark.unit
+def test_compare_quantities_to_vmec():
+    """Compare several computed quantities to vmec."""
+    wout_file = ".//tests//inputs//wout_DSHAPE.nc"
+    desc_file = ".//tests//inputs//DSHAPE_output_saved_without_current.h5"
+
+    fid = netcdf_file(wout_file, mmap=False)
+    ns = fid.variables["ns"][()]
+    J_dot_B_vmec = fid.variables["jdotb"][()]
+    volavgB = fid.variables["volavgB"][()]
+    betatotal = fid.variables["betatotal"][()]
+    fid.close()
+
+    eq = EquilibriaFamily.load(desc_file)[-1]
+
+    # Compare 0D quantities:
+    grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)
+    data = eq.compute("<beta>_vol", grid=grid)
+    data = eq.compute("<|B|>_rms", grid=grid, data=data)
+
+    np.testing.assert_allclose(volavgB, data["<|B|>_rms"], rtol=1e-7)
+    np.testing.assert_allclose(betatotal, data["<beta>_vol"], rtol=1e-5)
+
+    # Compare radial profile quantities:
+    s = np.linspace(0, 1, ns)
+    rho = np.sqrt(s)
+    grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
+    data = eq.compute("<J*B>", grid=grid)
+    J_dot_B_desc = compress(grid, data["<J*B>"])
+
+    # Drop first point since desc gives NaN:
+    np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
 
 
 @pytest.mark.unit

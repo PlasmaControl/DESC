@@ -333,7 +333,8 @@ def _optimize_scipy_least_squares(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 0:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.least_squares(
             fun_wrapped,

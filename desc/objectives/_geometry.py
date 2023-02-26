@@ -654,16 +654,17 @@ class MeanCurvature(_Objective):
 
 
 class PrincipalCurvature(_Objective):
-    """Target a particular value for the (unsigned) principal curvature.
+    """Target a particular value for the (unsigned) maximum principal curvature.
 
     The two principal curvatures at a given point of a surface are the maximum and
     minimum values of the curvature as expressed by the eigenvalues of the shape
     operator at that point. They measure how the surface bends by different amounts in
     different directions at that point.
 
-    This objective targets the maximum absolute value of the two principal curvatures.
-    Principal curvature with large absolute value indicates a tight radius of curvature
-    which may be difficult to obtain with coils or magnets.
+    This objective targets the maximum over a surface of the maximum absolute value of
+    the two principal curvatures. Principal curvature with large absolute value
+    indicates a tight radius of curvature which may be difficult to obtain with coils
+    or magnets.
 
     Parameters
     ----------
@@ -735,7 +736,7 @@ class PrincipalCurvature(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = 1
         self._data_keys = ["curvature_k1", "curvature_k2"]
         self._args = get_params(self._data_keys)
 
@@ -780,4 +781,6 @@ class PrincipalCurvature(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+        return jnp.max(
+            jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+        )

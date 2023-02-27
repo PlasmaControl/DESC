@@ -14,8 +14,9 @@ The following plots are all saved in the `data` sub-folder:
 - `f_B.png` corresponds to Figure 1
 - `f_C.png` corresponds to Figure 2
 - `f_T.png` corresponds to Figure 3
-- `Booz.png` corresponds to Figure 4
-- `errors.png` corresponds to Figure 5
+- `boundaries.png` corresponds to Figure 4
+- `Booz.png` corresponds to Figure 5
+- `errors.png` corresponds to Figure 6
 
 The `data` sub-folder also contains the following data used to generate the plots:
 - `initial_input` is the DESC input file used to generate the initial equilibrium solution.

@@ -15,6 +15,8 @@ from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.transform import Transform
 
+plt.rcParams["font.family"] = "DejaVu Sans"
+plt.rcParams["mathtext.fontset"] = "dejavusans"
 plt.rcParams["font.size"] = 14
 dim = 11
 
@@ -384,5 +386,27 @@ ax.set_ylabel(r"$ZBS(2,1)$")
 ax.set_title(r"$\hat{f}_{T}$")
 fig.tight_layout()
 plt.savefig("data/f_T.png")
+
+fig, ax = plt.subplots(figsize=(7, 7), sharex=True, sharey=True)
+grid = LinearGrid(theta=100, zeta=5, NFP=eq_initial.NFP, endpoint=True)
+for i, eq in enumerate((eq_initial, eq_fT_or2)):
+    coords = eq.compute(["R", "Z"], grid=grid)
+    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    for j in range(grid.num_zeta - 1):
+        (line,) = ax.plot(
+            R[:, -1, j],
+            Z[:, -1, j],
+            color=blue if i == 0 else green,
+            linestyle="-",
+            lw=4,
+        )
+        if j == 0:
+            line.set_label("Initial" if i == 0 else "Optimized")
+ax.legend(loc="upper right")
+ax.set_xlabel(r"$R$ (m)")
+ax.set_ylabel(r"$Z$ (m)")
+fig.tight_layout()
+plt.savefig("data/boundaries.png")
 
 print("figures saved!")

@@ -3324,7 +3324,7 @@ def plot_field_lines_sfl(
     logger.info(
         (
             "Calculating field line (rho,theta,zeta) coordinates corresponding "
-            + "to sfl coordinates",
+            + "to sfl coordinates"
         )
     )
     for vartheta_list in varthetas:

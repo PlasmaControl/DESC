@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 from desc.io import IOAble
 from desc.objectives import (
     CurrentDensity,
@@ -271,6 +271,9 @@ class Optimizer(IOAble):
             hess_wrapped,
             jac_wrapped,
             grad_fd,
+            grad_spsa,
+            grad_spsa_wrapped,
+            grad_spsa_rprop,
             project,
             recover,
         ) = _wrap_objective_with_constraints(objective, linear_constraints, self.method)
@@ -546,6 +549,89 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
             jac[:,i] = df
         return fx.T @ jac
 
+    def grad_spsa(x_reduced,x0):
+        x = recover(x_reduced)
+        fx = objective.compute(x)
+        h = 0.1*np.abs(x0)
+        
+        jac = np.zeros((len(fx),len(x0)))
+        
+        N = 4
+        for j in range(N):
+            djac = np.zeros((len(fx),len(x0)))
+            dx = (np.random.binomial(1,0.5,x0.shape)*2-1)*h
+            df = objective.compute(recover(x_reduced+dx)) - objective.compute(recover(x_reduced-dx))
+            for i in range(len(x0)):
+                Zx = recover(dx)
+                print("norm of Zx is " + str(np.linalg.norm(Zx)))
+                djac[:,i] = df/(2*np.linalg.norm(Zx)*dx[i])
+            jac = jac + djac
+        jac = jac/N
+
+        return fx.T @ jac
+
+    def grad_spsa_rprop(x_reduced,x0):
+        x = recover(x_reduced)
+        fx = objective.compute(x)
+        h = 0.1*np.abs(x0)
+        
+        jac = np.zeros((len(fx),len(x0)))
+        
+        N = 2
+        for j in range(N):
+            djac = np.zeros((len(fx),len(x0)))
+            dx = (np.random.binomial(1,0.5,x0.shape)*2-1)*h
+            df = objective.compute(recover(x_reduced+dx)) - objective.compute(recover(x_reduced-dx))
+            mag = np.power(10,np.floor(np.log10(np.abs(x_reduced))))
+            for i in range(len(x0)):
+                djaci =  np.abs(df)/df * np.abs(dx[i])/dx[i]*mag[i]
+                print("djaci is " + str(djaci))
+                djac[:,i] = djaci
+            jac = jac + djac
+        jac = jac/N
+
+        return fx.T @ jac
+
+
+    def grad_spsa_wrapped(x_reduced,x0_reduced):
+
+
+        x = recover(x_reduced)
+        x0 = recover(x0_reduced)
+        fx = objective.compute(x)
+        jac = np.zeros((len(fx),len(x)))
+#        h = 0.1*np.abs(x0_reduced)
+#        dx_reduced = (np.random.binomial(1,0.5,x0_reduced.shape)*2-1)*h
+
+        print("x is " + str(x))
+        sign_x = (x >= 0).astype(float) * 2 - 1
+        x = put(x,np.where(x==0)[0],1e-6) 
+
+        #        print("dx is " + str(dx))
+#        print("unfixed idx is " + str(unfixed_idx))
+#        h = 0.0001 * sign_x * np.maximum(1.0, np.abs(x))
+#        dx = (np.random.binomial(1,0.5,x0.shape)*2-1)*h
+
+#        h = 0.02*np.abs(x0)
+#        dx = (np.random.binomial(1,0.5,x0.shape)*2-1)*h
+
+#        print("h containts 0s: " + str(np.all(h)))
+        N = 4
+        for j in range(N):
+            djac = np.zeros((len(fx),len(x)))
+#            h = 1e-6 * sign_x * np.maximum(1.0, np.abs(x))
+            h = 0.01*np.power(10,np.floor(np.log10(np.abs(x))))
+            dx = (np.random.binomial(1,0.5,x0.shape)*2-1)*h
+
+            df = objective.compute(x+dx) - objective.compute(x-dx)
+            for i in range(len(x)):
+                djac[:,i] = df/(2*len(dx)*dx[i])
+
+            jac = jac + djac
+        jac = jac/N
+        return (fx.T @ jac)[unfixed_idx] @ Z
+
+
     return (
         compute_wrapped,
         compute_scalar_wrapped,
@@ -553,6 +639,9 @@ def _wrap_objective_with_constraints(objective, linear_constraints, method):
         hess_wrapped,
         jac_wrapped,
         grad_fd,
+        grad_spsa,
+        grad_spsa_wrapped,
+        grad_spsa_rprop,
         project,
         recover,
     )

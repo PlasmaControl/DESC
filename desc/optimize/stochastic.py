@@ -105,17 +105,21 @@ def sgd(
 
     N = x0.size
     x = x0.copy()
+    print("x is " + str(x))
     v = np.zeros_like(x)
     f = fun(x, *args)
+    print("f is " + str(f))
     nfev += 1
     g = grad(x,x0)
+    print("g is " + str(g))
     while np.linalg.norm(g) > 5000:
         print("DECREASING g")
         g = g / 10
         print("g is " + str(g))
 
     ngev += 1
-
+    
+   
     if maxiter is None:
         maxiter = N * 1000
     gnorm_ord = options.pop("gnorm_ord", np.inf)
@@ -137,7 +141,13 @@ def sgd(
 
     if return_all:
         allx = [x]
-
+    v = beta * v + (1 - beta) * g
+    print("v is " + str(v))
+    x = x - alpha * v
+    print("x is " + str(x))
+    fnew = fun(x, *args)
+    print("new f is " + str(fnew))
+    iteration += 1
     while True:
         success, message = check_termination(
             df_norm,
@@ -161,19 +171,21 @@ def sgd(
         if success is not None:
             break
         
-#        print("g is " + str(g))
-        v = beta * v + (1 - beta) * g
-#        print("v is " + str(v))
-        x = x - alpha * v
-#        print("x is " + str(x))
-        fnew = fun(x, *args)
-#        print("new f is " + str(fnew))
         g = grad(x,x0)
         while np.linalg.norm(g) > 5000:
             print("DECREASING g")
             g = g / 10
             print("g is " + str(g))
 
+
+        print("g is " + str(g))
+        v = beta * v + (1 - beta) * g
+        print("v is " + str(v))
+        x = x - alpha * v
+        print("x is " + str(x))
+        fnew = fun(x, *args)
+        print("new f is " + str(fnew))
+        
         ngev += 1
         step_norm = np.linalg.norm(alpha * v, ord=xnorm_ord)
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
@@ -198,9 +210,9 @@ def sgd(
     success = True
     message = STATUS_MESSAGES["success"]
     result = OptimizeResult(
-        x=x,
+        x=xlast,
         success=success,
-        fun=f,
+        fun=flast,
         grad=g,
         optimality=g_norm,
         nfev=nfev,

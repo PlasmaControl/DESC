@@ -6,6 +6,7 @@ from desc.derivatives import nested_zeros_like
 import numpy as np
 import jax
 from desc.vmec import VMECIO
+import dill
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/docs/notebooks/tutorials/qs_initial_guess.h5")
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/DSHAPE_output.h5")[-1]
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/test_equilibria/unconstrained_qs.h5")
@@ -17,11 +18,18 @@ from desc.vmec import VMECIO
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/examples/VMEC/OPT_scans/OPT_z_m0_n-1_-0.00_output.h5")[-1]
 #eq = desc.io.load("/scratch/gpfs/pk2354/DESC/desc/examples/NCSX_output.h5")[-1]
 #eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/intermediate8_3.h5')
-#eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/input.nfp4_QH_output.h5')[-1]
-eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/swap_end4_4.h5')
+eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/input.nfp4_QH_output.h5')[-1]
+#eq = desc.io.load('/scratch/gpfs/pk2354/DESC/test_equilibria/swap_end4_4.h5')
 #eq.change_resolution(M=6,L=6,N=4,M_grid=12,L_grid=12,N_grid=8)
 gxw = GXWrapper(eq=eq)
-gxw.compute(R_lmn=eq.R_lmn,Z_lmn=eq.Z_lmn,L_lmn=eq.L_lmn,i_l=eq.i_l,c_l=eq.c_l,p_l=eq.p_l,Psi=eq.Psi)
+
+filename = "test_dill"
+
+filehandler = open(filename, 'wb')
+dill.dump(gxw, filehandler)
+filehandler.close()
+
+#gxw.compute(R_lmn=eq.R_lmn,Z_lmn=eq.Z_lmn,L_lmn=eq.L_lmn,i_l=eq.i_l,c_l=eq.c_l,p_l=eq.p_l,Psi=eq.Psi)
 #values = (eq.R_lmn,eq.Z_lmn,eq._L_lmn,eq.i_l,eq.p_l,eq.Psi)
 #tangents = nested_zeros_like(values)
 #tangents[0] = tangents[0].at[0].set(1)

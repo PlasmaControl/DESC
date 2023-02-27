@@ -33,7 +33,7 @@ from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
-from utils import area_difference_desc, area_difference_vmec
+from .utils import area_difference_desc, area_difference_vmec
 
 
 @pytest.mark.regression

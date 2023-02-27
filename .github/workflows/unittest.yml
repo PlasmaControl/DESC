@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - dev
+      - logging_overhaul2
   pull_request:
     branches:
       - master

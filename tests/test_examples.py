@@ -6,7 +6,6 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
-import .utils
 
 import desc.examples
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -34,6 +33,8 @@ from desc.plotting import plot_boozer_surface
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import vmec_boundary_subspace
 
+from . utils import area_difference_desc, area_difference_vmec
+
 
 @pytest.mark.regression
 @pytest.mark.solve
@@ -51,7 +52,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
 def test_SOLOVEV_results(SOLOVEV):
     """Tests that the SOLOVEV example gives the same result as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, SOLOVEV["vmec_nc_path"])
 
     np.testing.assert_allclose(rho_err, 0, atol=1e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
@@ -62,7 +63,7 @@ def test_SOLOVEV_results(SOLOVEV):
 def test_DSHAPE_results(DSHAPE):
     """Tests that the DSHAPE examples gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE["desc_h5_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, DSHAPE["vmec_nc_path"])
     np.testing.assert_allclose(rho_err, 0, atol=2e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
@@ -72,7 +73,7 @@ def test_DSHAPE_results(DSHAPE):
 def test_DSHAPE_current_results(DSHAPE_current):
     """Tests that the DSHAPE with fixed current gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_vmec(eq, DSHAPE_current["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, DSHAPE_current["vmec_nc_path"])
     np.testing.assert_allclose(rho_err, 0, atol=3e-3)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
@@ -82,7 +83,7 @@ def test_DSHAPE_current_results(DSHAPE_current):
 def test_HELIOTRON_results(HELIOTRON):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
@@ -92,7 +93,7 @@ def test_HELIOTRON_results(HELIOTRON):
 def test_HELIOTRON_vac_results(HELIOTRON_vac):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_vmec(eq, HELIOTRON_vac["vmec_nc_path"])
+    rho_err, theta_err = area_difference_vmec(eq, HELIOTRON_vac["vmec_nc_path"])
     np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
     curr = eq.get_profile("current")
@@ -105,7 +106,7 @@ def test_precise_QH_results(precise_QH):
     """Tests that the precise QH initial solve gives the same results as a base case."""
     eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_desc(eq1, eq2)
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
     np.testing.assert_allclose(rho_err, 0, atol=1e-4)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
@@ -116,7 +117,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     """Tests that the 2 methods for solving vacuum give the same results."""
     eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
-    rho_err, theta_err = utils.area_difference_desc(eq1, eq2)
+    rho_err, theta_err = area_difference_desc(eq1, eq2)
     np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
     curr1 = eq1.get_profile("current")
@@ -282,7 +283,7 @@ def test_qh_optimization1():
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq1a = run_qh_step(0, eq0)
-    rho_err, theta_err = utils.area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
+    rho_err, theta_err = area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
     # similar, the main test is ensuring its not pathological and has good qs
     assert rho_err.mean() < 1
@@ -302,7 +303,7 @@ def test_qh_optimization2():
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq2a = run_qh_step(1, eq1)
-    rho_err, theta_err = utils.area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
+    rho_err, theta_err = area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
     # similar, the main test is ensuring its not pathological and has good qs
     assert rho_err.mean() < 1
@@ -323,7 +324,7 @@ def test_qh_optimization3():
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq3 = load(".//tests//inputs//precise_QH_step3.h5")
     eq3a = run_qh_step(2, eq2)
-    rho_err, theta_err = utils.area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
+    rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
     # similar, the main test is ensuring its not pathological and has good qs
     assert rho_err.mean() < 1
@@ -365,7 +366,7 @@ def test_ATF_results(tmpdir_factory):
         checkpoint_path=output_dir.join("ATF.h5"),
     )
     eqf = load(output_dir.join("ATF.h5"))
-    rho_err, theta_err = utils.area_difference_desc(eq0, eqf[-1])
+    rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
     np.testing.assert_allclose(rho_err[:, 4:], 0, atol=4e-2)
     np.testing.assert_allclose(theta_err, 0, atol=5e-4)
 
@@ -398,7 +399,7 @@ def test_ESTELL_results(tmpdir_factory):
         checkpoint_path=output_dir.join("ESTELL.h5"),
     )
     eqf = load(output_dir.join("ESTELL.h5"))
-    rho_err, theta_err = utils.area_difference_desc(eq0, eqf[-1])
+    rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
     np.testing.assert_allclose(rho_err[:, 3:], 0, atol=5e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 

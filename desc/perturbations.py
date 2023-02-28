@@ -366,7 +366,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 setattr(eq_new, key, value)
 
     timer.stop("Total perturbation")
-    logger.info("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+    logger.info("||dx||/||x|| = %s" % round((np.linalg.norm(dx_reduced) / x_norm), 3))
     timer.disp("Total perturbation")
 
     return eq_new
@@ -763,8 +763,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     predicted_reduction = -evaluate_quadratic_form_jac(LHS, -RHS_1g.T @ LHS, dc)
 
     timer.stop("Total perturbation")
-    logger.info("||dc||/||c|| = {:10.3e}", np.linalg.norm(dc) / c_norm)
-    logger.info("||dx||/||x|| = {:10.3e}", np.linalg.norm(dx_reduced) / x_norm)
+    logger.info("||dc||/||c|| = %s" % round((np.linalg.norm(dc) / c_norm), 3))
+    logger.info("||dx||/||x|| = %s" % round((np.linalg.norm(dx_reduced) / x_norm), 3))
     timer.disp("Total perturbation")
 
     return eq_new, predicted_reduction, dc_opt, dc, np.linalg.norm(c), bound_hit

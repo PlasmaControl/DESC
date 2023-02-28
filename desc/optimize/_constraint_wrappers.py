@@ -126,6 +126,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             Level of output.
 
         """
+
         self._objective.compile(mode, verbose)
 
     def project(self, x):

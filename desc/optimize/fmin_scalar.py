@@ -7,6 +7,7 @@ import numpy as np
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
+from desc import set_console_logging
 from desc.backend import jnp
 
 from .tr_subproblems import (
@@ -38,6 +39,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     xtol=1e-6,
     gtol=1e-6,
     maxiter=None,
+    verbose=1,
     callback=None,
     options={},
 ):
@@ -84,6 +86,10 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         If None, the termination by this condition is disabled.
     maxiter : int, optional
         maximum number of iterations. Defaults to size(x)*100
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
     callback : callable, optional
         Called after each iteration. Should be a callable with
         the signature:
@@ -106,6 +112,14 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         Boolean flag indicating if the optimizer exited successfully.
 
     """
+
+    if verbose == 0:
+        set_console_logging(console_log_level="CRITICAL")
+    if verbose == 1:
+        set_console_logging(console_log_level="INFO")
+    if verbose == 2:
+        set_console_logging(console_log_level="DEBUG")
+
     nfev = 0
     ngev = 0
     nhev = 0

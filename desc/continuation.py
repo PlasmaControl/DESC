@@ -425,7 +425,7 @@ def solve_continuation(  # noqa: C901
     logger.info("Done")
     timer.disp("Total time")
     if checkpoint_path is not None:
-        logger.info("Output written to %s". % (checkpoint_path))
+        logger.info("Output written to %s" % (checkpoint_path))
         eqfam.save(checkpoint_path)
     logger.info("====================")
     return eqfam

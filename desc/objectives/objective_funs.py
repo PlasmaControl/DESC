@@ -336,7 +336,7 @@ class ObjectiveFunction(IOAble):
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
-    def compile(self, mode="auto"):
+    def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
 
         Parameters
@@ -345,6 +345,10 @@ class ObjectiveFunction(IOAble):
             Whether to compile for least squares optimization or scalar optimization.
             "auto" compiles based on the type of objective,
             "all" compiles all derivatives.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
         if not self.built:
@@ -352,6 +356,13 @@ class ObjectiveFunction(IOAble):
         if not use_jax:
             self._compiled = True
             return
+
+        if verbose == 0:
+            set_console_logging(console_log_level="CRITICAL")
+        if verbose == 1:
+            set_console_logging(console_log_level="INFO")
+        if verbose == 2:
+            set_console_logging(console_log_level="DEBUG")
 
         timer = Timer()
         if mode == "auto" and self.scalar:

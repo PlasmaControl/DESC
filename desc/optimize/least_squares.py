@@ -7,6 +7,7 @@ import numpy as np
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
+from desc import set_console_logging
 from desc.backend import jnp
 
 from .tr_subproblems import (
@@ -37,6 +38,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     gtol=1e-6,
     maxiter=None,
     tr_method="svd",
+    verbose=1,
     callback=None,
     options={},
 ):
@@ -83,6 +85,10 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         cholesky factorizations (generally 2-3), while 'svd' uses one singular value
         decomposition. 'cho' is generally faster for large systems, especially on GPU,
         but may be less accurate in some cases.
+    verbose : integer, optional
+        * 0  : work silently.
+        * 1  : display a termination report
+        * 2  : display progress and timing info during iterations
     callback : callable, optional
         Called after each iteration. Should be a callable with
         the signature:
@@ -116,6 +122,13 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 x_scale
             )
         )
+
+    if verbose == 0:
+        set_console_logging(console_log_level="CRITICAL")
+    if verbose == 1:
+        set_console_logging(console_log_level="INFO")
+    if verbose == 2:
+        set_console_logging(console_log_level="DEBUG")
 
     nfev = 0
     njev = 0

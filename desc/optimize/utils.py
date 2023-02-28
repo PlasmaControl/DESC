@@ -241,13 +241,14 @@ def print_iteration_nonlinear(
         optimality = "{:^15.2e}".format(optimality)
 
     logger.debug(
-        "{0}{1}{2}{3}{4}{5}",
-        iteration,
-        nfev,
-        cost,
-        cost_reduction,
-        step_norm,
-        optimality,
+        "%s%s%s%s%s%s" % (
+            iteration,
+            nfev,
+            cost,
+            cost_reduction,
+            step_norm,
+            optimality,
+        )
     )
 
 

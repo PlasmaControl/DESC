@@ -327,7 +327,7 @@ class hdf5Writer(hdf5IO, Writer):
                         sub_obj.save(group)
                     except AttributeError:
                         warnings.warn(
-                            "Could not save object '%s'.". % attr, RuntimeWarning
+                            "Could not save object '%s'." % attr, RuntimeWarning
                         )
 
     def write_dict(self, thedict, where=None):

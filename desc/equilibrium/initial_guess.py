@@ -116,7 +116,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                     axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
                 else:
                     raise TypeError(
-                        "Don't know how to initialize from object type %s". % (
+                        "Don't know how to initialize from object type %s" % (
                             type(args[1])
                         )
                     )
@@ -198,7 +198,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 eq.L_lmn = jnp.zeros(eq.L_basis.num_modes)
 
         else:
-            raise ValueError("Can't initialize equilibrium from args %s." % args)
+            raise ValueError("Can't initialize equilibrium from args %s." % str(args))
     return eq
 
 

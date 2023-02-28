@@ -6,6 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
+from desc import set_console_logging
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
 from desc.utils import Timer

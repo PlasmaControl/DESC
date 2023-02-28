@@ -309,15 +309,14 @@ class VMECIO:
         ]
 
         signgs = file.createVariable("signgs", np.int32)
-        signgs.long_name = "sign of coordinate system jacobian"
-        signgs[:] = -sign(
-            eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"]
-        )
+        signgs.long_name = "sign of coordinate system Jacobian"
+        signgs[:] = -1  # VMEC always uses a negative Jacobian
 
         gamma = file.createVariable("gamma", np.float64)
         gamma.long_name = "compressibility index (0 = pressure prescribed)"
         gamma[:] = 0
 
+        # profiles
         # TODO: add option for saving spline profiles
         power_series = stringtochar(
             np.array(
@@ -351,12 +350,10 @@ class VMECIO:
         ai[:] = np.zeros((file.dimensions["preset"].size,))
         if eq.iota is not None:
             # only using up to 10th order to avoid poor conditioning
-            ai[:11] = (
-                signgs[:]
-                * PowerSeriesProfile.from_values(
-                    s_full, eq.iota(r_full), order=10, sym=False
-                ).params
-            )
+            # negative sign for negative Jacobian
+            ai[:11] = -PowerSeriesProfile.from_values(
+                s_full, eq.iota(r_full), order=10, sym=False
+            ).params
 
         ac = file.createVariable("ac", np.float64, ("preset",))
         ac.long_name = "normalized toroidal current density coefficients"
@@ -385,23 +382,23 @@ class VMECIO:
 
         iotaf = file.createVariable("iotaf", np.float64, ("radius",))
         iotaf.long_name = "rotational transform on full mesh"
+        iotaf.units = "None"
         if eq.iota is not None:
-            iotaf[:] = signgs[:] * eq.iota(r_full)
+            iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
             # value closest to axis will be nan
             grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
-            iotaf[:] = signgs[:] * compress(grid, eq.compute("iota", grid=grid)["iota"])
+            iotaf[:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
+        iotas.units = "None"
         iotas[0] = 0
         if eq.iota is not None:
-            iotas[1:] = signgs[:] * eq.iota(r_half)
+            iotas[1:] = -eq.iota(r_half)  # negative sign for negative Jacobian
         else:
             grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
-            iotas[1:] = signgs[:] * compress(
-                grid, eq.compute("iota", grid=grid)["iota"]
-            )
+            iotas[1:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
         phi.long_name = "toroidal flux"
@@ -421,9 +418,8 @@ class VMECIO:
         chi.long_name = "poloidal flux"
         chi.units = "Wb"
         chi[:] = (
-            2
+            -2  # negative sign for negative Jacobian
             * Psi
-            * signgs[:]
             * integrate.cumtrapz(r_full * iotaf[:], r_full, initial=0)
         )
 
@@ -431,6 +427,7 @@ class VMECIO:
         chipf.long_name = "d(chi)/ds: poloidal flux derivative"
         chipf[:] = phipf[:] * iotaf[:]
 
+        # geometric scalars
         Rmajor_p = file.createVariable("Rmajor_p", np.float64)
         Rmajor_p.long_name = "major radius"
         Rmajor_p.units = "m"
@@ -443,6 +440,7 @@ class VMECIO:
 
         aspect = file.createVariable("aspect", np.float64)
         aspect.long_name = "aspect ratio = R_major / A_minor"
+        aspect.units = "None"
         aspect[:] = eq.compute("R0/a")["R0/a"]
 
         volume_p = file.createVariable("volume_p", np.float64)
@@ -450,10 +448,21 @@ class VMECIO:
         volume_p.units = "m^3"
         volume_p[:] = eq.compute("V")["V"]
 
-        grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute(["D_Mercier", "I", "G"], grid=grid)
+        volavgB = file.createVariable("volavgB", np.float64)
+        volavgB.long_name = "volume average magnetic field, root mean square"
+        volavgB.units = "T"
+        volavgB[:] = eq.compute("<|B|>_rms")["<|B|>_rms"]
 
-        # Boozer currents
+        betatotal = file.createVariable("betatotal", np.float64)
+        betatotal.long_name = "normalized plasma pressure"
+        betatotal.units = "None"
+        betatotal[:] = eq.compute("<beta>_vol")["<beta>_vol"]
+
+        # grid for computing radial profile data
+        grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
+        data = eq.compute(["I", "G", "<J*B>", "D_Mercier"], grid=grid)
+
+        # currents
         buco = file.createVariable("buco", np.float64, ("radius",))
         buco.long_name = "Boozer toroidal current I"
         buco.units = "T*m"
@@ -466,25 +475,36 @@ class VMECIO:
         bvco[:] = compress(grid, data["G"])
         bvco[0] = 0
 
+        jdotb = file.createVariable("jdotb", np.float64, ("radius",))
+        jdotb.long_name = "flux surface average of J*B"
+        jdotb.units = "N/m^3"
+        jdotb[:] = compress(grid, data["<J*B>"])
+        jdotb[0] = 0
+
         # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = "Mercier stability criterion magnetic shear term"
+        DShear.units = "1/Wb^2"
         DShear[:] = compress(grid, data["D_shear"])
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
         DCurr.long_name = "Mercier stability criterion toroidal current term"
+        DCurr.units = "1/Wb^2"
         DCurr[:] = compress(grid, data["D_current"])
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
         DWell.long_name = "Mercier stability criterion magnetic well term"
+        DWell.units = "1/Wb^2"
         DWell[:] = compress(grid, data["D_well"])
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
         DGeod.long_name = "Mercier stability criterion geodesic curvature term"
+        DGeod.units = "1/Wb^2"
         DGeod[:] = compress(grid, data["D_geodesic"])
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
         DMerc.long_name = "Mercier stability criterion"
+        DMerc.units = "1/Wb^2"
         DMerc[:] = compress(grid, data["D_Mercier"])
 
         timer.stop("parameters")
@@ -500,10 +520,12 @@ class VMECIO:
             R0_n[n + N] += (-2 * (l % 2) + 1) * eq.R_lmn[k]
         raxis_cc = file.createVariable("raxis_cc", np.float64, ("n_tor",))
         raxis_cc.long_name = "cos(n*p) component of magnetic axis R coordinate"
+        raxis_cc.units = "m"
         raxis_cc[:] = R0_n[N:]
         if not eq.sym:
             raxis_cs = file.createVariable("raxis_cs", np.float64, ("n_tor",))
             raxis_cs.long_name = "sin(n*p) component of magnetic axis R coordinate"
+            raxis_cs.units = "m"
             raxis_cs[1:] = R0_n[0:N]
 
         # Z axis
@@ -514,10 +536,12 @@ class VMECIO:
             Z0_n[n + N] += (-2 * (l % 2) + 1) * eq.Z_lmn[k]
         zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
+        zaxis_cs.units = "m"
         zaxis_cs[1:] = Z0_n[0:N]
         if not eq.sym:
             zaxis_cc = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
             zaxis_cc.long_name = "cos(n*p) component of magnetic axis Z coordinate"
+            zaxis_cc.units = "m"
             zaxis_cc[:] = Z0_n[N:]
 
         # R
@@ -657,10 +681,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         gmnc[0, :] = 0
-        gmnc[1:, :] = c * signgs[:]
+        gmnc[1:, :] = -c  # negative sign for negative Jacobian
         if not eq.sym:
             gmns[0, :] = 0
-            gmns[1:, :] = s * signgs[:]
+            gmns[1:, :] = -s
         timer.stop("Jacobian")
         timer.disp("Jacobian")
 
@@ -735,10 +759,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsupumnc[0, :] = 0
-        bsupumnc[1:, :] = c * signgs[:]
+        bsupumnc[1:, :] = -c  # negative sign for negative Jacobian
         if not eq.sym:
             bsupumns[0, :] = 0
-            bsupumns[1:, :] = s * signgs[:]
+            bsupumns[1:, :] = -s
         timer.stop("B^theta")
         timer.disp("B^theta")
 
@@ -814,16 +838,14 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        bsubsmns[:, :] = signgs[:] * s
-        bsubsmns[0, :] = signgs[
-            :
-        ] * (  # linear extrapolation for coefficient at the magnetic axis
+        bsubsmns[:, :] = -s  # negative sign for negative Jacobian
+        bsubsmns[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            bsubsmnc[:, :] = signgs[:] * c
-            bsubsmnc[0, :] = signgs[:] * (
+            bsubsmnc[:, :] = -c
+            bsubsmnc[0, :] = -(
                 c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("B_psi")
@@ -863,10 +885,10 @@ class VMECIO:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
-        bsubumnc[1:, :] = c * signgs[:]
+        bsubumnc[1:, :] = -c  # negative sign for negative Jacobian
         if not eq.sym:
             bsubumns[0, :] = 0
-            bsubumns[1:, :] = s * signgs[:]
+            bsubumns[1:, :] = -s
         timer.stop("B_theta")
         timer.disp("B_theta")
 
@@ -1002,16 +1024,14 @@ class VMECIO:
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        currvmnc[:, :] = signgs[:] * c
-        currvmnc[0, :] = signgs[
-            :
-        ] * (  # linear extrapolation for coefficient at the magnetic axis
+        currvmnc[:, :] = -c  # negative sign for negative Jacobian
+        currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            currvmns[:, :] = signgs[:] * s
-            currumns[0, :] = signgs[:] * (
+            currvmns[:, :] = -s
+            currumns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("J^zeta")
@@ -1058,9 +1078,6 @@ class VMECIO:
         betator = file.createVariable("betator", np.float64)
         betator[:] = 0.0
 
-        betatotal = file.createVariable("betatotal", np.float64)
-        betatotal[:] = 0.0
-
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis[:] = 0.0
 
@@ -1094,9 +1111,6 @@ class VMECIO:
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcurv[:] = np.zeros((file.dimensions["radius"].size,))
 
-        jdotb = file.createVariable("jdotb", np.float64, ("radius",))
-        jdotb[:] = np.zeros((file.dimensions["radius"].size,))
-
         nextcur = file.createVariable("nextcur", np.int32)
         nextcur[:] = 0
 
@@ -1117,9 +1131,6 @@ class VMECIO:
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))
-
-        volavgB = file.createVariable("volavgB", np.float64)
-        volavgB[:] = 0.0
 
         vp = file.createVariable("vp", np.float64, ("radius",))
         vp[:] = np.zeros((file.dimensions["radius"].size,))

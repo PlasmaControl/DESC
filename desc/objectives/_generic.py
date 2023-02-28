@@ -165,7 +165,7 @@ class ToroidalCurrent(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(A)"
     _print_value_fmt = "Toroidal current: {:10.3e} "
@@ -237,7 +237,7 @@ class ToroidalCurrent(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["I"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -277,7 +277,31 @@ class ToroidalCurrent(_Objective):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * w
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
 
 
 class RotationalTransform(_Objective):
@@ -418,4 +442,11 @@ class RotationalTransform(_Objective):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * w
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

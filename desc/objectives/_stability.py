@@ -123,7 +123,7 @@ class MercierStability(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["Psi"] ** 2 / jnp.sqrt(self._dim_f)
+            self._normalization = 1 / scales["Psi"] ** 2
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -173,7 +173,7 @@ class MercierStability(_Objective):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * w
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -352,7 +352,7 @@ class MagneticWell(_Objective):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * w
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

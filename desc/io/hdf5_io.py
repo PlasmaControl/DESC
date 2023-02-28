@@ -123,7 +123,7 @@ class hdf5Reader(hdf5IO, Reader):
         for attr in obj._io_attrs_:
             if attr not in loc.keys():
                 warnings.warn(
-                    "Save attribute '{}' was not loaded.".format(attr), RuntimeWarning
+                    "Save attribute '%s' was not loaded." % attr, RuntimeWarning
                 )
                 continue
             if isinstance(loc[attr], h5py.Dataset):
@@ -133,9 +133,7 @@ class hdf5Reader(hdf5IO, Reader):
             elif isinstance(loc[attr], h5py.Group):
                 if "__class__" not in loc[attr].keys():
                     warnings.warn(
-                        "Could not load attribute '{}', no class name found.".format(
-                            attr
-                        ),
+                        "Could not load attribute '%s', no class name found." % attr,
                         RuntimeWarning,
                     )
                     continue
@@ -159,7 +157,7 @@ class hdf5Reader(hdf5IO, Reader):
                         )
                     else:
                         warnings.warn(
-                            "Class '{}' could not be imported.".format(cls_name),
+                            "Class '%s' could not be imported." % cls_name,
                             RuntimeWarning,
                         )
                         continue
@@ -183,9 +181,7 @@ class hdf5Reader(hdf5IO, Reader):
             elif isinstance(loc[key], h5py.Group):
                 if "__class__" not in loc[key].keys():
                     warnings.warn(
-                        "Could not load attribute '{}', no class name found.".format(
-                            key
-                        ),
+                        "Could not load attribute '%s', no class name found." % key,
                         RuntimeWarning,
                     )
                     continue
@@ -204,7 +200,7 @@ class hdf5Reader(hdf5IO, Reader):
                         )
                     else:
                         warnings.warn(
-                            "Class '{}' could not be imported.".format(cls_name),
+                            "Class '%s' could not be imported." % cls_name,
                             RuntimeWarning,
                         )
                         continue
@@ -231,7 +227,7 @@ class hdf5Reader(hdf5IO, Reader):
             elif isinstance(loc[str(i)], h5py.Group):
                 if "__class__" not in loc[str(i)].keys():
                     warnings.warn(
-                        "Could not load attribute '{}', no class name found.".format(
+                        "Could not load attribute '%s', no class name found." % (
                             str(i)
                         ),
                         RuntimeWarning,
@@ -254,7 +250,7 @@ class hdf5Reader(hdf5IO, Reader):
                         )
                     else:
                         warnings.warn(
-                            "Class '{}' could not be imported.".format(cls_name),
+                            "Class '%s' could not be imported." % cls_name,
                             RuntimeWarning,
                         )
                         continue
@@ -312,8 +308,7 @@ class hdf5Writer(hdf5IO, Writer):
                 loc.create_dataset(attr, data=data, compression=compression)
             except AttributeError:
                 warnings.warn(
-                    "Save attribute '{}' was not saved as it does "
-                    "not exist.".format(attr),
+                    "Save attribute '%s' was not saved as it does not exist." % attr,
                     RuntimeWarning,
                 )
             except TypeError:
@@ -332,7 +327,7 @@ class hdf5Writer(hdf5IO, Writer):
                         sub_obj.save(group)
                     except AttributeError:
                         warnings.warn(
-                            "Could not save object '{}'.".format(attr), RuntimeWarning
+                            "Could not save object '%s'.". % attr, RuntimeWarning
                         )
 
     def write_dict(self, thedict, where=None):

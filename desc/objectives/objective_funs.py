@@ -186,7 +186,7 @@ class ObjectiveFunction(IOAble):
         self._dim_f = 0
         for objective in self.objectives:
             if objective.name:
-                logger.info("Building objective: {}", objective.name)
+                logger.info("Building objective: %s" % objective.name)
             else:
                 logger.info("Building objective")
             objective.build(eq, use_jit=self.use_jit, verbose=verbose)

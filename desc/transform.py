@@ -60,7 +60,7 @@ class Transform(IOAble):
         if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
             warnings.warn(
                 colored(
-                    "Unequal number of field periods for grid {} and basis {}.".format(
+                    "Unequal number of field periods for grid %s and basis %s." % (
                         self.grid.NFP, self.basis.NFP
                     ),
                     "yellow",
@@ -209,7 +209,7 @@ class Transform(IOAble):
             warnings.warn(
                 colored(
                     "fft method can not undersample in zeta, "
-                    + "num_toroidal_modes={}, num_toroidal_angles={}, ".format(
+                    + "num_toroidal_modes=%s, num_toroidal_angles=%s, " % (
                         len(n_vals), len(zeta_vals)
                     )
                     + "falling back to direct2 method",

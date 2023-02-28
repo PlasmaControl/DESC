@@ -83,7 +83,7 @@ class Timer:
             self._timers[name].append(self.op())
         except KeyError:
             raise ValueError(
-                colored("timer '{}' has not been started".format(name), "red")
+                colored("timer '%s' has not been started" % name, "red")
             ) from None
         self._times[name] = np.diff(self._timers[name])[0]
         if self._ns:
@@ -126,7 +126,7 @@ class Timer:
         else:
             out = "{:.3f}".format(hrs)[:4] + " hrs"
 
-        logging.debug(colored("Timer: {} = {}".format(name, out), "green"))
+        logging.debug(colored("Timer: %s = %s" % (name, out), "green"))
 
     def disp(self, name):
         """Pretty print elapsed time.

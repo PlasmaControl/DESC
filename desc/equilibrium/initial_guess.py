@@ -116,7 +116,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                     axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
                 else:
                     raise TypeError(
-                        "Don't know how to initialize from object type {}".format(
+                        "Don't know how to initialize from object type %s". % (
                             type(args[1])
                         )
                     )
@@ -142,7 +142,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             eq1 = args[0]
             if nargs > 1:
                 raise ValueError(
-                    "set_initial_guess got unknown additional argument {}.".format(
+                    "set_initial_guess got unknown additional argument %s." % (
                         args[1]
                     )
                 )
@@ -159,7 +159,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 else:
                     raise ValueError(
                         "set_initial_guess got unknown additional argument "
-                        + "{}.".format(args[1])
+                        + "%s." % args[1]
                     )
             try:  # is it desc?
                 eq1 = load(path, file_format)
@@ -170,7 +170,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                     eq1 = VMECIO.load(path)
                 except:  # noqa: E722
                     raise ValueError(
-                        "Could not load equilibrium from path {}, ".format(path)
+                        "Could not load equilibrium from path %s, " % path
                         + "please make sure it is a valid DESC or VMEC equilibrium."
                     )
             if not type(eq1) is type(eq):
@@ -179,7 +179,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 else:
                     raise TypeError(
                         "Cannot initialize equilibrium from loaded object of type "
-                        + "{}".format(type(eq1))
+                        + "%s" % type(eq1)
                     )
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
@@ -198,7 +198,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                 eq.L_lmn = jnp.zeros(eq.L_basis.num_modes)
 
         else:
-            raise ValueError("Can't initialize equilibrium from args {}.".format(args))
+            raise ValueError("Can't initialize equilibrium from args %s." % args)
     return eq
 
 

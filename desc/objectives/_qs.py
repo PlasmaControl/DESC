@@ -90,10 +90,9 @@ class QuasisymmetryBoozer(_Objective):
         )
 
         self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) Boozer error: ".format(
-                self.helicity[0], self.helicity[1]
+            "Quasi-symmetry (%s,%s) Boozer error: " % (
+                round(self.helicity[0], 3), round(self.helicity[1], 3)
             )
-            + "{:10.3e} "
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -206,10 +205,9 @@ class QuasisymmetryBoozer(_Objective):
         if hasattr(self, "_print_value_fmt"):
             units = "(T)"
             self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) Boozer error: ".format(
-                    self.helicity[0], self.helicity[1]
+                "Quasi-symmetry (%s,%s) Boozer error: " % (
+                    round(self.helicity[0]), round(self.helicity[1])
                 )
-                + "{:10.3e} "
                 + units
             )
         warnings.warn("Re-build objective after changing the helicity!")
@@ -277,10 +275,9 @@ class QuasisymmetryTwoTerm(_Objective):
         )
 
         self._print_value_fmt = (
-            "Quasi-symmetry ({},{}) two-term error: ".format(
-                self.helicity[0], self.helicity[1]
+            "Quasi-symmetry (%s,%s) two-term error: " % (
+                round(self.helicity[0], 3), round(self.helicity[1], 3)
             )
-            + "{:10.3e} "
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -373,10 +370,9 @@ class QuasisymmetryTwoTerm(_Objective):
         if hasattr(self, "_print_value_fmt"):
             units = "(T^3)"
             self._print_value_fmt = (
-                "Quasi-symmetry ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
+                "Quasi-symmetry (%s,%s) error: " % (
+                    round(self.helicity[0], 3), round(self.helicity[1], 3)
                 )
-                + "{:10.3e} "
                 + units
             )
 

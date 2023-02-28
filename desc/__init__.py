@@ -86,13 +86,11 @@ def set_device(kind="cpu"):
             warnings.warn(
                 colored(
                     (
-                        "CUDA_VISIBLE_DEVICES={} ".format(
+                        "CUDA_VISIBLE_DEVICES=%s " %
                             os.environ["CUDA_VISIBLE_DEVICES"]
-                        )
                         + "did not match any physical GPU "
-                        + "(id={}), falling back to CPU".format(
+                        + "(id=%s), falling back to CPU" %
                             [dev["index"] for dev in devices]
-                        )
                     ),
                     "yellow",
                 )
@@ -105,9 +103,7 @@ def set_device(kind="cpu"):
             if mem > maxmem:
                 maxmem = mem
                 selected_gpu = dev
-        config["device"] = selected_gpu["type"] + " (id={})".format(
-            selected_gpu["index"]
-        )
+        config["device"] = selected_gpu["type"] + " (id=%s)" % selected_gpu["index"]
         config["avail_mem"] = (
             selected_gpu["mem_total"] - selected_gpu["mem_used"]
         ) / 1024  # in GB

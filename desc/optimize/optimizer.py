@@ -160,7 +160,7 @@ class Optimizer(IOAble):
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
                 colored(
-                    "method {} is not intended for scalar objective function".format(
+                    "method %s is not intended for scalar objective function" % (
                         ".".join([method])
                     ),
                     "yellow",
@@ -178,9 +178,8 @@ class Optimizer(IOAble):
             options,
         )
 
-        if verbose > 0:
-            print("Number of parameters: {}".format(x0.size))
-            print("Number of objectives: {}".format(objective.dim_f))
+        logger.info("Number of parameters: %s" % x0.size)
+        logger.info("Number of objectives: %s" % objective.dim_f)
 
         logger.info("Starting optimization")
         timer.start("Solution time")

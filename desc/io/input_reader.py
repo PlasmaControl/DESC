@@ -248,7 +248,7 @@ class InputReader:
                 logging.info("Converting VMEC input to DESC input")
                 path = self.input_path + "_desc"
                 InputReader.vmec_to_desc_input(self.input_path, path)
-                logging.info("Generated DESC input file {}:".format(path))
+                logging.info("Generated DESC input file %s:" % path)
                 return self.parse_inputs(path)
 
             # extract numbers & words

@@ -18,7 +18,7 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     use_jax = False
     set_device(kind="cpu")
     logger.info(
-        "DESC version {}, using numpy backend, version={}, dtype={}".format(
+        "DESC version %s, using numpy backend, version=%s, dtype=%s" % (
             desc.__version__, np.__version__, np.linspace(0, 1).dtype
         )
     )
@@ -57,12 +57,12 @@ else:
         set_device(kind="cpu")
         logger.warning(colored("Failed to load JAX", "red"))
         logger.info(
-            "DESC version {}, using NumPy backend, version={}, dtype={}".format(
-                desc.__version__, np.__version__, y.dtype
+            "DESC version %s, using NumPy backend, version=%s, dtype=%s" % (
+                desc.__version__, np.__version__, round(y.dtype, 2)
             )
         )
 logger.info(
-    "Using device: {}, with {:.2f} GB available memory".format(
+    "Using device: %s, with %s GB available memory" % (
         desc_config.get("device"), desc_config.get("avail_mem")
     )
 )

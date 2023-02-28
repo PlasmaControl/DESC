@@ -171,7 +171,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         )
 
     if verbose > 0:
-        logger.info("Perturbing {}".format(", ".join(deltas.keys())))
+        logger.info("Perturbing %s" % (", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
@@ -505,7 +505,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         logger.error("At least one input must be a free variable for optimization.")
         raise ValueError("At least one input must be a free variable for optimization.")
 
-    logger.info("Perturbing {}".format(", ".join(deltas.keys())))
+    logger.info("Perturbing %s" % (", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")
@@ -523,9 +523,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dim_c, dim_opt = subspace.shape
 
     if dim_c != c.size:
-        logger.error("Number of parameters: {}", dim_opt)
-        logger.error("Number of objectives: {}", objective_g.dim_f)
-        logger.error("Invalid dimension: opt_subspace must have {} rows.", c.size)
+        logger.error("Number of parameters: %s" % dim_opt)
+        logger.error("Number of objectives: %s" % objective_g.dim_f)
+        logger.error("Invalid dimension: opt_subspace must have %s rows." % c.size)
         raise ValueError(
             "Invalid dimension: opt_subspace must have {} rows.".format(c.size)
         )

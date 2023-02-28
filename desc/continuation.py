@@ -87,7 +87,7 @@ def solve_continuation_automatic(  # noqa: C901
     mres_step = kwargs.pop("mres_step", 6)
     pres_step = kwargs.pop("pres_step", 1 / 2)
     bdry_step = kwargs.pop("bdry_step", 1 / 4)
-    assert len(kwargs) == 0, "Got an unexpected kwarg {}".format(kwargs.keys())
+    assert len(kwargs) == 0, "Got an unexpected kwarg %s" % kwargs.keys()
 
     Mi = min(M // 2, mres_step) if mres_step > 0 else M
     Li = int(np.ceil(L / M) * Mi)
@@ -149,7 +149,7 @@ def solve_continuation_automatic(  # noqa: C901
     nn = mres_steps + pres_steps + bdry_steps
     stop = False
     while ii < nn and not stop:
-        timer.start("Iteration {} total".format(ii + 1))
+        timer.start("Iteration %s total" % (ii + 1))
 
         if ii > 0:
             eqi = eqfam[-1].copy()
@@ -240,8 +240,8 @@ def solve_continuation_automatic(  # noqa: C901
         if checkpoint_path is not None:
             logger.info("Saving latest iteration")
             eqfam.save(checkpoint_path)
-        timer.stop("Iteration {} total".format(ii + 1))
-        timer.disp("Iteration {} total".format(ii + 1))
+        timer.stop("Iteration %s total" % (ii + 1))
+        timer.disp("Iteration %s total" % (ii + 1))
         ii += 1
 
     eq.R_lmn = eqi.R_lmn
@@ -253,7 +253,7 @@ def solve_continuation_automatic(  # noqa: C901
     logger.info("Done")
     timer.disp("Total time")
     if checkpoint_path is not None:
-        logger.info("Output written to {}".format(checkpoint_path))
+        logger.info("Output written to %s" % checkpoint_path)
         eqfam.save(checkpoint_path)
     logger.info("====================")
 
@@ -334,7 +334,7 @@ def solve_continuation(  # noqa: C901
     nn = len(eqfam)
     stop = False
     while ii < nn and not stop:
-        timer.start("Iteration {} total".format(ii + 1))
+        timer.start("Iteration %s total" % (ii + 1))
         eqi = eqfam[ii]
         _print_iteration_summary(
             ii,
@@ -416,8 +416,8 @@ def solve_continuation(  # noqa: C901
         if checkpoint_path is not None:
             logger.info("Saving latest iteration")
             eqfam.save(checkpoint_path)
-        timer.stop("Iteration {} total".format(ii + 1))
-        timer.disp("Iteration {} total".format(ii + 1))
+        timer.stop("Iteration %s total" % (ii + 1))
+        timer.disp("Iteration %s total" % (ii + 1))
         ii += 1
 
     timer.stop("Total time")
@@ -425,7 +425,7 @@ def solve_continuation(  # noqa: C901
     logger.info("Done")
     timer.disp("Total time")
     if checkpoint_path is not None:
-        logger.info("Output written to {}".format(checkpoint_path))
+        logger.info("Output written to %s". % (checkpoint_path))
         eqfam.save(checkpoint_path)
     logger.info("====================")
     return eqfam
@@ -463,22 +463,20 @@ def _print_iteration_summary(
     **kwargs,
 ):
     logger.debug("================")
-    logger.debug("Step {}/{}".format(ii + 1, nn))
+    logger.debug("Step %s/%s" % (ii + 1, nn))
     logger.debug("================")
     eq.resolution_summary()
-    logger.debug("Boundary ratio = {}".format(bdry_ratio))
-    logger.debug("Pressure ratio = {}".format(pres_ratio))
+    logger.debug("Boundary ratio = %s" % bdry_ratio)
+    logger.debug("Pressure ratio = %s" % pres_ratio)
     if eq.current is not None:
-        logger.debug("Current ratio = {}".format(curr_ratio))
-    logger.debug("Perturbation Order = {}".format(pert_order))
+        logger.debug("Current ratio = %s" % curr_ratio)
+    logger.debug("Perturbation Order = %s" % pert_order)
     logger.debug(
-        "Objective: {}".format(
+        "Objective: %s" %
             objective if isinstance(objective, str) else objective.objectives[0].name
-        )
     )
     logger.debug(
-        "Optimizer: {}".format(
+        "Optimizer: %s" %
             optimizer if isinstance(optimizer, str) else optimizer.method
-        )
     )
     logger.debug("================")

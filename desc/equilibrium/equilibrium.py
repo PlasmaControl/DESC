@@ -249,13 +249,13 @@ class Equilibrium(_Configuration, IOAble):
 
     def resolution_summary(self):
         """Print a summary of the spectral and real space resolution."""
-        logger.debug("Spectral indexing: {}".format(self.spectral_indexing))
+        logger.debug("Spectral indexing: %s" % self.spectral_indexing)
         logger.debug(
-            "Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N)
+            "Spectral resolution (L,M,N)=(%s,%s,%s)" % (self.L, self.M, self.N)
         )
-        logger.debug("Node pattern: {}".format(self.node_pattern))
+        logger.debug("Node pattern: %s" % self.node_pattern)
         logger.debug(
-            "Node resolution (L,M,N)=({},{},{})".format(
+            "Node resolution (L,M,N)=(%s,%s,%s)" % (
                 self.L_grid, self.M_grid, self.N_grid
             )
         )
@@ -723,11 +723,11 @@ class Equilibrium(_Configuration, IOAble):
         success = None
         while success is None:
 
-            timer.start("Step {} time".format(iteration))
+            timer.start("Step %s time" % iteration)
             logger.debug("====================")
-            logger.debug("Optimization Step {}".format(iteration))
+            logger.debug("Optimization Step %s" % iteration)
             logger.debug("====================")
-            logger.debug("Trust-Region ratio = {:9.3e}".format(tr_ratio[0]))
+            logger.debug("Trust-Region ratio = %s" % round(tr_ratio[0], 3))
 
             # perturb + solve
             (
@@ -759,11 +759,11 @@ class Equilibrium(_Configuration, IOAble):
             tr_ratio[0] = trust_radius / c_norm
             perturb_options["tr_ratio"] = tr_ratio
 
-            timer.stop("Step {} time".format(iteration))
+            timer.stop("Step %s time" % iteration)
             objective.print_value(objective.x(eq_new))
-            logger.debug("Predicted Reduction = {:10.3e}".format(predicted_reduction))
-            logger.debug("Reduction Ratio = {:+.3f}".format(ratio))
-            timer.disp("Step {} time".format(iteration))
+            logger.debug("Predicted Reduction = %s" % round(predicted_reduction, 3))
+            logger.debug("Reduction Ratio = %s" % round(ratio),3)
+            timer.disp("Step %s time" % iteration)
 
             # stopping criteria
             success, message = check_termination(

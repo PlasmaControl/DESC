@@ -11,7 +11,7 @@ from desc.grid import ConcentricGrid
 
 from .data_index import data_index
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 # defines the order in which objective arguments get concatenated into the state vector
 arg_order = (

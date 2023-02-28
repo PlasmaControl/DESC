@@ -6,7 +6,6 @@ import numpy as np
 import scipy.optimize
 from scipy.optimize import OptimizeResult
 
-from desc import LogStyleAdapter
 from desc.backend import jnp
 
 from .optimizer import register_optimizer
@@ -19,7 +18,7 @@ from .utils import (
     print_iteration_nonlinear,
 )
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 @register_optimizer(

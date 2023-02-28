@@ -9,7 +9,6 @@ from netCDF4 import Dataset
 
 import desc.examples
 import desc.io
-from desc import LogStyleAdapter
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -231,7 +230,6 @@ def test_mercier_print(TmpDir):
     test_logfile_handler.setLevel("DEBUG")
     test_logfile_handler.setFormatter(logfile_formatter)
     logger.addHandler(test_logfile_handler)
-    logger = LogStyleAdapter(logger)
 
     # Test magnetic well stability print functions
     eq = Equilibrium()
@@ -289,7 +287,6 @@ def test_magwell_print(TmpDir):
     test_logfile_handler.setLevel("DEBUG")
     test_logfile_handler.setFormatter(logfile_formatter)
     logger.addHandler(test_logfile_handler)
-    logger = LogStyleAdapter(logger)
 
     # Test magnetic well stability print functions
     eq = Equilibrium()

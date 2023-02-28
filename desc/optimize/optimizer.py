@@ -12,7 +12,7 @@ from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 class Optimizer(IOAble):

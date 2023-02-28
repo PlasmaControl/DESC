@@ -4,10 +4,9 @@
 import logging
 import sys
 
-from desc import LogStyleAdapter
 from desc.io import InputReader
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 def main(cl_args=sys.argv[1:]):

@@ -123,39 +123,6 @@ logging.getLogger().addHandler(logging.NullHandler())
 # and the 'quiet' command will turn off console logging.
 
 
-class LogMessage:
-    """Custom class to extend python string formatting capabilities to logging."""
-
-    def __init__(self, fmt, args):
-        self.fmt = fmt
-        self.args = args
-
-    def __str__(self):
-        return self.fmt.format(*self.args)
-
-
-class LogStyleAdapter(logging.LoggerAdapter):
-    """Adapter to allow custom log messages using string-formatting to be logged."""
-
-    def __init__(self, logger, extra=None):
-        super().__init__(logger, extra or {})
-
-    def log(self, level, msg, /, *args, **kwargs):
-        """Overwrites normal logging calls with custom logger messages.
-
-        Parameters
-        ----------
-        level : int
-            log level from 0 to 50
-        msg : str
-            unprocessed string to be formatted before logging
-
-        """
-        level = self.getEffectiveLevel()
-        msg, kwargs = self.process(msg, kwargs)
-        self.logger._log(level, LogMessage(msg, args), (), **kwargs)
-
-
 def stop_logfile_logging():
     """Quickly stops logfile logging to DESC logger.
 
@@ -237,9 +204,6 @@ def set_logfile_logging(logfile_level="DEBUG", logfile_file="desc.log"):
     logger.addHandler(logfile_handler)
     logging.captureWarnings(True)
 
-    # Overwrite logger with custom subclass to be able to use {} string formatting
-    logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
-
     return logger
 
 
@@ -294,9 +258,6 @@ def set_console_logging(console_log_level="INFO", console_log_output="stdout"):
     # Assign handlers to logger
     logger.addHandler(console_handler)
     logging.captureWarnings(True)
-
-    # Overwrite logger with custom subclass to be able to use {} string formatting
-    logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
 
     return logger
 

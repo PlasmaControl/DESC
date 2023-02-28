@@ -2,7 +2,6 @@
 
 import logging
 
-from desc import LogStyleAdapter
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -14,7 +13,7 @@ from desc.utils import Timer
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 class GenericObjective(_Objective):

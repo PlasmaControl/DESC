@@ -5,14 +5,13 @@ import logging
 
 import numpy as np
 
-from desc import LogStyleAdapter
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
 from desc.perturbations import get_deltas
 from desc.utils import Timer
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 def solve_continuation_automatic(  # noqa: C901

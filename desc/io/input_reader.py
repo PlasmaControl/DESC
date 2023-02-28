@@ -13,14 +13,13 @@ import numpy as np
 from termcolor import colored
 
 from desc import (
-    LogStyleAdapter,
     set_console_logging,
     set_device,
     set_logfile_logging,
     stop_logfile_logging,
 )
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 class InputReader:

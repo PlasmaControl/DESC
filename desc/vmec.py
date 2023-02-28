@@ -11,7 +11,6 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
-from desc import LogStyleAdapter
 from desc.backend import sign
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
@@ -30,7 +29,7 @@ from desc.vmec_utils import (
     zernike_to_fourier,
 )
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 class VMECIO:

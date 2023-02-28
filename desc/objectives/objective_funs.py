@@ -6,14 +6,14 @@ from inspect import getfullargspec
 
 import numpy as np
 
-from desc import LogStyleAdapter, set_console_logging
+from desc import set_console_logging
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.compute import arg_order
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 

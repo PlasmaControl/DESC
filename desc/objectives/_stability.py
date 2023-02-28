@@ -5,7 +5,6 @@ import logging
 
 import numpy as np
 
-from desc import LogStyleAdapter
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
@@ -16,7 +15,7 @@ from desc.utils import Timer
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 class MercierStability(_Objective):

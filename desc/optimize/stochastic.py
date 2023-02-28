@@ -6,8 +6,6 @@ import logging
 import numpy as np
 from scipy.optimize import OptimizeResult
 
-from desc import LogStyleAdapter
-
 from .utils import (
     STATUS_MESSAGES,
     check_termination,
@@ -15,7 +13,7 @@ from .utils import (
     print_iteration_nonlinear,
 )
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 def sgd(

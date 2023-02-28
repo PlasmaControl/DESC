@@ -7,7 +7,6 @@ import numpy as np
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
-from desc import LogStyleAdapter
 from desc.backend import jnp
 
 from .tr_subproblems import (
@@ -24,7 +23,7 @@ from .utils import (
     print_iteration_nonlinear,
 )
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 def fmintr(  # noqa: C901 - FIXME: simplify this

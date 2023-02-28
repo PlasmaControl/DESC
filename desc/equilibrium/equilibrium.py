@@ -10,7 +10,7 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc import LogStyleAdapter, set_console_logging
+from desc import set_console_logging
 from desc.basis import FourierZernikeBasis
 from desc.geometry import FourierRZCurve
 from desc.grid import LinearGrid
@@ -28,7 +28,7 @@ from desc.utils import Timer
 
 from .configuration import _Configuration
 
-logger = LogStyleAdapter(logging.getLogger("DESC_logger"))
+logger = logging.getLogger("DESC_logger")
 
 
 class Equilibrium(_Configuration, IOAble):

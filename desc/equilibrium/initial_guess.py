@@ -116,9 +116,8 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
                     axisZ = np.array([axis.Z_basis.modes[:, -1], axis.Z_n]).T
                 else:
                     raise TypeError(
-                        "Don't know how to initialize from object type %s" % (
-                            type(args[1])
-                        )
+                        "Don't know how to initialize from object type %s"
+                        % (type(args[1]))
                     )
             else:
                 axisR = None
@@ -142,9 +141,7 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             eq1 = args[0]
             if nargs > 1:
                 raise ValueError(
-                    "set_initial_guess got unknown additional argument %s." % (
-                        args[1]
-                    )
+                    "set_initial_guess got unknown additional argument %s." % (args[1])
                 )
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)

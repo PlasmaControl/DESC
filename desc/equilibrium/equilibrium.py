@@ -255,9 +255,8 @@ class Equilibrium(_Configuration, IOAble):
         )
         logger.debug("Node pattern: %s" % self.node_pattern)
         logger.debug(
-            "Node resolution (L,M,N)=(%s,%s,%s)" % (
-                self.L_grid, self.M_grid, self.N_grid
-            )
+            "Node resolution (L,M,N)=(%s,%s,%s)"
+            % (self.L_grid, self.M_grid, self.N_grid)
         )
 
     def change_resolution(
@@ -762,7 +761,7 @@ class Equilibrium(_Configuration, IOAble):
             timer.stop("Step %s time" % iteration)
             objective.print_value(objective.x(eq_new))
             logger.debug("Predicted Reduction = %s" % round(predicted_reduction, 3))
-            logger.debug("Reduction Ratio = %s" % round(ratio),3)
+            logger.debug("Reduction Ratio = %s" % round(ratio), 3)
             timer.disp("Step %s time" % iteration)
 
             # stopping criteria

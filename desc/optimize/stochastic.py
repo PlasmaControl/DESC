@@ -7,6 +7,7 @@ import numpy as np
 from scipy.optimize import OptimizeResult
 
 from desc import set_console_logging
+
 from .utils import (
     STATUS_MESSAGES,
     check_termination,
@@ -27,7 +28,7 @@ def sgd(
     xtol=1e-6,
     gtol=1e-6,
     maxiter=None,
-    verbose = 1,
+    verbose=1,
     callback=None,
     options={},
 ):

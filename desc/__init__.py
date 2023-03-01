@@ -86,11 +86,10 @@ def set_device(kind="cpu"):
             warnings.warn(
                 colored(
                     (
-                        "CUDA_VISIBLE_DEVICES=%s " %
-                            os.environ["CUDA_VISIBLE_DEVICES"]
+                        "CUDA_VISIBLE_DEVICES=%s " % os.environ["CUDA_VISIBLE_DEVICES"]
                         + "did not match any physical GPU "
-                        + "(id=%s), falling back to CPU" %
-                            [dev["index"] for dev in devices]
+                        + "(id=%s), falling back to CPU"
+                        % [dev["index"] for dev in devices]
                     ),
                     "yellow",
                 )

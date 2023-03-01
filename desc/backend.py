@@ -18,9 +18,8 @@ if os.environ.get("DESC_BACKEND") == "numpy":
     use_jax = False
     set_device(kind="cpu")
     logger.info(
-        "DESC version %s, using numpy backend, version=%s, dtype=%s" % (
-            desc.__version__, np.__version__, np.linspace(0, 1).dtype
-        )
+        "DESC version %s, using numpy backend, version=%s, dtype=%s"
+        % (desc.__version__, np.__version__, np.linspace(0, 1).dtype)
     )
 else:
     if desc_config.get("device") is None:
@@ -57,14 +56,12 @@ else:
         set_device(kind="cpu")
         logger.warning(colored("Failed to load JAX", "red"))
         logger.info(
-            "DESC version %s, using NumPy backend, version=%s, dtype=%s" % (
-                desc.__version__, np.__version__, round(y.dtype, 2)
-            )
+            "DESC version %s, using NumPy backend, version=%s, dtype=%s"
+            % (desc.__version__, np.__version__, round(y.dtype, 2))
         )
 logger.info(
-    "Using device: %s, with %s GB available memory" % (
-        desc_config.get("device"), desc_config.get("avail_mem")
-    )
+    "Using device: %s, with %s GB available memory"
+    % (desc_config.get("device"), desc_config.get("avail_mem"))
 )
 
 if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assign?

@@ -112,7 +112,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         Boolean flag indicating if the optimizer exited successfully.
 
     """
-
     if verbose == 0:
         set_console_logging(console_log_level="CRITICAL")
     if verbose == 1:

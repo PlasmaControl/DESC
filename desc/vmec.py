@@ -11,7 +11,6 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
-from desc.backend import sign
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress

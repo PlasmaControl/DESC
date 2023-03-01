@@ -227,9 +227,8 @@ class hdf5Reader(hdf5IO, Reader):
             elif isinstance(loc[str(i)], h5py.Group):
                 if "__class__" not in loc[str(i)].keys():
                     warnings.warn(
-                        "Could not load attribute '%s', no class name found." % (
-                            str(i)
-                        ),
+                        "Could not load attribute '%s', no class name found."
+                        % (str(i)),
                         RuntimeWarning,
                     )
                     continue

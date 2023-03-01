@@ -90,10 +90,9 @@ class QuasisymmetryBoozer(_Objective):
             name=name,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry (%s,%s) Boozer error: " % (
-                round(self.helicity[0], 3), round(self.helicity[1], 3)
-            )
+        self._print_value_fmt = "Quasi-symmetry (%s,%s) Boozer error: " % (
+            round(self.helicity[0], 3),
+            round(self.helicity[1], 3),
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -206,9 +205,8 @@ class QuasisymmetryBoozer(_Objective):
         if hasattr(self, "_print_value_fmt"):
             units = "(T)"
             self._print_value_fmt = (
-                "Quasi-symmetry (%s,%s) Boozer error: " % (
-                    round(self.helicity[0]), round(self.helicity[1])
-                )
+                "Quasi-symmetry (%s,%s) Boozer error: "
+                % (round(self.helicity[0]), round(self.helicity[1]))
                 + units
             )
         warnings.warn("Re-build objective after changing the helicity!")
@@ -275,10 +273,9 @@ class QuasisymmetryTwoTerm(_Objective):
             name=name,
         )
 
-        self._print_value_fmt = (
-            "Quasi-symmetry (%s,%s) two-term error: " % (
-                round(self.helicity[0], 3), round(self.helicity[1], 3)
-            )
+        self._print_value_fmt = "Quasi-symmetry (%s,%s) two-term error: " % (
+            round(self.helicity[0], 3),
+            round(self.helicity[1], 3),
         )
 
     def build(self, eq, use_jit=True, verbose=1):
@@ -371,9 +368,8 @@ class QuasisymmetryTwoTerm(_Objective):
         if hasattr(self, "_print_value_fmt"):
             units = "(T^3)"
             self._print_value_fmt = (
-                "Quasi-symmetry (%s,%s) error: " % (
-                    round(self.helicity[0], 3), round(self.helicity[1], 3)
-                )
+                "Quasi-symmetry (%s,%s) error: "
+                % (round(self.helicity[0], 3), round(self.helicity[1], 3))
                 + units
             )
 

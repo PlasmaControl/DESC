@@ -472,11 +472,11 @@ def _print_iteration_summary(
         logger.debug("Current ratio = %s" % curr_ratio)
     logger.debug("Perturbation Order = %s" % pert_order)
     logger.debug(
-        "Objective: %s" %
-            objective if isinstance(objective, str) else objective.objectives[0].name
+        "Objective: %s" % objective
+        if isinstance(objective, str)
+        else objective.objectives[0].name
     )
     logger.debug(
-        "Optimizer: %s" %
-            optimizer if isinstance(optimizer, str) else optimizer.method
+        "Optimizer: %s" % optimizer if isinstance(optimizer, str) else optimizer.method
     )
     logger.debug("================")

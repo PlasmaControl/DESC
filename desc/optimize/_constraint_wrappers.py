@@ -122,11 +122,12 @@ class LinearConstraintProjection(ObjectiveFunction):
             Whether to compile for least squares optimization or scalar optimization.
             "auto" compiles based on the type of objective,
             "all" compiles all derivatives.
-        verbose : int, optional
-            Level of output.
+        verbose : integer, optional
+            * 0  : work silently.
+            * 1  : display a termination report
+            * 2  : display progress and timing info during iterations
 
         """
-
         self._objective.compile(mode, verbose)
 
     def project(self, x):

@@ -161,9 +161,8 @@ class Optimizer(IOAble):
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
                 colored(
-                    "method %s is not intended for scalar objective function" % (
-                        ".".join([method])
-                    ),
+                    "method %s is not intended for scalar objective function"
+                    % (".".join([method])),
                     "yellow",
                 )
             )

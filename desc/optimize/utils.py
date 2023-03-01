@@ -314,9 +314,6 @@ def check_termination(
     elif kwargs.get("dx_total", 0) > kwargs.get("max_dx", np.inf):
         success = False
         message = STATUS_MESSAGES["out_of_bounds"]
-    elif np.isnan(dF) or np.isnan(reduction_ratio):
-        success = False
-        message = STATUS_MESSAGES["nan"]
     else:
         success = None
         message = None

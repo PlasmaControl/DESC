@@ -57,8 +57,6 @@ timer.start("Total")
 
 # equilibrium
 eq = Equilibrium.load(input_path)
-
-# XXX: remove
 eq.surface.R_basis._create_idx()
 eq.surface.Z_basis._create_idx()
 

@@ -279,8 +279,8 @@ def j_dot_B_Redl(
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
-    nu_e_star = nu_e    # noqa: F841
-    nu_i_star = nu_i    # noqa: F841
+    nu_e_star = nu_e  # noqa: F841
+    nu_i_star = nu_i  # noqa: F841
     variables = [
         "rho",
         "ne",

@@ -142,6 +142,8 @@ class Optimizer(IOAble):
             objective = LinearConstraintProjection(objective, linear_constraints)
         if not objective.built:
             objective.build(eq, verbose=verbose)
+        if nonlinear_constraint is not None and not nonlinear_constraint.built:
+            nonlinear_constraint.build(eq, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if optimizers[method]["scalar"] else "lsq"
             objective.compile(mode, verbose)
@@ -289,7 +291,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             )
         )
         wrapper = "proximal"
-    if wrapper.lower() in ["prox", "proximal"]:
+    if wrapper is not None and wrapper.lower() in ["prox", "proximal"]:
         perturb_options = options.pop("perturb_options", {})
         solve_options = options.pop("solve_options", {})
         objective = ProximalProjection(

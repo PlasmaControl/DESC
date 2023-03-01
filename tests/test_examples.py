@@ -505,7 +505,7 @@ def test_simsopt_QH_comparison():
         verbose=3,
         objective=objective,
         constraints=constraints,
-        optimizer=Optimizer("lsq-exact"),
+        optimizer=Optimizer("proximal-lsq-exact"),
     )
     aspect = eq2.compute("R0/a")["R0/a"]
     np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)

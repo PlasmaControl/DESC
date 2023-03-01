@@ -1,0 +1,56 @@
+# QI NFP=1 vacuum solution from Alan Goodman 2022
+
+# global parameters
+sym = 1
+NFP = 1
+Psi = 0.08385728
+
+# spectral resolution
+M_pol = 8
+N_tor = 0, 8
+
+# continuation parameters
+bdry_ratio = 0, 0.25, 0.5, 0.75, 1.0
+
+# solver tolerances
+ftol = 1e-2
+xtol = 1e-6
+gtol = 1e-6
+nfev = 50
+
+# solver methods
+optimizer = lsq-exact
+objective = vacuum
+bdry_mode = lcfs
+spectral_indexing = ansi
+node_pattern = jacobi
+
+# pressure and rotational transform/current profiles
+l:   0	p =   0.00000000E+00	c =   0.00000000E+00
+
+# fixed-boundary surface shape
+l:   0	m:  -2	n:  -2	R1 =  -1.50758971E-02	Z1 =   0.00000000E+00
+l:   0	m:  -2	n:  -1	R1 =   1.13103772E-02	Z1 =   0.00000000E+00
+l:   0	m:  -2	n:   0	R1 =   0.00000000E+00	Z1 =  -2.75909839E-03
+l:   0	m:  -2	n:   1	R1 =   0.00000000E+00	Z1 =  -6.91543113E-03
+l:   0	m:  -2	n:   2	R1 =   0.00000000E+00	Z1 =  -1.09507351E-02
+l:   0	m:  -1	n:  -2	R1 =   8.98197238E-02	Z1 =   0.00000000E+00
+l:   0	m:  -1	n:  -1	R1 =   6.28409806E-02	Z1 =   0.00000000E+00
+l:   0	m:  -1	n:   0	R1 =   0.00000000E+00	Z1 =   1.31141889E-01
+l:   0	m:  -1	n:   1	R1 =   0.00000000E+00	Z1 =  -3.33878565E-03
+l:   0	m:  -1	n:   2	R1 =   0.00000000E+00	Z1 =  -8.24347294E-02
+l:   0	m:   0	n:  -2	R1 =   0.00000000E+00	Z1 =  -1.91894406E-01
+l:   0	m:   0	n:  -1	R1 =   0.00000000E+00	Z1 =  -0.00000000E+00
+l:   0	m:   0	n:   0	R1 =   1.00000000E+00	Z1 =   0.00000000E+00
+l:   0	m:   0	n:   1	R1 =   3.25694424E-03	Z1 =   0.00000000E+00
+l:   0	m:   0	n:   2	R1 =  -2.12809690E-01	Z1 =   0.00000000E+00
+l:   0	m:   1	n:  -2	R1 =   0.00000000E+00	Z1 =   6.84033953E-02
+l:   0	m:   1	n:  -1	R1 =   0.00000000E+00	Z1 =  -7.77143215E-02
+l:   0	m:   1	n:   0	R1 =   1.04207670E-01	Z1 =   0.00000000E+00
+l:   0	m:   1	n:   1	R1 =  -2.47737996E-02	Z1 =   0.00000000E+00
+l:   0	m:   1	n:   2	R1 =   7.95219617E-02	Z1 =   0.00000000E+00
+l:   0	m:   2	n:  -2	R1 =   0.00000000E+00	Z1 =   1.33354191E-02
+l:   0	m:   2	n:  -1	R1 =   0.00000000E+00	Z1 =   3.53175850E-03
+l:   0	m:   2	n:   0	R1 =   2.99224778E-03	Z1 =   0.00000000E+00
+l:   0	m:   2	n:   1	R1 =   5.10003437E-03	Z1 =   0.00000000E+00
+l:   0	m:   2	n:   2	R1 =  -8.44225828E-03	Z1 =   0.00000000E+00

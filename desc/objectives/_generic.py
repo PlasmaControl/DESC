@@ -281,22 +281,24 @@ class ToroidalCurrent(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+        logger.info("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        logger.info("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        logger.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
+        )
 
         if self._normalize:
-            print(
+            logger.info(
                 "Maximum "
                 + self._print_value_fmt.format(jnp.max(f / self.normalization))
                 + "(normalized)"
             )
-            print(
+            logger.info(
                 "Minimum "
                 + self._print_value_fmt.format(jnp.min(f / self.normalization))
                 + "(normalized)"
             )
-            print(
+            logger.info(
                 "Average "
                 + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"
@@ -446,6 +448,8 @@ class RotationalTransform(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+        logger.info("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        logger.info("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        logger.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
+        )

@@ -1,5 +1,6 @@
 """Objectives related to the bootstrap current profile."""
 
+import logging
 import warnings
 
 import numpy as np
@@ -13,6 +14,8 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+
+logger = logging.getLogger("DESC_logger")
 
 
 class BootstrapRedlConsistency(_Objective):
@@ -168,16 +171,14 @@ class BootstrapRedlConsistency(_Objective):
             )
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -215,22 +216,24 @@ class BootstrapRedlConsistency(_Objective):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute(*args, **kwargs)
-        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
-        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
-        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+        logger.info("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        logger.info("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        logger.info(
+            "Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units
+        )
 
         if self._normalize:
-            print(
+            logger.info(
                 "Maximum "
                 + self._print_value_fmt.format(jnp.max(f / self.normalization))
                 + "(normalized)"
             )
-            print(
+            logger.info(
                 "Minimum "
                 + self._print_value_fmt.format(jnp.min(f / self.normalization))
                 + "(normalized)"
             )
-            print(
+            logger.info(
                 "Average "
                 + self._print_value_fmt.format(jnp.mean(f / self.normalization))
                 + "(normalized)"

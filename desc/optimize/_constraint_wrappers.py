@@ -110,8 +110,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         self._built = True
         timer.stop("Linear constraint projection build")
-        if verbose > 1:
-            timer.disp("Linear constraint projection build")
+        timer.disp("Linear constraint projection build")
 
     def compile(self, mode="lsq", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
@@ -445,8 +444,7 @@ class ProximalProjection(ObjectiveFunction):
 
         self._built = True
         timer.stop("Proximal projection build")
-        if verbose > 1:
-            timer.disp("Proximal projection build")
+        timer.disp("Proximal projection build")
 
     def compile(self, mode="lsq", verbose=1):
         """Call the necessary functions to ensure the function is compiled.

@@ -2,6 +2,7 @@
 
 
 import logging
+import os
 
 import numpy as np
 import pytest
@@ -220,16 +221,16 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
 @pytest.mark.unit
 def test_mercier_print(TmpDir):
     """Test that the Mercier stability criteria prints correctly."""
-    # Create temporary logfile to capture outputs
-    logfile_path = str(TmpDir.join("/DESC_test_mercier_print.log"))
+    # Create logger to capture output
+    logfile_path = str(TmpDir.join("/DESC_test_objective_print.log"))
     log_connection = open(logfile_path, "x")
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     logfile_formatter = logging.Formatter("%(message)s")
-    logger = logging.getLogger("DESC_logger")
-    logger.setLevel(logging.DEBUG)
-    test_logfile_handler = logging.StreamHandler(log_connection)
-    test_logfile_handler.setLevel("DEBUG")
-    test_logfile_handler.setFormatter(logfile_formatter)
-    logger.addHandler(test_logfile_handler)
+    logfile_handler = logging.StreamHandler(log_connection)
+    logfile_handler.setLevel("INFO")
+    logfile_handler.setFormatter(logfile_formatter)
+    logger.addHandler(logfile_handler)
 
     # Test magnetic well stability print functions
     eq = Equilibrium()
@@ -239,10 +240,12 @@ def test_mercier_print(TmpDir):
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
     mercier_obj.print_value(*mercier_obj.xs(eq))
 
-    # Read and compare logfile to expected output
-    logconnection = open(logfile_path)
-    out = logconnection.read()
-    logconnection.close()
+    # Read output and close connection and remove files
+    log_connection = open(logfile_path)
+    out = log_connection.read()
+    log_connection.close()
+    os.remove(logfile_path)
+
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "
@@ -277,16 +280,16 @@ def test_mercier_print(TmpDir):
 
 def test_magwell_print(TmpDir):
     """Test that the magnetic well stability criteria prints correctly."""
-    # Create temporary logfile to capture outputs
-    logfile_path = str(TmpDir.join("/DESC_test_magwell_print.log"))
+    # Create logger to capture output
+    logfile_path = str(TmpDir.join("/DESC_test_objective_print.log"))
     log_connection = open(logfile_path, "x")
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     logfile_formatter = logging.Formatter("%(message)s")
-    logger = logging.getLogger("DESC_logger")
-    logger.setLevel(logging.DEBUG)
-    test_logfile_handler = logging.StreamHandler(log_connection)
-    test_logfile_handler.setLevel("DEBUG")
-    test_logfile_handler.setFormatter(logfile_formatter)
-    logger.addHandler(test_logfile_handler)
+    logfile_handler = logging.StreamHandler(log_connection)
+    logfile_handler.setLevel("INFO")
+    logfile_handler.setFormatter(logfile_formatter)
+    logger.addHandler(logfile_handler)
 
     # Test magnetic well stability print functions
     eq = Equilibrium()
@@ -299,10 +302,12 @@ def test_magwell_print(TmpDir):
 
     obj.print_value(*obj.xs(eq))
 
-    # Read and compare logfile to expected output
-    logconnection = open(logfile_path)
-    out = logconnection.read()
-    logconnection.close()
+    # Read output and close connection and remove files
+    log_connection = open(logfile_path)
+    out = log_connection.read()
+    log_connection.close()
+    os.remove(logfile_path)
+
     corr_out = str(
         "Precomputing transforms\n"
         + "Maximum "

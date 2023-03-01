@@ -157,10 +157,10 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             else:
                 reduction_ratio = 0
 
-        if verbose > 1:
-            print_iteration_nonlinear(
-                len(allx), len(func_allx), f1, df, dx_norm, g_norm
-            )
+        print_iteration_nonlinear(
+            len(allx), len(func_allx), f1, df, dx_norm, g_norm
+        )
+
         success[0], message[0] = check_termination(
             df,
             f1,
@@ -187,8 +187,8 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    if verbose > 1:
-        print_header_nonlinear()
+    print_header_nonlinear()
+
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
@@ -350,10 +350,10 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             else:
                 reduction_ratio = 0
 
-        if verbose > 1:
-            print_iteration_nonlinear(
-                len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
-            )
+        print_iteration_nonlinear(
+            len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
+        )
+
         success[0], message[0] = check_termination(
             df,
             c1,
@@ -380,8 +380,8 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    if verbose > 1:
-        print_header_nonlinear()
+    print_header_nonlinear()
+    
     try:
         result = scipy.optimize.least_squares(
             fun_wrapped,

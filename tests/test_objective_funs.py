@@ -6,6 +6,9 @@ that is done in test_compute_functions or regression tests.
 This module primarily tests the constructing/building/calling methods.
 """
 
+import logging
+import os
+
 import numpy as np
 import pytest
 from scipy.constants import mu_0
@@ -485,19 +488,33 @@ def test_principal_curvature():
 
 
 @pytest.mark.unit
-def test_objective_print(capsys):
+def test_objective_print(TmpDir):
     """Test that the profile objectives prints correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
     def test(obj, values, normalize=False):
+        # Create logger to capture output
+        logfile_path = str(TmpDir.join("/DESC_test_objective_print.log"))
+        log_connection = open(logfile_path, "x")
+        logger = logging.getLogger()
+        logger.setLevel(logging.INFO)
+        logfile_formatter = logging.Formatter("%(message)s")
+        logfile_handler = logging.StreamHandler(log_connection)
+        logfile_handler.setLevel("INFO")
+        logfile_handler.setFormatter(logfile_formatter)
+        logger.addHandler(logfile_handler)
 
         obj.print_value(*obj.xs(eq))
-        out = capsys.readouterr()
+
+        # Read output and close connection and remove files
+        log_connection = open(logfile_path)
+        out = log_connection.read()
+        log_connection.close()
+        os.remove(logfile_path)
 
         corr_out = str(
-            "Precomputing transforms\n"
-            + "Maximum "
+            "Maximum "
             + obj._print_value_fmt.format(np.max(values))
             + obj._units
             + "\n"
@@ -510,6 +527,7 @@ def test_objective_print(capsys):
             + obj._units
             + "\n"
         )
+
         if normalize:
             corr_out += str(
                 "Maximum "
@@ -526,7 +544,7 @@ def test_objective_print(capsys):
                 + "\n"
             )
 
-        assert out.out == corr_out
+        assert out == corr_out
 
     iota = eq.compute("iota", grid=grid)["iota"]
     obj = RotationalTransform(eq=eq, grid=grid)

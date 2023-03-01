@@ -170,8 +170,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             "Cannot perturb with a scalar objective: {}.".format(objective)
         )
 
-    if verbose > 0:
-        logger.info("Perturbing %s" % (", ".join(deltas.keys())))
+    logger.info("Perturbing %s" % (", ".join(deltas.keys())))
 
     timer = Timer()
     timer.start("Total perturbation")

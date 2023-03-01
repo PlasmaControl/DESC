@@ -341,16 +341,14 @@ class Volume(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -479,8 +477,7 @@ class PlasmaVesselDistance(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._surface_coords = self._surface.compute_coordinates(
@@ -492,8 +489,7 @@ class PlasmaVesselDistance(_Objective):
         )
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -615,16 +611,14 @@ class MeanCurvature(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
@@ -745,16 +739,14 @@ class PrincipalCurvature(_Objective):
         self._args = get_params(self._data_keys)
 
         timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
+        logger.info("Precomputing transforms")
         timer.start("Precomputing transforms")
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
         timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
+        timer.disp("Precomputing transforms")
 
         if self._normalize:
             scales = compute_scaling_factors(eq)

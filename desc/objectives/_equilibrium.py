@@ -52,6 +52,7 @@ class ForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Total force: {:10.3e} "
 
@@ -229,6 +230,7 @@ class RadialForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Radial force: {:10.3e} "
 
@@ -396,6 +398,7 @@ class HelicalForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Helical force: {:10.3e}, "
 
@@ -565,6 +568,7 @@ class Energy(_Objective):
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
     _linear = False
+    _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
 
@@ -749,6 +753,7 @@ class CurrentDensity(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(A*m)"
     _print_value_fmt = "Total current density: {:10.3e} "
 

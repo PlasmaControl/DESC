@@ -595,6 +595,9 @@ class _Objective(IOAble, ABC):
 
     """
 
+    _scalar = False
+    _linear = False
+    _equilibrium = False
     _io_attrs_ = [
         "_target",
         "_weight",

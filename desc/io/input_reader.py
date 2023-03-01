@@ -145,11 +145,11 @@ class InputReader:
                     args.verbose = 1
 
         if args.verbose == 0:
-            set_console_logging("1", "stdout")
+            logger = set_console_logging("1", "stdout")
         elif args.verbose == 1:
-            set_console_logging("INFO", "stdout")
+            logger = set_console_logging("INFO", "stdout")
         elif args.verbose == 2:
-            set_console_logging("DEBUG", "stdout")
+            logger = set_console_logging("DEBUG", "stdout")
 
         if args.disable_logging is True:
             stop_logfile_logging()

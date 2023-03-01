@@ -129,11 +129,11 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     """
     if verbose == 0:
-        set_console_logging(console_log_level="CRITICAL")
+        logger = set_console_logging(console_log_level="CRITICAL")
     if verbose == 1:
-        set_console_logging(console_log_level="INFO")
+        logger = set_console_logging(console_log_level="INFO")
     if verbose == 2:
-        set_console_logging(console_log_level="DEBUG")
+        logger = set_console_logging(console_log_level="DEBUG")
 
     if not use_jax:
         warnings.warn(
@@ -432,11 +432,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     """
     if verbose == 0:
-        set_console_logging(console_log_level="CRITICAL")
+        logger = set_console_logging(console_log_level="CRITICAL")
     if verbose == 1:
-        set_console_logging(console_log_level="INFO")
+        logger = set_console_logging(console_log_level="INFO")
     if verbose == 2:
-        set_console_logging(console_log_level="DEBUG")
+        logger = set_console_logging(console_log_level="DEBUG")
 
     if not use_jax:
         warnings.warn(

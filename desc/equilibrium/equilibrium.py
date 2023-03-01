@@ -501,11 +501,11 @@ class Equilibrium(_Configuration, IOAble):
             )
 
         if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
+            logger = set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            set_console_logging(console_log_level="INFO")
+            logger = set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+            logger = set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(
             eq,
@@ -608,11 +608,11 @@ class Equilibrium(_Configuration, IOAble):
             eq = self
 
         if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
+            logger = set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            set_console_logging(console_log_level="INFO")
+            logger = set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+            logger = set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(
             eq,
@@ -695,11 +695,11 @@ class Equilibrium(_Configuration, IOAble):
             constraint = get_equilibrium_objective()
 
         if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
+            logger = set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
-            set_console_logging(console_log_level="INFO")
+            logger = set_console_logging(console_log_level="INFO")
         if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+            logger = set_console_logging(console_log_level="DEBUG")
         timer = Timer()
         timer.start("Total time")
 
@@ -883,11 +883,11 @@ class Equilibrium(_Configuration, IOAble):
                 constraint.build(self)
 
         if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
+            logger = set_console_logging(console_log_level="CRITICAL") # noqa: F841
         if verbose == 1:
-            set_console_logging(console_log_level="INFO")
+            logger = set_console_logging(console_log_level="INFO") # noqa: F841
         if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+            logger = set_console_logging(console_log_level="DEBUG") # noqa: F841
 
         eq = perturb(
             self,

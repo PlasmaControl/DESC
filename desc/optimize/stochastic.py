@@ -96,11 +96,11 @@ def sgd(
 
     """
     if verbose == 0:
-        set_console_logging(console_log_level="CRITICAL")
+        logger = set_console_logging(console_log_level="CRITICAL")
     if verbose == 1:
-        set_console_logging(console_log_level="INFO")
+        logger = set_console_logging(console_log_level="INFO")
     if verbose == 2:
-        set_console_logging(console_log_level="DEBUG")
+        logger = set_console_logging(console_log_level="DEBUG")
 
     nfev = 0
     ngev = 0

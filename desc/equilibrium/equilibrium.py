@@ -761,7 +761,7 @@ class Equilibrium(_Configuration, IOAble):
             timer.stop("Step %s time" % iteration)
             objective.print_value(objective.x(eq_new))
             logger.debug("Predicted Reduction = %s" % round(predicted_reduction, 3))
-            logger.debug("Reduction Ratio = %s" % round(ratio), 3)
+            logger.debug("Reduction Ratio = %s" % round(ratio, 3))
             timer.disp("Step %s time" % iteration)
 
             # stopping criteria

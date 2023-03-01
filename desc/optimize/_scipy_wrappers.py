@@ -157,9 +157,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             else:
                 reduction_ratio = 0
 
-        print_iteration_nonlinear(
-            len(allx), len(func_allx), f1, df, dx_norm, g_norm
-        )
+        print_iteration_nonlinear(len(allx), len(func_allx), f1, df, dx_norm, g_norm)
 
         success[0], message[0] = check_termination(
             df,
@@ -350,9 +348,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             else:
                 reduction_ratio = 0
 
-        print_iteration_nonlinear(
-            len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
-        )
+        print_iteration_nonlinear(len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm)
 
         success[0], message[0] = check_termination(
             df,
@@ -381,7 +377,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
 
     EPS = 2 * np.finfo(x0.dtype).eps
     print_header_nonlinear()
-    
+
     try:
         result = scipy.optimize.least_squares(
             fun_wrapped,

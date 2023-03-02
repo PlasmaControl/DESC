@@ -883,11 +883,11 @@ class Equilibrium(_Configuration, IOAble):
                 constraint.build(self)
 
         if verbose == 0:
-            logger = set_console_logging(console_log_level="CRITICAL") # noqa: F841
+            logger = set_console_logging(console_log_level="CRITICAL")  # noqa: F841
         if verbose == 1:
-            logger = set_console_logging(console_log_level="INFO") # noqa: F841
+            logger = set_console_logging(console_log_level="INFO")  # noqa: F841
         if verbose == 2:
-            logger = set_console_logging(console_log_level="DEBUG") # noqa: F841
+            logger = set_console_logging(console_log_level="DEBUG")  # noqa: F841
 
         eq = perturb(
             self,

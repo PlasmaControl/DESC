@@ -29,6 +29,8 @@
    notebooks/hands_on
    notebooks/Spline_Basis
    notebooks/Saving_Equilibria_in_VMEC_Format
+   notebooks/DESC_Solve_from_pyQSC
+   notebooks/Toroidal_current_constraint
 
 .. toctree::
    :maxdepth: 1

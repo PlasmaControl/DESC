@@ -50,7 +50,7 @@ Repository Contents
 
 - desc_ contains the source code including the main script and supplemental files. Refer to the API_ documentation for details on all of the available functions and classes.
 - docs_ contains the documentation files.
-- examples_ contains example input files along with corresponding DESC solutions, whihc are also accessible using the `desc.examples.get` function. 
+- examples_ contains example input files along with corresponding DESC solutions, which are also accessible using the `desc.examples.get` function.
 - tests_ contains routines for automatic testing.
 
 .. _desc: https://github.com/PlasmaControl/DESC/tree/master/desc
@@ -87,7 +87,7 @@ Contribute
     :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
     :alt: RegressionTests
 
-.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z 
+.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z
     :target: https://codecov.io/github/PlasmaControl/DESC
     :alt: Coverage
 

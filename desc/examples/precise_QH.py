@@ -32,7 +32,7 @@ surf = FourierRZToroidalSurface(
     NFP=4,
 )
 eq = Equilibrium(M=8, N=8, Psi=0.04, surface=surf)
-eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=3)[-1]
+eq = solve_continuation_automatic(eq, objective="force", bdry_step=0.5, verbose=2)[-1]
 eqfam = EquilibriaFamily(eq)
 
 # optimize in steps
@@ -73,7 +73,7 @@ for n in range(1, eq.M + 1):
         constraints=constraints,
         optimizer=optimizer,
         maxiter=50,
-        verbose=3,
+        verbose=2,
         copy=True,
         options={
             "initial_trust_radius": 0.5,

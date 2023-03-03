@@ -1342,7 +1342,7 @@ class TestBootstrapObjectives:
         )
 
         eq.solve(
-            verbose=3,
+            verbose=2,
             ftol=1e-8,
             constraints=get_fixed_boundary_constraints(kinetic=True),
             optimizer=Optimizer("lsq-exact"),
@@ -1382,7 +1382,7 @@ class TestBootstrapObjectives:
             )
         )
         eq, _ = eq.optimize(
-            verbose=3,
+            verbose=2,
             objective=objective,
             constraints=constraints,
             optimizer=Optimizer("scipy-trf"),
@@ -1461,7 +1461,7 @@ class TestBootstrapObjectives:
         eq.current.change_resolution(current_L)
 
         eq.solve(
-            verbose=3,
+            verbose=2,
             ftol=1e-8,
             constraints=get_fixed_boundary_constraints(kinetic=True, iota=False),
             optimizer=Optimizer("lsq-exact"),
@@ -1502,7 +1502,7 @@ class TestBootstrapObjectives:
             )
         )
         eq, _ = eq.optimize(
-            verbose=3,
+            verbose=2,
             objective=objective,
             constraints=constraints,
             optimizer=Optimizer("scipy-trf"),

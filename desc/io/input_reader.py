@@ -126,8 +126,10 @@ class InputReader:
             set_device("cpu")
 
         logger = logging.getLogger("DESC_logger")
-        # Sets verbosity to default of 1 on no argument unless 'quiet' flag has been
-        # set or the DESC logger has been silenced or had its handler removed
+
+        # Sets verbosity to default of 1 on no argument if not already set, unless
+        # 'quiet' flag has been set or the DESC logger has been silenced or had its
+        # handler removed
         if args.verbose is None:
             if args.quiet is True:
                 args.verbose = 0
@@ -137,6 +139,12 @@ class InputReader:
                         if isinstance(handler, logging.StreamHandler):
                             if handler.level < 10:
                                 args.verbose = 0
+                            elif handler.level == logging.DEBUG:
+                                args.verbose = 1
+                            elif handler.level == logging.INFO:
+                                args.verbose = 2
+                            elif handler.level > 20:
+                                args.verbose = 2
                             else:
                                 args.verbose = 1
                         else:
@@ -150,6 +158,8 @@ class InputReader:
             logger = set_console_logging("INFO", "stdout")
         elif args.verbose == 2:
             logger = set_console_logging("DEBUG", "stdout")
+        else:
+            logger = set_console_logging("INFO", "stdout")
 
         if args.disable_logging is True:
             stop_logfile_logging()

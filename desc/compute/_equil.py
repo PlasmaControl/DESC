@@ -5,7 +5,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages
+from .utils import cross, dot, surface_averages, surface_integrals
 
 
 @register_compute_fun(
@@ -463,6 +463,32 @@ def _W_B(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="W_B(r)",
+    label="W_B(\\rho)",
+    units="J",
+    units_long="Joules",
+    description="Plasma magnetic energy enclosed by flux surfaces",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|B|", "e_theta", "e_zeta", "Z"],
+)
+def _W_B_of_r(params, transforms, profiles, data, **kwargs):
+    data["W_B(r)"] = jnp.abs(
+        surface_integrals(
+            transforms["grid"],
+            data["|B|"] ** 2
+            / (2 * mu_0)
+            * cross(data["e_theta"], data["e_zeta"])[:, 2]
+            * data["Z"],
+        )
+    )
+    return data
+
+
+@register_compute_fun(
     name="W_Bpol",
     label="W_B,pol",
     units="J",
@@ -526,6 +552,33 @@ def _W_p(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="W_p(r)",
+    label="W_p(\\rho)",
+    units="J",
+    units_long="Joules",
+    description="Plasma thermodynamic energy enclosed by flux surfaces",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["p", "e_theta", "e_zeta", "Z"],
+    gamma="gamma",
+)
+def _W_p_of_r(params, transforms, profiles, data, **kwargs):
+    data["W_p(r)"] = jnp.abs(
+        surface_integrals(
+            transforms["grid"],
+            data["p"]
+            / (kwargs.get("gamma", 0) - 1)
+            * cross(data["e_theta"], data["e_zeta"])[:, 2]
+            * data["Z"],
+        )
+    )
+    return data
+
+
+@register_compute_fun(
     name="W",
     label="W",
     units="J",
@@ -544,6 +597,24 @@ def _W(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="W(r)",
+    label="W(\\rho)",
+    units="J",
+    units_long="Joules",
+    description="Plasma total energy enclosed by flux surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_B(r)", "W_p(r)"],
+)
+def _W_of_r(params, transforms, profiles, data, **kwargs):
+    data["W(r)"] = data["W_B(r)"] + data["W_p(r)"]
+    return data
+
+
+@register_compute_fun(
     name="<beta>_vol",
     label="\\langle \\beta \\rangle_{vol}",
     units="~",
@@ -558,6 +629,24 @@ def _W(params, transforms, profiles, data, **kwargs):
 )
 def _beta_vol(params, transforms, profiles, data, **kwargs):
     data["<beta>_vol"] = jnp.abs(data["W_p"] / data["W_B"])
+    return data
+
+
+@register_compute_fun(
+    name="<beta>_vol(r)",
+    label="\\langle \\beta \\rangle_{vol} (\\rho)",
+    units="~",
+    units_long="None",
+    description="Normalized plasma pressure enclosed by flux surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_p(r)", "W_B(r)"],
+)
+def _beta_vol_of_r(params, transforms, profiles, data, **kwargs):
+    data["<beta>_vol(r)"] = jnp.abs(data["W_p(r)"] / data["W_B(r)"])
     return data
 
 

@@ -487,6 +487,12 @@ class VMECIO:
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
         rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
 
+        b0 = file.createVariable("b0", np.float64)
+        b0.long_name = "Avg Btor on axis"
+        b0.units = "T"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
+        b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
+
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
         data = eq.compute(["I", "G", "<J*B>", "D_Mercier"], grid=grid)

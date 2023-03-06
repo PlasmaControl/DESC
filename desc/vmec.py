@@ -11,7 +11,7 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import compress
+from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
@@ -515,6 +515,32 @@ class VMECIO:
         jdotb.units = "N/m^3"
         jdotb[:] = compress(grid, data["<J*B>"])
         jdotb[0] = 0
+
+        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
+        jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
+        jcuru.units = "A/m^3"
+        jcuru[:] = compress(
+            grid,
+            surface_averages(
+                grid,
+                data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+                sqrt_g=data["sqrt(g)"],
+            ),
+        )
+        jcuru[0] = 0
+
+        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
+        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
+        jcurv.units = "A/m^3"
+        jcurv[:] = compress(
+            grid,
+            surface_averages(
+                grid,
+                data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
+                sqrt_g=data["sqrt(g)"],
+            ),
+        )
+        jcurv[0] = 0
 
         # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
@@ -1099,12 +1125,6 @@ class VMECIO:
 
         # TODO: these output quantities need to be added
         """
-        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
-        jcuru[:] = np.zeros((file.dimensions["radius"].size,))
-
-        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcurv[:] = np.zeros((file.dimensions["radius"].size,))
-
         b0 = file.createVariable("b0", np.float64)
         b0[:] = 1.0
 

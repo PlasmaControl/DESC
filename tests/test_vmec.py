@@ -389,6 +389,16 @@ def test_vmec_save_1(VMEC_save):
         rtol=1e-6,
     )
     np.testing.assert_allclose(
+        np.abs(vmec.variables["jcuru"][20:100]),
+        np.abs(desc.variables["jcuru"][20:100]),
+        rtol=1e-5,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jcurv"][20:100]),
+        np.abs(desc.variables["jcurv"][20:100]),
+        rtol=3e-2,
+    )
+    np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2
     )
     np.testing.assert_allclose(

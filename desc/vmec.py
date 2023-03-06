@@ -476,19 +476,19 @@ class VMECIO:
         betator[:] = eq.compute("<beta>_voltor")["<beta>_voltor"]
 
         rbtor = file.createVariable("rbtor", np.float64)
-        rbtor.long_name = "<R*Btor> on LCFS"
+        rbtor.long_name = "<R*B_tor> on LCFS"
         rbtor.units = "T*m"
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
         rbtor[:] = eq.compute("G", grid=grid)["G"][0]
 
         rbtor0 = file.createVariable("rbtor0", np.float64)
-        rbtor0.long_name = "<R*Btor> on axis"
+        rbtor0.long_name = "<R*B_tor> on axis"
         rbtor0.units = "T*m"
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
         rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
 
         b0 = file.createVariable("b0", np.float64)
-        b0.long_name = "Avg Btor on axis"
+        b0.long_name = "average B_tor on axis"
         b0.units = "T"
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
         b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
@@ -1117,10 +1117,8 @@ class VMECIO:
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
 
-
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis[:] = 0.0
-
 
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0
@@ -1142,7 +1140,6 @@ class VMECIO:
 
         am_aux_s = file.createVariable("am_aux_s", np.float64, ("ndfmax",))
         am_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
-
 
         ctor = file.createVariable("ctor", np.float64)
         ctor[:] = 0.0
@@ -1168,8 +1165,6 @@ class VMECIO:
         itfsq = file.createVariable("itfsq", np.int32)
         itfsq[:] = 1
 
-
-
         nextcur = file.createVariable("nextcur", np.int32)
         nextcur[:] = 0
 
@@ -1178,9 +1173,6 @@ class VMECIO:
 
         over_r = file.createVariable("over_r", np.float64, ("radius",))
         over_r[:] = np.zeros((file.dimensions["radius"].size,))
-
-
-
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))

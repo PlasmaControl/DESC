@@ -321,6 +321,9 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
     np.testing.assert_allclose(vmec.variables["iotaf"][:], desc.variables["iotaf"][:])
+    np.testing.assert_allclose(
+        vmec.variables["q_factor"][:], desc.variables["q_factor"][:]
+    )
     np.testing.assert_allclose(vmec.variables["iotas"][:], desc.variables["iotas"][:])
     np.testing.assert_allclose(vmec.variables["phi"][:], desc.variables["phi"][:])
     np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
@@ -344,6 +347,21 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(
         vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
     # raxis_cc & zaxis_cs excluded b/c VMEC saves initial guess, not final solution
     np.testing.assert_allclose(

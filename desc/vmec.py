@@ -475,6 +475,12 @@ class VMECIO:
         betator.units = "None"
         betator[:] = eq.compute("<beta>_voltor")["<beta>_voltor"]
 
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis.long_name = "normalize plasma pressure on axis"
+        betaxis.units = "None"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
+        betaxis[:] = eq.compute("<beta>_vol(r)", grid=grid)["<beta>_vol(r)"][0]
+
         ctor = file.createVariable("ctor", np.float64)
         ctor.long_name = "total toroidal plamsa current"
         ctor.units = "A"
@@ -1143,14 +1149,8 @@ class VMECIO:
 
         # TODO: these output quantities need to be added
         """
-        b0 = file.createVariable("b0", np.float64)
-        b0[:] = 1.0
-
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-
-        betaxis = file.createVariable("betaxis", np.float64)
-        betaxis[:] = 0.0
 
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0
@@ -1206,15 +1206,18 @@ class VMECIO:
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))
 
+        # this is not the same as DESC's "V(r)"
         vp = file.createVariable("vp", np.float64, ("radius",))
         vp[:] = np.zeros((file.dimensions["radius"].size,))
 
+        # this is not the same as DESC's "W_B"
         wb = file.createVariable("wb", np.float64)
         wb[:] = 0.0
 
         wdot = file.createVariable("wdot", np.float64, ("time",))
         wdot[:] = np.zeros((file.dimensions["time"].size,))
 
+        # this is not the same as DESC's "W_p"
         wp = file.createVariable("wp", np.float64)
         wp[:] = 0.0
         """

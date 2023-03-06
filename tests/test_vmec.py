@@ -355,6 +355,9 @@ def test_vmec_save_1(VMEC_save):
         vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-6
     )
     np.testing.assert_allclose(
+        vmec.variables["betaxis"][:], desc.variables["betaxis"][:], rtol=1e-4
+    )
+    np.testing.assert_allclose(
         vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-6
     )
     np.testing.assert_allclose(

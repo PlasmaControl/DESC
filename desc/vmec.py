@@ -1148,10 +1148,9 @@ class VMECIO:
             timer.disp("J^zeta")
 
         # TODO: these output quantities need to be added
-        """
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-
+        """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0
 

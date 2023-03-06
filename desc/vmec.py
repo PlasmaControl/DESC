@@ -9,7 +9,6 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
-from desc.backend import sign
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress
@@ -457,6 +456,16 @@ class VMECIO:
         betatotal.long_name = "normalized plasma pressure"
         betatotal.units = "None"
         betatotal[:] = eq.compute("<beta>_vol")["<beta>_vol"]
+
+        betapol = file.createVariable("betapol", np.float64)
+        betapol.long_name = "normalized poloidal plasma pressure"
+        betapol.units = "None"
+        betapol[:] = eq.compute("<beta>_volpol")["<beta>_volpol"]
+
+        betator = file.createVariable("betator", np.float64)
+        betator.long_name = "normalized toroidal plasma pressure"
+        betator.units = "None"
+        betator[:] = eq.compute("<beta>_voltor")["<beta>_voltor"]
 
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
@@ -1064,6 +1073,29 @@ class VMECIO:
 
         # TODO: these output quantities need to be added
         """
+        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
+        jcuru[:] = np.zeros((file.dimensions["radius"].size,))
+
+        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
+        jcurv[:] = np.zeros((file.dimensions["radius"].size,))
+
+        b0 = file.createVariable("b0", np.float64)
+        b0[:] = 1.0
+
+        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
+        bdotb[:] = np.zeros((file.dimensions["radius"].size,))
+
+        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
+        bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
+
+        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
+        beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+
+
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis[:] = 0.0
+
+
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0
 
@@ -1085,26 +1117,6 @@ class VMECIO:
         am_aux_s = file.createVariable("am_aux_s", np.float64, ("ndfmax",))
         am_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
 
-        b0 = file.createVariable("b0", np.float64)
-        b0[:] = 1.0
-
-        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
-        bdotb[:] = np.zeros((file.dimensions["radius"].size,))
-
-        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
-        bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-
-        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
-        beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
-
-        betapol = file.createVariable("betapol", np.float64)
-        betapol[:] = 0.0
-
-        betator = file.createVariable("betator", np.float64)
-        betator[:] = 0.0
-
-        betaxis = file.createVariable("betaxis", np.float64)
-        betaxis[:] = 0.0
 
         ctor = file.createVariable("ctor", np.float64)
         ctor[:] = 0.0
@@ -1130,11 +1142,7 @@ class VMECIO:
         itfsq = file.createVariable("itfsq", np.int32)
         itfsq[:] = 1
 
-        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
-        jcuru[:] = np.zeros((file.dimensions["radius"].size,))
 
-        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcurv[:] = np.zeros((file.dimensions["radius"].size,))
 
         nextcur = file.createVariable("nextcur", np.int32)
         nextcur[:] = 0

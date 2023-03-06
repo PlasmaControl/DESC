@@ -35,7 +35,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     verbose=1,
     maxiter=None,
     callback=None,
-    options={},
+    options=None,
 ):
     """Minimize a scalar function using a (quasi)-Newton trust region method.
 
@@ -106,6 +106,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         Boolean flag indicating if the optimizer exited successfully.
 
     """
+    options = {} if options is None else options
     nfev = 0
     ngev = 0
     nhev = 0

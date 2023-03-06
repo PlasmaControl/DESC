@@ -75,7 +75,7 @@ class Optimizer(IOAble):
         x_scale="auto",
         verbose=1,
         maxiter=None,
-        options={},
+        options=None,
     ):
         """Optimize an objective function.
 
@@ -130,6 +130,7 @@ class Optimizer(IOAble):
             `OptimizeResult` for a description of other attributes.
 
         """
+        options = {} if options is None else options
         # TODO: document options
         timer = Timer()
         wrapper, method = _parse_method(self.method)

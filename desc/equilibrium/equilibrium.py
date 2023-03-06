@@ -413,7 +413,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -531,7 +531,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -628,8 +628,8 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         verbose=1,
         copy=False,
-        solve_options={},
-        perturb_options={},
+        solve_options=None,
+        perturb_options=None,
     ):
         """Optimize an equilibrium for an objective.
 
@@ -666,6 +666,9 @@ class Equilibrium(_Configuration, IOAble):
         from desc.optimize.tr_subproblems import update_tr_radius
         from desc.optimize.utils import check_termination
         from desc.perturbations import optimal_perturb
+
+        solve_options = {} if solve_options is None else solve_options
+        perturb_options = {} if perturb_options is None else perturb_options
 
         if constraint is None:
             constraint = get_equilibrium_objective()

@@ -314,8 +314,8 @@ class ProximalProjection(ObjectiveFunction):
         constraint,
         eq=None,
         verbose=1,
-        perturb_options={},
-        solve_options={},
+        perturb_options=None,
+        solve_options=None,
     ):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
@@ -339,6 +339,8 @@ class ProximalProjection(ObjectiveFunction):
                 )
         self._objective = objective
         self._constraint = constraint
+        solve_options = {} if solve_options is None else solve_options
+        perturb_options = {} if perturb_options is None else perturb_options
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)

@@ -385,6 +385,24 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
     )
+    np.testing.assert_allclose(
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["q_factor"][:], desc.variables["q_factor"][:], rtol=1e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["b0"][:], desc.variables["b0"][:], rtol=1e-3
+    )
 
 
 @pytest.mark.unit

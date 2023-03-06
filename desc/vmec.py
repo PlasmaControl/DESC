@@ -186,6 +186,9 @@ class VMECIO:
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
+        # desc throws NaN for r == 0, so we use something small to approximate it
+        ONAXIS = 1e-6
+
         Psi = eq.Psi
         NFP = eq.NFP
         M = eq.M
@@ -471,6 +474,18 @@ class VMECIO:
         betator.long_name = "normalized toroidal plasma pressure"
         betator.units = "None"
         betator[:] = eq.compute("<beta>_voltor")["<beta>_voltor"]
+
+        rbtor = file.createVariable("rbtor", np.float64)
+        rbtor.long_name = "<R*Btor> on LCFS"
+        rbtor.units = "T*m"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
+        rbtor[:] = eq.compute("G", grid=grid)["G"][0]
+
+        rbtor0 = file.createVariable("rbtor0", np.float64)
+        rbtor0.long_name = "<R*Btor> on axis"
+        rbtor0.units = "T*m"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
+        rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
 
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
@@ -1160,11 +1175,6 @@ class VMECIO:
 
 
 
-        rbtor = file.createVariable("rbtor", np.float64)
-        rbtor[:] = 0.0
-
-        rbtor0 = file.createVariable("rbtor0", np.float64)
-        rbtor0[:] = 0.0
 
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))

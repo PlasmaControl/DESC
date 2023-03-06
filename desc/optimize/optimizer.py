@@ -7,6 +7,7 @@ from termcolor import colored
 
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
+from desc.objectives.utils import combine_args
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
@@ -302,6 +303,8 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             solve_options=solve_options,
         )
         nonlinear_constraint = None
+    if nonlinear_constraint is not None:
+        objective, nonlinear_constraint = combine_args(objective, nonlinear_constraint)
     return objective, nonlinear_constraint
 
 

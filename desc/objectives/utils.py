@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import block_diag, jnp, put
 from desc.compute import arg_order
-from desc.utils import svd_inv_null
+from desc.utils import flatten_list, svd_inv_null
 
 from ._equilibrium import (
     CurrentDensity,
@@ -272,3 +272,40 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def combine_args(*objectives):
+    """Given ObjectiveFunctions, modify all to take the same state vector.
+
+    The new state vector will be a combination of all arguments taken by any objective.
+
+    Parameters
+    ----------
+    objectives : ObjectiveFunction
+        ObjectiveFunctions to modify.
+
+    Returns
+    -------
+    objectives : ObjectiveFunction
+        Original ObjectiveFunctions modified to take the same state vector.
+    """
+    args = flatten_list([obj.args for obj in objectives])
+    args = [arg for arg in arg_order if arg in args]
+
+    dimensions = objectives[0].dimensions
+    for obj in objectives[1:]:
+        dimensions.update(obj.dimensions)
+
+    dim_x = 0
+    x_idx = {}
+    for arg in args:
+        x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
+        dim_x += dimensions[arg]
+
+    for obj in objectives:
+        obj._args = args
+        obj._dimensions = dimensions
+        obj._dim_x = dim_x
+        obj._x_idx = x_idx
+
+    return objectives

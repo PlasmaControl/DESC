@@ -685,6 +685,24 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     return data
 
 
+@register_compute_fun(
+    name="q",
+    label="q = 1/\\iota",
+    units="~",
+    units_long="None",
+    description="Safety factor 'q', inverse of rotational transform.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["iota"],
+)
+def _q(params, transforms, profiles, data, **kwargs):
+    data["q"] = 1 / data["iota"]
+    return data
+
+
 # TODO: add K(rho,theta,zeta)*grad(rho) term
 @register_compute_fun(
     name="I",

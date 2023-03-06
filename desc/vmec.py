@@ -386,8 +386,13 @@ class VMECIO:
             iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
             # value closest to axis will be nan
-            grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
             iotaf[:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
+
+        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
+        q_factor.long_name = "inverse rotational transform on full mesh"
+        q_factor.units = "None"
+        q_factor[:] = 1 / iotaf[:]
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
@@ -396,7 +401,7 @@ class VMECIO:
         if eq.iota is not None:
             iotas[1:] = -eq.iota(r_half)  # negative sign for negative Jacobian
         else:
-            grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
             iotas[1:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
@@ -1153,8 +1158,7 @@ class VMECIO:
         over_r = file.createVariable("over_r", np.float64, ("radius",))
         over_r[:] = np.zeros((file.dimensions["radius"].size,))
 
-        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
-        q_factor[:] = np.zeros((file.dimensions["radius"].size,))
+
 
         rbtor = file.createVariable("rbtor", np.float64)
         rbtor[:] = 0.0

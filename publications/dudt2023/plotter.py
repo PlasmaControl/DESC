@@ -23,7 +23,9 @@ QI_mn = np.array([np.pi / 16, -np.pi / 10, np.pi / 8])
 eq = Equilibrium()
 z = np.linspace(0, np.pi / 2, num=QI_l.size)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(["|B|_QI", "zeta_QI"], grid=grid, M_QI=1, N_QI=1, QI_l=QI_l, QI_mn=QI_mn)
+data = eq.compute(
+    ["|B|_QI", "zeta_QI"], grid=grid, M_QI=1, N_QI=1, QI_l=QI_l, QI_mn=QI_mn
+)
 
 alph = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
 zbar = data["zeta-bar_QI"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
@@ -34,7 +36,14 @@ fig, (ax0, ax1, ax2) = plt.subplots(
     ncols=3, figsize=(18, 6), sharex=False, sharey=False
 )
 # plot a
-ax0.plot(zbar[0, :], B[0, :], color=color3, linestyle="-", lw=6, label=r"spline interpolation")
+ax0.plot(
+    zbar[0, :],
+    B[0, :],
+    color=color3,
+    linestyle="-",
+    lw=6,
+    label=r"spline interpolation",
+)
 ax0.plot(z, QI_l, color=color1, linestyle="", marker="o", ms=12, label=r"$x_l$")
 ax0.legend(loc="upper center")
 ax0.set_xlabel(r"$\bar{\zeta}$")
@@ -54,11 +63,38 @@ cax = div.append_axes("right", size="5%", pad=0.05)
 cbar = fig.colorbar(im2, cax=cax)
 cbar.update_ticks()
 arr = np.array([1, 1])
-ax2.plot([0, 2 * np.pi], 0 * arr, color=color0, linestyle=":", lw=6, label=r"$\alpha=0$")
-ax2.plot([0, 2 * np.pi], np.pi / 2 * arr, color=color1, linestyle=":", lw=6, label=r"$\alpha=\pi/2$")
-ax2.plot([0, 2 * np.pi], np.pi * arr, color=color2, linestyle=":", lw=6, label=r"$\alpha=\pi$")
-ax2.plot([0, 2 * np.pi], 3 * np.pi / 2 * arr, color=color3, linestyle=":", lw=6, label=r"$\alpha=3\pi/2$")
+ax2.plot(
+    [0, 2 * np.pi], 0 * arr, color=color0, linestyle=":", lw=6, label=r"$\alpha=0$"
+)
+ax2.plot(
+    [0, 2 * np.pi],
+    np.pi / 2 * arr,
+    color=color1,
+    linestyle=":",
+    lw=6,
+    label=r"$\alpha=\pi/2$",
+)
+ax2.plot(
+    [0, 2 * np.pi],
+    np.pi * arr,
+    color=color2,
+    linestyle=":",
+    lw=6,
+    label=r"$\alpha=\pi$",
+)
+ax2.plot(
+    [0, 2 * np.pi],
+    3 * np.pi / 2 * arr,
+    color=color3,
+    linestyle=":",
+    lw=6,
+    label=r"$\alpha=3\pi/2$",
+)
 ax2.set_xlabel(r"$\zeta_B$")
 ax2.set_ylabel(r"$\alpha$")
 fig.tight_layout()
+plt.show()
 plt.savefig("QI.png")
+plt.savefig("QI.eps")
+
+print("Done!")

@@ -53,7 +53,8 @@ ax.set_xlabel(r"$R$ (m)")
 ax.set_ylabel(r"$Z$ (m)")
 fig.tight_layout()
 plt.show()
-plt.savefig("boundaries.png")
+plt.savefig("Goodman_boundaries.png")
+plt.savefig("Goodman_boundaries.eps")
 
 grid0_compute = LinearGrid(
     M=6 * eq_DESC.M + 1, N=6 * eq_DESC.N + 1, NFP=eq_DESC.NFP, sym=False, rho=1.0
@@ -172,7 +173,8 @@ ax1.set_title(r"DESC $|\mathbf{B}|~(T)$")
 ax2.set_title(r"Goodman et al. $|\mathbf{B}|~(T)$")
 fig.tight_layout()
 plt.show()
-plt.savefig("Boozer.png")
+plt.savefig("Goodman_Boozer.png")
+plt.savefig("Goodman_Boozer.eps")
 
 # magnetic wells
 fig, ax = plt.subplots(nrows=2, ncols=2, figsize=(10, 10), sharex=True, sharey=True)
@@ -258,7 +260,12 @@ ax[0, 0].plot(
     zeta0[0, :], B0_init[0, :], color=color3, linestyle="-", lw=8, label="Initial"
 )
 ax[0, 0].plot(
-    zeta0[0, :], B0_Good[0, :], color=color2, linestyle="-", lw=8, label="Goodman et al."
+    zeta0[0, :],
+    B0_Good[0, :],
+    color=color2,
+    linestyle="-",
+    lw=8,
+    label="Goodman et al.",
 )
 ax[0, 0].plot(
     zeta0[0, :], B0_QI[0, :], color=color1, linestyle="--", lw=8, label="QI Target"
@@ -276,7 +283,12 @@ ax[0, 1].plot(
     zeta1[1, :], B0_init[1, :], color=color3, linestyle="-", lw=8, label="Initial"
 )
 ax[0, 1].plot(
-    zeta1[1, :], B0_Good[1, :], color=color2, linestyle="-", lw=8, label="Goodman et al."
+    zeta1[1, :],
+    B0_Good[1, :],
+    color=color2,
+    linestyle="-",
+    lw=8,
+    label="Goodman et al.",
 )
 ax[0, 1].plot(
     zeta1[1, :], B0_QI[1, :], color=color1, linestyle="--", lw=8, label="QI Target"
@@ -292,7 +304,12 @@ ax[1, 0].plot(
     zeta0[0, :], B1_init[0, :], color=color3, linestyle="-", lw=8, label="Initial"
 )
 ax[1, 0].plot(
-    zeta0[0, :], B1_Good[0, :], color=color2, linestyle="-", lw=8, label="Goodman et al."
+    zeta0[0, :],
+    B1_Good[0, :],
+    color=color2,
+    linestyle="-",
+    lw=8,
+    label="Goodman et al.",
 )
 ax[1, 0].plot(
     zeta0[0, :], B1_QI[0, :], color=color1, linestyle="--", lw=8, label="QI Target"
@@ -310,7 +327,12 @@ ax[1, 1].plot(
     zeta1[1, :], B1_init[1, :], color=color3, linestyle="-", lw=8, label="Initial"
 )
 ax[1, 1].plot(
-    zeta1[1, :], B1_Good[1, :], color=color2, linestyle="-", lw=8, label="Goodman et al."
+    zeta1[1, :],
+    B1_Good[1, :],
+    color=color2,
+    linestyle="-",
+    lw=8,
+    label="Goodman et al.",
 )
 ax[1, 1].plot(
     zeta1[1, :], B1_QI[1, :], color=color1, linestyle="--", lw=8, label="QI Target"
@@ -323,4 +345,7 @@ ax[1, 1].set_xlim([0, 2 * np.pi])
 ax[1, 1].set_xlabel(r"$\zeta_{Boozer}$")
 fig.tight_layout()
 plt.show()
-plt.savefig("wells.png")
+plt.savefig("Goodman_wells.png")
+plt.savefig("Goodman_wells.eps")
+
+print("Done!")

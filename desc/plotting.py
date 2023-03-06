@@ -459,13 +459,13 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     # surface average. Surface averages should be computed over a 2-D grid to
     # sample the entire surface. Computing this on a 1-D grid would return a
     # misleading plot.
-    default_L = 100
+    default_rho = 101
     if data_index[name]["coordinates"] == "r":
         if grid is None:
             return plot_fsa(
                 eq,
                 name,
-                rho=default_L,
+                rho=default_rho,
                 log=log,
                 ax=ax,
                 return_data=return_data,
@@ -479,7 +479,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
             )
 
     if grid is None:
-        grid_kwargs = {"L": default_L, "NFP": eq.NFP}
+        grid_kwargs = {"rho": default_rho, "NFP": eq.NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 1:
@@ -597,7 +597,7 @@ def plot_2d(
 
     """
     if grid is None:
-        grid_kwargs = {"M": 33, "N": 33, "NFP": eq.NFP, "axis": False}
+        grid_kwargs = {"theta": 90, "zeta": 90, "NFP": eq.NFP}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -779,7 +779,7 @@ def plot_3d(
     """
     nfp = 1 if all_field_periods else eq.NFP
     if grid is None:
-        grid_kwargs = {"M": 33, "N": int(33 * eq.NFP), "NFP": nfp}
+        grid_kwargs = {"theta": 90, "zeta": int(90 * eq.NFP), "NFP": nfp}
         grid = _get_grid(**grid_kwargs)
     plot_axes = _get_plot_axes(grid)
     if len(plot_axes) != 2:
@@ -1155,11 +1155,11 @@ def plot_section(
             nzeta = int(kwargs.pop("nzeta", 6))
         nfp = eq.NFP
         grid_kwargs = {
-            "L": 25,
-            "NFP": nfp,
-            "axis": False,
+            "rho": 100,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
             "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
+            "NFP": nfp,
+            "axis": False,
         }
         grid = _get_grid(**grid_kwargs)
         zeta = np.unique(grid.nodes[:, 2])
@@ -1400,16 +1400,16 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
 
     grid_kwargs = {
         "rho": rho,
-        "NFP": nfp,
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
         "zeta": zeta,
+        "NFP": nfp,
     }
     r_grid = _get_grid(**grid_kwargs)
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
-        "NFP": nfp,
         "theta": theta,
         "zeta": zeta,
+        "NFP": nfp,
     }
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
@@ -1582,7 +1582,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     zeta = zeta + 1  # include zeta = 2*pi
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": zeta}
+    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 90, "zeta": zeta}
     grid = _get_grid(**grid_kwargs)
 
     if colors is None:
@@ -1736,9 +1736,9 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
 
     for i in range(neq):
         grid_kwargs = {
-            "NFP": eqs[i].NFP,
-            "theta": 100,
+            "theta": 90,
             "zeta": zeta if eqs[i].N > 0 else 2,
+            "NFP": eqs[i].NFP,
         }
         grid = _get_grid(**grid_kwargs)
 
@@ -2027,9 +2027,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         color = [color]
     fig, ax = _format_ax(ax, True, figsize=figsize)
     if grid is None:
-        grid_kwargs = {
-            "zeta": np.linspace(0, 2 * np.pi, 50),
-        }
+        grid_kwargs = {"zeta": np.linspace(0, 2 * np.pi, 90)}
         grid = _get_grid(**grid_kwargs)
 
     def flatten_coils(coilset):
@@ -2310,15 +2308,21 @@ def plot_boozer_surface(
     """
     if grid_compute is None:
         grid_kwargs = {
-            "M": 6 * eq.M + 1,
-            "N": 6 * eq.N + 1,
+            "rho": rho,
+            "M": 4 * eq.M,
+            "N": 4 * eq.N,
             "NFP": eq.NFP,
             "endpoint": False,
-            "rho": rho,
         }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
-        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True, "rho": rho}
+        grid_kwargs = {
+            "rho": rho,
+            "theta": 91,
+            "zeta": 91,
+            "NFP": eq.NFP,
+            "endpoint": True,
+        }
         grid_plot = _get_grid(**grid_kwargs)
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
@@ -2401,6 +2405,7 @@ def plot_boozer_surface(
     return fig, ax
 
 
+# FIXME: QI_l & QI_mn need to be passed in (no longer Equilibrium attributes)
 def plot_qi_surface(eq, grid=None, fill=True, ncontours=100, ax=None, **kwargs):
     """Plot :math:`|B|_{QI}` on a surface vs the Boozer poloidal and toroidal angles.
 
@@ -2438,8 +2443,8 @@ def plot_qi_surface(eq, grid=None, fill=True, ncontours=100, ax=None, **kwargs):
     """
     if grid is None:
         grid_kwargs = {
-            "M": 6 * eq.M + 1,
-            "N": 6 * eq.N + 1,
+            "M": 4 * eq.M,
+            "N": 4 * eq.N,
             "NFP": eq.NFP,
             "endpoint": False,
         }
@@ -3582,7 +3587,7 @@ def plot_field_lines_real_space(
     """
     nfp = 1
     if grid is None:
-        grid_kwargs = {"M": 30, "N": 30, "L": 20, "NFP": nfp, "axis": False}
+        grid_kwargs = {"rho": 25, "theta": 90, "zeta": 90, "NFP": nfp, "axis": False}
         grid = _get_grid(**grid_kwargs)
 
     fig, ax = _format_ax(ax, is3d=True, figsize=kwargs.get("figsize", None))

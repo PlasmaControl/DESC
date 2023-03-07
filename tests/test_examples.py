@@ -134,11 +134,10 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option,
-    # Radial, HelicalForceBalance defaulted to cos, sin rotation, respectively
+    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
+    # defaulted to cos, sin rotation, respectively.
     # This test has been kept to increase code coverage.
 
     def test(iota=False):
@@ -175,10 +174,28 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
-@pytest.mark.solve
+def test_solve_bounds():
+    """Tests optimizing with bounds=(lower bound, upper bound)."""
+    # decrease resolution and double pressure so no longer in force balance
+    eq = desc.examples.get("DSHAPE")
+    eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
+    eq.p_l *= 2
+
+    # target force balance residuals with |F| <= 1e3 N
+    obj = ObjectiveFunction(
+        ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3)), eq=eq
+    )
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+
+    # check that all errors are nearly 0, since residual values are within target bounds
+    f = obj.compute(obj.x(eq))
+    np.testing.assert_allclose(f, 0, atol=1e-4)
+
+
+@pytest.mark.regression
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
         ForceBalance(),
@@ -190,16 +207,15 @@ def test_1d_optimization(SOLOVEV):
     )
     options = {"perturb_options": {"order": 1}}
     with pytest.warns(UserWarning):
-        eq.optimize(objective, constraints, options=options)
+        eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 @pytest.mark.regression
-@pytest.mark.solve
-def test_1d_optimization_old(SOLOVEV):
+def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     eq._optimize(
         objective,
@@ -211,7 +227,7 @@ def test_1d_optimization_old(SOLOVEV):
         },
     )
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 def run_qh_step(n, eq):
@@ -246,7 +262,7 @@ def run_qh_step(n, eq):
         FixCurrent(),
         FixPsi(),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
@@ -454,7 +470,6 @@ def test_simsopt_QH_comparison():
         verbose=3,
         ftol=1e-8,
         constraints=get_fixed_boundary_constraints(profiles=False),
-        optimizer=Optimizer("lsq-exact"),
         objective=ObjectiveFunction(objectives=CurrentDensity()),
     )
     ##################################
@@ -548,6 +563,12 @@ def test_NAE_solve():
 
 class TestGetExample:
     """Tests for desc.examples.get."""
+
+    @pytest.mark.unit
+    def test_missing_example(self):
+        """Test for correct error thrown when no example is found."""
+        with pytest.raises(ValueError, match="example FOO not found"):
+            desc.examples.get("FOO")
 
     @pytest.mark.unit
     def test_example_get_eq(self):

@@ -197,9 +197,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(  # noqa: C901  # too complex
-    constraints, objective_args
-):
+def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -258,12 +256,14 @@ def factorize_linear_constraints(  # noqa: C901  # too complex
     for obj_ind, obj in enumerate(constraints):
         if len(obj.args) > 1:
             raise ValueError("Linear constraints must have only 1 argument.")
+        if obj.bounds is not None:
+            raise ValueError("Linear constraints must use target instead of bounds.")
         arg = obj.args[0]
         if arg not in objective_args:
             continue
         if arg not in constraint_args:  # hope this does not mess
             constraint_args.append(arg)
-        if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
+        if obj.fixed and obj.dim_f == dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
@@ -313,12 +313,24 @@ def factorize_linear_constraints(  # noqa: C901  # too complex
             Ainv[key] = _A_unweighted[
                 key
             ].T  # make inverse matrices using already unweighted A
+            unfixed_args.append(arg)
+            A_ = obj.derivatives["jac"][arg](jnp.zeros(dimensions[arg]))
+            # using obj.compute instead of obj.target to allow for correct scale/weight
+            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
+            if A_.shape[0]:
+                Ainv_, Z_ = svd_inv_null(A_)
+            else:
+                Ainv_ = A_.T
+            A[arg] = A_
+            b[arg] = b_
+            # need to undo scaling here to work with perturbations
+            Ainv[arg] = Ainv_ * obj.weight / obj.normalization
 
     # catch any arguments that are not constrained
     for arg in x_idx.keys():
         if arg not in constraint_args:
             unfixed_args.append(arg)
-            A[arg] = jnp.zeros((1, constraints[0].dimensions[arg]))
+            A[arg] = jnp.zeros((1, dimensions[arg]))
             b[arg] = jnp.zeros((1,))
 
     # full A matrix for all unfixed constraints
@@ -347,7 +359,7 @@ def factorize_linear_constraints(  # noqa: C901  # too complex
         arg = con.args[0]
         if arg not in objective_args:
             continue
-        res = con.compute(**xp_dict)
+        res = con.compute_scaled(**xp_dict)
         x = xp_dict[arg]
         # stuff like density is O(1e19) so need some adjustable tolerance here.
         atol = max(1e-8, np.finfo(x).eps * np.linalg.norm(x) / x.size)

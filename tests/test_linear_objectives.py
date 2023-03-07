@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -29,6 +30,7 @@ from desc.objectives import (
     FixSumModesZ,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -240,6 +242,23 @@ def test_fixed_axis_solve():
     np.testing.assert_almost_equal(orig_R_val, eq.axis.R_n)
     np.testing.assert_almost_equal(orig_Z_val, eq.axis.Z_n)
     np.testing.assert_array_equal(np.zeros_like(eq.L_lmn), eq.L_lmn)
+
+
+@pytest.mark.unit
+def test_factorize_linear_constraints_asserts():
+    """Test error checking for factorize_linear_constraints."""
+    eq = Equilibrium()
+    constraints = get_fixed_boundary_constraints(iota=False)
+    for con in constraints:
+        con.build(eq, verbose=0)
+    constraints[3].bounds = (0, 1)  # bounds on FixPsi
+
+    from desc.objectives.utils import factorize_linear_constraints
+
+    with pytest.raises(ValueError):
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, arg_order
+        )
 
 
 @pytest.mark.unit

@@ -468,12 +468,12 @@ class VMECIO:
         betapol = file.createVariable("betapol", np.float64)
         betapol.long_name = "normalized poloidal plasma pressure"
         betapol.units = "None"
-        betapol[:] = eq.compute("<beta>_volpol")["<beta>_volpol"]
+        betapol[:] = eq.compute("<beta_pol>_vol")["<beta_pol>_vol"]
 
         betator = file.createVariable("betator", np.float64)
         betator.long_name = "normalized toroidal plasma pressure"
         betator.units = "None"
-        betator[:] = eq.compute("<beta>_voltor")["<beta>_voltor"]
+        betator[:] = eq.compute("<beta_tor>_vol")["<beta_tor>_vol"]
 
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis.long_name = "normalize plasma pressure on axis"
@@ -517,8 +517,8 @@ class VMECIO:
         beta_vol[:] = compress(grid, data["<beta>_vol(r)"])
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
-        beta_vol.long_name = "flux surface average of magnetic field squared"
-        beta_vol.units = "T^2"
+        bdotb.long_name = "flux surface average of magnetic field squared"
+        bdotb.units = "T^2"
         bdotb[:] = compress(grid, data["<B^2>"])
 
         # currents

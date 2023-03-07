@@ -472,7 +472,7 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["|B|", "e_theta", "e_zeta", "Z"],
 )
 def _W_B_of_r(params, transforms, profiles, data, **kwargs):
@@ -490,7 +490,7 @@ def _W_B_of_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="W_Bpol",
-    label="W_B,pol",
+    label="W_{B,pol}",
     units="J",
     units_long="Joules",
     description="Plasma magnetic energy in poloidal field",
@@ -512,7 +512,7 @@ def _W_Bpol(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="W_Btor",
-    label="W_B,tor",
+    label="W_{B,tor}",
     units="J",
     units_long="Joules",
     description="Plasma magnetic energy in toroidal field",
@@ -561,7 +561,7 @@ def _W_p(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["p", "e_theta", "e_zeta", "Z"],
     gamma="gamma",
 )
@@ -606,7 +606,7 @@ def _W(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["W_B(r)", "W_p(r)"],
 )
 def _W_of_r(params, transforms, profiles, data, **kwargs):
@@ -642,7 +642,7 @@ def _beta_vol(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["W_p(r)", "W_B(r)"],
 )
 def _beta_vol_of_r(params, transforms, profiles, data, **kwargs):
@@ -651,8 +651,8 @@ def _beta_vol_of_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="<beta>_volpol",
-    label="\\langle \\beta \\rangle_{vol, pol}",
+    name="<beta_pol>_vol",
+    label="\\langle \\beta_{pol} \\rangle_{vol}",
     units="~",
     units_long="None",
     description="Normalized poloidal plasma pressure",
@@ -664,13 +664,13 @@ def _beta_vol_of_r(params, transforms, profiles, data, **kwargs):
     data=["W_p", "W_Bpol"],
 )
 def _beta_volpol(params, transforms, profiles, data, **kwargs):
-    data["<beta>_volpol"] = jnp.abs(data["W_p"] / data["W_Bpol"])
+    data["<beta_pol>_vol"] = jnp.abs(data["W_p"] / data["W_Bpol"])
     return data
 
 
 @register_compute_fun(
-    name="<beta>_voltor",
-    label="\\langle \\beta \\rangle_{vol, tor}",
+    name="<beta_tor>_vol",
+    label="\\langle \\beta_{tor} \\rangle_{vol}",
     units="~",
     units_long="None",
     description="Normalized toroidal plasma pressure",
@@ -682,5 +682,5 @@ def _beta_volpol(params, transforms, profiles, data, **kwargs):
     data=["W_p", "W_Btor"],
 )
 def _beta_voltor(params, transforms, profiles, data, **kwargs):
-    data["<beta>_voltor"] = jnp.abs(data["W_p"] / data["W_Btor"])
+    data["<beta_tor>_vol"] = jnp.abs(data["W_p"] / data["W_Btor"])
     return data

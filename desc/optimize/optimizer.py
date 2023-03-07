@@ -142,13 +142,28 @@ class Optimizer(IOAble):
         )
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
+            if nonlinear_constraint is not None:
+                nonlinear_constraint = LinearConstraintProjection(
+                    nonlinear_constraint, linear_constraints
+                )
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.built:
             nonlinear_constraint.build(eq, verbose=verbose)
+        if nonlinear_constraint is not None:
+            objective, nonlinear_constraint = combine_args(
+                objective, nonlinear_constraint
+            )
         if not objective.compiled:
-            mode = "scalar" if optimizers[method]["scalar"] else "lsq"
+            if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
+                mode = "scalar"
+            elif optimizers[method]["scalar"]:
+                mode = "bfgs"
+            else:
+                mode = "lsq"
             objective.compile(mode, verbose)
+        if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
+            nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
@@ -304,8 +319,6 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             solve_options=solve_options,
         )
         nonlinear_constraint = None
-    if nonlinear_constraint is not None:
-        objective, nonlinear_constraint = combine_args(objective, nonlinear_constraint)
     return objective, nonlinear_constraint
 
 

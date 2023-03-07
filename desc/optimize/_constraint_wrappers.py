@@ -4,13 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import arg_order
-from desc.objectives import (
-    CurrentDensity,
-    ForceBalance,
-    HelicalForceBalance,
-    ObjectiveFunction,
-    RadialForceBalance,
-)
+from desc.objectives import ObjectiveFunction
 from desc.objectives.utils import (
     align_jacobian,
     factorize_linear_constraints,
@@ -341,15 +335,7 @@ class ProximalProjection(ObjectiveFunction):
             "constraint should be instance of ObjectiveFunction." ""
         )
         for con in constraint.objectives:
-            if not isinstance(
-                con,
-                (
-                    ForceBalance,
-                    RadialForceBalance,
-                    HelicalForceBalance,
-                    CurrentDensity,
-                ),
-            ):
+            if not con._equilibrium:
                 raise ValueError(
                     "ProximalProjection method "
                     + "cannot handle general nonlinear constraint {}.".format(con)
@@ -390,9 +376,8 @@ class ProximalProjection(ObjectiveFunction):
 
         self._eq = eq.copy()
         self._linear_constraints = get_fixed_boundary_constraints(
-            iota=not isinstance(self._constraint.objectives[0], CurrentDensity)
-            and self._eq.iota is not None,
-            kinetic=eq.electron_temperature is not None,
+            iota=self._eq.iota is not None,
+            kinetic=self._eq.electron_temperature is not None,
         )
 
         if not self._objective.built:

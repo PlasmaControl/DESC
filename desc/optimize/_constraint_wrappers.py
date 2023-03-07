@@ -58,6 +58,7 @@ class LinearConstraintProjection(ObjectiveFunction):
                     + "cannot handle nonlinear constraint {}.".format(con)
                 )
         self._objective = objective
+        self._objectives = [objective]
         self._constraints = constraints
         self._built = False
         # don't want to compile this, just use the compiled objective
@@ -280,6 +281,21 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x_reduced)
         df = self._objective.jac_scaled(x)
         return df[:, self._unfixed_idx] @ self._Z
+
+    @property
+    def target(self):
+        """ndarray: target vector."""
+        return self._objective.target
+
+    @property
+    def bounds(self):
+        """tuple: lower and upper bounds for residual vector."""
+        return self._objective.bounds
+
+    @property
+    def weights(self):
+        """ndarray: weight vector."""
+        return self._objective.weights
 
 
 class ProximalProjection(ObjectiveFunction):
@@ -696,3 +712,18 @@ class ProximalProjection(ObjectiveFunction):
         """
         J = self.jac_scaled(x)
         return J.T @ J
+
+    @property
+    def target(self):
+        """ndarray: target vector."""
+        return self._objective.target
+
+    @property
+    def bounds(self):
+        """tuple: lower and upper bounds for residual vector."""
+        return self._objective.bounds
+
+    @property
+    def weights(self):
+        """ndarray: weight vector."""
+        return self._objective.weights

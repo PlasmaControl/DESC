@@ -398,8 +398,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 )
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data["<|F|>_vol"] = (
-        jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
-        / data["V"]
+        jnp.sum(data["|F|"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
     )
     return data
 
@@ -457,7 +456,7 @@ def _helical_mag(params, transforms, profiles, data, **kwargs):
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+        data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 
@@ -504,7 +503,7 @@ def _W_B_of_r(params, transforms, profiles, data, **kwargs):
 def _W_Bpol(params, transforms, profiles, data, **kwargs):
     data["W_Bpol"] = jnp.sum(
         dot(data["B"][:, (0, 2)], data["B"][:, (0, 2)])
-        * jnp.abs(data["sqrt(g)"])
+        * data["sqrt(g)"]
         * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
@@ -525,7 +524,7 @@ def _W_Bpol(params, transforms, profiles, data, **kwargs):
 )
 def _W_Btor(params, transforms, profiles, data, **kwargs):
     data["W_Btor"] = jnp.sum(
-        data["B"][:, 1] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+        data["B"][:, 1] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 
@@ -545,9 +544,9 @@ def _W_Btor(params, transforms, profiles, data, **kwargs):
     gamma="gamma",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
-    data["W_p"] = jnp.sum(
-        data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-    ) / (kwargs.get("gamma", 0) - 1)
+    data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (
+        kwargs.get("gamma", 0) - 1
+    )
     return data
 
 

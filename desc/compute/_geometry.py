@@ -18,7 +18,7 @@ from .utils import compress, cross, dot, surface_integrals
     data=["sqrt(g)"],
 )
 def _V(params, transforms, profiles, data, **kwargs):
-    data["V"] = jnp.sum(jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
+    data["V"] = jnp.sum(data["sqrt(g)"] * transforms["grid"].weights)
     return data
 
 
@@ -61,7 +61,7 @@ def _V_of_r(params, transforms, profiles, data, **kwargs):
 )
 def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     # eq. 4.9.10 in W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
-    data["V_r(r)"] = surface_integrals(transforms["grid"], jnp.abs(data["sqrt(g)"]))
+    data["V_r(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)"])
     return data
 
 

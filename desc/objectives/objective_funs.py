@@ -771,30 +771,36 @@ class _Objective(IOAble, ABC):
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
-        f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
+        return self._scale(self._shift(f))
 
+    def _shift(self, f):
+        """Subtract target or clamp to bounds."""
         if self.bounds is not None:  # using lower/upper bounds instead of target
             if self._normalize_target:
-                bounds = tuple([bound / self.normalization for bound in self.bounds])
-            else:
                 bounds = self.bounds
+            else:
+                bounds = tuple([bound * self.normalization for bound in self.bounds])
             f_target = jnp.where(  # where f is within target bounds, return 0 error
-                jnp.logical_and(f_norm >= bounds[0], f_norm <= bounds[1]),
-                jnp.zeros_like(f_norm),
+                jnp.logical_and(f >= bounds[0], f <= bounds[1]),
+                jnp.zeros_like(f),
                 jnp.where(  # otherwise return error = f - bound
-                    jnp.abs(f_norm - bounds[0]) < jnp.abs(f_norm - bounds[1]),
-                    f_norm - bounds[0],  # errors below lower bound are negative
-                    f_norm - bounds[1],  # errors above upper bound are positive
+                    jnp.abs(f - bounds[0]) < jnp.abs(f - bounds[1]),
+                    f - bounds[0],  # errors below lower bound are negative
+                    f - bounds[1],  # errors above upper bound are positive
                 ),
             )
         else:  # using target instead of lower/upper bounds
             if self._normalize_target:
-                target = self.target / self.normalization
-            else:
                 target = self.target
-            f_target = f_norm - target
+            else:
+                target = self.target * self.normalization
+            f_target = f - target
+        return f_target
 
-        return jnp.atleast_1d(f_target * self.weight)  # weighting
+    def _scale(self, f):
+        """Apply weighting, normalization etc."""
+        f_norm = jnp.atleast_1d(f) / self.normalization  # normalization
+        return f_norm * self.weight  # weighting
 
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
@@ -807,10 +813,14 @@ class _Objective(IOAble, ABC):
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
         f = self.compute_unscaled(*args, **kwargs)
-        print(self._print_value_fmt.format(jnp.linalg.norm(f)) + self._units)
+        print(
+            self._print_value_fmt.format(jnp.linalg.norm(self._shift(f))) + self._units
+        )
         if self._normalize:
             print(
-                self._print_value_fmt.format(jnp.linalg.norm(f / self.normalization))
+                self._print_value_fmt.format(
+                    jnp.linalg.norm(self._scale(self._shift(f)))
+                )
                 + "(normalized)"
             )
 

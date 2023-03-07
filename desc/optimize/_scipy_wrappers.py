@@ -583,8 +583,9 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
                 reduction_ratio = 0
 
         constr_violation = (
-            0 if constraint is None else np.max(np.abs(constraint.compute_scaled(x1))),
+            0 if constraint is None else np.max(np.abs(constraint.compute_scaled(x1)))
         )
+
         if verbose > 1:
             print_iteration_nonlinear(
                 len(allx),

@@ -91,6 +91,7 @@ class LinearConstraintProjection(ObjectiveFunction):
                 con.build(eq, verbose=verbose)
         self._args = self._objective.args
         self._dim_f = self._objective.dim_f
+        self._dimensions = self._objective.dimensions
         self._scalar = self._objective.scalar
         (
             self._xp,

@@ -369,7 +369,12 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
     )
-    # raxis_cc & zaxis_cs excluded b/c VMEC saves initial guess, not final solution
+    np.testing.assert_allclose(
+        vmec.variables["raxis_cc"][:], desc.variables["raxis_cc"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zaxis_cs"][:], desc.variables["zaxis_cs"][:], rtol=5e-5
+    )
     np.testing.assert_allclose(
         vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
     )

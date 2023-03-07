@@ -167,6 +167,7 @@ class Optimizer(IOAble):
             ftol,
             xtol,
             gtol,
+            None,
             maxiter,
             options,
         )
@@ -313,6 +314,7 @@ def _get_default_tols(
     ftol=None,
     xtol=None,
     gtol=None,
+    ctol=None,
     maxiter=None,
     options=None,
 ):
@@ -326,6 +328,8 @@ def _get_default_tols(
         stoptol["ftol"] = ftol
     if gtol is not None:
         stoptol["gtol"] = gtol
+    if ctol is not None:
+        stoptol["ctol"] = ctol
     if maxiter is not None:
         stoptol["maxiter"] = maxiter
     stoptol.setdefault(
@@ -337,6 +341,7 @@ def _get_default_tols(
         options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
+    stoptol.setdefault("ctol", options.pop("gtol", 1e-4))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
     stoptol["max_nfev"] = options.pop("max_nfev", np.inf)

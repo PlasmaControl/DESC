@@ -495,13 +495,20 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
 
     if constraint is not None:
-        constraint = NonlinearConstraint(
+        if constraint.dim_f > len(x0):
+            raise ValueError(
+                "scipy constrained optimizers cannot handle systems with more "
+                + "constraints than free variables. Suggest reducing the grid "
+                + "resolution of constraints"
+            )
+        constraint_wrapped = NonlinearConstraint(
             constraint.compute_unscaled,
             constraint.bounds[0],
             constraint.bounds[1],
             constraint.jac_unscaled,
         )
-
+    else:
+        constraint_wrapped = None
     # need to use some "global" variables here
     allx = []
     func_allx = []
@@ -571,9 +578,18 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             else:
                 reduction_ratio = 0
 
+        constr_violation = (
+            0 if constraint is None else np.max(np.abs(constraint.compute_scaled(x1))),
+        )
         if verbose > 1:
             print_iteration_nonlinear(
-                len(allx), len(func_allx), f1, df, dx_norm, g_norm
+                len(allx),
+                len(func_allx),
+                f1,
+                df,
+                dx_norm,
+                g_norm,
+                constr_violation,
             )
         success[0], message[0] = check_termination(
             df,
@@ -595,6 +611,8 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             stoptol["max_nhev"],
             dx_total=np.linalg.norm(x1 - x0),
             max_dx=options.get("max_dx", np.inf),
+            ctol=stoptol["ctol"],
+            constr_violation=constr_violation,
         )
 
         if success[0] is not None:
@@ -602,7 +620,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
 
     EPS = 2 * np.finfo(x0.dtype).eps
     if verbose > 1:
-        print_header_nonlinear()
+        print_header_nonlinear(constrained=True)
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
@@ -611,7 +629,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             method=method.replace("scipy-", ""),
             jac=grad_wrapped,
             hess=hess_wrapped,
-            constraints=constraint,
+            constraints=constraint_wrapped,
             tol=EPS,
             options=options,
         )
@@ -635,6 +653,9 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             grad=g,
             hess=H,
             optimality=np.linalg.norm(g, ord=np.inf),
+            constr_violation=0
+            if constraint is None
+            else np.max(np.abs(constraint.compute_scaled(x))),
             nfev=len(func_allx),
             ngev=len(grad_allx),
             nhev=len(hess_allx),
@@ -648,6 +669,11 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
+        print(
+            "         Max constraint violation: {:.3e}".format(
+                result["constr_violation"]
+            )
+        )
         print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))

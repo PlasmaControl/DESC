@@ -188,22 +188,23 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
     return 0.5 * q + l
 
 
-def print_header_nonlinear():
+def print_header_nonlinear(constrained=False):
     """Print a pretty header."""
-    print(
-        "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
-            "Iteration",
-            "Total nfev",
-            "Cost",
-            "Cost reduction",
-            "Step norm",
-            "Optimality",
-        )
+    s = "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
+        "Iteration",
+        "Total nfev",
+        "Cost",
+        "Cost reduction",
+        "Step norm",
+        "Optimality",
     )
+    if constrained:
+        s += "{:^24}".format("Constraint violation")
+    print(s)
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality
+    iteration, nfev, cost, cost_reduction, step_norm, optimality, constr_violation=None
 ):
     """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
@@ -235,12 +236,12 @@ def print_iteration_nonlinear(
         optimality = " " * 15
     else:
         optimality = "{:^15.2e}".format(optimality)
-
-    print(
-        "{}{}{}{}{}{}".format(
-            iteration, nfev, cost, cost_reduction, step_norm, optimality
-        )
+    s = "{}{}{}{}{}{}".format(
+        iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
+    if constr_violation is not None:
+        s += "{:^24.2e}".format(constr_violation)
+    print(s)
 
 
 STATUS_MESSAGES = {
@@ -286,8 +287,9 @@ def check_termination(
     ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
+    ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 
-    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
+    if ctol_satisfied and any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
         message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:

@@ -123,6 +123,8 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         hess_allf.append(H)
         return H / (np.atleast_2d(x_scale).T * np.atleast_2d(x_scale))
 
+    hess_wrapped = None if method in ["scipy-bfgs", "scipy-CG"] else hess_wrapped
+
     def callback(x1):
         allx.append(x1)
         f1 = f_where_x(x1, func_allx, func_allf)
@@ -546,6 +548,8 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         H = hess(x)
         hess_allf.append(H)
         return H / (np.atleast_2d(x_scale).T * np.atleast_2d(x_scale))
+
+    hess_wrapped = None if method in ["scipy-SLSQP"] else hess_wrapped
 
     def callback(x1):
         allx.append(x1)

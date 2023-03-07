@@ -44,7 +44,7 @@ def _B0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="",
+    coordinates="rtz",
     data=["0"],
 )
 def _B_sup_rho(params, transforms, profiles, data, **kwargs):

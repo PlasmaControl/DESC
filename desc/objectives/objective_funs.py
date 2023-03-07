@@ -409,9 +409,10 @@ class ObjectiveFunction(IOAble):
 
         Parameters
         ----------
-        mode : {"auto", "lsq", "scalar", "all"}
+        mode : {"auto", "lsq", "scalar", "bfgs", "all"}
             Whether to compile for least squares optimization or scalar optimization.
-            "auto" compiles based on the type of objective,
+            "auto" compiles based on the type of objective, either scalar or lsq
+            "bfgs" compiles only scalar objective and gradient,
             "all" compiles all derivatives.
         verbose : int, optional
             Level of output.
@@ -436,7 +437,7 @@ class ObjectiveFunction(IOAble):
             print("Compiling objective function and derivatives")
         timer.start("Total compilation time")
 
-        if mode in ["scalar", "all"]:
+        if mode in ["scalar", "bfgs", "all"]:
             timer.start("Objective compilation time")
             _ = self.compute_scalar(x).block_until_ready()
             timer.stop("Objective compilation time")
@@ -447,6 +448,7 @@ class ObjectiveFunction(IOAble):
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
+        if mode in ["scalar", "all"]:
             timer.start("Hessian compilation time")
             _ = self.hess(x).block_until_ready()
             timer.stop("Hessian compilation time")
@@ -764,7 +766,7 @@ class _Objective(IOAble, ABC):
 
     def compute_unscaled(self, *args, **kwargs):
         """Compute the unscaled version of the objective."""
-        return self.compute(*args, **kwargs)
+        return jnp.atleast_1d(self.compute(*args, **kwargs))
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -792,7 +794,7 @@ class _Objective(IOAble, ABC):
                 target = self.target
             f_target = f_norm - target
 
-        return f_target * self.weight  # weighting
+        return jnp.atleast_1d(f_target * self.weight)  # weighting
 
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""

@@ -187,7 +187,7 @@ class VMECIO:
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
         # desc throws NaN for r == 0, so we use something small to approximate it
-        ONAXIS = 1e-6
+        ONAXIS = np.array([1e-6])
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -475,12 +475,6 @@ class VMECIO:
         betator.units = "None"
         betator[:] = eq.compute("<beta_tor>_vol")["<beta_tor>_vol"]
 
-        betaxis = file.createVariable("betaxis", np.float64)
-        betaxis.long_name = "normalize plasma pressure on axis"
-        betaxis.units = "None"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
-        betaxis[:] = eq.compute("<beta>_vol(r)", grid=grid)["<beta>_vol(r)"][0]
-
         ctor = file.createVariable("ctor", np.float64)
         ctor.long_name = "total toroidal plamsa current"
         ctor.units = "A"
@@ -496,30 +490,24 @@ class VMECIO:
         rbtor0 = file.createVariable("rbtor0", np.float64)
         rbtor0.long_name = "<R*B_tor> on axis"
         rbtor0.units = "T*m"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
         rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
 
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[ONAXIS], NFP=NFP)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
         b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
 
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute(
-            ["<beta>_vol(r)", "<B^2>", "I", "G", "<J*B>", "D_Mercier"], grid=grid
-        )
-
-        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
-        beta_vol.long_name = "normalized plasma pressure profile"
-        beta_vol.units = "None"
-        beta_vol[:] = compress(grid, data["<beta>_vol(r)"])
+        data = eq.compute(["<B^2>", "I", "G", "<J*B>", "D_Mercier"], grid=grid)
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared"
         bdotb.units = "T^2"
         bdotb[:] = compress(grid, data["<B^2>"])
+        bdotb[0] = 0
 
         # currents
         buco = file.createVariable("buco", np.float64, ("radius",))
@@ -571,26 +559,31 @@ class VMECIO:
         DShear.long_name = "Mercier stability criterion magnetic shear term"
         DShear.units = "1/Wb^2"
         DShear[:] = compress(grid, data["D_shear"])
+        DShear[0] = 0
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
         DCurr.long_name = "Mercier stability criterion toroidal current term"
         DCurr.units = "1/Wb^2"
         DCurr[:] = compress(grid, data["D_current"])
+        DCurr[0] = 0
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
         DWell.long_name = "Mercier stability criterion magnetic well term"
         DWell.units = "1/Wb^2"
         DWell[:] = compress(grid, data["D_well"])
+        DWell[0] = 0
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
         DGeod.long_name = "Mercier stability criterion geodesic curvature term"
         DGeod.units = "1/Wb^2"
         DGeod[:] = compress(grid, data["D_geodesic"])
+        DGeod[0] = 0
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
         DMerc.long_name = "Mercier stability criterion"
         DMerc.units = "1/Wb^2"
         DMerc[:] = compress(grid, data["D_Mercier"])
+        DMerc[0] = 0
 
         timer.stop("parameters")
         if verbose > 1:
@@ -1150,6 +1143,12 @@ class VMECIO:
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
+        # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
+        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
+        beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+        # betaxis = beta_vol at the axis?
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis[:] = 0
         """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0

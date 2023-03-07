@@ -516,6 +516,12 @@ class TestGetExample:
     """Tests for desc.examples.get."""
 
     @pytest.mark.unit
+    def test_missing_example(self):
+        """Test for correct error thrown when no example is found."""
+        with pytest.raises(ValueError, match="example FOO not found"):
+            desc.examples.get("FOO")
+
+    @pytest.mark.unit
     def test_example_get_eq(self):
         """Test getting a single equilibrium."""
         eq = desc.examples.get("SOLOVEV")

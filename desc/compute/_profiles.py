@@ -482,7 +482,7 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["iota", "current"],
     coordinates="r",
-    data=["psi_r", "iota_0_num", "iota_0_den"],
+    data=["psi_r", "iota_0_num", "iota_0_den"] + ["psi_rr"],
 )
 def _iota(params, transforms, profiles, data, **kwargs):
     # The rotational transform is computed from the toroidal current profile using

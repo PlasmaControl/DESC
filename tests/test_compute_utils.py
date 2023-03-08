@@ -87,7 +87,8 @@ class TestComputeUtils:
         test("zeta", cg_sym)
 
     @pytest.mark.unit
-    def test_surface_integrals(self):
+    @pytest.mark.solve
+    def test_surface_integrals(self, DSHAPE_current, HELIOTRON_vac):
         """Test surface_integrals against a more intuitive implementation.
 
         This test should ensure that the algorithm in implementation is correct
@@ -95,30 +96,52 @@ class TestComputeUtils:
         should also be done on grids with duplicate nodes (e.g. endpoint=True).
         """
 
-        def test(surface_label, grid):
-            q = np.random.random_sample(size=grid.num_nodes)
+        def test_B_theta(surface_label, grid, eq):
+            q = eq.compute("B_theta", grid=grid)["B_theta"]
             integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
             integrals_2 = compress(
                 grid, surface_integrals(grid, q, surface_label), surface_label
             )
-            np.testing.assert_allclose(integrals_1, integrals_2, err_msg=surface_label)
+            np.testing.assert_allclose(
+                integrals_1, integrals_2, atol=1e-16, err_msg=surface_label
+            )
 
         nrho = 13
         ntheta = 11
         nzeta = 9
-        NFP = 5
-        lg = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=NFP, endpoint=False)
-        lg_endpoint = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=NFP, endpoint=True)
+        eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
+        lg = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=eq.NFP, endpoint=False)
+        lg_endpoint = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=eq.NFP, endpoint=True)
         cg_sym = ConcentricGrid(
-            L=(nrho + ntheta) // 2, M=(nrho + ntheta) // 2, N=nzeta, NFP=NFP, sym=True
+            L=(nrho + ntheta) // 2,
+            M=(nrho + ntheta) // 2,
+            N=nzeta,
+            NFP=eq.NFP,
+            sym=True,
         )
-
         for label in ("rho", "theta", "zeta"):
-            test(label, lg)
-            test(label, lg_endpoint)
+            test_B_theta(label, lg, eq)
+            test_B_theta(label, lg_endpoint, eq)
             if label != "theta":
                 # theta integrals are poorly defined on concentric grids
-                test(label, cg_sym)
+                test_B_theta(label, cg_sym, eq)
+
+        eq = desc.io.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
+        lg = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=eq.NFP, endpoint=False)
+        lg_endpoint = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=eq.NFP, endpoint=True)
+        cg_sym = ConcentricGrid(
+            L=(nrho + ntheta) // 2,
+            M=(nrho + ntheta) // 2,
+            N=nzeta,
+            NFP=eq.NFP,
+            sym=True,
+        )
+        for label in ("rho", "theta", "zeta"):
+            test_B_theta(label, lg, eq)
+            test_B_theta(label, lg_endpoint, eq)
+            if label != "theta":
+                # theta integrals are poorly defined on concentric grids
+                test_B_theta(label, cg_sym, eq)
 
     @pytest.mark.unit
     def test_surface_area_unweighted(self):

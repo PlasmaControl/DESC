@@ -502,6 +502,14 @@ def _iota(params, transforms, profiles, data, **kwargs):
             * profiles["current"].compute(params["c_l"], dr=0)
             / data["psi_r"]
         )
+        if transforms["grid"].axis.size:
+            limit = (
+                mu_0
+                / (2 * jnp.pi)
+                * profiles["current"].compute(params["c_l"], dr=2)
+                / data["psi_rr"]
+            )[transforms["grid"].axis]
+            current_term = put(current_term, transforms["grid"].axis, limit)
         data["iota"] = (current_term + data["iota_0_num"]) / data["iota_0_den"]
     return data
 
@@ -625,7 +633,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     label="\\iota_{0} numerator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Numerator of zero current rotational transform",
+    description="0 current rotational transform numerator",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -640,7 +648,6 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
     ) / data["sqrt(g)"]
     data["iota_0_num"] = surface_averages(transforms["grid"], num)
 
-    # limit at axis
     if transforms["grid"].axis.size:
         limit = (
             (data["g_tz_r"] * data["sqrt(g)_rr"] * (1 + data["lambda_t"]))
@@ -663,7 +670,7 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} \\iota_{0} numerator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Numerator of zero current rotational transform, first radial derivative",
+    description="0 current rotational transform numerator, first radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -703,7 +710,7 @@ def _iota_0_num_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho\\rho} \\iota_{0} numerator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Numerator of zero current rotational transform, second radial derivative",
+    description="0 current rotational transform numerator, second radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -758,7 +765,7 @@ def _iota_0_num_rr(params, transforms, profiles, data, **kwargs):
     label="\\iota_{0} denominator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Denominator of zero current rotational transform",
+    description="0 current rotational transform denominator",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -770,7 +777,6 @@ def _iota_0_den(params, transforms, profiles, data, **kwargs):
     den = data["g_tt"] / data["sqrt(g)"]
     data["iota_0_den"] = surface_averages(transforms["grid"], den)
 
-    # limit at axis
     if transforms["grid"].axis.size:
         limit = data["g_tt_rr"] / data["sqrt(g)_r"]
         limit = surface_averages(transforms["grid"], limit)[transforms["grid"].axis]
@@ -784,7 +790,7 @@ def _iota_0_den(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} \\iota_{0} denominator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Denominator of zero current rotational transform, first radial derivative",
+    description="0 current rotational transform denominator, first radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -806,7 +812,7 @@ def _iota_0_den_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho\\rho} \\iota_{0} denominator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Denominator of zero current rotational transform, second radial derivative",
+    description="0 current rotational transform denominator, second radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},

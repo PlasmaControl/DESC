@@ -580,7 +580,7 @@ class FixLambdaZero(_Objective):
 
         """
         fixed_params = L_lmn[self._idx]
-        return self._shift_scale(fixed_params)
+        return fixed_params
 
     @property
     def target_arg(self):
@@ -736,7 +736,7 @@ class FixAxisR(_Objective):
 
         """
         f = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(f)
+        return f
 
 
 class FixAxisZ(_Objective):
@@ -882,7 +882,7 @@ class FixAxisZ(_Objective):
 
         """
         f = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(f)
+        return f
 
 
 # TODO: add tests that build with FixModeR, similar to the target pass tests
@@ -1009,7 +1009,7 @@ class FixModeR(_Objective):
 
         """
         fixed_params = R_lmn[self._idx]
-        return self._shift_scale(fixed_params)
+        return fixed_params
 
     @property
     def target_arg(self):
@@ -1141,7 +1141,7 @@ class FixModeZ(_Objective):
 
         """
         fixed_params = Z_lmn[self._idx]
-        return self._shift_scale(fixed_params)
+        return fixed_params
 
     @property
     def target_arg(self):
@@ -1289,7 +1289,7 @@ class FixSumModesR(_Objective):
 
         """
         f = jnp.dot(self._A, R_lmn)
-        return self._shift_scale(f)
+        return f
 
     @property
     def target_arg(self):
@@ -1437,7 +1437,7 @@ class FixSumModesZ(_Objective):
 
         """
         f = jnp.dot(self._A, Z_lmn)
-        return self._shift_scale(f)
+        return f
 
     @property
     def target_arg(self):

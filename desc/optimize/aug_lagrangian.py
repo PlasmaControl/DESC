@@ -57,8 +57,8 @@ def fmin_lag_stel(
     if maxiter is None:
         maxiter = N * 100
 
-    mu = options.pop("mu", 10000.0)
-    lmbda = options.pop("lmbda", 1.0 * jnp.ones(eq_dim + ineq_dim))
+    mu = options.pop("mu", 1.0)
+    lmbda = options.pop("lmbda", 0.0 * jnp.ones(eq_dim + ineq_dim))
     bounds = options.pop("bounds", jnp.zeros(eq_dim + ineq_dim))
 
     def recover(x):
@@ -82,19 +82,21 @@ def fmin_lag_stel(
 
     constr = np.array([wrapped_constraint])
     L = AugLagrangian(wrapped_obj, constr)
-    gradL = Derivative(L.compute, 0, "fwd")
+    gradL = Derivative(L.compute, 0, "rev")
     hessL = Derivative(L.compute, argnum=0, mode="hess")
 
     gtolk = 1 / (10 * mu)
-    ctolk = 1 / (mu ** (0.1))
+    c = np.linalg.norm(L.compute_constraints(x))
+    ctolk = c / (mu ** (0.1))
     xold = x
     f = fun(recover(x))
     fold = f
     cv = L.compute_constraints(x)
-    lmbda = lmbda - mu * cv
+    # lmbda = lmbda - mu * cv
     print("f is " + str(f))
     print("lmbda term is " + str(np.dot(lmbda, cv)))
     print("mu term is " + str(mu / 2 * np.dot(cv, cv)))
+    print("The constraints are " + str(c))
 
     while iteration < maxiter:
         # xk = fmintr(
@@ -123,6 +125,7 @@ def fmin_lag_stel(
         f = fun(recover(x))
         print("f is " + str(f))
         cv = L.compute_constraints(x)
+        print("The constraints are " + str(np.linalg.norm(cv)))
         print("lmbda term is " + str(np.dot(lmbda, cv)))
         print("mu term is " + str(mu / 2 * np.dot(cv, cv)))
         print("\n")
@@ -146,7 +149,7 @@ def fmin_lag_stel(
                 ctolk = ctolk / (mu ** (0.9))
                 gtolk = gtolk / (mu)
         else:
-            mu = 10 * mu
+            mu = 2 * mu
             ctolk = c / (mu ** (0.1))
             gtolk = gtolk / mu
 

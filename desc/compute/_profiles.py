@@ -518,7 +518,6 @@ def _iota(params, transforms, profiles, data, **kwargs):
     profiles=["iota", "current"],
     coordinates="r",
     data=[
-        "iota",
         "psi_r",
         "psi_rr",
         "iota_0_num",
@@ -570,7 +569,6 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
     profiles=["iota", "current"],
     coordinates="r",
     data=[
-        "iota",
         "psi_r",
         "psi_rr",
         "psi_rrr",

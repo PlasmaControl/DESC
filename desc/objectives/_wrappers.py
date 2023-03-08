@@ -36,6 +36,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         objective,
         eq_objective=None,
         eq=None,
+        eq_threshold=5e-3,
         verbose=1,
         perturb_options={},
         solve_options={},
@@ -43,6 +44,7 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         self._objective = objective
         self._eq_objective = eq_objective
+        self._eq_threshold = eq_threshold
         self._perturb_options = perturb_options
         self._solve_options = solve_options
         self._built = False
@@ -190,13 +192,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self.history[arg] = [
                 np.asarray(
                     getattr(
-                        self._objective.objectives[
-                            self._QI_dict[arg_name[1]]
-                        ],
+                        self._objective.objectives[self._QI_dict[arg_name[1]]],
                         arg_name[0],
                     )
                 ).copy()
             ]
+
+        if self._eq_threshold is None:
+            self._eq_threshold = 5 * self._eq_objective.compute_scalar(
+                self._eq_objective.x(self._eq)
+            )
 
         self._built = True
 
@@ -244,6 +249,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
             self._allxopt.append(xopt)
             self._allxeq.append(xeq)
 
+        self._f_eq = self._eq_objective.compute_scalar(xeq)
+
         if store:
             self._x_old = x
             xd = self.unpack_state(x)
@@ -283,6 +290,8 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
 
         """
         xopt, _ = self._update_equilibrium(x, store=False)
+        if self._f_eq > self._eq_threshold:
+            return np.ones((self._dim_f,)) * 1e6
         return self._objective.compute(xopt)
 
     def grad(self, x):

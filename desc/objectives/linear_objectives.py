@@ -14,6 +14,7 @@ from termcolor import colored
 
 from desc.backend import jnp
 from desc.basis import zernike_radial, zernike_radial_coeffs
+from desc.derivatives import Derivative
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
@@ -1884,10 +1885,6 @@ class FixQIShape(_Objective):
 
         self._dim_f = self._idx.size
 
-        # use profile parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
-            self.target = eq.QI_l[self._idx]
-
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -1917,6 +1914,20 @@ class FixQIShape(_Objective):
         params = super()._parse_args(*args, **kwargs)
         params["QI_l"] = params.pop("QI_l {}".format(self.name))
         return params
+
+    def _set_derivatives(self):
+        """Set up derivatives of the objective wrt each argument."""
+        super()._set_derivatives()
+        arg = "QI_l {}".format(self.name)
+        self._derivatives["jac"][arg] = Derivative(
+            self.compute_scaled, argnum=self.args.index(arg), mode="fwd"
+        )
+        self._derivatives["grad"][arg] = Derivative(
+            self.compute_scalar, argnum=self.args.index(arg), mode="grad"
+        )
+        self._derivatives["hess"][arg] = Derivative(
+            self.compute_scalar, argnum=self.args.index(arg), mode="hess"
+        )
 
 
 class FixQIShift(_Objective):
@@ -2001,10 +2012,6 @@ class FixQIShift(_Objective):
 
         self._dim_f = self._idx.size
 
-        # use profile parameters as target if needed
-        if None in self.target or self.target.size != self.dim_f:
-            self.target = eq.QI_mn[self._idx]
-
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -2034,3 +2041,17 @@ class FixQIShift(_Objective):
         params = super()._parse_args(*args, **kwargs)
         params["QI_mn"] = params.pop("QI_mn {}".format(self.name))
         return params
+
+    def _set_derivatives(self):
+        """Set up derivatives of the objective wrt each argument."""
+        super()._set_derivatives()
+        arg = "QI_mn {}".format(self.name)
+        self._derivatives["jac"][arg] = Derivative(
+            self.compute_scaled, argnum=self.args.index(arg), mode="fwd"
+        )
+        self._derivatives["grad"][arg] = Derivative(
+            self.compute_scalar, argnum=self.args.index(arg), mode="grad"
+        )
+        self._derivatives["hess"][arg] = Derivative(
+            self.compute_scalar, argnum=self.args.index(arg), mode="hess"
+        )

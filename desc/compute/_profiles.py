@@ -656,10 +656,8 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
         ) / data[
             "sqrt(g)_r"
         ]
-        nearest_surface_idx = transforms["grid"].unique_rho_idx[0]
-        limit = surface_averages(transforms["grid"], limit)[nearest_surface_idx]
-        iota_0_num = put(compress(transforms["grid"], data["iota_0_num"]), 0, limit)
-        data["iota_0_num"] = expand(transforms["grid"], iota_0_num)
+        limit = surface_averages(transforms["grid"], limit)[transforms["grid"].axis]
+        data["iota_0_num"] = put(data["iota_0_num"], transforms["grid"].axis, limit)
 
     return data
 
@@ -779,10 +777,8 @@ def _iota_0_den(params, transforms, profiles, data, **kwargs):
     # limit at axis
     if transforms["grid"].axis.size:
         limit = data["g_tt_rr"] / data["sqrt(g)_r"]
-        nearest_surface_idx = transforms["grid"].unique_rho_idx[0]
-        limit = surface_averages(transforms["grid"], limit)[nearest_surface_idx]
-        iota_0_den = put(compress(transforms["grid"], data["iota_0_den"]), 0, limit)
-        data["iota_0_den"] = expand(transforms["grid"], iota_0_den)
+        limit = surface_averages(transforms["grid"], limit)[transforms["grid"].axis]
+        data["iota_0_den"] = put(data["iota_0_den"], transforms["grid"].axis, limit)
 
     return data
 

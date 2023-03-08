@@ -518,6 +518,7 @@ def _iota(params, transforms, profiles, data, **kwargs):
     profiles=["iota", "current"],
     coordinates="r",
     data=[
+        "iota",
         "psi_r",
         "psi_rr",
         "iota_0_num",
@@ -550,9 +551,8 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             / data["psi_r"]
             - current_term * data["psi_rr"] / data["psi_r"]
         )
-        iota = (current_term + data["iota_0_num"]) / data["iota_0_den"]
         data["iota_r"] = (
-            current_term_r + data["iota_0_num_r"] - iota * data["iota_0_den_r"]
+            current_term_r + data["iota_0_num_r"] - data["iota"] * data["iota_0_den_r"]
         ) / data["iota_0_den"]
     return data
 
@@ -569,6 +569,8 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
     profiles=["iota", "current"],
     coordinates="r",
     data=[
+        "iota",
+        "iota_r",
         "psi_r",
         "psi_rr",
         "psi_rrr",
@@ -609,15 +611,11 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
             - 2 * current_term_r * data["psi_rr"]
             - current_term * data["psi_rrr"]
         ) / data["psi_r"]
-        iota = (current_term + data["iota_0_num"]) / data["iota_0_den"]
-        iota_r = (
-            current_term_r + data["iota_0_num_r"] - iota * data["iota_0_den_r"]
-        ) / data["iota_0_den"]
         data["iota_rr"] = (
             current_term_rr
             + data["iota_0_num_rr"]
-            - 2 * iota_r * data["iota_0_den_r"]
-            - iota * data["iota_0_den_rr"]
+            - 2 * data["iota_r"] * data["iota_0_den_r"]
+            - data["iota"] * data["iota_0_den_rr"]
         ) / data["iota_0_den"]
     return data
 

@@ -268,7 +268,8 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
             xp = put(xp, x_idx[obj.target_arg], obj.target)
         else:
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
-            b_ = -obj.compute(jnp.zeros(obj.dimensions[arg]))
+            # using obj.compute instead of obj.target to allow for correct scale/weight
+            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
             if arg not in A.keys():
                 A[arg] = A_
 
@@ -306,7 +307,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
 
                 b[arg] = jnp.hstack((b[arg], b_))
     # find inverse of the now-combined constraint matrices for each arg
-    for key in A.keys():
+    for key in list(A.keys()):
         if A[key].shape[0]:
             Ainv[key], Z_ = svd_inv_null(_A_unweighted[key])
         else:

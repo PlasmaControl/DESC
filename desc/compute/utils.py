@@ -544,12 +544,6 @@ def expand(grid, x, surface_label="rho"):
         return x[grid.inverse_zeta_idx]
 
 
-def tupleset(t, i, value):
-    l = list(t)
-    l[i] = value
-    return tuple(l)
-
-
 def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
     """Cumulatively integrate y(x) using the composite trapezoidal rule.
 
@@ -602,6 +596,11 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
             raise ValueError(
                 "If given, length of x along axis must be the " "same as y."
             )
+
+    def tupleset(t, i, value):
+        l = list(t)
+        l[i] = value
+        return tuple(l)
 
     nd = len(y.shape)
     slice1 = tupleset((slice(None),) * nd, axis, slice(1, None))

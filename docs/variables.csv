@@ -133,17 +133,13 @@ Name,Label,Units,Description,Module
 ``e^helical``,:math:`B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta`,Tesla / square meter,Helical basis vector,``desc.compute._equil``
 ``|e^helical|``,:math:`|B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta|`,Tesla / square meter,Magnitude of helical basis vector,``desc.compute._equil``
 ``W_B``,:math:`W_B`,Joules,Plasma magnetic energy,``desc.compute._equil``
-``W_B(r)``,:math:`W_B(\rho)`,Joules,Plasma magnetic energy enclosed by flux surfaces,``desc.compute._equil``
-``W_Bpol``,":math:`W_B,pol`",Joules,Plasma magnetic energy in poloidal field,``desc.compute._equil``
-``W_Btor``,":math:`W_B,tor`",Joules,Plasma magnetic energy in toroidal field,``desc.compute._equil``
+``W_Bpol``,":math:`W_{B,pol}`",Joules,Plasma magnetic energy in poloidal field,``desc.compute._equil``
+``W_Btor``,":math:`W_{B,tor}`",Joules,Plasma magnetic energy in toroidal field,``desc.compute._equil``
 ``W_p``,:math:`W_p`,Joules,Plasma thermodynamic energy,``desc.compute._equil``
-``W_p(r)``,:math:`W_p(\rho)`,Joules,Plasma thermodynamic energy enclosed by flux surfaces,``desc.compute._equil``
 ``W``,:math:`W`,Joules,Plasma total energy,``desc.compute._equil``
-``W(r)``,:math:`W(\rho)`,Joules,Plasma total energy enclosed by flux surfaces,``desc.compute._equil``
 ``<beta>_vol``,:math:`\langle \beta \rangle_{vol}`,None,Normalized plasma pressure,``desc.compute._equil``
-``<beta>_vol(r)``,:math:`\langle \beta \rangle_{vol} (\rho)`,None,Normalized plasma pressure enclosed by flux surfaces,``desc.compute._equil``
-``<beta>_volpol``,":math:`\langle \beta \rangle_{vol, pol}`",None,Normalized poloidal plasma pressure,``desc.compute._equil``
-``<beta>_voltor``,":math:`\langle \beta \rangle_{vol, tor}`",None,Normalized toroidal plasma pressure,``desc.compute._equil``
+``<beta_pol>_vol``,:math:`\langle \beta_{pol} \rangle_{vol}`,None,Normalized poloidal plasma pressure,``desc.compute._equil``
+``<beta_tor>_vol``,:math:`\langle \beta_{tor} \rangle_{vol}`,None,Normalized toroidal plasma pressure,``desc.compute._equil``
 ``B0``,:math:`\partial_{\rho} \psi / \sqrt{g}`,Tesla / meter,,``desc.compute._field``
 ``B^rho``,:math:`B^{\rho}`,Tesla / meter,Contravariant radial component of magnetic field,``desc.compute._field``
 ``B^theta``,:math:`B^{\theta}`,Tesla / meter,Contravariant poloidal component of magnetic field,``desc.compute._field``

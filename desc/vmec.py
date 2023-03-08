@@ -501,7 +501,10 @@ class VMECIO:
 
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute(["<B^2>", "I", "G", "<J*B>", "D_Mercier"], grid=grid)
+        data = eq.compute(
+            ["<B^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
+            grid=grid,
+        )
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared"

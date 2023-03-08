@@ -636,7 +636,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)"]
-    + ["lambda_rt", "g_tz_r", "g_tz_rr", "sqrt(g)_r", "sqrt(g)_rr"],
+    + ["lambda_rt", "g_tt_rr", "g_tz_r", "g_tz_rr", "sqrt(g)_r", "sqrt(g)_rr"],
 )
 def _iota_0_num(params, transforms, profiles, data, **kwargs):
     num = (
@@ -645,8 +645,7 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
     data["iota_0_num"] = surface_averages(transforms["grid"], num)
 
     # limit at axis
-    nearest_surface_idx = transforms["grid"].unique_rho_idx[0]
-    if jnp.isclose(transforms["grid"].nodes[nearest_surface_idx, 0], 0):
+    if transforms["grid"].axis.size:
         limit = (
             (data["g_tz_r"] * data["sqrt(g)_rr"] * (1 + data["lambda_t"]))
             / data["sqrt(g)_r"] ** 2
@@ -657,6 +656,7 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
         ) / data[
             "sqrt(g)_r"
         ]
+        nearest_surface_idx = transforms["grid"].unique_rho_idx[0]
         limit = surface_averages(transforms["grid"], limit)[nearest_surface_idx]
         iota_0_num = put(compress(transforms["grid"], data["iota_0_num"]), 0, limit)
         data["iota_0_num"] = expand(transforms["grid"], iota_0_num)
@@ -777,9 +777,9 @@ def _iota_0_den(params, transforms, profiles, data, **kwargs):
     data["iota_0_den"] = surface_averages(transforms["grid"], den)
 
     # limit at axis
-    nearest_surface_idx = transforms["grid"].unique_rho_idx[0]
-    if jnp.isclose(transforms["grid"].nodes[nearest_surface_idx, 0], 0):
+    if transforms["grid"].axis.size:
         limit = data["g_tt_rr"] / data["sqrt(g)_r"]
+        nearest_surface_idx = transforms["grid"].unique_rho_idx[0]
         limit = surface_averages(transforms["grid"], limit)[nearest_surface_idx]
         iota_0_den = put(compress(transforms["grid"], data["iota_0_den"]), 0, limit)
         data["iota_0_den"] = expand(transforms["grid"], iota_0_den)
@@ -820,7 +820,7 @@ def _iota_0_den_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["g_tt", "g_tt_r", "g_tt_r", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_rr"],
+    data=["g_tt", "g_tt_r", "g_tt_rr", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_rr"],
 )
 def _iota_0_den_rr(params, transforms, profiles, data, **kwargs):
     den = data["g_tt"] / data["sqrt(g)"]

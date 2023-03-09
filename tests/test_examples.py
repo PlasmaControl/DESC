@@ -9,8 +9,7 @@ import pytest
 from qsc import Qsc
 
 import desc.examples
-
-# needed for iota test from desc.compute.utils import compress
+from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -556,9 +555,9 @@ def test_NAE_solve():
     np.testing.assert_allclose(theta_err[:, 0:-4], 0, atol=1.2e-3)
 
     # Make sure iota of solved equilibrium is same near axis as QSC
-    # not used now grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
-    # not used now iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
-    # this will fail: np.testing.assert_allclose(iota[1:10], qsc.iota)
+    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
+    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-2)
 
 
 class TestGetExample:

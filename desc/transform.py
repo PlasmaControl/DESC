@@ -58,7 +58,7 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         if (
-            self.grid.num_zeta > 1
+            not np.all(self.grid.nodes[:, 2] == 0)
             and not (self.grid.NFP == self.basis.NFP)
             and grid.node_pattern != "custom"
         ):

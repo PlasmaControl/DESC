@@ -130,7 +130,7 @@ def stop_logfile_logging():
     if logger.handlers is not None:
         for handler in logger.handlers:
             if isinstance(handler, logging.handlers.RotatingFileHandler):
-                handler.setLevel(1)
+                handler.setLevel("CRITICAL")
                 return True
             else:
                 warnings.warn(

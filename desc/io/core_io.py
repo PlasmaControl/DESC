@@ -1,7 +1,10 @@
 """Base classes for input/output readers and writers."""
 
+import logging
 import os
 from abc import ABC, abstractmethod
+
+from desc import set_console_logging
 
 
 class IO(ABC):
@@ -9,6 +12,11 @@ class IO(ABC):
 
     def __init__(self):
         self.resolve_base()
+
+        # If logger has not been setup yet, start logger.
+        logger = logging.getLogger("DESC_logger")
+        if logger.hasHandlers is False:
+            logger = set_console_logging()
 
     def __del__(self):
         """Close file upon garbage colleciton or explicit deletion with del function."""

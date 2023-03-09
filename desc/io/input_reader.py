@@ -152,11 +152,11 @@ class InputReader:
                 else:
                     args.verbose = 1
 
-        if args.verbose == 0:
-            logger = set_console_logging("1", "stdout")
+        if args.verbose <= 0:
+            logger = set_console_logging("CRITICAL", "stdout")
         elif args.verbose == 1:
             logger = set_console_logging("INFO", "stdout")
-        elif args.verbose == 2:
+        elif args.verbose >= 2:
             logger = set_console_logging("DEBUG", "stdout")
         else:
             logger = set_console_logging("INFO", "stdout")

@@ -535,11 +535,11 @@ class FixLambdaZero(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
+    _print_value_fmt = "lambda zero error: {:10.3e} (m)"
 
     def __init__(self, eq=None, target=0, weight=1, name="lambda zero"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._print_value_fmt = "lambda zero error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -613,6 +613,7 @@ class FixAxisR(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _print_value_fmt = "R axis error: {:10.3e} (m)"
 
     def __init__(
         self,
@@ -634,7 +635,6 @@ class FixAxisR(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-        self._print_value_fmt = "R axis error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -763,6 +763,7 @@ class FixAxisZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _print_value_fmt = "Z axis error: {:10.3e} (m)"
 
     def __init__(
         self,
@@ -784,7 +785,6 @@ class FixAxisZ(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-        self._print_value_fmt = "Z axis error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -911,6 +911,7 @@ class FixModeR(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
+    _print_value_fmt = "Fixed-R modes error: {:10.3e} (m)"
 
     def __init__(
         self,
@@ -936,7 +937,6 @@ class FixModeR(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-        self._print_value_fmt = "Fixed-R modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -1042,6 +1042,7 @@ class FixModeZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
+    _print_value_fmt = "Fixed-Z modes error: {:10.3e} (m)"
 
     def __init__(
         self,
@@ -1068,7 +1069,6 @@ class FixModeZ(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-        self._print_value_fmt = "Fixed-Z modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -1181,6 +1181,7 @@ class FixSumModesR(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
 
     def __init__(
         self,
@@ -1215,7 +1216,6 @@ class FixSumModesR(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-        self._print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -1276,7 +1276,6 @@ class FixSumModesR(_Objective):
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-        ################################################
 
     def compute(self, R_lmn, **kwargs):
         """Compute Sum mode R errors.
@@ -1334,6 +1333,7 @@ class FixSumModesZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
+    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
 
     def __init__(
         self,
@@ -1368,7 +1368,6 @@ class FixSumModesZ(_Objective):
             normalize=normalize,
             normalize_target=normalize_target,
         )
-        self._print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -1430,7 +1429,6 @@ class FixSumModesZ(_Objective):
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-        ################################################
 
     def compute(self, Z_lmn, **kwargs):
         """Compute Sum mode Z errors.
@@ -1495,6 +1493,7 @@ class _FixProfile(_Objective, ABC):
     _scalar = False
     _linear = True
     _fixed = True
+    _print_value_fmt = "Fix-profile error: {:.3e} "
 
     def __init__(
         self,
@@ -1520,7 +1519,6 @@ class _FixProfile(_Objective, ABC):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = None
 
     def build(self, eq, profile=None, use_jit=False, verbose=1):
         """Build constant arrays.

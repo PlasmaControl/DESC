@@ -21,13 +21,13 @@ from desc.objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
-    FixLambdaZero,
     FixModeR,
     FixModeZ,
     FixPressure,
     FixPsi,
     FixSumModesR,
     FixSumModesZ,
+    FixThetaSFL,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
     get_fixed_boundary_constraints,
@@ -222,7 +222,7 @@ def test_fixed_axis_solve():
     orig_Z_val = eq.axis.Z_n
 
     constraints = (
-        FixLambdaZero(),
+        FixThetaSFL(),
         FixPressure(),
         FixIota(),
         FixPsi(),

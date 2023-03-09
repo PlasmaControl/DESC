@@ -515,7 +515,7 @@ class FixLambdaGauge(_Objective):
         return jnp.dot(self._A, L_lmn)
 
 
-class FixLambdaZero(_Objective):
+class FixThetaSFL(_Objective):
     """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
 
     Parameters
@@ -535,9 +535,9 @@ class FixLambdaZero(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _print_value_fmt = "lambda zero error: {:10.3e} (m)"
+    _print_value_fmt = "Theta - Theta SFL error: {:10.3e} (m)"
 
-    def __init__(self, eq=None, target=0, weight=1, name="lambda zero"):
+    def __init__(self, eq=None, target=0, weight=1, name="Theta SFL"):
 
         super().__init__(eq=eq, target=target, weight=weight, name=name)
 
@@ -560,13 +560,12 @@ class FixLambdaZero(_Objective):
 
         self._dim_f = modes_idx.size
 
-        # use axis parameters as target if needed
         self.target = np.zeros_like(modes_idx)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, L_lmn, **kwargs):
-        """Compute lambda fixed to zero errors.
+        """Compute Theta SFL errors.
 
         Parameters
         ----------
@@ -576,7 +575,7 @@ class FixLambdaZero(_Objective):
         Returns
         -------
         f : ndarray
-            Lambda fixed to zero errors.
+            Theta - Theta SFL errors.
 
         """
         fixed_params = L_lmn[self._idx]
@@ -681,14 +680,12 @@ class FixAxisR(_Objective):
                         "yellow",
                     )
                 )
-        # hm, if we ...
-        # TODO: check for all bdryR things if work when False is passed in
-        # bc empty array indexed will lead to an error
+
         if modes.size > 0:
             ns = modes[:, 2]
         else:
             ns = np.array([[]], dtype=int)
-        # we need A to be M x N where N is number of modes in R_basis (done)
+        # we need A to be M x N where N is number of modes in R_basis
         # and M is the number of modes in the axis (that we are fixing)
         self._A = np.zeros((ns.size, R_basis.num_modes))
         self._dim_f = ns.size
@@ -978,7 +975,7 @@ class FixModeR(_Objective):
 
         self._dim_f = modes_idx.size
 
-        # use axis parameters as target if needed
+        # use current eq's coefficients as target if needed
         if self.target is None:
             self.target = eq.R_lmn[self._idx]
         else:  # rearrange given target to match modes order
@@ -1110,7 +1107,7 @@ class FixModeZ(_Objective):
 
         self._dim_f = modes_idx.size
 
-        # use axis parameters as target if needed
+        # use current eq's coefficients as target if needed
         if self.target is None:
             self.target = eq.Z_lmn[self._idx]
         else:  # rearrange given target to match modes order
@@ -1350,7 +1347,7 @@ class FixSumModesZ(_Objective):
         self._modes = modes
         if modes is None or modes is False:
             raise ValueError(
-                f"modes kwarg must be specified or True with FixSumModesR! got {modes}"
+                f"modes kwarg must be specified or True with FixSumModesZ! got {modes}"
             )
         self._sum_weights = sum_weights
         if target is not None:

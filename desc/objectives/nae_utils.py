@@ -112,7 +112,33 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     return coeffs, bases
 
 
-def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
+def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
+    """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
+
+    Parameters
+    ----------
+        qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
+        desc_eq (Equilibrium): desc equilibrium to constrain
+        coeffs (dict): dictionary of arrays with keys like 'X_L_M_n', where
+                X is R or Z, L is 1 , and M is 1, are the
+                NAE Fourier (in toroidal angle phi) coeffs of
+                radial order L and poloidal order M
+        bases (dict): dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
+            the FourierSeries basis objects used to obtain the coefficients, where
+            _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
+            symmetry is such that the R or Z coefficients is stellarator symmetric
+            i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
+             stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
+            and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
+            since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+
+    Returns
+    -------
+        Rconstraints (tuple): tuple of constraints of type FixSumModesR, which enforce
+            the O(rho) behavior of the equilibrium R coefficents to match the NAE.
+        Zconstraints (tuple): tuple of constraints of type FixSumModesZ, which enforce
+            the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
+    """
     # r is the ratio  r_NAE / rho_DESC
     r = np.sqrt(2 * desc_eq.Psi / qsc.Bbar / 2 / np.pi)
 
@@ -120,6 +146,8 @@ def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
     Zconstraints = ()
     Rbasis_cos = bases["Rbasis_cos"]
     Zbasis_cos = bases["Zbasis_cos"]
+    Rbasis_sin = bases["Rbasis_sin"]
+    Zbasis_sin = bases["Zbasis_sin"]
 
     # R_11n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
@@ -146,17 +174,6 @@ def _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases):
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
         Zconstraints += (Zcon,)
-    return Rconstraints, Zconstraints
-
-
-def _make_RZ_cons_Rn1_Z1(qsc, desc_eq, coeffs, bases):
-    # r is the ratio  r_NAE / rho_DESC
-    r = np.sqrt(2 * desc_eq.Psi / qsc.Bbar / 2 / np.pi)
-    Rconstraints = ()
-    Zconstraints = ()
-
-    Rbasis_sin = bases["Rbasis_sin"]
-    Zbasis_sin = bases["Zbasis_sin"]
 
     # R_1-1n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
@@ -207,11 +224,6 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
     Zconstraints = ()
 
     coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq)
-
-    Rcons1, Zcons1 = _make_RZ_cons_R1_Zn1(qsc, desc_eq, coeffs, bases)
-    Rcons2, Zcons2 = _make_RZ_cons_Rn1_Z1(qsc, desc_eq, coeffs, bases)
-
-    Rconstraints += Rcons1 + Rcons2
-    Zconstraints += Zcons1 + Zcons2
+    Rconstraints, Zconstraints = _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases)
 
     return Rconstraints + Zconstraints

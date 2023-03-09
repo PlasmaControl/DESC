@@ -175,12 +175,20 @@ class ObjectiveFunction(IOAble):
         timer = Timer()
         timer.start("Objective build")
 
-        if verbose == 0:
-            logger = set_console_logging(console_log_level="CRITICAL")
-        if verbose == 1:
-            logger = set_console_logging(console_log_level="INFO")
-        if verbose == 2:
-            logger = set_console_logging(console_log_level="DEBUG")
+        # Sets logger if given valid input, fetches DESC logger if empty and creates
+        # creates DESC logger if it hasn't been done yet
+        if type(verbose) is int:
+            if verbose <= 0:
+                logger = set_console_logging(console_log_level="CRITICAL")
+            elif verbose == 1:
+                logger = set_console_logging(console_log_level="INFO")
+            elif verbose >= 2:
+                logger = set_console_logging(console_log_level="DEBUG")
+        else:
+            logger = logging.getLogger("DESC_logger)")
+            if logger.handlers is False:
+                logger = set_console_logging()
+                logger.info("Setting up default DESC_logger.")
 
         # build objectives
         self._dim_f = 0
@@ -357,12 +365,20 @@ class ObjectiveFunction(IOAble):
             self._compiled = True
             return
 
-        if verbose == 0:
-            set_console_logging(console_log_level="CRITICAL")
-        if verbose == 1:
-            set_console_logging(console_log_level="INFO")
-        if verbose == 2:
-            set_console_logging(console_log_level="DEBUG")
+        # Sets logger if given valid input, fetches DESC logger if empty and creates
+        # creates DESC logger if it hasn't been done yet
+        if type(verbose) is int:
+            if verbose <= 0:
+                logger = set_console_logging(console_log_level="CRITICAL")
+            elif verbose == 1:
+                logger = set_console_logging(console_log_level="INFO")
+            elif verbose >= 2:
+                logger = set_console_logging(console_log_level="DEBUG")
+        else:
+            logger = logging.getLogger("DESC_logger)")
+            if logger.handlers is False:
+                logger = set_console_logging()
+                logger.info("Setting up default DESC_logger.")
 
         timer = Timer()
         if mode == "auto" and self.scalar:

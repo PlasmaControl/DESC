@@ -128,12 +128,20 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Perturbed equilibrium.
 
     """
-    if verbose == 0:
-        logger = set_console_logging(console_log_level="CRITICAL")
-    if verbose == 1:
-        logger = set_console_logging(console_log_level="INFO")
-    if verbose == 2:
-        logger = set_console_logging(console_log_level="DEBUG")
+    # Sets logger if given valid input, fetches DESC logger if empty and creates
+    # creates DESC logger if it hasn't been done yet
+    if type(verbose) is int:
+        if verbose <= 0:
+            logger = set_console_logging(console_log_level="CRITICAL")
+        elif verbose == 1:
+            logger = set_console_logging(console_log_level="INFO")
+        elif verbose >= 2:
+            logger = set_console_logging(console_log_level="DEBUG")
+    else:
+        logger = logging.getLogger("DESC_logger)")
+        if logger.handlers is False:
+            logger = set_console_logging()
+            logger.info("Setting up default DESC_logger.")
 
     if not use_jax:
         warnings.warn(
@@ -431,12 +439,20 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         optimized equilibrium
 
     """
-    if verbose == 0:
-        logger = set_console_logging(console_log_level="CRITICAL")
-    if verbose == 1:
-        logger = set_console_logging(console_log_level="INFO")
-    if verbose == 2:
-        logger = set_console_logging(console_log_level="DEBUG")
+    # Sets logger if given valid input, fetches DESC logger if empty and creates
+    # creates DESC logger if it hasn't been done yet
+    if type(verbose) is int:
+        if verbose <= 0:
+            logger = set_console_logging(console_log_level="CRITICAL")
+        elif verbose == 1:
+            logger = set_console_logging(console_log_level="INFO")
+        elif verbose >= 2:
+            logger = set_console_logging(console_log_level="DEBUG")
+    else:
+        logger = logging.getLogger("DESC_logger)")
+        if logger.handlers is False:
+            logger = set_console_logging()
+            logger.info("Setting up default DESC_logger.")
 
     if not use_jax:
         warnings.warn(

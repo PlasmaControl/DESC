@@ -500,12 +500,20 @@ class Equilibrium(_Configuration, IOAble):
                 + "on master branch."
             )
 
-        if verbose == 0:
-            logger = set_console_logging(console_log_level="CRITICAL")
-        if verbose == 1:
-            logger = set_console_logging(console_log_level="INFO")
-        if verbose == 2:
-            logger = set_console_logging(console_log_level="DEBUG")
+        # Sets logger if given valid input, fetches DESC logger if empty and creates
+        # creates DESC logger if it hasn't been done yet
+        if type(verbose) is int:
+            if verbose <= 0:
+                logger = set_console_logging(console_log_level="CRITICAL")
+            elif verbose == 1:
+                logger = set_console_logging(console_log_level="INFO")
+            elif verbose >= 2:
+                logger = set_console_logging(console_log_level="DEBUG")
+        else:
+            logger = logging.getLogger("DESC_logger)")
+            if logger.handlers is False:
+                logger = set_console_logging()
+                logger.info("Setting up default DESC_logger.")
 
         result = optimizer.optimize(
             eq,
@@ -607,12 +615,20 @@ class Equilibrium(_Configuration, IOAble):
         else:
             eq = self
 
-        if verbose == 0:
-            logger = set_console_logging(console_log_level="CRITICAL")
-        if verbose == 1:
-            logger = set_console_logging(console_log_level="INFO")
-        if verbose >= 2:
-            logger = set_console_logging(console_log_level="DEBUG")
+        # Sets logger if given valid input, fetches DESC logger if empty and creates
+        # creates DESC logger if it hasn't been done yet
+        if type(verbose) is int:
+            if verbose <= 0:
+                logger = set_console_logging(console_log_level="CRITICAL")
+            elif verbose == 1:
+                logger = set_console_logging(console_log_level="INFO")
+            elif verbose >= 2:
+                logger = set_console_logging(console_log_level="DEBUG")
+        else:
+            logger = logging.getLogger("DESC_logger)")
+            if logger.handlers is False:
+                logger = set_console_logging()
+                logger.info("Setting up default DESC_logger.")
 
         result = optimizer.optimize(
             eq,
@@ -694,12 +710,21 @@ class Equilibrium(_Configuration, IOAble):
         if constraint is None:
             constraint = get_equilibrium_objective()
 
-        if verbose == 0:
-            logger = set_console_logging(console_log_level="CRITICAL")
-        if verbose == 1:
-            logger = set_console_logging(console_log_level="INFO")
-        if verbose == 2:
-            logger = set_console_logging(console_log_level="DEBUG")
+        # Sets logger if given valid input, fetches DESC logger if empty and creates
+        # creates DESC logger if it hasn't been done yet
+        if type(verbose) is int:
+            if verbose <= 0:
+                logger = set_console_logging(console_log_level="CRITICAL")
+            elif verbose == 1:
+                logger = set_console_logging(console_log_level="INFO")
+            elif verbose >= 2:
+                logger = set_console_logging(console_log_level="DEBUG")
+        else:
+            logger = logging.getLogger("DESC_logger)")
+            if logger.handlers is False:
+                logger = set_console_logging()
+                logger.info("Setting up default DESC_logger.")
+
         timer = Timer()
         timer.start("Total time")
 
@@ -882,12 +907,20 @@ class Equilibrium(_Configuration, IOAble):
             if not constraint.built:
                 constraint.build(self)
 
-        if verbose == 0:
-            logger = set_console_logging(console_log_level="CRITICAL")  # noqa: F841
-        if verbose == 1:
-            logger = set_console_logging(console_log_level="INFO")  # noqa: F841
-        if verbose == 2:
-            logger = set_console_logging(console_log_level="DEBUG")  # noqa: F841
+        # Sets logger if given valid input, fetches DESC logger if empty and creates
+        # creates DESC logger if it hasn't been done yet
+        if type(verbose) is int:
+            if verbose <= 0:
+                logger = set_console_logging(console_log_level="CRITICAL")
+            elif verbose == 1:
+                logger = set_console_logging(console_log_level="INFO")
+            elif verbose >= 2:
+                logger = set_console_logging(console_log_level="DEBUG")
+        else:
+            logger = logging.getLogger("DESC_logger)")
+            if logger.handlers is False:
+                logger = set_console_logging()
+                logger.info("Setting up default DESC_logger.")
 
         eq = perturb(
             self,

@@ -55,7 +55,6 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
 
     # use untwisted, which accounts for when NAE has QH symmetry,
     # and the poloidal angle is a helical angle.
-    # we want the untwisted angle
     X1c = qsc.X1c_untwisted
     X1s = qsc.X1s_untwisted
     Y1c = qsc.Y1c_untwisted
@@ -162,7 +161,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         sum_weights = []
         modes = []
         target = NAEcoeff * r
-        for k in range(1, int((desc_eq.L + 1) / 2) + 1):  # FIXME: add by 1 desc_eq.L+1
+        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)

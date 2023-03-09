@@ -302,10 +302,6 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
                 )
                 arg_obj_lists[arg] += [obj]
 
-                # FIXME: this test will throw error if the same constraint
-                # is used  twice i.e. R_111 = 1 and 2*R_111=2
-                # do we want to detect and say that is ok? I vote no
-
                 b[arg] = jnp.hstack((b[arg], b_))
     # find inverse of the now-combined constraint matrices for each arg
     for key in list(A.keys()):

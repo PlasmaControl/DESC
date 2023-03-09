@@ -251,7 +251,7 @@ class Equilibrium(_Configuration, IOAble):
         """Print a summary of the spectral and real space resolution."""
         logger.debug("Spectral indexing: %s" % self.spectral_indexing)
         logger.debug(
-            "Spectral resolution (L,M,N)=(%s,%s,%s)" % (self.L, self.M, self.N)
+            "Spectral resolution (L,M,N)=({},{},{})".format(self.L, self.M, self.N)
         )
         logger.debug("Node pattern: %s" % self.node_pattern)
         logger.debug(
@@ -611,7 +611,7 @@ class Equilibrium(_Configuration, IOAble):
             logger = set_console_logging(console_log_level="CRITICAL")
         if verbose == 1:
             logger = set_console_logging(console_log_level="INFO")
-        if verbose == 2:
+        if verbose >= 2:
             logger = set_console_logging(console_log_level="DEBUG")
 
         result = optimizer.optimize(

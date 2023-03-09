@@ -209,6 +209,66 @@ def test_fixed_mode_solve():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
+def test_fixed_modes_solve():
+    """Test solving an equilibrium with fixed sum modes constraint."""
+    # Reset DSHAPE to initial guess, fix sum modes, and then resolve
+    # and check that the mode sum stayed fix
+    modes_R = np.array([[1, 1, 0], [2, 2, 0]])
+    modes_Z = np.array([[1, -1, 0], [2, -2, 0]])
+
+    eq = desc.examples.get("DSHAPE")
+    eq.set_initial_guess()
+    fixR = FixSumModesR(
+        modes=modes_R, sum_weights=np.array([1, 2])
+    )  # no target supplied, so defaults to the eq's current sum
+    fixZ = FixSumModesZ(
+        modes=modes_Z, sum_weights=np.array([1, 2])
+    )  # no target supplied, so defaults to the eq's current sum
+    orig_R_val = (
+        eq.R_lmn[eq.R_basis.get_idx(L=modes_R[0, 0], M=modes_R[0, 1], N=0)]
+        + 2 * eq.R_lmn[eq.R_basis.get_idx(L=modes_R[1, 0], M=modes_R[1, 1], N=0)]
+    )
+    orig_Z_val = (
+        eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
+        + 2 * eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
+    )
+
+    constraints = (
+        FixLambdaGauge(),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        fixR,
+        fixZ,
+    )
+
+    eq.solve(
+        verbose=3,
+        ftol=1e-2,
+        objective="force",
+        maxiter=10,
+        xtol=1e-6,
+        constraints=constraints,
+    )
+
+    new_R_val = (
+        eq.R_lmn[eq.R_basis.get_idx(L=modes_R[0, 0], M=modes_R[0, 1], N=0)]
+        + 2 * eq.R_lmn[eq.R_basis.get_idx(L=modes_R[1, 0], M=modes_R[1, 1], N=0)]
+    )
+    new_Z_val = (
+        eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
+        + 2 * eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
+    )
+
+    np.testing.assert_almost_equal(orig_R_val, new_R_val)
+    np.testing.assert_almost_equal(orig_Z_val, new_Z_val)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
 def test_fixed_axis_solve():
     """Test solving an equilibrium with a fixed axis constraint."""
     # also tests zero lambda solve

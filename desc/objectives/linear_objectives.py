@@ -1145,7 +1145,6 @@ class FixModeZ(_Objective):
         return "Z_lmn"
 
 
-# TODO: add test for this class
 class FixSumModesR(_Objective):
     """Fixes a linear sum of Fourier-Zernike R coefficients.
 
@@ -1297,7 +1296,6 @@ class FixSumModesR(_Objective):
         return "R_lmn"
 
 
-# TODO: add test for this class
 class FixSumModesZ(_Objective):
     """Fixes a linear sum of Fourier-Zernike Z coefficients.
 

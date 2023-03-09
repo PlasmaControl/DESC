@@ -885,7 +885,6 @@ class FixAxisZ(_Objective):
         return f
 
 
-# TODO: add tests that build with FixModeR, similar to the target pass tests
 class FixModeR(_Objective):
     """Fixes Fourier-Zernike R coefficients.
 
@@ -902,7 +901,8 @@ class FixModeR(_Objective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the Equilibrium's modes.
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
     name : str
         Name of the objective function.
 
@@ -917,13 +917,17 @@ class FixModeR(_Objective):
         eq=None,
         target=None,
         weight=1,
-        modes=False,
+        modes=True,
         name="Fix Mode R",
         normalize=True,
         normalize_target=True,
     ):
 
         self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixModeR! got {modes}"
+            )
         super().__init__(
             eq=eq,
             target=target,
@@ -947,12 +951,7 @@ class FixModeR(_Objective):
             Level of output.
 
         """
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-            # FIXME: we don't want this option right? fix all modes...
-        elif self._modes is True:  # all modes
+        if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
             modes_idx = idx
@@ -1017,7 +1016,6 @@ class FixModeR(_Objective):
         return "R_lmn"
 
 
-# TODO: add test for this class
 class FixModeZ(_Objective):
     """Fixes Fourier-Zernike Z coefficients.
 
@@ -1034,7 +1032,8 @@ class FixModeZ(_Objective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the Equilibrium's modes.
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
     name : str
         Name of the objective function.
 
@@ -1049,13 +1048,18 @@ class FixModeZ(_Objective):
         eq=None,
         target=None,
         weight=1,
-        modes=False,
+        modes=True,
         name="Fix Mode Z",
         normalize=True,
         normalize_target=True,
     ):
 
         self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixModeZ! got {modes}"
+            )
+
         super().__init__(
             eq=eq,
             target=target,
@@ -1079,12 +1083,7 @@ class FixModeZ(_Objective):
             Level of output.
 
         """
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-            # FIXME: we don't want this option right? fix all modes...
-        elif self._modes is True:  # all modes
+        if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
             modes_idx = idx
@@ -1170,8 +1169,8 @@ class FixSumModesR(_Objective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
          len(weight) = len(modes).
-        If True/False uses all/none of the Equilibrium's modes.
-         #FIXME: do we want to allow this in sum fix?
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
     surface_label : float
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
@@ -1189,14 +1188,25 @@ class FixSumModesR(_Objective):
         target=None,
         weight=1,
         sum_weights=None,
-        modes=False,
+        modes=True,
         name="Fix Sum Modes R",
         normalize=True,
         normalize_target=True,
     ):
 
         self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixSumModesR! got {modes}"
+            )
         self._sum_weights = sum_weights
+        if target is not None:
+            if target.size > 1:
+                raise ValueError(
+                    "FixSumModesR only accepts 1 target value, please use multiple"
+                    + " FixSumModesR objectives if you wish to have multiple"
+                    + " sets of constrained mode sums!"
+                )
         super().__init__(
             eq=eq,
             target=target,
@@ -1220,13 +1230,7 @@ class FixSumModesR(_Objective):
             Level of output.
 
         """
-        # FIXME: passing with False does no modes... why have this?
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-            # FIXME: we don't want this option right? fix all modes...
-        elif self._modes is True:  # all modes
+        if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
         else:  # specified modes
@@ -1318,8 +1322,8 @@ class FixSumModesZ(_Objective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
          len(weight) = len(modes).
-        If True/False uses all/none of the Equilibrium's modes.
-         #FIXME: do we want to allow this in sum fix?
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
     surface_label : float
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
@@ -1337,14 +1341,25 @@ class FixSumModesZ(_Objective):
         target=None,
         weight=1,
         sum_weights=None,
-        modes=False,
+        modes=True,
         name="Fix Sum Modes Z",
         normalize=True,
         normalize_target=True,
     ):
 
         self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixSumModesR! got {modes}"
+            )
         self._sum_weights = sum_weights
+        if target is not None:
+            if target.size > 1:
+                raise ValueError(
+                    "FixSumModesZ only accepts 1 target value, please use multiple"
+                    + " FixSumModesZ objectives if you wish to have multiple sets of"
+                    + " constrained mode sums!"
+                )
         super().__init__(
             eq=eq,
             target=target,
@@ -1368,12 +1383,7 @@ class FixSumModesZ(_Objective):
             Level of output.
 
         """
-        if self._modes is False or self._modes is None:  # no modes
-            modes = np.array([[]], dtype=int)
-            idx = np.array([], dtype=int)
-            modes_idx = idx
-            # FIXME: we don't want this option right? fix all modes...
-        elif self._modes is True:  # all modes
+        if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
         else:  # specified modes

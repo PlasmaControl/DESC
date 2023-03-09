@@ -677,7 +677,6 @@ def test_FixBoundary_with_single_weight():
     np.testing.assert_array_equal(FixR.weight, w)
 
 
-# TODO: also test this for FixMode and FixSumMode and FixAxis
 @pytest.mark.unit
 def test_FixBoundary_passed_target_no_passed_modes_error():
     """Test Fixing boundary with no passed-in modes."""
@@ -694,3 +693,70 @@ def test_FixBoundary_passed_target_no_passed_modes_error():
     FixR = FixBoundaryR(modes=False, fixed_boundary=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
+
+
+@pytest.mark.unit
+def test_FixAxis_passed_target_no_passed_modes_error():
+    """Test Fixing Axis with no passed-in modes."""
+    eq = Equilibrium()
+    FixZ = FixAxisZ(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixZ = FixAxisZ(modes=False, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixR = FixAxisR(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+    FixR = FixAxisR(modes=False, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+
+
+@pytest.mark.unit
+def test_FixMode_passed_target_no_passed_modes_error():
+    """Test Fixing Modes with no passed-in modes."""
+    eq = Equilibrium()
+    FixZ = FixModeZ(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixR = FixModeR(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+
+
+@pytest.mark.unit
+def test_FixSumModes_passed_target_too_long():
+    """Test Fixing Modes with more than a size-1 target."""
+    # TODO: remove this test if FixSumModes is generalized
+    # to accept multiple targets and sets of modes at a time
+    with pytest.raises(ValueError):
+        FixSumModesZ(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesR(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+
+
+@pytest.mark.unit
+def test_FixMode_False_or_None_modes():
+    """Test Fixing Modes without specifying modes or All modes."""
+    with pytest.raises(ValueError):
+        FixModeR(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeR(modes=None, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeZ(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeZ(modes=None, target=np.array([[0, 1]]))
+
+
+@pytest.mark.unit
+def test_FixSumModes_False_or_None_modes():
+    """Test Fixing Sum Modes without specifying modes or All modes."""
+    with pytest.raises(ValueError):
+        FixSumModesZ(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesZ(modes=None, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesR(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesR(modes=None, target=np.array([[0, 1]]))

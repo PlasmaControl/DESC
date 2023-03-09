@@ -158,7 +158,8 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
             constraints += (FixCurrent(),)
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
-    if order == 2:  # 2nd order constraints
+    if order >= 2:  # 2nd order constraints
+        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
         constraints += make_RZ_cons_2nd_order(qsc=qsc_eq, desc_eq=desc_eq)
 
     return constraints

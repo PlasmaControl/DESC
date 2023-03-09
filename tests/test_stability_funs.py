@@ -292,8 +292,8 @@ def test_magwell_print(TmpDir):
     logger.addHandler(logfile_handler)
 
     # Test magnetic well stability print functions
-    eq = Equilibrium()
-    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+    eq = desc.examples.get("HELIOTRON")
+    grid = LinearGrid(L=12, M=12, N=6, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
 
     magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])

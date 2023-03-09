@@ -52,7 +52,7 @@ def _psi_r(params, transforms, profiles, data, **kwargs):
     params=["Psi"],
     transforms={},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["rho"],
 )
 def _psi_rr(params, transforms, profiles, data, **kwargs):
@@ -71,7 +71,7 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
     params=["Psi"],
     transforms={},
     profiles=[],
-    coordinates="",
+    coordinates="r",
     data=["0"],
 )
 def _psi_rrr(params, transforms, profiles, data, **kwargs):

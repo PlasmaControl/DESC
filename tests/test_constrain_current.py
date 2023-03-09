@@ -5,7 +5,7 @@ import pytest
 
 import desc.io
 from desc.compute import compute as compute_fun
-from desc.compute import get_transforms
+from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
@@ -16,17 +16,35 @@ class _ExactValueProfile:
     def __init__(self, eq, grid):
         self.eq = eq
         self.grid = grid
+        self.transforms = get_transforms("current_rr", eq=eq, grid=grid)
+        self.profiles = get_profiles("current_rr", eq=eq, grid=grid)
+        self.params = get_params("current_rr", eq=eq)
 
     def compute(self, params, dr, *args, **kwargs):
         if dr == 0:
             # returns the surface average of B_theta in amperes
-            return self.eq.compute("current", grid=self.grid)["current"]
+            return compute_fun(
+                "current",
+                params=self.params,
+                transforms=self.transforms,
+                profiles=self.profiles,
+            )["current"]
         if dr == 1:
             # returns the surface average of B_theta_r in amperes
-            return self.eq.compute("current_r", grid=self.grid)["current_r"]
+            return compute_fun(
+                "current_r",
+                params=self.params,
+                transforms=self.transforms,
+                profiles=self.profiles,
+            )["current_r"]
         if dr == 2:
             # returns the surface average of B_theta_rr in amperes
-            return self.eq.compute("current_rr", grid=self.grid)["current_rr"]
+            return compute_fun(
+                "current_rr",
+                params=self.params,
+                transforms=self.transforms,
+                profiles=self.profiles,
+            )["current_rr"]
 
 
 class TestConstrainCurrent:
@@ -74,9 +92,14 @@ class TestConstrainCurrent:
             # compute rotational transform using the equilibrium's default
             # profile (directly from the power series which defines iota
             # if the equilibrium fixes iota)
-            benchmark_data = eq.compute("iota_rr", grid=grid)
+            benchmark_data = compute_fun(
+                ["iota", "iota_r", "iota_rr"],
+                params=get_params("iota_rr", eq=eq),
+                transforms=transforms,
+                profiles=get_profiles("iota_rr", eq=eq, grid=grid),
+            )
 
-            if grid_type == "linear":
+            if grid_type in "linear":
                 # ignore axis
                 np.testing.assert_allclose(
                     compress(grid, data["iota"])[1:],

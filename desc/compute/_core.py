@@ -15,7 +15,7 @@ from .data_index import register_compute_fun
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="rtz",
     data=[],
 )
 def _0(params, transforms, profiles, data, **kwargs):

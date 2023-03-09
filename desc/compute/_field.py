@@ -2965,3 +2965,24 @@ def _kappa_n(params, transforms, profiles, data, **kwargs):
 def _kappa_g(params, transforms, profiles, data, **kwargs):
     data["kappa_g"] = dot(data["kappa"], cross(data["n"], data["b"]))
     return data
+
+
+@register_compute_fun(
+    name="isodynamicity",
+    label="1/B^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
+    units="~",
+    units_long="None",
+    description="Measure of cross field drift at each point, "
+    + "unweighted by particle energy",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["b", "grad(|B|)", "|B|", "grad(psi)"],
+)
+def _isodynamicity(params, transforms, profiles, data, **kwargs):
+    data["isodynamicity"] = (
+        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|"] ** 2
+    )
+    return data

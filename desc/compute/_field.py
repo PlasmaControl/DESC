@@ -2421,7 +2421,7 @@ def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
     data["<B^2>_r"] = (
         surface_integrals(
             transforms["grid"],
-            data["sqrt(g)_r"] * data["sqrt(g)"] * data["|B|^2"]
+            data["sqrt(g)_r"] * data["|B|^2"]
             + data["sqrt(g)"] * 2 * dot(data["B"], data["B_r"]),
         )
         - data["V_rr(r)"] * data["<B^2>"]

@@ -429,51 +429,8 @@ class FixLambdaGauge(_Objective):
         L_basis = eq.L_basis
 
         if L_basis.sym:
-            # l(0,t,z) = 0
-            # any zernike mode that has m != 0 (i.e., has any theta dependence)
-            # contains radial dependence at least as rho^m
-            # therefore if m!=0, no constraint is needed to make the mode go to
-            # zero at rho=0
-
-            # for the other modes with m=0, at rho =0 the basis reduces
-            # to just a linear combination of sin(n*zeta), cos(n*zeta), and 1
-            # since these are all linearly independent, to make lambda -> 0 at rho=0,
-            # each coefficient on these terms must individually go to zero
-            # i.e. if at rho=0 the lambda basis is given by
-            # Lambda(rho=0) = (L_{00-1} - L_{20-1})sin(zeta) + (L_{001}
-            #                   - L_{201})cos(zeta) + L_{000} - L_{200}
-            # Lambda(rho=0) = 0 constraint being enforced means that each
-            # coefficient goes to zero:
-            # L_{00-1} - L_{20-1} = 0
-            # L_{001} - L_{201} = 0
-            # L_{000} - L_{200} = 0
-            self._A = np.zeros((L_basis.N, L_basis.num_modes))
-            ns = np.arange(-L_basis.N, 1)
-            for i, (l, m, n) in enumerate(L_basis.modes):
-                if m != 0:
-                    continue
-                if (
-                    l // 2
-                ) % 2 == 0:  # this basis mode radial polynomial is +1 at rho=0
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = 1
-                else:  # this basis mode radial polynomial is -1 at rho=0
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = -1
+            self._A = np.zeros((0, L_basis.num_modes))
         else:
-            # l(0,t,z) = 0
-
-            ns = np.arange(-L_basis.N, L_basis.N + 1)
-            self._A = np.zeros((len(ns), L_basis.num_modes))
-            for i, (l, m, n) in enumerate(L_basis.modes):
-                if m != 0:
-                    continue
-                if (l // 2) % 2 == 0:
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = 1
-                else:
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = -1
             # l(rho,0,0) = 0
             # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
             # what this constraint does is make all the coefficients of each power
@@ -492,7 +449,7 @@ class FixLambdaGauge(_Objective):
 
             A = np.zeros((c.shape[1], L_basis.num_modes))
             A[:, mnpos] = c.T
-            self._A = np.vstack((self._A, A))
+            self._A = A
 
         self._dim_f = self._A.shape[0]
 

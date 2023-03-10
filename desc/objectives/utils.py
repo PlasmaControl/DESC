@@ -27,7 +27,6 @@ from .linear_objectives import (
     FixLambdaGauge,
     FixPressure,
     FixPsi,
-    FixThetaSFL,
 )
 from .nae_utils import make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
@@ -145,8 +144,7 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
     constraints = (
         FixAxisR(),
         FixAxisZ(),
-        FixThetaSFL(),
-        # Fixes lambda=0 as the mapping from NAE->DESC assumes theta is boozer angle
+        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:

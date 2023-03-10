@@ -2,6 +2,7 @@
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import scipy.linalg
 
 import desc.examples
 from desc.compute import arg_order
@@ -39,19 +40,15 @@ from desc.profiles import PowerSeriesProfile
 
 
 @pytest.mark.unit
-def test_LambdaGauge_axis_sym(DummyStellarator):
-    """Test that lambda at axis is fixed correctly for symmetric equilibrium."""
-    # symmetric cases only have the axis constraint
+def test_LambdaGauge_sym(DummyStellarator):
+    """Test that lambda is fixed correctly for symmetric equilibrium."""
+    # symmetric cases automatically satisfy gauge freedom, no constraint needed.
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
     eq.change_resolution(L=2, M=1, N=1)
-    correct_constraint_matrix = np.zeros((1, 5))
-    correct_constraint_matrix[0, 0] = 1
-    correct_constraint_matrix[0, 2] = -1
-
+    correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
-
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
 
@@ -84,19 +81,15 @@ def test_LambdaGauge_asym():
         "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
-    correct_constraint_matrix = np.zeros((3, eq.L_basis.num_modes))
-    correct_constraint_matrix[0, 0] = 1.0
-    correct_constraint_matrix[0, 1] = -1.0
-    correct_constraint_matrix[2, 4] = 1.0
-    correct_constraint_matrix[2, 5] = -1.0
-    correct_constraint_matrix[1, 2] = 1.0
-    correct_constraint_matrix[1, 3] = -1.0
-
     lam_con = FixLambdaGauge(eq)
 
-    np.testing.assert_array_equal(
-        lam_con._A[0:3, 0 : eq.L_basis.num_modes], correct_constraint_matrix
-    )
+    # make sure that any lambda in the null space gives lambda==0 at theta=zeta=0
+    Z = scipy.linalg.null_space(lam_con._A)
+    grid = LinearGrid(L=10, theta=[0], zeta=[0])
+    for z in Z.T:
+        eq.L_lmn = z
+        lam = eq.compute("lambda", grid=grid)["lambda"]
+        np.testing.assert_allclose(lam, 0, atol=1e-15)
 
 
 @pytest.mark.unit

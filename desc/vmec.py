@@ -608,7 +608,8 @@ class VMECIO:
             raxis_cs = file.createVariable("raxis_cs", np.float64, ("n_tor",))
             raxis_cs.long_name = "sin(n*p) component of magnetic axis R coordinate"
             raxis_cs.units = "m"
-            raxis_cs[1:] = R0_n[0:N]
+            raxis_cs[0] = 0.0
+            raxis_cs[1:] = -R0_n[0:N][::-1]
 
         # Z axis
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
@@ -619,7 +620,8 @@ class VMECIO:
         zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
         zaxis_cs.units = "m"
-        zaxis_cs[1:] = Z0_n[0:N]
+        zaxis_cs[0] = 0.0
+        zaxis_cs[1:] = -Z0_n[0:N][::-1]
         if not eq.sym:
             zaxis_cc = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
             zaxis_cc.long_name = "cos(n*p) component of magnetic axis Z coordinate"

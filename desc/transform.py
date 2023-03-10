@@ -57,7 +57,11 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
+        if (
+            not np.all(self.grid.nodes[:, 2] == 0)
+            and not (self.grid.NFP == self.basis.NFP)
+            and grid.node_pattern != "custom"
+        ):
             warnings.warn(
                 colored(
                     "Unequal number of field periods for grid %s and basis %s."

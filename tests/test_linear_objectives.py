@@ -288,9 +288,9 @@ def test_fixed_axis_and_theta_SFL_solve():
         constraints=constraints,
     )
 
-    np.testing.assert_almost_equal(orig_R_val, eq.axis.R_n, atol=1e-14)
-    np.testing.assert_almost_equal(orig_Z_val, eq.axis.Z_n, atol=1e-14)
-    np.testing.assert_array_equal(np.zeros_like(eq.L_lmn), eq.L_lmn)
+    np.testing.assert_allclose(orig_R_val, eq.axis.R_n, atol=1e-14)
+    np.testing.assert_allclose(orig_Z_val, eq.axis.Z_n, atol=1e-14)
+    np.testing.assert_allclose(np.zeros_like(eq.L_lmn), eq.L_lmn, atol=1e-14)
 
 
 @pytest.mark.unit

@@ -265,10 +265,7 @@ def test_fixed_modes_solve():
 def test_fixed_axis_and_theta_SFL_solve():
     """Test solving an equilibrium with a fixed axis and theta SFL constraint."""
     # also tests zero lambda solve
-    # Reset DSHAPE to initial guess, fix axis, and then resolve
-    # and check that the axis stayed fixed
-    eq = desc.examples.get("DSHAPE")
-    eq.set_initial_guess()
+    eq = Equilibrium()
 
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n
@@ -276,7 +273,7 @@ def test_fixed_axis_and_theta_SFL_solve():
     constraints = (
         FixThetaSFL(),
         FixPressure(),
-        FixIota(),
+        FixCurrent(),
         FixPsi(),
         FixAxisR(),
         FixAxisZ(),

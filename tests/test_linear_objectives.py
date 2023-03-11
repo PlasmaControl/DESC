@@ -275,7 +275,7 @@ def test_fixed_axis_and_theta_SFL_solve():
     constraints = (
         FixThetaSFL(),
         FixPressure(),
-        FixIota(),
+        FixCurrent(),
         FixPsi(),
         FixAxisR(),
         FixAxisZ(),

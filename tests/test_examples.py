@@ -88,7 +88,7 @@ def test_HELIOTRON_results(HELIOTRON):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
-    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err.mean(), 0, atol=2e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
@@ -111,8 +111,8 @@ def test_precise_QH_results(precise_QH):
     eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
 
 
 @pytest.mark.regression

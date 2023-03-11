@@ -262,14 +262,12 @@ def test_fixed_modes_solve():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_fixed_axis_solve():
-    """Test solving an equilibrium with a fixed axis constraint."""
+def test_fixed_axis_and_theta_SFL_solve():
+    """Test solving an equilibrium with a fixed axis and theta SFL constraint."""
     # also tests zero lambda solve
     # Reset DSHAPE to initial guess, fix axis, and then resolve
     # and check that the axis stayed fix
-    eq = desc.examples.get("DSHAPE")
-    eq.axis.R_n[0] = 3.6
-    eq.set_initial_guess()
+    eq = Equilibrium()
 
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n

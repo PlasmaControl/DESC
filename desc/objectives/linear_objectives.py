@@ -659,7 +659,7 @@ class FixAxisR(_Objective):
 
         # use axis parameters as target if needed
         if self.target is None:
-            self.target = np.zeros((len(ns),))
+            self.target = np.zeros(self._dim_f)
             for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Rn
@@ -805,7 +805,7 @@ class FixAxisZ(_Objective):
 
         # use axis parameters as target if needed
         if self.target is None:
-            self.target = np.zeros((len(ns),))
+            self.target = np.zeros(self._dim_f)
             for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
                 j = np.argwhere(ns == n)
                 self.target[j] = Zn

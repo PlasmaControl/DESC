@@ -25,6 +25,7 @@ pytest-cov >= 2.6.0
 pytest-monitor
 pytest-mpl == 0.16.1
 pytest-split
+qicna @ git+https://github.com/rogeriojorge/pyQIC/
 qsc
 shapely >= 1.8.2
 

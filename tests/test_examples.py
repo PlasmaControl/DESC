@@ -203,7 +203,7 @@ def test_1d_optimization(SOLOVEV):
     )
     options = {"perturb_options": {"order": 1}}
     with pytest.warns(UserWarning):
-        eq.optimize(objective, constraints, options=options)
+        eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
@@ -258,7 +258,7 @@ def run_qh_step(n, eq):
         FixCurrent(),
         FixPsi(),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
@@ -466,7 +466,6 @@ def test_simsopt_QH_comparison():
         verbose=3,
         ftol=1e-8,
         constraints=get_fixed_boundary_constraints(profiles=False),
-        optimizer=Optimizer("lsq-exact"),
         objective=ObjectiveFunction(objectives=CurrentDensity()),
     )
     ##################################
@@ -515,6 +514,12 @@ def test_simsopt_QH_comparison():
 
 class TestGetExample:
     """Tests for desc.examples.get."""
+
+    @pytest.mark.unit
+    def test_missing_example(self):
+        """Test for correct error thrown when no example is found."""
+        with pytest.raises(ValueError, match="example FOO not found"):
+            desc.examples.get("FOO")
 
     @pytest.mark.unit
     def test_example_get_eq(self):

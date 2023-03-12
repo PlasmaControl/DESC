@@ -525,7 +525,7 @@ class Equilibrium(_Configuration, IOAble):
         self,
         objective=None,
         constraints=None,
-        optimizer="lsq-exact",
+        optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
         gtol=None,

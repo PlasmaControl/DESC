@@ -541,13 +541,19 @@ class _Objective(IOAble, ABC):
                     mode="hess",
                 )
             else:  # these derivatives are always zero
-                self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["jac"][
+                    arg
+                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
                     (self.dim_f, self.dimensions[arg])
                 )
-                self._derivatives["grad"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["grad"][
+                    arg
+                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
                     (1, self.dimensions[arg])
                 )
-                self._derivatives["hess"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["hess"][
+                    arg
+                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
                     (self.dimensions[arg], self.dimensions[arg])
                 )
 

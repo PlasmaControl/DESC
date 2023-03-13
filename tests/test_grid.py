@@ -607,10 +607,10 @@ class TestGrid:
         # precondition for the following tests to work
         np.testing.assert_allclose(lg_2.spacing[:, 1], 2 * np.pi / ntheta)
         lg_2._sym = True
-        scaled_idx, dtheta_scale = lg_2._enforce_symmetry()
+        dtheta_scale = lg_2._enforce_symmetry()
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
-        lg_2._scale_weights(scaled_idx, dtheta_scale)
+        lg_2._scale_weights(dtheta_scale)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         # np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 

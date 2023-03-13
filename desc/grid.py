@@ -53,12 +53,12 @@ class Grid(IOAble):
 
         self._nodes, self._spacing = self._create_nodes(nodes)
 
-        scaled_idx, dtheta_scale = self._enforce_symmetry()
+        dtheta_scale = self._enforce_symmetry()
         if sort:
             self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._scale_weights(scaled_idx, dtheta_scale)
+        self._scale_weights(dtheta_scale)
 
     def _enforce_symmetry(self):
         """Enforce stellarator symmetry.
@@ -66,15 +66,15 @@ class Grid(IOAble):
         1. Remove nodes with theta > pi.
         2. Rescale theta spacing to preserve dtheta weight.
             Need to rescale on each theta coordinate curve by a different factor.
-            dtheta should = 2pi / number of nodes remaining on that theta curve
+            dtheta should = 2pi / number of nodes remaining on that theta curve.
+            Nodes on the symmetry line should have half the dtheta as the others.
 
         Returns
         -------
-        scaled_idx : ndarray
-            The indices of the nodes which had dtheta scaled by the factor dtheta_scale.
         dtheta_scale : ndarray
-            The multiplicative factor used to scale the theta spacing for each rho surface.
-                number of nodes / (number of nodes - number of nodes to delete)
+            The factor used to scale the theta spacing for each rho surface.
+                number of nodes off the symmetry line
+                / (number of nodes off the symmetry line - number of nodes to delete)
 
         """
         if self.sym:
@@ -125,9 +125,8 @@ class Grid(IOAble):
             self._spacing[off_sym_line_idx, 1] *= scale
             self._nodes = np.delete(self.nodes, to_delete_idx, axis=0)
             self._spacing = np.delete(self.spacing, to_delete_idx, axis=0)
-            scaled_idx = np.where(self.nodes[:, 1] % np.pi != 0)[0]
-            return scaled_idx, dtheta_scale[scaled_idx]
-        return np.arange(0), np.array([1])
+            return np.delete(dtheta_scale, to_delete_idx)
+        return np.array([1])
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -154,16 +153,15 @@ class Grid(IOAble):
         self._num_theta = self._unique_theta_idx.size
         self._num_zeta = self._unique_zeta_idx.size
 
-    def _scale_weights(self, scaled_idx, dtheta_scale):
+    def _scale_weights(self, dtheta_scale):
         """Scale weights sum to full volume and reduce weights for duplicated nodes.
 
         Parameters
         ----------
-        scaled_idx : ndarray
-            The indices of the nodes which had dtheta scaled by the factor dtheta_scale.
         dtheta_scale : ndarray
-            The multiplicative factor used to scale the theta spacing for each rho surface.
-                number of nodes / (number of nodes - number of nodes to delete)
+            The factor used to scale the theta spacing for each rho surface.
+                number of nodes off the symmetry line
+                / (number of nodes off the symmetry line - number of nodes to delete)
         """
         nodes = self.nodes.copy().astype(float)
         nodes[:, 1] %= 2 * np.pi
@@ -176,7 +174,7 @@ class Grid(IOAble):
         temp_spacing = np.copy(self.spacing)
         temp_spacing /= duplicates ** (1 / 3)
         # assign weights pretending _enforce_symmetry didn't change theta spacing
-        temp_spacing[scaled_idx, 1] /= dtheta_scale
+        temp_spacing[:, 1] /= dtheta_scale
         # scale weights sum to full volume
         temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         self._weights = temp_spacing.prod(axis=1)
@@ -428,7 +426,7 @@ class LinearGrid(Grid):
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._scale_weights(scaled_idx=np.arange(0), dtheta_scale=np.array([1]))
+        self._scale_weights(dtheta_scale=np.array([1]))
 
     def _create_nodes(  # noqa: C901
         self,
@@ -514,8 +512,8 @@ class LinearGrid(Grid):
             theta = int(theta)
             if self.sym and theta > 1:
                 # Enforce that no node lies on theta=0 or theta=2pi, so that
-                # each node has a symmetric counterpart, and
-                # that, for all i, t[i]-t[i-1] = 2 t[0] = 2 (pi - t[last node before pi]).
+                # each node has a symmetric counterpart, and that, for all i,
+                # t[i]-t[i-1] = 2 t[0] = 2 (pi - t[last node before pi]).
                 # Both conditions necessary to evenly space nodes with constant dt.
                 # This can be done by making (theta + endpoint) an even integer.
                 if (theta + endpoint) % 2 != 0:
@@ -573,8 +571,9 @@ class LinearGrid(Grid):
                         assert (first_positive_idx == 1) or (
                             dt[0] == dt[first_positive_idx - 1]
                         )
-                        # If the first condition is false and the latter true, then both of those dt
-                        # should be halved. The scale_weights() function will handle this.
+                        # If the first condition is false and the latter true,
+                        # then both of those dt should be halved.
+                        # The scale_weights() function will handle this.
                     first_pi_idx = np.searchsorted(t, np.pi, side="left")
                     if first_pi_idx == t.size:
                         # then there are no nodes at theta=pi
@@ -587,8 +586,9 @@ class LinearGrid(Grid):
                         assert (first_pi_idx == t.size - 1) or (
                             dt[first_pi_idx] == dt[-1]
                         )
-                        # If the first condition is false and the latter true, then both of those dt
-                        # should be halved. The scale_weights() function will handle this.
+                        # If the first condition is false and the latter true,
+                        # then both of those dt should be halved.
+                        # The scale_weights() function will handle this.
             else:
                 dt = np.array([2 * np.pi])
 
@@ -684,10 +684,10 @@ class LinearGrid(Grid):
                 axis=len(self.axis) > 0,
                 endpoint=self.endpoint,
             )
-            scaled_idx, dtheta_scale = self._enforce_symmetry()
+            dtheta_scale = self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
-            self._scale_weights(scaled_idx, dtheta_scale)
+            self._scale_weights(dtheta_scale)
 
     @property
     def endpoint(self):
@@ -865,11 +865,11 @@ class ConcentricGrid(Grid):
             node_pattern=self.node_pattern,
         )
 
-        scaled_idx, dtheta_scale = self._enforce_symmetry()
+        dtheta_scale = self._enforce_symmetry()
         self._sort_nodes()
         self._find_axis()
         self._count_nodes()
-        self._scale_weights(scaled_idx, dtheta_scale)
+        self._scale_weights(dtheta_scale)
 
     def _create_nodes(self, L, M, N, NFP=1, axis=False, node_pattern="jacobi"):
         """Create grid nodes and weights.
@@ -1010,10 +1010,10 @@ class ConcentricGrid(Grid):
                 axis=len(self.axis) > 0,
                 node_pattern=self.node_pattern,
             )
-            scaled_idx, dtheta_scale = self._enforce_symmetry()
+            dtheta_scale = self._enforce_symmetry()
             self._sort_nodes()
             self._find_axis()
-            self._scale_weights(scaled_idx, dtheta_scale)
+            self._scale_weights(dtheta_scale)
 
 
 # these functions are currently unused ---------------------------------------

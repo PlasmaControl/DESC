@@ -1905,6 +1905,7 @@ class FixQIShape(_Objective):
         params = self._parse_args(*args, **kwargs)
         return params["QI_l"][self._idx]
 
+    # TODO: rethink this method now that QI_l is not an Equilibrium attribute
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
@@ -2032,6 +2033,7 @@ class FixQIShift(_Objective):
         params = self._parse_args(*args, **kwargs)
         return params["QI_mn"][self._idx]
 
+    # TODO: rethink this method now that QI_mn is not an Equilibrium attribute
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""

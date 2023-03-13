@@ -357,6 +357,7 @@ def f_where_x(x, xs, fs):
     -------
     f : float or ndarray
         value of fs[i] where x==xs[i]
+
     """
     x, xs, fs = map(np.asarray, (x, xs, fs))
     assert len(xs) == len(fs)

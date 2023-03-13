@@ -622,6 +622,7 @@ class Equilibrium(_Configuration, IOAble):
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
+            # TODO: add logic for QI params
             if value[-1].size:
                 setattr(eq, key, value[-1])
         if verbose > 0:

@@ -268,7 +268,10 @@ class ObjectiveFunction(IOAble):
 
         x = jnp.atleast_1d(x)
         if x.size != self.dim_x:
-            raise ValueError("Input vector dimension is invalid.")
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self.dim_x} got {x.size}."
+            )
 
         kwargs = {}
         for arg in self.args:

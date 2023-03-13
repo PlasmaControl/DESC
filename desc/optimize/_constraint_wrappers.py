@@ -155,8 +155,12 @@ class LinearConstraintProjection(ObjectiveFunction):
             Dictionary of the state components with argument names as keys.
 
         """
-        if len(x) == self._dim_x:
-            x = self.recover(x)
+        if x.size != self.dim_x:
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self.dim_x} got {x.size}."
+            )
+        x = self.recover(x)
         return self._objective.unpack_state(x)
 
     def compute(self, x_reduced):

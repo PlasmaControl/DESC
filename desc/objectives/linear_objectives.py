@@ -1217,7 +1217,7 @@ class FixSumModesR(_Objective):
             sum_weights = np.ones(modes.shape[0])
         else:
             sum_weights = np.atleast_1d(self._sum_weights)
-        self._dim_f = np.array([1])
+        self._dim_f = 1
 
         self._A = np.zeros((1, eq.R_basis.num_modes))
         for i, (l, m, n) in enumerate(modes):
@@ -1369,7 +1369,7 @@ class FixSumModesZ(_Objective):
             sum_weights = np.ones(modes.shape[0])
         else:
             sum_weights = np.atleast_1d(self._sum_weights)
-        self._dim_f = np.array([1])
+        self._dim_f = 1
 
         self._A = np.zeros((1, eq.Z_basis.num_modes))
         for i, (l, m, n) in enumerate(modes):

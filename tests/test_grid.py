@@ -34,7 +34,7 @@ class TestGrid:
         weights_ref = np.array([w, w, w / 2, w / 2, w, w])
 
         np.testing.assert_allclose(weights, weights_ref)
-        np.testing.assert_allclose(np.sum(grid.weights), (2 * np.pi) ** 2)
+        np.testing.assert_allclose(grid.weights.sum(), (2 * np.pi) ** 2)
 
     @pytest.mark.unit
     def test_linear_grid(self):
@@ -72,29 +72,35 @@ class TestGrid:
             np.testing.assert_allclose(g.spacing.prod(axis=1), g.weights)
 
     @pytest.mark.unit
-    def test_linear_grid_spacing(self):
-        """Test linear grid spacing is consistent."""
+    def test_linear_grid_spacing_consistency(self):
+        """Test consistency between alternate construction methods."""
 
         def test(sym, endpoint, axis, ntheta_is_odd):
             nrho = 1
-            # more edge cases are caught when ntheta is odd when endpoint=True
-            # and ntheta is even when endpoint is False
             ntheta = 6 + ntheta_is_odd
             nzeta = 7
             NFP = 3
-            theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint)
-            if sym:
-                # When users supply nodes and set symmetry to true, they need
-                # to ensure their nodes are placed symmetrically.
-                # Here we change the array to match the effect done in grid.py,
-                # so the nodes are actually symmetric.
+            # We need to construct the theta coordinates to match
+            # whatever is done in grid.py for construction via theta=integer input.
+            # First round up ntheta + endpoint to next even integer.
+            theta = np.linspace(
+                0,
+                2 * np.pi,
+                (ntheta + endpoint + 1) // 2 * 2 - endpoint
+                if (sym and ntheta > 1)
+                else ntheta,
+                endpoint=endpoint,
+            )
+            if sym and ntheta > 1:
+                # Second, change the array to match the effect done in grid.py,
+                # which sets dtheta to a constant. This requires shifting nodes
+                # off the axis.
                 theta += theta[1] / 2
-                if endpoint:
-                    # We have to manually delete last node because the addition
-                    # above pushed it to the (2pi, pi) range which = (0, pi)
-                    # range, meaning it wouldn't have been deleted by
-                    # enforce_symmetry which only removes nodes from (pi, 2pi).
-                    theta = theta[:-1]
+                # Third, manually delete last node because the addition
+                # above pushed it to the (2pi, pi) range which = (0, pi)
+                # range, meaning it wouldn't have been deleted by
+                # enforce_symmetry which only removes nodes from (pi, 2pi).
+                theta = theta[: theta.size - endpoint]
             lg_1 = LinearGrid(
                 rho=nrho,
                 theta=ntheta,
@@ -134,6 +140,28 @@ class TestGrid:
         test(sym=True, endpoint=False, axis=True, ntheta_is_odd=False)
         test(sym=True, endpoint=True, axis=False, ntheta_is_odd=False)
         test(sym=True, endpoint=True, axis=True, ntheta_is_odd=False)
+
+    @pytest.mark.unit
+    def test_linear_grid_symmetric_nodes_consistency(self):
+        """Test that specifying theta nodes from [0, pi] is sufficient."""
+        # uniform spacing
+        theta = np.linspace(0, 2 * np.pi, 12)
+        lg_1 = LinearGrid(L=5, theta=theta, N=5, sym=True)
+        lg_2 = LinearGrid(L=5, theta=theta[theta <= np.pi], N=5, sym=True)
+        np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
+        np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
+        np.testing.assert_allclose(lg_1.weights, lg_2.weights)
+
+        # non-uniform spacing
+        pts = np.linspace(0, 1, 15)
+        rho = np.asarray([r**3 for r in pts])
+        theta = np.asarray([2 * np.pi * t**1.85 for t in pts])
+        zeta = np.asarray([2 * np.pi * z**4 for z in pts])
+        lg_1 = LinearGrid(rho=rho, theta=theta, zeta=zeta, sym=True)
+        lg_2 = LinearGrid(rho=rho, theta=theta[theta <= np.pi], zeta=zeta, sym=True)
+        np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
+        np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
+        np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
     @pytest.mark.unit
     def test_linear_grid_spacing_two_nodes(self):
@@ -180,20 +208,23 @@ class TestGrid:
         np.testing.assert_allclose(lg_2.spacing, spacing)
 
     @pytest.mark.unit
-    def test_duplicate_node_spacing(self):
-        """Test surface spacing on all types of grids with endpoint=True."""
+    def test_node_spacing_non_sym(self):
+        """Test surface spacing on grids with sym=False."""
+        self._test_node_spacing_non_sym(False, 8, 13, 3)
+        self._test_node_spacing_non_sym(True, 8, 13, 3)
+
+    @staticmethod
+    def _test_node_spacing_non_sym(
+        endpoint, unique_theta_count, unique_zeta_count, NFP
+    ):
+        """Test surface spacing on grids with sym=False."""
         nrho = 1
-        ntheta = 8  # unique theta count
-        nzeta = 13  # unique zeta count
-        NFP = 3
-        axis = True
-        endpoint = True
 
         def test(grid):
-            is_theta_dupe = (endpoint and (ntheta > 0) and not grid.sym) & (
+            is_theta_dupe = (endpoint and unique_theta_count > 0 and not grid.sym) & (
                 grid.nodes[:, 1] % (2 * np.pi) == 0
             )
-            is_zeta_dupe = (endpoint and nzeta > 0) & (
+            is_zeta_dupe = (endpoint and unique_zeta_count > 0) & (
                 grid.nodes[:, 2] % (2 * np.pi / NFP) == 0
             )
 
@@ -209,84 +240,192 @@ class TestGrid:
                         # unique node
                         np.testing.assert_allclose(ds, desired_ds, err_msg=label)
 
-            if grid.sym:
-                dtheta_scale = max(ntheta, 1) / grid.num_theta
-            else:
-                dtheta_scale = 1
             test_surface(
                 "rho",
                 grid.spacing[:, 1:].prod(axis=1),
-                (2 * np.pi / max(ntheta, 1))
-                * (2 * np.pi / max(nzeta, 1))
-                * dtheta_scale,
+                (2 * np.pi / max(unique_theta_count, 1))
+                * (2 * np.pi / max(unique_zeta_count, 1)),
             )
             test_surface(
                 "theta",
                 grid.spacing[:, [0, 2]].prod(axis=1),
-                (1 / nrho) * (2 * np.pi / max(nzeta, 1)),
+                (1 / nrho) * (2 * np.pi / max(unique_zeta_count, 1)),
             )
             test_surface(
                 "zeta",
                 grid.spacing[:, :2].prod(axis=1),
-                (1 / nrho) * (2 * np.pi / max(ntheta, 1)) * dtheta_scale,
+                (1 / nrho) * (2 * np.pi / max(unique_theta_count, 1)),
             )
 
         lg_1 = LinearGrid(
             rho=nrho,
-            theta=ntheta + endpoint,
-            zeta=nzeta + endpoint,
+            theta=unique_theta_count + endpoint,
+            zeta=unique_zeta_count + endpoint,
             NFP=NFP,
             sym=False,
-            axis=axis,
             endpoint=endpoint,
         )
-        lg_1_sym = LinearGrid(
-            rho=nrho,
-            theta=ntheta + endpoint,
-            zeta=nzeta + endpoint,
-            NFP=NFP,
-            sym=True,
-            axis=axis,
-            endpoint=endpoint,
+        rho = np.linspace(1, 0, nrho)[::-1]
+        theta = np.linspace(
+            0, 2 * np.pi, unique_theta_count + endpoint, endpoint=endpoint
+        )
+        zeta = np.linspace(
+            0, 2 * np.pi / NFP, unique_zeta_count + endpoint, endpoint=endpoint
         )
         lg_2 = LinearGrid(
-            rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
-            theta=np.linspace(0, 2 * np.pi, ntheta + endpoint, endpoint=endpoint),
-            zeta=np.linspace(0, 2 * np.pi / NFP, nzeta + endpoint, endpoint=endpoint),
-            NFP=NFP,
-            sym=False,
-            axis=axis,
-            endpoint=endpoint,
-        )
-        lg_2_sym = LinearGrid(
-            rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
-            theta=np.linspace(0, 2 * np.pi, ntheta + endpoint, endpoint=endpoint),
-            zeta=np.linspace(0, 2 * np.pi / NFP, nzeta + endpoint, endpoint=endpoint),
-            NFP=NFP,
-            sym=True,
-            axis=axis,
-            endpoint=endpoint,
+            rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=False, endpoint=endpoint
         )
         lg_3 = LinearGrid(
-            rho=np.linspace(1, 0, nrho, endpoint=axis)[::-1],
-            theta=np.linspace(0, 2 * np.pi, ntheta + endpoint, endpoint=endpoint),
-            zeta=np.linspace(0, 2 * np.pi / NFP, nzeta + endpoint, endpoint=endpoint),
+            rho=rho,
+            theta=theta,
+            zeta=zeta,
             NFP=NFP,
             sym=False,
-            axis=axis,
             endpoint=not endpoint,  # incorrect marker should have no effect
         )
         assert lg_3.endpoint == endpoint
         test(lg_1)
-        test(lg_1_sym)
         # The test below might fail for theta and zeta surfaces only if nrho > 1.
         # This is unrelated to how duplicate node spacing is handled.
         # The cause is because grid construction does not always
         # compute drho as constant (even when the rho nodes are linearly spaced),
         # and this test assumes drho to be a constant for grids without duplicates.
         test(lg_2)
-        test(lg_2_sym)
         test(lg_3)
+
+    @pytest.mark.unit
+    def test_symmetry_spacing_basic(self):
+        """Test symmetry effect on spacing in a basic case."""
+        nrho = 2
+        ntheta = 3
+        nzeta = 2
+        lg = LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, sym=False)
+        lg_sym = LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, sym=True)
+        np.testing.assert_allclose(
+            lg.spacing,
+            np.tile(
+                [1 / nrho, 2 * np.pi / ntheta, 2 * np.pi / nzeta],
+                (nrho * ntheta * nzeta, 1),
+            ),
+        )
+        np.testing.assert_allclose(
+            lg_sym.spacing,
+            np.tile(
+                [1 / nrho, 2 * np.pi / (ntheta - 1), 2 * np.pi / nzeta],
+                (nrho * (ntheta - 1) * nzeta, 1),
+            ),
+        )
+
+    @pytest.mark.unit
+    def test_node_spacing_sym(self):
+        """Test surface spacing on grids with sym=True."""
+        # It's useful to test with ntheta even and odd.
+        # These tests should pass for any combination of parameters.
+        self._test_node_spacing_sym(False, 8, 13, 3)
+        self._test_node_spacing_sym(False, 7, 13, 3)
+        self._test_node_spacing_sym(True, 8, 13, 3)
+        self._test_node_spacing_sym(True, 7, 13, 3)
+
+    @staticmethod
+    def _test_node_spacing_sym(endpoint, ntheta, unique_zeta_count, NFP):
+        """Test surface spacing on grids with sym=True."""
+        nrho = 1
+
+        # unique_theta_and_reflection count is twice
+        # the number of nodes at unique theta coordinates (0, pi)
+        # on a given theta curve.
+        def test(grid, unique_theta_and_reflection_count):
+            is_zeta_dupe = (endpoint and unique_zeta_count > 0) & (
+                grid.nodes[:, 2] % (2 * np.pi / NFP) == 0
+            )
+
+            def test_surface(label, actual_ds, desired_ds):
+                for index, ds in enumerate(actual_ds):
+                    if (
+                        label != "theta"
+                        and grid.sym
+                        and grid.nodes[index, 1] % np.pi != 0
+                    ):
+                        # these nodes should have double weight to account for
+                        # reflection across symmetry line
+                        if is_zeta_dupe[index]:
+                            # the grid has 2 of these nodes,
+                            # so each should have half weight
+                            np.testing.assert_allclose(
+                                ds, (desired_ds / 2) * 2, err_msg=label
+                            )
+                        else:
+                            np.testing.assert_allclose(
+                                ds, desired_ds * 2, err_msg=label
+                            )
+                    elif is_zeta_dupe[index]:
+                        # the grid has 2 of these nodes,
+                        # so each should have half weight
+                        np.testing.assert_allclose(ds, desired_ds / 2, err_msg=label)
+                    else:
+                        # unique node
+                        np.testing.assert_allclose(ds, desired_ds, err_msg=label)
+
+            test_surface(
+                "rho",
+                grid.spacing[:, 1:].prod(axis=1),
+                (2 * np.pi / max(unique_theta_and_reflection_count, 1))
+                * (2 * np.pi / max(unique_zeta_count, 1)),
+            )
+            test_surface(
+                "theta",
+                grid.spacing[:, [0, 2]].prod(axis=1),
+                (1 / nrho) * (2 * np.pi / max(unique_zeta_count, 1)),
+            )
+            test_surface(
+                "zeta",
+                grid.spacing[:, :2].prod(axis=1),
+                (1 / nrho) * (2 * np.pi / max(unique_theta_and_reflection_count, 1)),
+            )
+
+        lg_1_sym = LinearGrid(
+            rho=nrho,
+            theta=ntheta,
+            zeta=unique_zeta_count + endpoint,
+            NFP=NFP,
+            sym=True,
+            endpoint=endpoint,
+        )
+        # Recall that LinearGrid created with integers forces ntheta + endpoint
+        # to be even and shifts nodes counterclockwise. The result is that
+        # unique_theta_and_reflection_count is ntheta rounded up (down) to the
+        # closest even integer when endpoint is false (true).
+        test(
+            lg_1_sym, unique_theta_and_reflection_count=(ntheta - endpoint + 1) // 2 * 2
+        )
+
+        rho = np.linspace(1, 0, nrho)[::-1]
+        theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=endpoint)
+        zeta = np.linspace(
+            0, 2 * np.pi / NFP, unique_zeta_count + endpoint, endpoint=endpoint
+        )
+        lg_2_sym = LinearGrid(
+            rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=True, endpoint=endpoint
+        )
+        lg_3_sym = LinearGrid(
+            rho=rho,
+            theta=theta,
+            zeta=zeta,
+            NFP=NFP,
+            sym=True,
+            endpoint=not endpoint,  # incorrect marker should have no effect
+        )
+        # endpoints were deleted
+        assert not lg_1_sym.endpoint
+        assert not lg_2_sym.endpoint
+        assert not lg_3_sym.endpoint
+        # The test below might fail for theta and zeta surfaces only if nrho > 1.
+        # This is unrelated to how duplicate node spacing is handled.
+        # The cause is because grid construction does not always
+        # compute drho as constant (even when the rho nodes are linearly spaced),
+        # and this test assumes drho to be a constant for grids without duplicates.
+        test(lg_2_sym, unique_theta_and_reflection_count=ntheta - endpoint)
+        test(lg_3_sym, unique_theta_and_reflection_count=ntheta - endpoint)
 
     @pytest.mark.unit
     def test_concentric_grid(self):
@@ -434,31 +573,8 @@ class TestGrid:
         assert cg.N == 5
 
     @pytest.mark.unit
-    def test_symmetry_spacing_basic(self):
-        """Test symmetry effect on spacing in a basic case."""
-        nrho = 2
-        ntheta = 3
-        nzeta = 2
-        lg = LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, sym=False)
-        lg_sym = LinearGrid(rho=nrho, theta=ntheta, zeta=nzeta, sym=True)
-        np.testing.assert_allclose(
-            lg.spacing,
-            np.tile(
-                [1 / nrho, 2 * np.pi / ntheta, 2 * np.pi / nzeta],
-                (nrho * ntheta * nzeta, 1),
-            ),
-        )
-        np.testing.assert_allclose(
-            lg_sym.spacing,
-            np.tile(
-                [1 / nrho, 2 * np.pi / (ntheta - 1), 2 * np.pi / nzeta],
-                (nrho * (ntheta - 1) * nzeta, 1),
-            ),
-        )
-
-    @pytest.mark.unit
-    def test_enforce_symmetry(self):
-        """Test that enforce_symmetry spaces theta nodes correctly.
+    def test_enforce_symmetry_sum(self):
+        """Test that enforce_symmetry sums dtheta to 2pi.
 
         Relies on correctness of surface_integrals.
         """
@@ -474,6 +590,29 @@ class TestGrid:
         # Otherwise, a dimension mismatch or broadcast error should be raised.
         test(ConcentricGrid(L=20, M=3, N=2, sym=True))
         test(LinearGrid(L=20, M=3, N=2, sym=True))
+
+    @pytest.mark.unit
+    def test_enforce_symmetry(self):
+        """Test correctness of enforce_symmetry() for uniformly spaced nodes.
+
+        Unlike enforce_symmetry(), the algorithm used in LinearGrid for
+        symmetry also works if the nodes are not uniformly spaced. This test
+        compares the two methods when the grid is uniformly spaced in theta,
+        as a means to ensure enforce_symmetry() is correct.
+        """
+        ntheta = 6
+        theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
+        lg_1 = LinearGrid(L=5, theta=theta, N=4, NFP=4, sym=True)
+        lg_2 = LinearGrid(L=5, theta=theta, N=4, NFP=4, sym=False)
+        # precondition for the following tests to work
+        np.testing.assert_allclose(lg_2.spacing[:, 1], 2 * np.pi / ntheta)
+        lg_2._sym = True
+        scaled_idx, dtheta_scale = lg_2._enforce_symmetry()
+        np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
+        np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
+        lg_2._scale_weights(scaled_idx, dtheta_scale)
+        np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
+        # np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
     @pytest.mark.unit
     def test_symmetry_1(self):

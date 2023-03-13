@@ -243,6 +243,18 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 constraints=self._constraints,
                 **self._solve_options
             )
+            # update other args that are not Equilibrium attributes
+            for arg in self._other_args:
+                arg_name = arg.split(" ")
+                old_arg = getattr(
+                    self._objective.objectives[self._QI_dict[arg_name[1]]],
+                    arg_name[0],
+                )
+                setattr(
+                    self._objective.objectives[self._QI_dict[arg_name[1]]],
+                    arg_name[0],
+                    old_arg + deltas[arg],
+                )
             xopt = self._objective.x(self._eq)
             xeq = self._eq_objective.x(self._eq)
             self._allx.append(x)
@@ -264,7 +276,11 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 # ensure eq has correct values if we didn't go into else block above.
                 if val.size:
                     setattr(self._eq, arg, val)
+            for arg in self._other_args:
+                val = xd.get(arg, self.history[arg][-1])
+                self.history[arg] += [np.asarray(val).copy()]
             for con in self._constraints:
+                # this will not update targets in self._other_args! (like QI parameters)
                 con.update_target(self._eq)
         else:
             for arg in arg_order:

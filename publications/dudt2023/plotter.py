@@ -66,7 +66,7 @@ ax1.set_ylabel(r"$|\mathbf{B}|$")
 div = make_axes_locatable(ax2)
 im2 = ax2.contour(zqi, alph, B, norm=Normalize(), levels=20, cmap="plasma")
 cax = div.append_axes("right", size="5%", pad=0.05)
-cbar = fig.colorbar(im2, cax=cax)
+cbar = fig.colorbar(im2, cax=cax, ticks=[1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
 cbar.update_ticks()
 arr = np.array([1, 1])
 ax2.plot(

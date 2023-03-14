@@ -45,6 +45,10 @@ ax0.plot(
     label=r"spline interpolation",
 )
 ax0.plot(z, QI_l, color=color1, linestyle="", marker="o", ms=12, label=r"$x_l$")
+ax0.set_xticks([-np.pi / 2, -np.pi / 3, -np.pi / 6, 0, np.pi / 6, np.pi / 3, np.pi / 2])
+ax0.set_xticklabels(
+    [r"$-\pi/2$", r"$-\pi/3$", r"$-\pi/6$", r"$0$", r"$\pi/6$", r"$\pi/3$", r"$\pi/2$"]
+)
 ax0.legend(loc="upper center")
 ax0.set_xlabel(r"$\bar{\zeta}$")
 ax0.set_ylabel(r"$|\mathbf{B}|$")
@@ -53,6 +57,8 @@ ax1.plot(zqi[0, :], B[0, :], color=color0, lw=6, label=r"$\alpha=0$")
 ax1.plot(zqi[25, :], B[25, :], color=color1, lw=6, label=r"$\alpha=\pi/2$")
 ax1.plot(zqi[50, :], B[50, :], color=color2, lw=6, label=r"$\alpha=\pi$")
 ax1.plot(zqi[75, :], B[75, :], color=color3, lw=6, label=r"$\alpha=3\pi/2$")
+ax1.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+ax1.set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
 ax1.legend(loc="lower right")
 ax1.set_xlabel(r"$\zeta_B$")
 ax1.set_ylabel(r"$|\mathbf{B}|$")
@@ -90,6 +96,10 @@ ax2.plot(
     lw=6,
     label=r"$\alpha=3\pi/2$",
 )
+ax2.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+ax2.set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+ax2.set_yticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+ax2.set_yticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
 ax2.set_xlabel(r"$\zeta_B$")
 ax2.set_ylabel(r"$\alpha$")
 fig.tight_layout()

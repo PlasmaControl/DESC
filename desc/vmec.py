@@ -146,7 +146,7 @@ class VMECIO:
             FixBoundaryZ(fixed_boundary=True),
         )
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
-        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
+        _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))

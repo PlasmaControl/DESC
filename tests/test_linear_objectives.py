@@ -1,5 +1,4 @@
 """Tests for linear constraints and objectives."""
-import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy.linalg
@@ -133,20 +132,10 @@ def test_constrain_asserts():
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
         eqi.solve(constraints=(FixCurrent(), FixIota()))
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         eqi.solve(constraints=(FixPressure(target=2), FixPressure(target=1)))
-    # cannot use two constraints on the same R mode
-    with pytest.raises(RuntimeError):
-        fixmode1 = FixModeR(modes=np.array([1, 1, 0]))
-        fixmode2 = FixModeR(modes=np.array([[0, 0, 0], [1, 1, 0]]))
-        eqc.solve(constraints=(fixmode1, fixmode2))
-    # cannot use two constraints on the same Z mode
-    with pytest.raises(RuntimeError):
-        fixmode1 = FixModeZ(modes=np.array([1, -1, 0]))
-        fixmode2 = FixModeZ(modes=np.array([1, -1, 0]))
-        eqc.solve(constraints=(fixmode1, fixmode2))
     # cannot use two incompatible constraints
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         con1 = FixCurrent(target=eqc.c_l)
         con2 = FixCurrent(target=eqc.c_l + 1)
         eqc.solve(constraints=(con1, con2))
@@ -305,7 +294,7 @@ def test_factorize_linear_constraints_asserts():
     from desc.objectives.utils import factorize_linear_constraints
 
     with pytest.raises(ValueError):
-        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             constraints, arg_order
         )
 
@@ -436,27 +425,20 @@ def test_correct_indexing_passed_modes():
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -510,27 +492,20 @@ def test_correct_indexing_passed_modes_and_passed_target():
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -579,27 +554,20 @@ def test_correct_indexing_passed_modes_axis():
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -688,27 +656,20 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit

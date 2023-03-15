@@ -275,6 +275,7 @@ def test_overstepping():
         def build(self, eq, *args, **kwargs):
 
             # objective = just shift x by a lil bit
+            self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
             self._x0 = (
                 np.concatenate(
                     [
@@ -295,10 +296,9 @@ def test_overstepping():
             self._set_derivatives()
             self._built = True
 
-        def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi):
-            x = jnp.concatenate(
-                [R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, jnp.atleast_1d(Psi)]
-            )
+        def compute(self, *args, **kwargs):
+            params = self._parse_args(*args, **kwargs)
+            x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
             return x - self._x0
 
     np.random.seed(0)

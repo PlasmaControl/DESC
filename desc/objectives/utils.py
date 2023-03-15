@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from desc.backend import block_diag, jnp, put
+from desc.backend import jnp, put
 from desc.compute import arg_order
 from desc.utils import svd_inv_null
 
@@ -214,14 +214,12 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     -------
     xp : ndarray
         particular solution to Ax=b
-    A : dict of ndarray
-        Individual constraint matrices, keyed by argument
-    Ainv : dict of ndarray
-        Individual pseudoinverses of constraint matrices
-    b : dict of ndarray
-        Individual rhs vectors
+    A : ndarray ndarray
+        Combined constraint matrix, such that A @ x[unfixed_idx] == b
+    b : list of ndarray
+        Combined rhs vector
     Z : ndarray
-        Null space operator for full combined A
+        Null space operator for full combined A such that A @ Z == 0
     unfixed_idx : ndarray
         indices of x that correspond to non-fixed values
     project, recover : function
@@ -237,95 +235,63 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
-    for arg in objective_args:
+    for arg in args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
 
-    A = {}
-    _A_unweighted = {}  # keep unweighted A here and use this to find Ainv
-    b = {}
-    Ainv = {}
-    arg_obj_lists = {}
+    A = []
+    b = []
     xp = jnp.zeros(dim_x)  # particular solution to Ax=b
-    constraint_args = []  # all args used in constraints
-    unfixed_args = []  # subset of constraint args for unfixed objectives
 
     # linear constraint matrices for each objective
     for obj_ind, obj in enumerate(constraints):
-        if len(obj.args) > 1:
-            raise ValueError("Linear constraints must have only 1 argument.")
         if obj.bounds is not None:
             raise ValueError("Linear constraints must use target instead of bounds.")
-        arg = obj.args[0]
-        if arg not in objective_args:
-            continue
-        if arg not in constraint_args:  # hope this does not mess
-            constraint_args.append(arg)
-        if obj.fixed and obj.dim_f == dimensions[obj.target_arg]:
-            # if all coefficients are fixed the constraint matrices are not needed
-            xp = put(xp, x_idx[obj.target_arg], obj.target)
+        A_ = {
+            arg: obj.derivatives["jac"][arg](
+                *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
+            )
+            for arg in args
+        }
+        # using obj.compute instead of obj.target to allow for correct scale/weight
+        b_ = -obj.compute_scaled(*[jnp.zeros(obj.dimensions[arg]) for arg in obj.args])
+        A.append(A_)
+        b.append(b_)
 
-        else:
-            A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
-            # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
-            if arg not in A.keys():
-                A[arg] = A_
-
-                _A_unweighted[arg] = (
-                    obj.normalization * (A_.T / obj.weight).T
-                )  # undo normalization here for each indiv A
-                b[arg] = b_
-                unfixed_args.append(arg)
-                arg_obj_lists[arg] = [obj]
-            elif b_.size > 0:  # we want to stack these vertically if the same arg
-                # but only if the constraint actually constrains anything
-                # if not, i.e. if attempted to fix a mode that is not in the basis,
-                # b_ is an empty array and does not need to be added
-                rk_before = jnp.linalg.matrix_rank(A[arg])
-                A[arg] = jnp.vstack((A[arg], A_))
-                rk_after = jnp.linalg.matrix_rank(A[arg])
-                if (
-                    rk_after < rk_before + A_.shape[0]
-                ):  # if less, there are some lin dependent rows of A_ and A[arg]
-                    # for example, could be trying to constrain same mode with 2
-                    # different values
-                    raise RuntimeError(
-                        f"Incompatible constraints given for {arg}!"
-                        + f" constraint {obj} is incompatible with"
-                        + f" {*arg_obj_lists[arg],}"
-                    )
-                _A_unweighted[arg] = jnp.vstack(
-                    (A[arg], A_ / obj.weight * obj.normalization)
-                )
-                arg_obj_lists[arg] += [obj]
-
-                b[arg] = jnp.hstack((b[arg], b_))
-    # find inverse of the now-combined constraint matrices for each arg
-    for key in list(A.keys()):
-        if A[key].shape[0]:
-            Ainv[key], Z_ = svd_inv_null(_A_unweighted[key])
-        else:
-            Ainv[key] = _A_unweighted[
-                key
-            ].T  # make inverse matrices using already unweighted A
-
-    # catch any arguments that are not constrained
-    for arg in x_idx.keys():
-        if arg not in constraint_args:
-            unfixed_args.append(arg)
-            A[arg] = jnp.zeros((1, dimensions[arg]))
-            b[arg] = jnp.zeros((1,))
-
-    # full A matrix for all unfixed constraints
-    if len(A):
-        unfixed_idx = jnp.concatenate(
-            [x_idx[arg] for arg in arg_order if arg in A.keys()]
+    A_full = jnp.vstack([jnp.hstack([Ai[arg] for arg in args]) for Ai in A])
+    b_full = jnp.concatenate(b)
+    # fixed just means there is a single element in A, so A_ij*x_j = b_i
+    fixed_rows = np.where(np.count_nonzero(A_full, axis=1) == 1)[0]
+    # indices of x that are fixed = cols of A where rows have 1 nonzero val.
+    _, fixed_idx = np.where(A_full[fixed_rows])
+    unfixed_rows = np.setdiff1d(np.arange(A_full.shape[0]), fixed_rows)
+    unfixed_idx = np.setdiff1d(np.arange(xp.size), fixed_idx)
+    if len(fixed_rows):
+        # something like 0.5 x1 = 2 is the same as x1 = 4
+        b_full = put(
+            b_full, fixed_rows, b_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)
         )
-        A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-        b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+        xp = put(xp, fixed_idx, b_full[fixed_rows])
+        # some values might be fixed, but they still show up in other constraints
+        # this is where the fixed cols have >1 nonzero val
+        # for fixed variables, we delete that row and col of A, but that means
+        # we need to subtract the fixed value from b so that the equation is balanced.
+        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    x1 = 1.5
+        # combining gives 3 x2 + 1 x3 = 1, with x1 now removed
+        b_full = put(
+            b_full,
+            unfixed_rows,
+            b_full[unfixed_rows]
+            - A_full[unfixed_rows][:, fixed_idx] @ b_full[fixed_rows],
+        )
+    A_full = A_full[unfixed_rows][:, unfixed_idx]
+    b_full = b_full[unfixed_rows]
+    if A_full.size:
         Ainv_full, Z = svd_inv_null(A_full)
-        xp = put(xp, unfixed_idx, Ainv_full @ b_full)
+    else:
+        Ainv_full = A_full.T
+        Z = np.eye(A_full.shape[1])
+    xp = put(xp, unfixed_idx, Ainv_full @ b_full)
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
@@ -340,19 +306,19 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        arg = con.args[0]
-        if arg not in objective_args:
-            continue
         res = con.compute_scaled(**xp_dict)
-        x = xp_dict[arg]
+        x = np.concatenate([xp_dict[arg] for arg in con.args])
         # stuff like density is O(1e19) so need some adjustable tolerance here.
-        atol = max(1e-8, np.finfo(x).eps * np.linalg.norm(x) / x.size)
-        if not np.allclose(res, 0, atol=atol):
-            raise ValueError(
-                f"Incompatible constraints detected, cannot satisfy constraint {con}"
-            )
+        atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
+        np.testing.assert_allclose(
+            res,
+            0,
+            atol=atol,
+            err_msg="Incompatible constraints detected, cannot satisfy "
+            + f"constraint {con}",
+        )
 
-    return xp, A, Ainv, b, Z, unfixed_idx, project, recover
+    return xp, A_full, b_full, Z, unfixed_idx, project, recover
 
 
 def align_jacobian(Fx, objective_f, objective_g):

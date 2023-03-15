@@ -104,7 +104,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         (
             self._xp,
             self._A,
-            self._Ainv,
             self._b,
             self._Z,
             self._unfixed_idx,
@@ -380,7 +379,6 @@ class ProximalProjection(ObjectiveFunction):
         (
             xp,
             A,
-            self._Ainv,
             b,
             self._Z,
             self._unfixed_idx,

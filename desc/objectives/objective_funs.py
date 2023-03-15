@@ -56,11 +56,18 @@ class ObjectiveFunction(IOAble):
         if eq is not None:
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
+    def set_args(self, *args):
+        """Set which arguments the objective should expect.
+
+        Defaults to args from all sub-objectives. Additional arguments can be passed in.
+        """
+        self._args = list(np.concatenate([obj.args for obj in self.objectives]))
+        self._args += list(args)
+        self._args = [arg for arg in arg_order if arg in self._args]
+        self._set_state_vector()
+
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
-        self._args = np.concatenate([obj.args for obj in self.objectives])
-        self._args = [arg for arg in arg_order if arg in self._args]
-
         self._dimensions = self.objectives[0].dimensions
 
         self._dim_x = 0
@@ -180,7 +187,7 @@ class ObjectiveFunction(IOAble):
         else:
             self._scalar = False
 
-        self._set_state_vector()
+        self.set_args()
         self._set_derivatives()
         if self.use_jit:
             self.jit()

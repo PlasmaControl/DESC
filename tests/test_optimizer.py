@@ -362,8 +362,8 @@ def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
     constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         FixPressure(),
         FixIota(),
         FixPsi(),
@@ -388,8 +388,8 @@ def test_maxiter_1_and_0_solve():
 def test_scipy_fail_message():
     """Test that scipy fail message does not cause an error (see PR #434)."""
     constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         FixPressure(),
         FixCurrent(),
         FixPsi(),
@@ -435,8 +435,8 @@ def test_wrappers():
     """Tests for using wrapped objectives."""
     eq = desc.examples.get("SOLOVEV")
     con = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         FixIota(),
         FixPressure(),
         FixPsi(),
@@ -451,8 +451,8 @@ def test_wrappers():
     assert ob.built
 
     con = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         FixIota(),
         FixPressure(),
         FixPsi(),
@@ -481,8 +481,8 @@ def test_all_optimizers():
     fobj.build(eq)
     eobj.build(eq)
     constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         FixIota(),
         FixPressure(),
         FixPsi(),

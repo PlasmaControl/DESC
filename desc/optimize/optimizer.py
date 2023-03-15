@@ -7,6 +7,7 @@ from termcolor import colored
 
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
+from desc.objectives.utils import maybe_add_self_consistency
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
@@ -138,6 +139,10 @@ class Optimizer(IOAble):
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
             objective, nonlinear_constraint, self.method, options
         )
+
+        if not isinstance(objective, ProximalProjection):
+            # need to include self consistency constraints
+            linear_constraints = maybe_add_self_consistency(linear_constraints)
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
         if not objective.built:

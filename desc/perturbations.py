@@ -7,11 +7,19 @@ from termcolor import colored
 
 from desc.backend import put, use_jax
 from desc.compute import arg_order, profile_names
-from desc.objectives import FixBoundaryR, FixBoundaryZ, get_fixed_boundary_constraints
-from desc.objectives.utils import align_jacobian, factorize_linear_constraints
+from desc.objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
+    get_fixed_boundary_constraints,
+)
+from desc.objectives.utils import (
+    align_jacobian,
+    factorize_linear_constraints,
+    maybe_add_self_consistency,
+)
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer
+from desc.utils import Timer, get_instance
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -148,6 +156,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
+    constraints = maybe_add_self_consistency(constraints)
     con_args = []
     for con in constraints:
         con_args += con.args
@@ -189,7 +198,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # tangent vectors
     tangents = np.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
-        con = [con for con in constraints if isinstance(con, FixBoundaryR)][0]
+        con = get_instance(constraints, BoundaryRSelfConsistency)
         A = con.derivatives["jac"]["R_lmn"](
             *[np.zeros(con.dimensions[arg]) for arg in con.args]
         )
@@ -198,7 +207,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dc = deltas["Rb_lmn"]
         tangents += np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
-        con = [con for con in constraints if isinstance(con, FixBoundaryZ)][0]
+        con = get_instance(constraints, BoundaryZSelfConsistency)
         A = con.derivatives["jac"]["Z_lmn"](
             *[np.zeros(con.dimensions[arg]) for arg in con.args]
         )
@@ -535,6 +544,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     constraints = get_fixed_boundary_constraints(
         iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
     )
+    constraints = maybe_add_self_consistency(constraints)
     con_args = []
     for con in constraints:
         con_args += con.args
@@ -584,7 +594,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         x_idx.sort(kind="mergesort")
         dxdc = np.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
-        con = [con for con in constraints if isinstance(con, FixBoundaryR)][0]
+        con = get_instance(constraints, BoundaryRSelfConsistency)
         A = con.derivatives["jac"]["R_lmn"](
             *[np.zeros(con.dimensions[arg]) for arg in con.args]
         )
@@ -593,7 +603,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dxdRb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
         dxdc = np.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
-        con = [con for con in constraints if isinstance(con, FixBoundaryZ)][0]
+        con = get_instance(constraints, BoundaryZSelfConsistency)
         A = con.derivatives["jac"]["Z_lmn"](
             *[np.zeros(con.dimensions[arg]) for arg in con.args]
         )

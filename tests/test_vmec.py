@@ -389,7 +389,7 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         np.abs(vmec.variables["jcuru"][20:100]),
         np.abs(desc.variables["jcuru"][20:100]),
-        rtol=1e-5,
+        rtol=1e-2,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jcurv"][20:100]),

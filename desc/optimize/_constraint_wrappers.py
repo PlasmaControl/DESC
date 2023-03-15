@@ -5,9 +5,9 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import arg_order
 from desc.objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     CurrentDensity,
-    FixBoundaryR,
-    FixBoundaryZ,
     ForceBalance,
     HelicalForceBalance,
     ObjectiveFunction,
@@ -17,8 +17,9 @@ from desc.objectives.utils import (
     align_jacobian,
     factorize_linear_constraints,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
-from desc.utils import Timer
+from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
 
@@ -397,7 +398,7 @@ class ProximalProjection(ObjectiveFunction):
         x_idx.sort(kind="mergesort")
         self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
         if "Rb_lmn" in self._args:
-            c = [c for c in self._linear_constraints if isinstance(c, FixBoundaryR)][0]
+            c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
             A = c.derivatives["jac"]["R_lmn"](
                 *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
             )
@@ -406,7 +407,7 @@ class ProximalProjection(ObjectiveFunction):
             dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdRb))
         if "Zb_lmn" in self._args:
-            c = [c for c in self._linear_constraints if isinstance(c, FixBoundaryZ)][0]
+            c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
             A = c.derivatives["jac"]["Z_lmn"](
                 *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
             )
@@ -438,6 +439,7 @@ class ProximalProjection(ObjectiveFunction):
             and self._eq.iota is not None,
             kinetic=eq.electron_temperature is not None,
         )
+        self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
 
         if not self._objective.built:
             self._objective.build(self._eq, verbose=verbose)

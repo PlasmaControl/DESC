@@ -10,6 +10,8 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -108,7 +110,7 @@ def test_bc_on_interior_surfaces():
 def test_constrain_bdry_with_only_one_mode():
     """Test Fixing boundary with a surface with only one mode in its basis."""
     eq = Equilibrium()
-    FixZ = FixBoundaryZ(fixed_boundary=True)
+    FixZ = BoundaryZSelfConsistency()
     try:
         FixZ.build(eq)
     except Exception:
@@ -166,8 +168,8 @@ def test_fixed_mode_solve():
         FixPressure(),
         FixIota(),
         FixPsi(),
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         fixR,
         fixZ,
     )
@@ -220,8 +222,8 @@ def test_fixed_modes_solve():
         FixPressure(),
         FixIota(),
         FixPsi(),
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         fixR,
         fixZ,
     )
@@ -308,11 +310,9 @@ def test_build_init():
     eq = Equilibrium(M=3, N=1)
 
     # initialize the constraints without building
-    fbR1 = FixBoundaryR(fixed_boundary=False)
-    fbZ1 = FixBoundaryZ(fixed_boundary=False)
-    fbR2 = FixBoundaryR(fixed_boundary=True)
-    fbZ2 = FixBoundaryZ(fixed_boundary=True)
-    for obj in (fbR1, fbR2, fbZ1, fbZ2):
+    fbR1 = FixBoundaryR()
+    fbZ1 = FixBoundaryZ()
+    for obj in (fbR1, fbZ1):
         obj.build(eq)
 
     arg = fbR1.args[0]
@@ -320,45 +320,23 @@ def test_build_init():
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
-    arg = fbR2.args[0]
-    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
-
     arg = fbZ1.args[0]
     A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
-    arg = fbZ2.args[0]
-    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
-
-    fbR1 = FixBoundaryR(fixed_boundary=False, eq=eq)
-    fbZ1 = FixBoundaryZ(fixed_boundary=False, eq=eq)
-    fbR2 = FixBoundaryR(fixed_boundary=True, eq=eq)
-    fbZ2 = FixBoundaryZ(fixed_boundary=True, eq=eq)
+    fbR1 = FixBoundaryR(eq=eq)
+    fbZ1 = FixBoundaryZ(eq=eq)
 
     arg = fbR1.args[0]
     A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
-    arg = fbR2.args[0]
-    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
-
     arg = fbZ1.args[0]
     A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
-
-    arg = fbZ2.args[0]
-    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
 
 
 @pytest.mark.unit
@@ -417,12 +395,15 @@ def test_correct_indexing_passed_modes():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
     ]
     constraints = (
-        FixBoundaryR(modes=R_modes, fixed_boundary=True, normalize=False),
-        FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),
+        FixBoundaryR(modes=R_modes, normalize=False),
+        FixBoundaryZ(modes=Z_modes, normalize=False),
+        BoundaryRSelfConsistency(),
+        BoundaryZSelfConsistency(),
     )
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
+    objective.set_args("Rb_lmn", "Zb_lmn")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -480,16 +461,15 @@ def test_correct_indexing_passed_modes_and_passed_target():
         idxs.append(eq.surface.Z_basis.get_idx(*mode))
     target_Z = eq.surface.Z_lmn[idxs]
     constraints = (
-        FixBoundaryR(
-            modes=R_modes, fixed_boundary=True, normalize=False, target=target_R
-        ),
-        FixBoundaryZ(
-            modes=Z_modes, fixed_boundary=True, normalize=False, target=target_Z
-        ),
+        FixBoundaryR(modes=R_modes, normalize=False, target=target_R),
+        FixBoundaryZ(modes=Z_modes, normalize=False, target=target_Z),
+        BoundaryRSelfConsistency(),
+        BoundaryZSelfConsistency(),
     )
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
+    objective.set_args("Rb_lmn", "Zb_lmn")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -677,11 +657,11 @@ def test_FixBoundary_with_single_weight():
     """Test Fixing boundary with only a single, passed weight."""
     eq = Equilibrium()
     w = 1.1
-    FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), fixed_boundary=True, weight=w)
+    FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), weight=w)
     FixZ.build(eq)
     np.testing.assert_array_equal(FixZ.weight.size, 1)
     np.testing.assert_array_equal(FixZ.weight, w)
-    FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), fixed_boundary=True, weight=w)
+    FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), weight=w)
     FixR.build(eq)
     np.testing.assert_array_equal(FixR.weight.size, 1)
     np.testing.assert_array_equal(FixR.weight, w)
@@ -691,16 +671,16 @@ def test_FixBoundary_with_single_weight():
 def test_FixBoundary_passed_target_no_passed_modes_error():
     """Test Fixing boundary with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixBoundaryZ(modes=True, fixed_boundary=True, target=np.array([[0]]))
+    FixZ = FixBoundaryZ(modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixZ.build(eq)
-    FixZ = FixBoundaryZ(modes=False, fixed_boundary=False, target=np.array([[0]]))
+    FixZ = FixBoundaryZ(modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixZ.build(eq)
-    FixR = FixBoundaryR(modes=True, fixed_boundary=False, target=np.array([[0]]))
+    FixR = FixBoundaryR(modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
-    FixR = FixBoundaryR(modes=False, fixed_boundary=True, target=np.array([[0]]))
+    FixR = FixBoundaryR(modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
 

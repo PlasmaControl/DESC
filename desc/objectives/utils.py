@@ -14,6 +14,8 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -55,13 +57,8 @@ def get_fixed_boundary_constraints(
 
     """
     constraints = (
-        FixBoundaryR(
-            fixed_boundary=True, normalize=normalize, normalize_target=normalize
-        ),
-        FixBoundaryZ(
-            fixed_boundary=True, normalize=normalize, normalize_target=normalize
-        ),
-        FixLambdaGauge(normalize=normalize, normalize_target=normalize),
+        FixBoundaryR(normalize=normalize, normalize_target=normalize),
+        FixBoundaryZ(normalize=normalize, normalize_target=normalize),
         FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:
@@ -86,6 +83,21 @@ def get_fixed_boundary_constraints(
     return constraints
 
 
+def maybe_add_self_consistency(constraints):
+    """Add self consistency constraints if needed."""
+
+    def _is_any_instance(things, cls):
+        return any([isinstance(t, cls) for t in things])
+
+    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+        constraints += (BoundaryRSelfConsistency(),)
+    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+        constraints += (BoundaryZSelfConsistency(),)
+    if not _is_any_instance(constraints, FixLambdaGauge):
+        constraints += (FixLambdaGauge(),)
+    return constraints
+
+
 def get_fixed_axis_constraints(profiles=True, iota=True):
     """Get the constraints necessary for a fixed-axis equilibrium problem.
 
@@ -105,7 +117,6 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
     constraints = (
         FixAxisR(fixed_boundary=True),
         FixAxisZ(fixed_boundary=True),
-        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:
@@ -144,7 +155,6 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
     constraints = (
         FixAxisR(),
         FixAxisZ(),
-        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:

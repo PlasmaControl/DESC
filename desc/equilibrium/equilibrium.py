@@ -432,7 +432,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -550,7 +550,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):

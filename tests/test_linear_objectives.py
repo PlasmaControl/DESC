@@ -10,6 +10,8 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
@@ -520,6 +522,8 @@ def test_correct_indexing_passed_modes_axis():
     constraints = (
         FixAxisR(modes=R_modes, normalize=False),
         FixAxisZ(modes=Z_modes, normalize=False),
+        AxisRSelfConsistency(),
+        AxisZSelfConsistency(),
         FixModeR(modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
         FixModeZ(modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
         FixSumModesR(
@@ -532,6 +536,7 @@ def test_correct_indexing_passed_modes_axis():
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
+    objective.set_args("Ra_n", "Za_n")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -590,6 +595,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     constraints = (
         FixAxisR(modes=R_modes, normalize=False, target=target_R),
         FixAxisZ(modes=Z_modes, normalize=False, target=target_Z),
+        AxisRSelfConsistency(),
+        AxisZSelfConsistency(),
         FixModeR(
             modes=np.array([[1, 1, 1], [2, 2, 2]]),
             target=np.array(
@@ -634,6 +641,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
+    objective.set_args("Ra_n", "Za_n")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(

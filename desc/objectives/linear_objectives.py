@@ -175,6 +175,166 @@ class BoundaryZSelfConsistency(_Objective):
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
+class AxisRSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
+
+    def __init__(
+        self,
+        eq=None,
+        name="axis R self consistency",
+    ):
+
+        self._args = ["R_lmn", "Ra_n"]
+        super().__init__(
+            eq=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        R_basis = eq.R_basis
+
+        modes = eq.axis.R_basis.modes
+        if modes.size > 0:
+            ns = modes[:, 2]
+        else:
+            ns = np.array([[]], dtype=int)
+        # we need A to be M x N where N is number of modes in R_basis
+        # and M is the number of modes in the axis (that we are fixing)
+        self._A = np.zeros((ns.size, R_basis.num_modes))
+        self._dim_f = ns.size
+
+        for i, (l, m, n) in enumerate(R_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute axis R self consistency errors."""
+        params = self._parse_args(*args, **kwargs)
+        f = jnp.dot(self._A, params["R_lmn"]) - params["Ra_n"]
+        return f
+
+
+class AxisZSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
+
+    def __init__(
+        self,
+        eq=None,
+        name="axis Z self consistency",
+    ):
+
+        self._args = ["Z_lmn", "Za_n"]
+        super().__init__(
+            eq=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        Z_basis = eq.Z_basis
+
+        modes = eq.axis.Z_basis.modes
+        if modes.size > 0:
+            ns = modes[:, 2]
+        else:
+            ns = np.array([[]], dtype=int)
+        # we need A to be M x N where N is number of modes in R_basis
+        # and M is the number of modes in the axis (that we are fixing)
+        self._A = np.zeros((ns.size, Z_basis.num_modes))
+        self._dim_f = ns.size
+
+        for i, (l, m, n) in enumerate(Z_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute axis Z self consistency errors."""
+        params = self._parse_args(*args, **kwargs)
+        f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
+        return f
+
+
 class FixBoundaryR(_Objective):
     """Boundary condition on the R boundary parameters.
 
@@ -662,7 +822,6 @@ class FixThetaSFL(_Objective):
         return "L_lmn"
 
 
-# TODO: make base class for FixAxis?
 class FixAxisR(_Objective):
     """Fixes magnetic axis R coefficients.
 
@@ -723,8 +882,6 @@ class FixAxisR(_Objective):
             Level of output.
 
         """
-        R_basis = eq.R_basis
-
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -760,20 +917,8 @@ class FixAxisR(_Objective):
             ns = modes[:, 2]
         else:
             ns = np.array([[]], dtype=int)
-        # we need A to be M x N where N is number of modes in R_basis
-        # and M is the number of modes in the axis (that we are fixing)
-        self._A = np.zeros((ns.size, R_basis.num_modes))
+        self._A = np.eye(eq.axis.R_basis.num_modes)[idx, :]
         self._dim_f = ns.size
-
-        for i, (l, m, n) in enumerate(R_basis.modes):
-            if m != 0:
-                continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
 
         # use axis parameters as target if needed
         if self.target is None:
@@ -793,13 +938,13 @@ class FixAxisR(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, **kwargs):
+    def compute(self, Ra_n, **kwargs):
         """Compute axis R errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta)
+        Ra_n : ndarray
+            Spectral coefficients of R(zeta) on axis
 
         Returns
         -------
@@ -807,7 +952,7 @@ class FixAxisR(_Objective):
             Axis R errors.
 
         """
-        f = jnp.dot(self._A, R_lmn)
+        f = jnp.dot(self._A, Ra_n)
         return f
 
 
@@ -871,8 +1016,6 @@ class FixAxisZ(_Objective):
             Level of output.
 
         """
-        Z_basis = eq.Z_basis
-
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -908,18 +1051,8 @@ class FixAxisZ(_Objective):
             ns = modes[:, 2]
         else:
             ns = np.array([[]], dtype=int)
-        self._A = np.zeros((ns.size, Z_basis.num_modes))
+        self._A = np.eye(eq.axis.Z_basis.num_modes)[idx, :]
         self._dim_f = ns.size
-
-        for i, (l, m, n) in enumerate(Z_basis.modes):
-            if m != 0:
-                continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
 
         # use axis parameters as target if needed
         if self.target is None:
@@ -939,13 +1072,13 @@ class FixAxisZ(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Z_lmn, **kwargs):
+    def compute(self, Za_n, **kwargs):
         """Compute axis Z errors.
 
         Parameters
         ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) .
+        Za_n : ndarray
+            Spectral coefficients of Z(zeta) on axis.
 
         Returns
         -------
@@ -953,7 +1086,7 @@ class FixAxisZ(_Objective):
             Axis Z errors.
 
         """
-        f = jnp.dot(self._A, Z_lmn)
+        f = jnp.dot(self._A, Za_n)
         return f
 
 

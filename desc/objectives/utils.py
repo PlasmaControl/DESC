@@ -14,6 +14,8 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
@@ -95,6 +97,10 @@ def maybe_add_self_consistency(constraints):
         constraints += (BoundaryZSelfConsistency(),)
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(),)
+    if not _is_any_instance(constraints, AxisRSelfConsistency):
+        constraints += (AxisRSelfConsistency(),)
+    if not _is_any_instance(constraints, AxisZSelfConsistency):
+        constraints += (AxisZSelfConsistency(),)
     return constraints
 
 
@@ -115,8 +121,8 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
 
     """
     constraints = (
-        FixAxisR(fixed_boundary=True),
-        FixAxisZ(fixed_boundary=True),
+        FixAxisR(),
+        FixAxisZ(),
         FixPsi(),
     )
     if profiles:

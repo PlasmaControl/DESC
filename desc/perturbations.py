@@ -7,7 +7,7 @@ from termcolor import colored
 
 from desc.backend import put, use_jax
 from desc.compute import arg_order, profile_names
-from desc.objectives import get_fixed_boundary_constraints
+from desc.objectives import FixBoundaryR, FixBoundaryZ, get_fixed_boundary_constraints
 from desc.objectives.utils import align_jacobian, factorize_linear_constraints
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
@@ -148,9 +148,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    for constraint in constraints:
-        if not constraint.built:
-            constraint.build(eq, verbose=verbose)
+    con_args = []
+    for con in constraints:
+        con_args += con.args
+        if not con.built:
+            con.build(eq, verbose=verbose)
+    objective.set_args(*con_args)
 
     if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
@@ -186,15 +189,23 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # tangent vectors
     tangents = np.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
+        con = [con for con in constraints if isinstance(con, FixBoundaryR)][0]
+        A = con.derivatives["jac"]["R_lmn"](
+            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = np.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
-        tangents += (
-            np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv["R_lmn"] @ dc
-        )
+        tangents += np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
-        dc = deltas["Zb_lmn"]
-        tangents += (
-            np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
+        con = [con for con in constraints if isinstance(con, FixBoundaryZ)][0]
+        A = con.derivatives["jac"]["Z_lmn"](
+            *[np.zeros(con.dimensions[arg]) for arg in con.args]
         )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = np.linalg.pinv(A)
+        dc = deltas["Zb_lmn"]
+        tangents += np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
     if len([arg for arg in other_args if arg in deltas.keys()]):
@@ -524,9 +535,15 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     constraints = get_fixed_boundary_constraints(
         iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
     )
-    for constraint in constraints:
-        if not constraint.built:
-            constraint.build(eq, verbose=verbose)
+    con_args = []
+    for con in constraints:
+        con_args += con.args
+        if not con.built:
+            con.build(eq, verbose=verbose)
+    con_args += objective_f.args + objective_g.args
+    objective_f.set_args(*con_args)
+    objective_g.set_args(*con_args)
+
     (
         xp,
         A,
@@ -568,10 +585,22 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         x_idx.sort(kind="mergesort")
         dxdc = np.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
-        dxdRb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv["R_lmn"]
+        con = [con for con in constraints if isinstance(con, FixBoundaryR)][0]
+        A = con.derivatives["jac"]["R_lmn"](
+            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = np.linalg.pinv(A)
+        dxdRb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
         dxdc = np.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
-        dxdZb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv["Z_lmn"]
+        con = [con for con in constraints if isinstance(con, FixBoundaryZ)][0]
+        A = con.derivatives["jac"]["Z_lmn"](
+            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = np.linalg.pinv(A)
+        dxdZb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
         dxdc = np.hstack((dxdc, dxdZb))
 
     # 1st order

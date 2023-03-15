@@ -556,7 +556,7 @@ class QuasiIsodynamic(_Objective):
 
     _scalar = False
     _linear = False
-    _units = "(dimensionless)"  # _units = "(T)"
+    _units = "(T)"
     _print_value_fmt = "Quasi-isodynamic error: {:10.3e} "
 
     def __init__(
@@ -565,8 +565,8 @@ class QuasiIsodynamic(_Objective):
         target=0,
         bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         L_QI=3,
         M_QI=1,
@@ -663,11 +663,8 @@ class QuasiIsodynamic(_Objective):
         if verbose > 1:
             timer.disp("Precomputing transforms")
 
-        """
         if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"]
-        """
+            self._normalization = jnp.mean(self.QI_l)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -708,7 +705,7 @@ class QuasiIsodynamic(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return data["f_QI"] * self.grid.weights / jnp.mean(params["QI_l"])
+        return data["f_QI"] * self.grid.weights
 
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""

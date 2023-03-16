@@ -81,7 +81,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     options = {} if options is None else options
     options.setdefault("maxiter", np.iinfo(np.int32).max)
     if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
-        options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0))
+        options.setdefault("initial_trust_radius", 1e-1 * np.linalg.norm(x0))
     if isinstance(x_scale, str):
         raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess

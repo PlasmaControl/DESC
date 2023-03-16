@@ -3,7 +3,7 @@ from scipy.constants import elementary_charge, mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import compress, dot, expand, surface_averages
+from .utils import compress, cumtrapz, dot, expand, surface_averages
 
 
 @register_compute_fun(
@@ -168,10 +168,8 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
 )
 def _chi(params, transforms, profiles, data, **kwargs):
     chi_r = compress(transforms["grid"], data["chi_r"], surface_label="rho")
-    drho = compress(
-        transforms["grid"], transforms["grid"].spacing[:, 0], surface_label="rho"
-    )
-    chi = jnp.cumsum(drho * chi_r)
+    rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx, 0]
+    chi = cumtrapz(chi_r, rho, initial=0)
     data["chi"] = expand(transforms["grid"], chi, surface_label="rho")
     return data
 
@@ -463,9 +461,7 @@ def _gradp_mag(params, transforms, profiles, data, **kwargs):
 )
 def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     data["<|grad(p)|>_vol"] = (
-        jnp.sum(
-            data["|grad(p)|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-        )
+        jnp.sum(data["|grad(p)|"] * data["sqrt(g)"] * transforms["grid"].weights)
         / data["V"]
     )
     return data
@@ -682,6 +678,24 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
             - 2 * data["iota_r"] * den_avg_r
             - data["iota"] * den_avg_rr
         ) / den_avg
+    return data
+
+
+@register_compute_fun(
+    name="q",
+    label="q = 1/\\iota",
+    units="~",
+    units_long="None",
+    description="Safety factor 'q', inverse of rotational transform.",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["iota"],
+)
+def _q(params, transforms, profiles, data, **kwargs):
+    data["q"] = 1 / data["iota"]
     return data
 
 

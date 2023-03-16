@@ -9,10 +9,9 @@ from netCDF4 import Dataset, stringtochar
 from scipy import integrate, interpolate, optimize
 from scipy.constants import mu_0
 
-from desc.backend import sign
 from desc.basis import DoubleFourierSeries
 from desc.compat import ensure_positive_jacobian
-from desc.compute.utils import compress
+from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
@@ -186,6 +185,9 @@ class VMECIO:
             see lines 300+ for full list of included variables
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
+
+        # desc throws NaN for r == 0, so we use something small to approximate it
+        ONAXIS = np.array([1e-6])
 
         Psi = eq.Psi
         NFP = eq.NFP
@@ -387,8 +389,13 @@ class VMECIO:
             iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
             # value closest to axis will be nan
-            grid = LinearGrid(M=12, N=12, rho=r_full, NFP=NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
             iotaf[:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
+
+        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
+        q_factor.long_name = "inverse rotational transform on full mesh"
+        q_factor.units = "None"
+        q_factor[:] = 1 / iotaf[:]
 
         iotas = file.createVariable("iotas", np.float64, ("radius",))
         iotas.long_name = "rotational transform on half mesh"
@@ -397,7 +404,7 @@ class VMECIO:
         if eq.iota is not None:
             iotas[1:] = -eq.iota(r_half)  # negative sign for negative Jacobian
         else:
-            grid = LinearGrid(M=12, N=12, rho=r_half, NFP=NFP)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_half, NFP=NFP)
             iotas[1:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
 
         phi = file.createVariable("phi", np.float64, ("radius",))
@@ -458,9 +465,52 @@ class VMECIO:
         betatotal.units = "None"
         betatotal[:] = eq.compute("<beta>_vol")["<beta>_vol"]
 
+        betapol = file.createVariable("betapol", np.float64)
+        betapol.long_name = "normalized poloidal plasma pressure"
+        betapol.units = "None"
+        betapol[:] = eq.compute("<beta_pol>_vol")["<beta_pol>_vol"]
+
+        betator = file.createVariable("betator", np.float64)
+        betator.long_name = "normalized toroidal plasma pressure"
+        betator.units = "None"
+        betator[:] = eq.compute("<beta_tor>_vol")["<beta_tor>_vol"]
+
+        ctor = file.createVariable("ctor", np.float64)
+        ctor.long_name = "total toroidal plamsa current"
+        ctor.units = "A"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
+        ctor[:] = eq.compute("I", grid=grid)["I"][0] * 2 * np.pi / mu_0
+
+        rbtor = file.createVariable("rbtor", np.float64)
+        rbtor.long_name = "<R*B_tor> on last closed flux surface"
+        rbtor.units = "T*m"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[1.0], NFP=NFP)
+        rbtor[:] = eq.compute("G", grid=grid)["G"][0]
+
+        rbtor0 = file.createVariable("rbtor0", np.float64)
+        rbtor0.long_name = "<R*B_tor> on axis"
+        rbtor0.units = "T*m"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
+
+        b0 = file.createVariable("b0", np.float64)
+        b0.long_name = "average B_tor on axis"
+        b0.units = "T"
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
+
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
-        data = eq.compute(["I", "G", "<J*B>", "D_Mercier"], grid=grid)
+        data = eq.compute(
+            ["<B^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
+            grid=grid,
+        )
+
+        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
+        bdotb.long_name = "flux surface average of magnetic field squared"
+        bdotb.units = "T^2"
+        bdotb[:] = compress(grid, data["<B^2>"])
+        bdotb[0] = 0
 
         # currents
         buco = file.createVariable("buco", np.float64, ("radius",))
@@ -481,31 +531,62 @@ class VMECIO:
         jdotb[:] = compress(grid, data["<J*B>"])
         jdotb[0] = 0
 
+        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
+        jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
+        jcuru.units = "A/m^3"
+        jcuru[:] = compress(
+            grid,
+            surface_averages(
+                grid,
+                data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+                sqrt_g=data["sqrt(g)"],
+            ),
+        )
+        jcuru[0] = 0
+
+        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
+        jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
+        jcurv.units = "A/m^3"
+        jcurv[:] = compress(
+            grid,
+            surface_averages(
+                grid,
+                data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
+                sqrt_g=data["sqrt(g)"],
+            ),
+        )
+        jcurv[0] = 0
+
         # Mercier stability
         DShear = file.createVariable("DShear", np.float64, ("radius",))
         DShear.long_name = "Mercier stability criterion magnetic shear term"
         DShear.units = "1/Wb^2"
         DShear[:] = compress(grid, data["D_shear"])
+        DShear[0] = 0
 
         DCurr = file.createVariable("DCurr", np.float64, ("radius",))
         DCurr.long_name = "Mercier stability criterion toroidal current term"
         DCurr.units = "1/Wb^2"
         DCurr[:] = compress(grid, data["D_current"])
+        DCurr[0] = 0
 
         DWell = file.createVariable("DWell", np.float64, ("radius",))
         DWell.long_name = "Mercier stability criterion magnetic well term"
         DWell.units = "1/Wb^2"
         DWell[:] = compress(grid, data["D_well"])
+        DWell[0] = 0
 
         DGeod = file.createVariable("DGeod", np.float64, ("radius",))
         DGeod.long_name = "Mercier stability criterion geodesic curvature term"
         DGeod.units = "1/Wb^2"
         DGeod[:] = compress(grid, data["D_geodesic"])
+        DGeod[0] = 0
 
         DMerc = file.createVariable("DMerc", np.float64, ("radius",))
         DMerc.long_name = "Mercier stability criterion"
         DMerc.units = "1/Wb^2"
         DMerc[:] = compress(grid, data["D_Mercier"])
+        DMerc[0] = 0
 
         timer.stop("parameters")
         if verbose > 1:
@@ -518,7 +599,7 @@ class VMECIO:
         R0_n = np.zeros((2 * N + 1,))
         for k in idx:
             (l, m, n) = eq.R_basis.modes[k, :]
-            R0_n[n + N] += (-2 * (l % 2) + 1) * eq.R_lmn[k]
+            R0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.R_lmn[k]
         raxis_cc = file.createVariable("raxis_cc", np.float64, ("n_tor",))
         raxis_cc.long_name = "cos(n*p) component of magnetic axis R coordinate"
         raxis_cc.units = "m"
@@ -527,18 +608,20 @@ class VMECIO:
             raxis_cs = file.createVariable("raxis_cs", np.float64, ("n_tor",))
             raxis_cs.long_name = "sin(n*p) component of magnetic axis R coordinate"
             raxis_cs.units = "m"
-            raxis_cs[1:] = R0_n[0:N]
+            raxis_cs[0] = 0.0
+            raxis_cs[1:] = -R0_n[0:N][::-1]
 
         # Z axis
         idx = np.where(eq.Z_basis.modes[:, 1] == 0)[0]
         Z0_n = np.zeros((2 * N + 1,))
         for k in idx:
             (l, m, n) = eq.Z_basis.modes[k, :]
-            Z0_n[n + N] += (-2 * (l % 2) + 1) * eq.Z_lmn[k]
+            Z0_n[n + N] += (-2 * (l // 2 % 2) + 1) * eq.Z_lmn[k]
         zaxis_cs = file.createVariable("zaxis_cs", np.float64, ("n_tor",))
         zaxis_cs.long_name = "sin(n*p) component of magnetic axis Z coordinate"
         zaxis_cs.units = "m"
-        zaxis_cs[1:] = Z0_n[0:N]
+        zaxis_cs[0] = 0.0
+        zaxis_cs[1:] = -Z0_n[0:N][::-1]
         if not eq.sym:
             zaxis_cc = file.createVariable("zaxis_cc", np.float64, ("n_tor",))
             zaxis_cc.long_name = "cos(n*p) component of magnetic axis Z coordinate"
@@ -1063,6 +1146,14 @@ class VMECIO:
             timer.disp("J^zeta")
 
         # TODO: these output quantities need to be added
+        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
+        bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
+        # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
+        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
+        beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+        # betaxis = beta_vol at the axis?
+        betaxis = file.createVariable("betaxis", np.float64)
+        betaxis[:] = 0
         """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0
@@ -1085,30 +1176,6 @@ class VMECIO:
         am_aux_s = file.createVariable("am_aux_s", np.float64, ("ndfmax",))
         am_aux_s[:] = -np.ones((file.dimensions["ndfmax"].size,))
 
-        b0 = file.createVariable("b0", np.float64)
-        b0[:] = 1.0
-
-        bdotb = file.createVariable("bdotb", np.float64, ("radius",))
-        bdotb[:] = np.zeros((file.dimensions["radius"].size,))
-
-        bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
-        bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-
-        beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
-        beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
-
-        betapol = file.createVariable("betapol", np.float64)
-        betapol[:] = 0.0
-
-        betator = file.createVariable("betator", np.float64)
-        betator[:] = 0.0
-
-        betaxis = file.createVariable("betaxis", np.float64)
-        betaxis[:] = 0.0
-
-        ctor = file.createVariable("ctor", np.float64)
-        ctor[:] = 0.0
-
         extcur = file.createVariable("extcur", np.float64)
         extcur[:] = 0.0
 
@@ -1130,12 +1197,6 @@ class VMECIO:
         itfsq = file.createVariable("itfsq", np.int32)
         itfsq[:] = 1
 
-        jcuru = file.createVariable("jcuru", np.float64, ("radius",))
-        jcuru[:] = np.zeros((file.dimensions["radius"].size,))
-
-        jcurv = file.createVariable("jcurv", np.float64, ("radius",))
-        jcurv[:] = np.zeros((file.dimensions["radius"].size,))
-
         nextcur = file.createVariable("nextcur", np.int32)
         nextcur[:] = 0
 
@@ -1145,27 +1206,21 @@ class VMECIO:
         over_r = file.createVariable("over_r", np.float64, ("radius",))
         over_r[:] = np.zeros((file.dimensions["radius"].size,))
 
-        q_factor = file.createVariable("q_factor", np.float64, ("radius",))
-        q_factor[:] = np.zeros((file.dimensions["radius"].size,))
-
-        rbtor = file.createVariable("rbtor", np.float64)
-        rbtor[:] = 0.0
-
-        rbtor0 = file.createVariable("rbtor0", np.float64)
-        rbtor0[:] = 0.0
-
         specw = file.createVariable("specw", np.float64, ("radius",))
         specw[:] = np.zeros((file.dimensions["radius"].size,))
 
+        # this is not the same as DESC's "V(r)"
         vp = file.createVariable("vp", np.float64, ("radius",))
         vp[:] = np.zeros((file.dimensions["radius"].size,))
 
+        # this is not the same as DESC's "W_B"
         wb = file.createVariable("wb", np.float64)
         wb[:] = 0.0
 
         wdot = file.createVariable("wdot", np.float64, ("time",))
         wdot[:] = np.zeros((file.dimensions["time"].size,))
 
+        # this is not the same as DESC's "W_p"
         wp = file.createVariable("wp", np.float64)
         wp[:] = 0.0
         """

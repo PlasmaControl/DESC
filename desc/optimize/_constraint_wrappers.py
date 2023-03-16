@@ -445,14 +445,7 @@ class ProximalProjection(ObjectiveFunction):
             self._objective.build(self._eq, verbose=verbose)
         if not self._constraint.built:
             self._constraint.build(self._eq, verbose=verbose)
-        # remove constraints that aren't necessary
-        self._linear_constraints = tuple(
-            [
-                con
-                for con in self._linear_constraints
-                if con.args[0] in self._constraint.args
-            ]
-        )
+
         for constraint in self._linear_constraints:
             constraint.build(self._eq, verbose=verbose)
 

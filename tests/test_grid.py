@@ -625,27 +625,40 @@ class TestGrid:
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
     @pytest.mark.unit
-    def test_symmetry_1(self):
-        """Test surface averages of a smooth function."""
+    def test_symmetry_surface_and_volume_integral(self):
+        """Test surface averages and volume integrals of a smooth function."""
 
         def test(grid):
+            r = grid.nodes[:, 0]
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
-            true_avg = 5
+            true_surface_avg = 5
+            rho_function = 1 / (r + 0.35)
             f = (
-                true_avg
+                true_surface_avg
                 + np.cos(t)
                 - 0.5 * np.cos(z)
-                + 3 * np.cos(t) * np.cos(z)
+                + 3 * np.cos(t) * np.cos(z) ** 2
                 - 2 * np.sin(z) * np.sin(t)
-            )
-            numerical_avg = surface_averages(grid, f)
+            ) * rho_function
+
+            rho_profile = true_surface_avg * rho_function
             np.testing.assert_allclose(
-                numerical_avg, true_avg, rtol=1e-14, err_msg=type(grid)
+                surface_averages(grid, f),
+                rho_profile,
+                rtol=1e-15,
+                err_msg=str(type(grid)) + " surface integral",
+            )
+            true_volume_integral = np.sum(grid.weights * rho_profile)
+            np.testing.assert_allclose(
+                np.sum(grid.weights * f),
+                true_volume_integral,
+                rtol=1e-15,
+                err_msg=str(type(grid)) + " volume integral",
             )
 
         # these tests should be run on relatively low resolution grids,
-        # or at least low enough so that the non-uniform spacing test fails
+        # or at least low enough so that the asymmetric spacing test fails
         L = [3, 3, 5, 3]
         M = [3, 6, 5, 7]
         N = [2, 2, 2, 2]
@@ -655,7 +668,7 @@ class TestGrid:
         even_number = 4
         n_theta = even_number - sym
 
-        # non-uniform spacing
+        # asymmetric spacing
         with pytest.raises(AssertionError):
             theta = 2 * np.pi * np.asarray([t**2 for t in np.linspace(0, 1, max(M))])
             test(LinearGrid(L=max(L), theta=theta, N=max(N), sym=False))
@@ -683,7 +696,7 @@ class TestGrid:
             )
             test(QuadratureGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i]))
             test(ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
-            # nonlinear spacing when sym is False, but spacing is still symmetric
+            # nonuniform spacing when sym is False, but spacing is still symmetric
             test(
                 LinearGrid(
                     L=L[i],
@@ -704,7 +717,7 @@ class TestGrid:
             )
 
     @pytest.mark.unit
-    def test_symmetry_2(self):
+    def test_symmetry_surface_average_2(self):
         """Tests that surface averages are correct using specified basis."""
 
         def test(grid, basis, true_avg=1):

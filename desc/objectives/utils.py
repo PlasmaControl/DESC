@@ -258,7 +258,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         if obj.bounds is not None:
             raise ValueError("Linear constraints must use target instead of bounds.")
         A_ = {
-            arg: obj.derivatives["jac_unscaled"][arg](
+            arg: obj.derivatives["jac_scaled"][arg](
                 *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
             )
             for arg in args

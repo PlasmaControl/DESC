@@ -440,19 +440,17 @@ class ProximalProjection(ObjectiveFunction):
         self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
         if "Rb_lmn" in self._args:
             c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
-            A = c.derivatives["jac"]["R_lmn"](
+            A = c.derivatives["jac_unscaled"]["R_lmn"](
                 *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
             )
-            A = (c.normalization * (A.T / c.weight)).T
             Ainv = np.linalg.pinv(A)
             dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdRb))
         if "Zb_lmn" in self._args:
             c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
-            A = c.derivatives["jac"]["Z_lmn"](
+            A = c.derivatives["jac_unscaled"]["Z_lmn"](
                 *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
             )
-            A = (c.normalization * (A.T / c.weight)).T
             Ainv = np.linalg.pinv(A)
             dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdZb))

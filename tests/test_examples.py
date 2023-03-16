@@ -566,7 +566,7 @@ def test_NAE_QSC_solve():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qsc = Qic.from_paper("r2 section 5.2", nphi=99)
+    qsc = Qic.from_paper("QI", nphi=99)
     ntheta = 75
     r = 0.01
     N = 9
@@ -590,13 +590,13 @@ def test_NAE_QIC_solve():
     np.testing.assert_almost_equal(orig_Rax_val, eq.axis.R_n)
     np.testing.assert_almost_equal(orig_Zax_val, eq.axis.Z_n)
 
-    # Make sure surfaces of solved equilibrium are similar near axis as QSC
+    # Make sure surfaces of solved equilibrium are similar near axis as QIC
     rho_err, theta_err = area_difference_desc(eq, eq_fit)
 
     np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2)
     np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
 
-    # Make sure iota of solved equilibrium is same near axis as QSC
+    # Make sure iota of solved equilibrium is same near axis as QIC
     grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 

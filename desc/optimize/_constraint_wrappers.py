@@ -352,6 +352,10 @@ class ProximalProjection(ObjectiveFunction):
         self._args = [arg for arg in arg_order if arg in self._args]
         if "L_lmn" in self._args:
             self._args.remove("L_lmn")
+        if "Ra_n" in self._args:
+            self._args.remove("Ra_n")
+        if "Za_n" in self._args:
+            self._args.remove("Za_n")
         if "R_lmn" in self._args:
             self._args.remove("R_lmn")
             if "Rb_lmn" not in self._args:
@@ -445,14 +449,7 @@ class ProximalProjection(ObjectiveFunction):
             self._objective.build(self._eq, verbose=verbose)
         if not self._constraint.built:
             self._constraint.build(self._eq, verbose=verbose)
-        # remove constraints that aren't necessary
-        self._linear_constraints = tuple(
-            [
-                con
-                for con in self._linear_constraints
-                if con.args[0] in self._constraint.args
-            ]
-        )
+
         for constraint in self._linear_constraints:
             constraint.build(self._eq, verbose=verbose)
 

@@ -277,7 +277,7 @@ class TestInitialGuess:
         eq = Equilibrium()
         surface = FourierRZToroidalSurface()
         # turn the circular cross-section into an ellipse w AR=2
-        surface.set_coeffs(m=-1, n=0, R=None, Z=2)
+        surface.set_coeffs(m=-1, n=0, R=None, Z=-2)
         # move z axis up to 0.5 for no good reason
         axis = FourierRZCurve([0, 10, 0], [0, 0.5, 0])
         eq.set_initial_guess(surface, axis)

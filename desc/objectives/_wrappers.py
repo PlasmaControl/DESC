@@ -181,9 +181,6 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                     arg_name[0],
                 )
 
-        self._allx = [self._x_old]
-        self._allxopt = [self._objective.x(eq)]
-        self._allxeq = [self._eq_objective.x(eq)]
         self.history = {}
         for arg in arg_order:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
@@ -219,19 +216,15 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
         -----
         After updating, if store=False, self._eq will revert back to the previous
         solution when store was True
-        """
-        from desc.optimize.utils import f_where_x
 
-        # first check if its something we've seen before, if it is just return
-        # cached value, no need to perturb + resolve
-        xopt = f_where_x(x, self._allx, self._allxopt)
-        xeq = f_where_x(x, self._allx, self._allxeq)
-        if xopt.size > 0 and xeq.size > 0:
-            pass
-        else:
-            x_dict = self.unpack_state(x)
-            x_dict_old = self.unpack_state(self._x_old)
-            deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+        """
+        # check if equilibrium has changed and needs to be updated
+        x_dict = self.unpack_state(x)
+        x_dict_old = self.unpack_state(self._x_old)
+        deltas = {str(key): x_dict[key] - x_dict_old[key] for key in x_dict}
+        if np.any(
+            [np.any(deltas[arg]) for arg in deltas if arg in self._eq_objective.args]
+        ):
             self._eq = self._eq.perturb(
                 objective=self._eq_objective,
                 constraints=self._constraints,
@@ -243,24 +236,16 @@ class WrappedEquilibriumObjective(ObjectiveFunction):
                 constraints=self._constraints,
                 **self._solve_options
             )
-            # update other args that are not Equilibrium attributes
-            for arg in self._other_args:
-                arg_name = arg.split(" ")
-                old_arg = getattr(
-                    self._objective.objectives[self._QI_dict[arg_name[1]]],
-                    arg_name[0],
-                )
-                setattr(
-                    self._objective.objectives[self._QI_dict[arg_name[1]]],
-                    arg_name[0],
-                    old_arg + deltas[arg],
-                )
-            xopt = self._objective.x(self._eq)
-            xeq = self._eq_objective.x(self._eq)
-            self._allx.append(x)
-            self._allxopt.append(xopt)
-            self._allxeq.append(xeq)
-
+        # update other args that are not Equilibrium attributes
+        for arg in self._other_args:
+            arg_name = arg.split(" ")
+            setattr(
+                self._objective.objectives[self._QI_dict[arg_name[1]]],
+                arg_name[0],
+                x_dict[arg],
+            )
+        xopt = self._objective.x(self._eq)
+        xeq = self._eq_objective.x(self._eq)
         self._f_eq = self._eq_objective.compute_scalar(xeq)
 
         if store:

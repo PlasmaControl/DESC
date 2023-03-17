@@ -367,7 +367,7 @@ class Equilibrium(_Configuration, IOAble):
         rho, _ = special.js_roots(L, 2, 2)
         # TODO: could make this an OCS grid to improve fitting, need to figure out
         # how concentric grids work with QSC
-        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.nphi, NFP=na_eq.nfp)
+        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,

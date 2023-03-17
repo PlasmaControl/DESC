@@ -550,7 +550,7 @@ class ObjectiveFunction(IOAble):
                 target_i = jnp.ones(obj.dim_f) * (obj.bounds[0] + obj.bounds[1]) / 2
             if not obj._normalize_target:
                 # we want the target in unscaled, unnnormalized units
-                target_i /= obj.normalization
+                target_i *= obj.normalization
             target += [target_i]
         return jnp.concatenate(target)
 
@@ -567,8 +567,8 @@ class ObjectiveFunction(IOAble):
                 ub_i = jnp.ones(obj.dim_f) * obj.target
             if not obj._normalize_target:
                 # we want the bounds in unscaled, unnnormalized units
-                lb_i /= obj.normalization
-                ub_i /= obj.normalization
+                lb_i *= obj.normalization
+                ub_i *= obj.normalization
             lb += [lb_i]
             ub += [ub_i]
         return (jnp.concatenate(lb), jnp.concatenate(ub))

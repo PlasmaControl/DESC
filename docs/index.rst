@@ -29,7 +29,7 @@
    notebooks/hands_on
    notebooks/Spline_Basis
    notebooks/Saving_Equilibria_in_VMEC_Format
-   notebooks/DESC_Solve_from_pyQSC
+   notebooks/DESC_Fixed_Axis_NAE_Constraint
    notebooks/Toroidal_current_constraint
 
 .. toctree::

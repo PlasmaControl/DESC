@@ -465,7 +465,7 @@ class LinearGrid(Grid):
         if np.isscalar(rho) and (int(rho) == rho) and rho > 0:
             r = np.flipud(np.linspace(1, 0, int(rho), endpoint=axis))
             # choose dr such that each node has the same weight
-            dr = 1 / r.size * np.ones_like(r)
+            dr = np.ones_like(r) / r.size
         else:
             # need to sort to compute correct spacing
             r = np.sort(np.atleast_1d(rho))

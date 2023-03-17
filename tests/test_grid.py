@@ -633,17 +633,17 @@ class TestGrid:
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
             true_surface_avg = 5
-            rho_function = 1 / (r + 0.35)
+            function_of_rho = 1 / (r + 0.35)
             f = (
                 true_surface_avg
                 + np.cos(t)
                 - 0.5 * np.cos(z)
                 + 3 * np.cos(t) * np.cos(z) ** 2
                 - 2 * np.sin(z) * np.sin(t)
-            ) * rho_function
+            ) * function_of_rho
             np.testing.assert_allclose(
                 surface_averages(grid, f),
-                true_surface_avg * rho_function,
+                true_surface_avg * function_of_rho,
                 rtol=1e-15,
                 err_msg=type(grid),
             )
@@ -754,28 +754,45 @@ class TestGrid:
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
 
-        def test(grid):
+        # Currently, midpoint rule is false for LinearGrid made with L=number.
+        def test(grid, midpoint_rule=False):
             r = grid.nodes[:, 0]
             t = grid.nodes[:, 1]
             z = grid.nodes[:, 2] * grid.NFP
             true_surface_avg = 5
-            rho_function = 1 / (r + 0.35)
+            function_of_rho = 1 / (r + 0.35)
             f = (
                 true_surface_avg
                 + np.cos(t)
                 - 0.5 * np.cos(z)
                 + 3 * np.cos(t) * np.cos(z) ** 2
                 - 2 * np.sin(z) * np.sin(t)
-            ) * rho_function
-            true_volume_integral = (
-                4
-                * np.pi**2
-                * true_surface_avg
-                * compress(grid, grid.spacing[:, 0] * rho_function).sum()
+            ) * function_of_rho
+
+            if midpoint_rule:
+                r_unique = r[grid.unique_rho_idx]
+                dr = np.empty_like(r_unique)
+                dr[0] = (r_unique[0] + r_unique[1]) / 2
+                dr[1:-1] = (r_unique[2:] - r_unique[:-2]) / 2
+                dr[-1] = 1 - (r_unique[-2] + r_unique[-1]) / 2
+            else:
+                dr = np.ones(grid.num_rho) / grid.num_rho
+            expected_integral = np.sum(dr * compress(grid, function_of_rho))
+            true_integral = np.log(1.35 / 0.35)
+            midpoint_rule_error_bound = max(dr) ** 2 / 24 * (2 / 0.35**3)
+            right_riemann_error_bound = dr[0] * (1 / 0.35 - 1 / 1.35)
+            np.testing.assert_allclose(
+                expected_integral,
+                true_integral,
+                rtol=0,
+                atol=midpoint_rule_error_bound / 4
+                if midpoint_rule
+                else right_riemann_error_bound / 3,
+                err_msg=type(grid),
             )
             np.testing.assert_allclose(
-                np.sum(grid.weights * f),
-                true_volume_integral,
+                np.sum(grid.weights * f) / (4 * np.pi**2 * true_surface_avg),
+                expected_integral,
                 rtol=1e-15,
                 err_msg=type(grid),
             )
@@ -810,8 +827,10 @@ class TestGrid:
                     sym=sym[i],
                 )
             )
-            test(QuadratureGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i]))
-            test(ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            test(
+                ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]),
+                midpoint_rule=True,
+            )
             # nonuniform spacing when sym is False, but spacing is still symmetric
             test(
                 LinearGrid(

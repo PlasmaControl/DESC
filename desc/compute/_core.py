@@ -33,7 +33,7 @@ def _NFP(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="rtz",
     data=[],
 )
 def _0(params, transforms, profiles, data, **kwargs):

@@ -8,9 +8,12 @@ from scipy.optimize import BFGS, rosen, rosen_der
 import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
+from desc.equilibrium import Equilibrium
 from desc.objectives import (
+    Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCurrent,
     FixIota,
     FixPressure,
     FixPsi,
@@ -18,7 +21,15 @@ from desc.objectives import (
     ObjectiveFunction,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.optimize import Optimizer, fmintr, lsqtr, sgd
+from desc.optimize import (
+    LinearConstraintProjection,
+    Optimizer,
+    ProximalProjection,
+    fmintr,
+    lsqtr,
+    optimizers,
+    sgd,
+)
 
 
 @jit
@@ -370,3 +381,117 @@ def test_maxiter_1_and_0_solve():
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt
         )
         assert result["nfev"] <= 1
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_scipy_fail_message():
+    """Test that scipy fail message does not cause an error (see PR #434)."""
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixPressure(),
+        FixCurrent(),
+        FixPsi(),
+    )
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+    eq = Equilibrium()
+    # should fail on maxiter, and should NOT throw an error
+    for opt in ["scipy-trf"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
+    objectives = Energy()
+    obj = ObjectiveFunction(objectives)
+    for opt in ["scipy-trust-exact"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
+
+
+def test_not_implemented_error():
+    """Test NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        Optimizer("not-a-method")
+
+
+@pytest.mark.unit
+def test_wrappers():
+    """Tests for using wrapped objectives."""
+    eq = desc.examples.get("SOLOVEV")
+    con = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+    con_nl = (ForceBalance(),)
+    obj = ForceBalance()
+    with pytest.raises(AssertionError):
+        _ = LinearConstraintProjection(obj, con)
+    with pytest.raises(ValueError):
+        _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    assert ob.built
+
+    con = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+    con_nl = (ForceBalance(),)
+    obj = ForceBalance()
+    with pytest.raises(AssertionError):
+        _ = ProximalProjection(obj, con[0])
+    with pytest.raises(AssertionError):
+        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1])
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con[1]))
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(
+            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl)
+        )
+    ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
+    assert ob.built
+
+
+def test_all_optimizers():
+    """Just tests that the optimizers run without error, eg tests for the wrappers."""
+    eq = desc.examples.get("SOLOVEV")
+    fobj = ObjectiveFunction(ForceBalance())
+    eobj = ObjectiveFunction(Energy())
+    fobj.build(eq)
+    eobj.build(eq)
+    constraints = (
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+
+    for opt in optimizers:
+        print("TESTING ", opt)
+        if optimizers[opt]["scalar"]:
+            obj = eobj
+        else:
+            obj = fobj
+        eq.solve(objective=obj, constraints=constraints, optimizer=opt, maxiter=5)

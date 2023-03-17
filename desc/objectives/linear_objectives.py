@@ -97,7 +97,7 @@ class FixBoundaryR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -218,7 +218,7 @@ class FixBoundaryZ(_Objective):
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
-        If True/False uses all/none of the profile modes.
+        If True/False uses all/none of the surface modes.
     surface_label : float
         Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
     name : str
@@ -266,7 +266,7 @@ class FixBoundaryZ(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -390,7 +390,7 @@ class FixLambdaGauge(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(rad)"
+    _units = "(radians)"
     _print_value_fmt = "lambda gauge error: {:10.3e} "
 
     def __init__(
@@ -399,8 +399,8 @@ class FixLambdaGauge(_Objective):
         target=0,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         name="lambda gauge",
     ):
 
@@ -414,7 +414,7 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -430,51 +430,8 @@ class FixLambdaGauge(_Objective):
         L_basis = eq.L_basis
 
         if L_basis.sym:
-            # l(0,t,z) = 0
-            # any zernike mode that has m != 0 (i.e., has any theta dependence)
-            # contains radial dependence at least as rho^m
-            # therefore if m!=0, no constraint is needed to make the mode go to
-            # zero at rho=0
-
-            # for the other modes with m=0, at rho =0 the basis reduces
-            # to just a linear combination of sin(n*zeta), cos(n*zeta), and 1
-            # since these are all linearly independent, to make lambda -> 0 at rho=0,
-            # each coefficient on these terms must individually go to zero
-            # i.e. if at rho=0 the lambda basis is given by
-            # Lambda(rho=0) = (L_{00-1} - L_{20-1})sin(zeta) + (L_{001}
-            #                   - L_{201})cos(zeta) + L_{000} - L_{200}
-            # Lambda(rho=0) = 0 constraint being enforced means that each
-            # coefficient goes to zero:
-            # L_{00-1} - L_{20-1} = 0
-            # L_{001} - L_{201} = 0
-            # L_{000} - L_{200} = 0
-            self._A = np.zeros((L_basis.N, L_basis.num_modes))
-            ns = np.arange(-L_basis.N, 1)
-            for i, (l, m, n) in enumerate(L_basis.modes):
-                if m != 0:
-                    continue
-                if (
-                    l // 2
-                ) % 2 == 0:  # this basis mode radial polynomial is +1 at rho=0
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = 1
-                else:  # this basis mode radial polynomial is -1 at rho=0
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = -1
+            self._A = np.zeros((0, L_basis.num_modes))
         else:
-            # l(0,t,z) = 0
-
-            ns = np.arange(-L_basis.N, L_basis.N + 1)
-            self._A = np.zeros((len(ns), L_basis.num_modes))
-            for i, (l, m, n) in enumerate(L_basis.modes):
-                if m != 0:
-                    continue
-                if (l // 2) % 2 == 0:
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = 1
-                else:
-                    j = np.argwhere(n == ns)
-                    self._A[j, i] = -1
             # l(rho,0,0) = 0
             # at theta=zeta=0, basis for lamba reduces to just a polynomial in rho
             # what this constraint does is make all the coefficients of each power
@@ -493,7 +450,7 @@ class FixLambdaGauge(_Objective):
 
             A = np.zeros((c.shape[1], L_basis.num_modes))
             A[:, mnpos] = c.T
-            self._A = np.vstack((self._A, A))
+            self._A = A
 
         self._dim_f = self._A.shape[0]
 
@@ -514,6 +471,946 @@ class FixLambdaGauge(_Objective):
 
         """
         return jnp.dot(self._A, L_lmn)
+
+
+class FixThetaSFL(_Objective):
+    """Fixes lambda=0 so that poloidal angle is the SFL poloidal angle.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix lambda to (always is zero)
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(radians)"
+    _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
+
+    def __init__(self, eq=None, target=0, weight=1, name="Theta SFL"):
+
+        super().__init__(eq=eq, target=target, weight=weight, name=name)
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        idx = np.arange(eq.L_basis.num_modes)
+        modes_idx = idx
+        self._idx = idx
+
+        self._dim_f = modes_idx.size
+
+        self.target = np.zeros_like(modes_idx)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, L_lmn, **kwargs):
+        """Compute Theta SFL errors.
+
+        Parameters
+        ----------
+        L_lmn : ndarray
+            Spectral coefficients of L(rho,theta,zeta) -- poloidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Theta - Theta SFL errors.
+
+        """
+        fixed_params = L_lmn[self._idx]
+        return fixed_params
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "L_lmn"
+
+
+# TODO: make base class for FixAxis?
+class FixAxisR(_Objective):
+    """Fixes magnetic axis R coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "R axis error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        modes=True,
+        normalize=True,
+        normalize_target=True,
+        name="axis R",
+    ):
+
+        self._modes = modes
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        R_basis = eq.R_basis
+
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.axis.R_basis.modes
+            idx = np.arange(eq.axis.R_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_1d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.axis.R_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.axis.R_basis.modes
+            # and eq.axis.R_n,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.axis.R_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the axis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        if modes.size > 0:
+            ns = modes[:, 2]
+        else:
+            ns = np.array([[]], dtype=int)
+        # we need A to be M x N where N is number of modes in R_basis
+        # and M is the number of modes in the axis (that we are fixing)
+        self._A = np.zeros((ns.size, R_basis.num_modes))
+        self._dim_f = ns.size
+
+        for i, (l, m, n) in enumerate(R_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        # use axis parameters as target if needed
+        if self.target is None:
+            self.target = np.zeros(self._dim_f)
+            for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
+                j = np.argwhere(ns == n)
+                self.target[j] = Rn
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R axis modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target axis"
+                )
+            self.target = self.target[modes_idx]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, R_lmn, **kwargs):
+        """Compute axis R errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta)
+
+        Returns
+        -------
+        f : ndarray
+            Axis R errors.
+
+        """
+        f = jnp.dot(self._A, R_lmn)
+        return f
+
+
+class FixAxisZ(_Objective):
+    """Fixes magnetic axis Z coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Z axis error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        modes=True,
+        name="axis Z",
+        normalize=True,
+        normalize_target=True,
+    ):
+
+        self._modes = modes
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        Z_basis = eq.Z_basis
+
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.axis.Z_basis.modes
+            idx = np.arange(eq.axis.Z_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_1d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.axis.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.axis.Z_basis.modes
+            # and eq.axis.Z_n,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.axis.Z_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the axis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        if modes.size > 0:
+            ns = modes[:, 2]
+        else:
+            ns = np.array([[]], dtype=int)
+        self._A = np.zeros((ns.size, Z_basis.num_modes))
+        self._dim_f = ns.size
+
+        for i, (l, m, n) in enumerate(Z_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        # use axis parameters as target if needed
+        if self.target is None:
+            self.target = np.zeros(self._dim_f)
+            for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
+                j = np.argwhere(ns == n)
+                self.target[j] = Zn
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z axis modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target axis"
+                )
+            self.target = self.target[modes_idx]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, Z_lmn, **kwargs):
+        """Compute axis Z errors.
+
+        Parameters
+        ----------
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Axis Z errors.
+
+        """
+        f = jnp.dot(self._A, Z_lmn)
+        return f
+
+
+class FixModeR(_Objective):
+    """Fixes Fourier-Zernike R coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Fourier-Zernike R coefficient target values. If None,
+         uses Equilibrium's R coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(m)"
+    _print_value_fmt = "Fixed-R modes error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        modes=True,
+        name="Fix Mode R",
+        normalize=True,
+        normalize_target=True,
+    ):
+
+        self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixModeR! got {modes}"
+            )
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._modes is True:  # all modes
+            modes = eq.R_basis.modes
+            idx = np.arange(eq.R_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.R_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            self._idx = idx
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the basis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = modes_idx.size
+
+        # use current eq's coefficients as target if needed
+        if self.target is None:
+            self.target = eq.R_lmn[self._idx]
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for R fixed modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self.target[modes_idx]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, R_lmn, **kwargs):
+        """Compute Fixed mode R errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Fixed mode R errors.
+
+        """
+        fixed_params = R_lmn[self._idx]
+        return fixed_params
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "R_lmn"
+
+
+class FixModeZ(_Objective):
+    """Fixes Fourier-Zernike Z coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Fourier-Zernike Z coefficient target values. If None,
+         uses Equilibrium's Z coefficients.
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        modes=True,
+        name="Fix Mode Z",
+        normalize=True,
+        normalize_target=True,
+    ):
+
+        self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixModeZ! got {modes}"
+            )
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._modes is True:  # all modes
+            modes = eq.Z_basis.modes
+            idx = np.arange(eq.Z_basis.num_modes)
+            modes_idx = idx
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            self._idx = idx
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the basis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = modes_idx.size
+
+        # use current eq's coefficients as target if needed
+        if self.target is None:
+            self.target = eq.Z_lmn[self._idx]
+        else:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Z fixed modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target modes"
+                )
+            self.target = self.target[modes_idx]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, Z_lmn, **kwargs):
+        """Compute Fixed mode Z errors.
+
+        Parameters
+        ----------
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Fixed mode Z errors.
+
+        """
+        fixed_params = Z_lmn[self._idx]
+        return fixed_params
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Z_lmn"
+
+
+class FixSumModesR(_Objective):
+    """Fixes a linear sum of Fourier-Zernike R coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, size-1 ndarray, optional
+        Fourier-Zernike R coefficient target sum. If None,
+         uses current sum of Equilibrium's R coefficients.
+         len(target)=1
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    sum_weight : float, ndarray, optional
+        Weights on the coefficients in the sum, should be same length as modes.
+         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
+         len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        sum_weights=None,
+        modes=True,
+        name="Fix Sum Modes R",
+        normalize=True,
+        normalize_target=True,
+    ):
+
+        self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixSumModesR! got {modes}"
+            )
+        self._sum_weights = sum_weights
+        if target is not None:
+            if target.size > 1:
+                raise ValueError(
+                    "FixSumModesR only accepts 1 target value, please use multiple"
+                    + " FixSumModesR objectives if you wish to have multiple"
+                    + " sets of constrained mode sums!"
+                )
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._modes is True:  # all modes
+            modes = eq.R_basis.modes
+            idx = np.arange(eq.R_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.R_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            self._idx = idx
+            # rearrange modes and weights to match order of eq.R_basis.modes
+            # and eq.R_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.R_basis.modes[idx, :])
+            if self._sum_weights is not None:
+                self._sum_weights = np.atleast_1d(self._sum_weights)
+                self._sum_weights = self._sum_weights[modes_idx]
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the basis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+        if self._sum_weights is None:
+            sum_weights = np.ones(modes.shape[0])
+        else:
+            sum_weights = np.atleast_1d(self._sum_weights)
+        self._dim_f = np.array([1])
+
+        self._A = np.zeros((1, eq.R_basis.num_modes))
+        for i, (l, m, n) in enumerate(modes):
+            j = eq.R_basis.get_idx(L=l, M=m, N=n)
+            self._A[0, j] = sum_weights[i]
+
+        # use current sum as target if needed
+        if self.target is None:
+            self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, R_lmn, **kwargs):
+        """Compute Sum mode R errors.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Fixed sum mode R errors.
+
+        """
+        f = jnp.dot(self._A, R_lmn)
+        return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "R_lmn"
+
+
+class FixSumModesZ(_Objective):
+    """Fixes a linear sum of Fourier-Zernike Z coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Fourier-Zernike Z coefficient target sum. If None,
+         uses current sum of Equilibrium's Z coefficients.
+         len(target)=1
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    sum_weight : float, ndarray, optional
+        Weights on the coefficients in the sum, should be same length as modes.
+         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
+         len(weight) = len(modes).
+        If True uses all of the Equilibrium's modes.
+        Must be either True or specified as an array
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        weight=1,
+        sum_weights=None,
+        modes=True,
+        name="Fix Sum Modes Z",
+        normalize=True,
+        normalize_target=True,
+    ):
+
+        self._modes = modes
+        if modes is None or modes is False:
+            raise ValueError(
+                f"modes kwarg must be specified or True with FixSumModesZ! got {modes}"
+            )
+        self._sum_weights = sum_weights
+        if target is not None:
+            if target.size > 1:
+                raise ValueError(
+                    "FixSumModesZ only accepts 1 target value, please use multiple"
+                    + " FixSumModesZ objectives if you wish to have multiple sets of"
+                    + " constrained mode sums!"
+                )
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._modes is True:  # all modes
+            modes = eq.Z_basis.modes
+            idx = np.arange(eq.Z_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.Z_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            self._idx = idx
+            # rearrange modes and weights to match order of eq.Z_basis.modes
+            # and eq.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
+            if self._sum_weights is not None:
+                self._sum_weights = np.atleast_1d(self._sum_weights)
+                self._sum_weights = self._sum_weights[modes_idx]
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the basis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+        if self._sum_weights is None:
+            sum_weights = np.ones(modes.shape[0])
+        else:
+            sum_weights = np.atleast_1d(self._sum_weights)
+        self._dim_f = np.array([1])
+
+        self._A = np.zeros((1, eq.Z_basis.num_modes))
+        for i, (l, m, n) in enumerate(modes):
+            j = eq.Z_basis.get_idx(L=l, M=m, N=n)
+            self._A[0, j] = sum_weights[i]
+
+        # use current sum as target if needed
+        if self.target is None:
+            self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, Z_lmn, **kwargs):
+        """Compute Sum mode Z errors.
+
+        Parameters
+        ----------
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) .
+
+        Returns
+        -------
+        f : ndarray
+            Fixed sum mode Z errors.
+
+        """
+        f = jnp.dot(self._A, Z_lmn)
+        return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Z_lmn"
 
 
 class _FixProfile(_Objective, ABC):
@@ -556,6 +1453,7 @@ class _FixProfile(_Objective, ABC):
     _scalar = False
     _linear = True
     _fixed = True
+    _print_value_fmt = "Fix-profile error: {:.3e} "
 
     def __init__(
         self,
@@ -581,9 +1479,8 @@ class _FixProfile(_Objective, ABC):
             normalize_target=normalize_target,
             name=name,
         )
-        self._print_value_fmt = None
 
-    def build(self, eq, profile=None, use_jit=True, verbose=1):
+    def build(self, eq, profile=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -683,7 +1580,7 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -797,7 +1694,7 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -906,7 +1803,7 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1455,7 +2352,7 @@ class FixPsi(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters

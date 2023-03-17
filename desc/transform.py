@@ -25,7 +25,7 @@ class Transform(IOAble):
         * if an array, derivative orders specified explicitly. Shape should be (N,3),
           where each row is one set of partial derivatives [dr, dt, dz]
     rcond : float
-         relative cutoff for singular values for inverse fitting
+        relative cutoff for singular values for inverse fitting
     build : bool
         whether to precompute the transforms now or do it later
     build_pinv : bool
@@ -57,7 +57,11 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
+        if (
+            not np.all(self.grid.nodes[:, 2] == 0)
+            and not (self.grid.NFP == self.basis.NFP)
+            and grid.node_pattern != "custom"
+        ):
             warnings.warn(
                 colored(
                     "Unequal number of field periods for grid {} and basis {}.".format(

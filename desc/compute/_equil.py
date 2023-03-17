@@ -157,6 +157,60 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J_rho",
+    label="J_{\\rho}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant radial component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_rho"],
+)
+def _J_sub_rho(params, transforms, profiles, data, **kwargs):
+    data["J_rho"] = dot(data["J"], data["e_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="J_theta",
+    label="J_{\\theta}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_theta"],
+)
+def _J_sub_theta(params, transforms, profiles, data, **kwargs):
+    data["J_theta"] = dot(data["J"], data["e_theta"])
+    return data
+
+
+@register_compute_fun(
+    name="J_zeta",
+    label="J_{\\zeta}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant toroidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_zeta"],
+)
+def _J_sub_zeta(params, transforms, profiles, data, **kwargs):
+    data["J_zeta"] = dot(data["J"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
     name="J*B",
     label="\\mathbf{J} \\cdot \\mathbf{B}",
     units="N / m^{3}",
@@ -344,8 +398,7 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 )
 def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data["<|F|>_vol"] = (
-        jnp.sum(data["|F|"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights)
-        / data["V"]
+        jnp.sum(data["|F|"] * data["sqrt(g)"] * transforms["grid"].weights) / data["V"]
     )
     return data
 
@@ -403,7 +456,49 @@ def _helical_mag(params, transforms, profiles, data, **kwargs):
 )
 def _W_B(params, transforms, profiles, data, **kwargs):
     data["W_B"] = jnp.sum(
-        data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
+        data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
+    ) / (2 * mu_0)
+    return data
+
+
+@register_compute_fun(
+    name="W_Bpol",
+    label="W_{B,pol}",
+    units="J",
+    units_long="Joules",
+    description="Plasma magnetic energy in poloidal field",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["B", "sqrt(g)"],
+)
+def _W_Bpol(params, transforms, profiles, data, **kwargs):
+    data["W_Bpol"] = jnp.sum(
+        dot(data["B"][:, (0, 2)], data["B"][:, (0, 2)])
+        * data["sqrt(g)"]
+        * transforms["grid"].weights
+    ) / (2 * mu_0)
+    return data
+
+
+@register_compute_fun(
+    name="W_Btor",
+    label="W_{B,tor}",
+    units="J",
+    units_long="Joules",
+    description="Plasma magnetic energy in toroidal field",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["B", "sqrt(g)"],
+)
+def _W_Btor(params, transforms, profiles, data, **kwargs):
+    data["W_Btor"] = jnp.sum(
+        data["B"][:, 1] ** 2 * data["sqrt(g)"] * transforms["grid"].weights
     ) / (2 * mu_0)
     return data
 
@@ -423,9 +518,9 @@ def _W_B(params, transforms, profiles, data, **kwargs):
     gamma="gamma",
 )
 def _W_p(params, transforms, profiles, data, **kwargs):
-    data["W_p"] = jnp.sum(
-        data["p"] * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-    ) / (kwargs.get("gamma", 0) - 1)
+    data["W_p"] = jnp.sum(data["p"] * data["sqrt(g)"] * transforms["grid"].weights) / (
+        kwargs.get("gamma", 0) - 1
+    )
     return data
 
 
@@ -462,4 +557,40 @@ def _W(params, transforms, profiles, data, **kwargs):
 )
 def _beta_vol(params, transforms, profiles, data, **kwargs):
     data["<beta>_vol"] = jnp.abs(data["W_p"] / data["W_B"])
+    return data
+
+
+@register_compute_fun(
+    name="<beta_pol>_vol",
+    label="\\langle \\beta_{pol} \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Normalized poloidal plasma pressure",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_p", "W_Bpol"],
+)
+def _beta_volpol(params, transforms, profiles, data, **kwargs):
+    data["<beta_pol>_vol"] = jnp.abs(data["W_p"] / data["W_Bpol"])
+    return data
+
+
+@register_compute_fun(
+    name="<beta_tor>_vol",
+    label="\\langle \\beta_{tor} \\rangle_{vol}",
+    units="~",
+    units_long="None",
+    description="Normalized toroidal plasma pressure",
+    dim=0,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="",
+    data=["W_p", "W_Btor"],
+)
+def _beta_voltor(params, transforms, profiles, data, **kwargs):
+    data["<beta_tor>_vol"] = jnp.abs(data["W_p"] / data["W_Btor"])
     return data

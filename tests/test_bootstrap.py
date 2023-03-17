@@ -1531,3 +1531,93 @@ class TestBootstrapObjectives:
         assert np.min(J_dot_B_MHD) < -5.1e6
         assert np.min(J_dot_B_MHD) > -5.4e6
         np.testing.assert_allclose(J_dot_B_MHD, J_dot_B_Redl, atol=5e5)
+
+
+@pytest.mark.unit
+def test_bootstrap_objective_build():
+    """Test defaults and warnings in bootstrap objective build method."""
+    obj = BootstrapRedlConsistency()
+    # can't build without profiles
+    eq = Equilibrium(L=3, M=3, N=3, NFP=2)
+    with pytest.raises(RuntimeError):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e21
+    )
+    eq.electron_density = None
+    with pytest.raises(RuntimeError):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e21
+    )
+    eq.ion_temperature = None
+    with pytest.raises(RuntimeError):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e25
+    )
+    # density too high
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3, M=3, N=3, NFP=2, electron_temperature=1e5, electron_density=1e21
+    )
+    # electron temperature too high
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        NFP=2,
+        electron_temperature=1e3,
+        electron_density=1e21,
+        ion_temperature=1e5,
+    )
+    # ion temperature too high
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        NFP=2,
+        electron_temperature=1e3,
+        electron_density=1e1,
+        ion_temperature=1e3,
+    )
+    # density too low
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        NFP=2,
+        electron_temperature=3,
+        electron_density=1e21,
+        ion_temperature=1e3,
+    )
+    # electron temperature too low
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        NFP=2,
+        electron_temperature=1e3,
+        electron_density=1e21,
+        ion_temperature=1,
+    )
+    # ion temperature too low
+    with pytest.warns(UserWarning):
+        obj.build(eq)
+
+    # make sure default grid has the right nodes
+    assert obj.grid.num_theta == 13
+    assert obj.grid.num_zeta == 13
+    assert obj.grid.num_rho == 5
+    np.testing.assert_allclose(
+        obj.grid.nodes[obj.grid.unique_rho_idx, 0], np.array([0.2, 0.4, 0.6, 0.8, 1.0])
+    )

@@ -117,6 +117,9 @@ Name,Label,Units,Description,Module
 ``J_phi``,:math:`J_{\phi}`,Amperes / square meter,Toroidal componenet of plasma current density in lab frame,``desc.compute._equil``
 ``J_Z``,:math:`J_{Z}`,Amperes / square meter,Vertical componenet of plasma current density in lab frame,``desc.compute._equil``
 ``|J|``,:math:`|\mathbf{J}|`,Amperes / square meter,Magnitue of plasma current density,``desc.compute._equil``
+``J_rho``,:math:`J_{\rho}`,Amperes / meter,Covariant radial component of plasma current density,``desc.compute._equil``
+``J_theta``,:math:`J_{\theta}`,Amperes / meter,Covariant poloidal component of plasma current density,``desc.compute._equil``
+``J_zeta``,:math:`J_{\zeta}`,Amperes / meter,Covariant toroidal component of plasma current density,``desc.compute._equil``
 ``J*B``,:math:`\mathbf{J} \cdot \mathbf{B}`,Newtons / cubic meter,"Current density parallel to magnetic field, times field strength (note units are not Amperes)",``desc.compute._equil``
 ``<J*B>``,:math:`\langle \mathbf{J} \cdot \mathbf{B} \rangle`,Newtons / cubic meter,Flux surface average of current density dotted into magnetic field,``desc.compute._equil``
 ``J_parallel``,:math:`\mathbf{J} \cdot \hat{\mathbf{b}}`,Amperes / square meter,Plasma current density parallel to magnetic field,``desc.compute._equil``
@@ -130,9 +133,13 @@ Name,Label,Units,Description,Module
 ``e^helical``,:math:`B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta`,Tesla / square meter,Helical basis vector,``desc.compute._equil``
 ``|e^helical|``,:math:`|B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta|`,Tesla / square meter,Magnitude of helical basis vector,``desc.compute._equil``
 ``W_B``,:math:`W_B`,Joules,Plasma magnetic energy,``desc.compute._equil``
+``W_Bpol``,":math:`W_{B,pol}`",Joules,Plasma magnetic energy in poloidal field,``desc.compute._equil``
+``W_Btor``,":math:`W_{B,tor}`",Joules,Plasma magnetic energy in toroidal field,``desc.compute._equil``
 ``W_p``,:math:`W_p`,Joules,Plasma thermodynamic energy,``desc.compute._equil``
 ``W``,:math:`W`,Joules,Plasma total energy,``desc.compute._equil``
 ``<beta>_vol``,:math:`\langle \beta \rangle_{vol}`,None,Normalized plasma pressure,``desc.compute._equil``
+``<beta_pol>_vol``,:math:`\langle \beta_{pol} \rangle_{vol}`,None,Normalized poloidal plasma pressure,``desc.compute._equil``
+``<beta_tor>_vol``,:math:`\langle \beta_{tor} \rangle_{vol}`,None,Normalized toroidal plasma pressure,``desc.compute._equil``
 ``B0``,:math:`\partial_{\rho} \psi / \sqrt{g}`,Tesla / meter,,``desc.compute._field``
 ``B^rho``,:math:`B^{\rho}`,Tesla / meter,Contravariant radial component of magnetic field,``desc.compute._field``
 ``B^theta``,:math:`B^{\theta}`,Tesla / meter,Contravariant poloidal component of magnetic field,``desc.compute._field``
@@ -324,6 +331,7 @@ Name,Label,Units,Description,Module
 ``iota``,:math:`\iota`,None,Rotational transform (normalized by 2pi),``desc.compute._profiles``
 ``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform (normalized by 2pi), first radial derivative",``desc.compute._profiles``
 ``iota_rr``,:math:`\partial_{\rho\rho} \iota`,None,"Rotational transform (normalized by 2pi), second radial derivative",``desc.compute._profiles``
+``q``,:math:`q = 1/\iota`,None,"Safety factor 'q', inverse of rotational transform.",``desc.compute._profiles``
 ``I``,:math:`I`,Tesla * meters,Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current),``desc.compute._profiles``
 ``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current), derivative wrt radial coordinate",``desc.compute._profiles``
 ``I_rr``,:math:`\partial_{\rho\rho} I`,Tesla * meters,"Boozer toroidal current enclosed by flux surfaces, second derivative wrt radial coordinate",``desc.compute._profiles``

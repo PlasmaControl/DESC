@@ -547,6 +547,9 @@ class QuasiIsodynamic(_Objective):
         Initial parameters for QI well shape.
     QI_mn : ndarray, optional
         Initial parameters for QI well shift.
+    well_weight : float, optional
+        Weight applied to the bottom of the magnetic well (B_min) relative to the top
+        of the magnetic well (B_max). Default = 1, which weights all points equally.
     name : str
         Name of the objective function.
 
@@ -575,6 +578,7 @@ class QuasiIsodynamic(_Objective):
         N_booz=None,
         QI_l=None,
         QI_mn=None,
+        well_weight=1,
         name="QI",
     ):
 
@@ -586,6 +590,7 @@ class QuasiIsodynamic(_Objective):
         self.N_booz = N_booz
         self.QI_l = QI_l
         self.QI_mn = QI_mn
+        self.well_weight = well_weight
         super().__init__(
             eq=eq,
             target=target,
@@ -705,7 +710,8 @@ class QuasiIsodynamic(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return data["f_QI"] * self.grid.weights
+        weights = 1 + (self.well_weight - 1) * jnp.cos(data["zeta-bar_QI"])
+        return data["f_QI"] * weights
 
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""

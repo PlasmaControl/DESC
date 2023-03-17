@@ -555,7 +555,7 @@ def test_NAE_QSC_solve():
     grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
 
 

@@ -167,7 +167,6 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
-        desc_eq.R_lmn
         Rconstraints += (Rcon,)
     # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):

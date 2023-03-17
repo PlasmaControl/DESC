@@ -223,6 +223,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     while True:
 
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, f, actual_reduction, step_norm, g_norm
+            )
+
         success, message = check_termination(
             actual_reduction,
             f,

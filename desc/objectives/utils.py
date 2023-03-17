@@ -150,7 +150,9 @@ def factorize_linear_constraints(constraints, objective_args, dimensions):
         and recovering x from y.
 
     """
-    all_args = arg_order + tuple([arg for arg in objective_args if arg not in arg_order])
+    all_args = arg_order + tuple(
+        [arg for arg in objective_args if arg not in arg_order]
+    )
     # set state vector
     dim_x = 0
     x_idx = {}
@@ -263,7 +265,9 @@ def align_jacobian(Fx, objective, other_args, dimensions):
     A = {arg: Fx.T[x_idx[arg]] for arg in args}
 
     all_args = list(set(np.concatenate([objective.args, other_args])))
-    all_arg_order = arg_order + tuple([arg for arg in all_args if arg not in arg_order])
+    all_arg_order = arg_order + tuple(
+        [arg for arg in sorted(all_args) if arg not in arg_order]
+    )
     all_args = [arg for arg in all_arg_order if arg in all_args]
     for arg in all_args:
         if arg not in A.keys():

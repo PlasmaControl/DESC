@@ -625,8 +625,8 @@ class TestGrid:
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
     @pytest.mark.unit
-    def test_symmetry_surface_and_volume_integral(self):
-        """Test surface averages and volume integrals of a smooth function."""
+    def test_symmetry_surface_average_1(self):
+        """Test surface average of a symmetric function."""
 
         def test(grid):
             r = grid.nodes[:, 0]
@@ -641,20 +641,11 @@ class TestGrid:
                 + 3 * np.cos(t) * np.cos(z) ** 2
                 - 2 * np.sin(z) * np.sin(t)
             ) * rho_function
-
-            rho_profile = true_surface_avg * rho_function
             np.testing.assert_allclose(
                 surface_averages(grid, f),
-                rho_profile,
+                true_surface_avg * rho_function,
                 rtol=1e-15,
-                err_msg=str(type(grid)) + " surface integral",
-            )
-            true_volume_integral = np.sum(grid.weights * rho_profile)
-            np.testing.assert_allclose(
-                np.sum(grid.weights * f),
-                true_volume_integral,
-                rtol=1e-15,
-                err_msg=str(type(grid)) + " volume integral",
+                err_msg=type(grid),
             )
 
         # these tests should be run on relatively low resolution grids,
@@ -758,3 +749,85 @@ class TestGrid:
             ConcentricGrid(L=M_grid, M=M_grid, N=0, sym=True),
             FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
         )
+
+    @pytest.mark.unit
+    def test_symmetry_volume_integral(self):
+        """Test volume integral of a symmetric function."""
+
+        def test(grid):
+            r = grid.nodes[:, 0]
+            t = grid.nodes[:, 1]
+            z = grid.nodes[:, 2] * grid.NFP
+            true_surface_avg = 5
+            rho_function = 1 / (r + 0.35)
+            f = (
+                true_surface_avg
+                + np.cos(t)
+                - 0.5 * np.cos(z)
+                + 3 * np.cos(t) * np.cos(z) ** 2
+                - 2 * np.sin(z) * np.sin(t)
+            ) * rho_function
+            true_volume_integral = (
+                4
+                * np.pi**2
+                * true_surface_avg
+                * compress(grid, grid.spacing[:, 0] * rho_function).sum()
+            )
+            np.testing.assert_allclose(
+                np.sum(grid.weights * f),
+                true_volume_integral,
+                rtol=1e-15,
+                err_msg=type(grid),
+            )
+
+        L = [3, 3, 5, 3]
+        M = [3, 6, 5, 7]
+        N = [2, 2, 2, 2]
+        NFP = [5, 3, 5, 3]
+        sym = np.asarray([True, True, False, False])
+        # to test code not tested on grids made with M=.
+        even_number = 4
+        n_theta = even_number - sym
+
+        for i in range(len(L)):
+            test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            test(LinearGrid(L=L[i], theta=n_theta[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, 2 * np.pi, n_theta[i], endpoint=False),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, 2 * np.pi, n_theta[i] + 1, endpoint=False),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+            test(QuadratureGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i]))
+            test(ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            # nonuniform spacing when sym is False, but spacing is still symmetric
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, np.pi, n_theta[i]),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, np.pi, n_theta[i] + 1),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )

@@ -566,7 +566,7 @@ def test_NAE_QSC_solve():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qsc = Qic.from_paper("QI", nphi=99)
+    qsc = Qic.from_paper("QI")
     ntheta = 75
     r = 0.01
     N = 9

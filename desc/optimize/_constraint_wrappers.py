@@ -104,6 +104,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._constraints,
             self._objective.args,
+            self._objective.dimensions,
         )
         self._dim_x = self._Z.shape[1]
         self._dim_x_full = self._objective.dim_x
@@ -411,7 +412,9 @@ class ProximalProjection(ObjectiveFunction):
             self._unfixed_idx,
             project,
             recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._full_args)
+        ) = factorize_linear_constraints(
+            self._linear_constraints, self._full_args, self._dimensions
+        )
 
         # dx/dc - goes from the full state to optimization variables
         x_idx = np.concatenate(
@@ -538,7 +541,7 @@ class ProximalProjection(ObjectiveFunction):
             xed = self._constraint.unpack_state(xeq)
             xd.update(xod)
             xd.update(xed)
-            for arg in arg_order + self._other_args:
+            for arg in arg_order + tuple(self._other_args):
                 val = xd.get(arg, self.history[arg][-1])
                 self.history[arg] += [np.asarray(val).copy()]
                 # ensure eq has correct values if we didn't go into else block above.

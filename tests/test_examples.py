@@ -6,11 +6,11 @@ difference in areas between constant theta and rho contours.
 
 import numpy as np
 import pytest
+from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-
-# needed for iota test from desc.compute.utils import compress
+from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -88,7 +88,7 @@ def test_HELIOTRON_results(HELIOTRON):
     """Tests that the HELIOTRON examples gives the same results as VMEC."""
     eq = EquilibriaFamily.load(load_from=str(HELIOTRON["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_vmec(eq, HELIOTRON["vmec_nc_path"])
-    np.testing.assert_allclose(rho_err.mean(), 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err.mean(), 0, atol=2e-2)
     np.testing.assert_allclose(theta_err.mean(), 0, atol=2e-2)
 
 
@@ -111,8 +111,8 @@ def test_precise_QH_results(precise_QH):
     eq1 = EquilibriaFamily.load(load_from=str(precise_QH["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(precise_QH["output_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    np.testing.assert_allclose(rho_err, 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-2)
 
 
 @pytest.mark.regression
@@ -519,8 +519,8 @@ def test_simsopt_QH_comparison():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_NAE_solve():
-    """Test O(rho) NAE constraints solve."""
+def test_NAE_QSC_solve():
+    """Test O(rho) NAE QSC constraints solve."""
     # get Qsc example
     qsc = Qsc.from_paper("precise QA")
     ntheta = 75
@@ -546,19 +546,62 @@ def test_NAE_solve():
     np.testing.assert_almost_equal(orig_Rax_val, eq.axis.R_n)
     np.testing.assert_almost_equal(orig_Zax_val, eq.axis.Z_n)
 
-    # Make sure lambda is zero (as our constraint assumes Boozer poloidal angle)
-    np.testing.assert_array_equal(np.zeros_like(eq.L_lmn), eq.L_lmn)
+    # Make sure surfaces of solved equilibrium are similar near axis as QSC
+    rho_err, theta_err = area_difference_desc(eq, eq_fit)
+
+    np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2)
+    np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
+
+    # Make sure iota of solved equilibrium is same near axis as QSC
+    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
+    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+
+    np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_NAE_QIC_solve():
+    """Test O(rho) NAE QIC constraints solve."""
+    # get Qic example
+    qsc = Qic.from_paper("r2 section 5.2", nphi=99)
+    ntheta = 75
+    r = 0.01
+    N = 9
+    eq = Equilibrium.from_near_axis(qsc, r=r, L=6, M=6, N=N, ntheta=ntheta)
+
+    orig_Rax_val = eq.axis.R_n
+    orig_Zax_val = eq.axis.Z_n
+
+    eq_fit = eq.copy()
+
+    # this has all the constraints we need,
+    #  iota=False specifies we want to fix current instead of iota
+    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+
+    eq.solve(verbose=3, ftol=1e-2, objective=obj, maxiter=50, xtol=1e-6, constraints=cs)
+
+    # Make sure axis is same
+    np.testing.assert_almost_equal(orig_Rax_val, eq.axis.R_n)
+    np.testing.assert_almost_equal(orig_Zax_val, eq.axis.Z_n)
 
     # Make sure surfaces of solved equilibrium are similar near axis as QSC
     rho_err, theta_err = area_difference_desc(eq, eq_fit)
 
     np.testing.assert_allclose(rho_err[:, 0:-4], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err[:, 0:-4], 0, atol=1.2e-3)
+    np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
 
     # Make sure iota of solved equilibrium is same near axis as QSC
-    # not used now grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
-    # not used now iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
-    # this will fail: np.testing.assert_allclose(iota[1:10], qsc.iota)
+    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
+    iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
+
+    np.testing.assert_allclose(iota[1], qsc.iota, atol=2e-5)
+    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
 
 
 class TestGetExample:

@@ -12,29 +12,31 @@ from .linear_objectives import FixSumModesR, FixSumModesZ
 def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
-    Description
-    -----------
-        uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
+    Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
 
     Parameters
     ----------
-        qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
-        desc_eq (Equilibrium): desc equilibrium to constrain
+    qsc : Qsc equilibrium
+        Qsc object to use as the NAE constraints on the DESC equilibrium.
+    desc_eq : Equilibrium
+        desc equilibrium to constrain.
 
     Returns
     -------
-        coeffs: dict, dictionary of arrays with keys like 'X_L_M_n', where
-                X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
-                NAE Fourier (in toroidal angle phi) coeffs of
-                radial order L and poloidal order M
-        bases: dict, dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
-            the FourierSeries basis objects used to obtain the coefficients, where
-            _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
-            symmetry is such that the R or Z coefficients is stellarator symmetric
-            i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
-             stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
-            and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
-            since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+    coeffs : dict
+        dictionary of arrays with keys like 'X_L_M_n', where
+        X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
+        NAE Fourier (in toroidal angle phi) coeffs of
+        radial order L and poloidal order M.
+    bases : dict
+        dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
+        the FourierSeries basis objects used to obtain the coefficients, where
+        _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
+        symmetry is such that the R or Z coefficients is stellarator symmetric
+        i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
+        stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
+        and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
+        since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
     phi = qsc.phi
 
@@ -53,7 +55,6 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
 
     # use untwisted, which accounts for when NAE has QH symmetry,
     # and the poloidal angle is a helical angle.
-    # we want the untwisted angle
     X1c = qsc.X1c_untwisted
     X1s = qsc.X1s_untwisted
     Y1c = qsc.Y1c_untwisted
@@ -117,27 +118,33 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
 
     Parameters
     ----------
-        qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
-        desc_eq (Equilibrium): desc equilibrium to constrain
-        coeffs (dict): dictionary of arrays with keys like 'X_L_M_n', where
-                X is R or Z, L is 1 , and M is 1, are the
-                NAE Fourier (in toroidal angle phi) coeffs of
-                radial order L and poloidal order M
-        bases (dict): dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
-            the FourierSeries basis objects used to obtain the coefficients, where
-            _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
-            symmetry is such that the R or Z coefficients is stellarator symmetric
-            i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
-             stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
-            and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
-            since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
+    qsc : Qsc equilibrium
+        Qsc object to use as the NAE constraints on the DESC equilibrium.
+    desc_eq : Equilibrium
+        desc equilibrium to constrain.
+    coeffs : dict
+        dictionary of arrays with keys like 'X_L_M_n', where
+        X is R or Z, L is 1 , and M is 1, are the
+        NAE Fourier (in toroidal angle phi) coeffs of
+        radial order L and poloidal order M.
+    bases : dict
+        dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
+        the FourierSeries basis objects used to obtain the coefficients, where
+        _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
+        symmetry is such that the R or Z coefficients is stellarator symmetric
+        i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
+        stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
+        and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
+        since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
 
     Returns
     -------
-        Rconstraints (tuple): tuple of constraints of type FixSumModesR, which enforce
-            the O(rho) behavior of the equilibrium R coefficents to match the NAE.
-        Zconstraints (tuple): tuple of constraints of type FixSumModesZ, which enforce
-            the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
+    Rconstraints : tuple of Objective
+        tuple of constraints of type FixSumModesR, which enforce
+        the O(rho) behavior of the equilibrium R coefficents to match the NAE.
+    Zconstraints : tuple of Objective
+        tuple of constraints of type FixSumModesZ, which enforce
+        the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
     """
     # r is the ratio  r_NAE / rho_DESC
     r = np.sqrt(2 * desc_eq.Psi / qsc.Bbar / 2 / np.pi)
@@ -149,12 +156,12 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     Rbasis_sin = bases["Rbasis_sin"]
     Zbasis_sin = bases["Zbasis_sin"]
 
-    # R_11n
+    # R_1_1_n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
         sum_weights = []
         modes = []
         target = NAEcoeff * r
-        for k in range(1, int((desc_eq.L + 1) / 2) + 1):  # FIXME: add by 1 desc_eq.L+1
+        for k in range(1, int((desc_eq.L + 1) / 2) + 1):
             modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
@@ -162,7 +169,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
         desc_eq.R_lmn
         Rconstraints += (Rcon,)
-    # Z_1-1n
+    # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
         sum_weights = []
         modes = []
@@ -175,7 +182,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
         Zconstraints += (Zcon,)
 
-    # R_1-1n
+    # R_1_neg1_n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
         sum_weights = []
         modes = []
@@ -187,7 +194,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
         Rconstraints += (Rcon,)
-    # Z_11n
+    # Z_1_1_n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
         sum_weights = []
         modes = []
@@ -208,17 +215,19 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
 
     Parameters
     ----------
-        qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
-        desc_eq (Equilibrium): desc equilibrium to constrain
+    qsc : Qsc equilibrium
+        Qsc object to use as the NAE constraints on the DESC equilibrium.
+    desc_eq : Equilibrium
+        desc equilibrium to constrain.
 
     Returns
     -------
-        Rconstraints tuple: tuple of FixSumModesR constraints
-           corresponding to constraining the O(rho) DESC coefficients,
-           to be used in constraining a DESC equilibrium solve
-        Zconstraints tuple: tuple of FixSumModesZ constraints
-            corresponding to constraining the O(rho) DESC coefficients,
-            to be used in constraining a DESC equilibrium solve
+    Rconstraints : tuple of Objective
+        tuple of FixSumModesR constraints corresponding to constraining the O(rho)
+        DESC coefficients, to be used in constraining a DESC equilibrium solve.
+    Zconstraints : tuple of Objective
+        tuple of FixSumModesZ constraints corresponding to constraining the O(rho)
+        DESC coefficients, to be used in constraining a DESC equilibrium solve.
     """
     Rconstraints = ()
     Zconstraints = ()

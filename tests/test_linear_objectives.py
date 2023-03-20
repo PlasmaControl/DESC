@@ -2,6 +2,7 @@
 import jax.numpy as jnp
 import numpy as np
 import pytest
+import scipy.linalg
 
 import desc.examples
 from desc.compute import arg_order
@@ -21,15 +22,16 @@ from desc.objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
-    FixLambdaZero,
     FixModeR,
     FixModeZ,
     FixPressure,
     FixPsi,
     FixSumModesR,
     FixSumModesZ,
+    FixThetaSFL,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
@@ -39,19 +41,15 @@ from desc.profiles import PowerSeriesProfile
 
 
 @pytest.mark.unit
-def test_LambdaGauge_axis_sym(DummyStellarator):
-    """Test that lambda at axis is fixed correctly for symmetric equilibrium."""
-    # symmetric cases only have the axis constraint
+def test_LambdaGauge_sym(DummyStellarator):
+    """Test that lambda is fixed correctly for symmetric equilibrium."""
+    # symmetric cases automatically satisfy gauge freedom, no constraint needed.
     eq = Equilibrium.load(
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
     eq.change_resolution(L=2, M=1, N=1)
-    correct_constraint_matrix = np.zeros((1, 5))
-    correct_constraint_matrix[0, 0] = 1
-    correct_constraint_matrix[0, 2] = -1
-
+    correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
-
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
 
@@ -84,19 +82,15 @@ def test_LambdaGauge_asym():
         "optimizer": "lsq-exact",
     }
     eq = Equilibrium(**inputs)
-    correct_constraint_matrix = np.zeros((3, eq.L_basis.num_modes))
-    correct_constraint_matrix[0, 0] = 1.0
-    correct_constraint_matrix[0, 1] = -1.0
-    correct_constraint_matrix[2, 4] = 1.0
-    correct_constraint_matrix[2, 5] = -1.0
-    correct_constraint_matrix[1, 2] = 1.0
-    correct_constraint_matrix[1, 3] = -1.0
-
     lam_con = FixLambdaGauge(eq)
 
-    np.testing.assert_array_equal(
-        lam_con._A[0:3, 0 : eq.L_basis.num_modes], correct_constraint_matrix
-    )
+    # make sure that any lambda in the null space gives lambda==0 at theta=zeta=0
+    Z = scipy.linalg.null_space(lam_con._A)
+    grid = LinearGrid(L=10, theta=[0], zeta=[0])
+    for z in Z.T:
+        eq.L_lmn = z
+        lam = eq.compute("lambda", grid=grid)["lambda"]
+        np.testing.assert_allclose(lam, 0, atol=1e-15)
 
 
 @pytest.mark.unit
@@ -209,22 +203,78 @@ def test_fixed_mode_solve():
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.slow
-def test_fixed_axis_solve():
-    """Test solving an equilibrium with a fixed axis constraint."""
-    # also tests zero lambda solve
-    # Reset DSHAPE to initial guess, fix axis, and then resolve
-    # and check that the axis stayed fix
+def test_fixed_modes_solve():
+    """Test solving an equilibrium with fixed sum modes constraint."""
+    # Reset DSHAPE to initial guess, fix sum modes, and then resolve
+    # and check that the mode sum stayed fix
+    modes_R = np.array([[1, 1, 0], [2, 2, 0]])
+    modes_Z = np.array([[1, -1, 0], [2, -2, 0]])
+
     eq = desc.examples.get("DSHAPE")
-    eq.axis.R_n[0] = 3.6
     eq.set_initial_guess()
+    fixR = FixSumModesR(
+        modes=modes_R, sum_weights=np.array([1, 2])
+    )  # no target supplied, so defaults to the eq's current sum
+    fixZ = FixSumModesZ(
+        modes=modes_Z, sum_weights=np.array([1, 2])
+    )  # no target supplied, so defaults to the eq's current sum
+    orig_R_val = (
+        eq.R_lmn[eq.R_basis.get_idx(L=modes_R[0, 0], M=modes_R[0, 1], N=0)]
+        + 2 * eq.R_lmn[eq.R_basis.get_idx(L=modes_R[1, 0], M=modes_R[1, 1], N=0)]
+    )
+    orig_Z_val = (
+        eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
+        + 2 * eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
+    )
+
+    constraints = (
+        FixLambdaGauge(),
+        FixPressure(),
+        FixIota(),
+        FixPsi(),
+        FixBoundaryR(fixed_boundary=True),
+        FixBoundaryZ(fixed_boundary=True),
+        fixR,
+        fixZ,
+    )
+
+    eq.solve(
+        verbose=3,
+        ftol=1e-2,
+        objective="force",
+        maxiter=10,
+        xtol=1e-6,
+        constraints=constraints,
+    )
+
+    new_R_val = (
+        eq.R_lmn[eq.R_basis.get_idx(L=modes_R[0, 0], M=modes_R[0, 1], N=0)]
+        + 2 * eq.R_lmn[eq.R_basis.get_idx(L=modes_R[1, 0], M=modes_R[1, 1], N=0)]
+    )
+    new_Z_val = (
+        eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[0, 0], M=modes_Z[0, 1], N=0)]
+        + 2 * eq.Z_lmn[eq.Z_basis.get_idx(L=modes_Z[1, 0], M=modes_Z[1, 1], N=0)]
+    )
+
+    np.testing.assert_almost_equal(orig_R_val, new_R_val)
+    np.testing.assert_almost_equal(orig_Z_val, new_Z_val)
+
+
+@pytest.mark.regression
+@pytest.mark.solve
+@pytest.mark.slow
+def test_fixed_axis_and_theta_SFL_solve():
+    """Test solving an equilibrium with a fixed axis and theta SFL constraint."""
+    # also tests zero lambda solve
+    eq = Equilibrium()
 
     orig_R_val = eq.axis.R_n
     orig_Z_val = eq.axis.Z_n
 
     constraints = (
-        FixLambdaZero(),
+        FixThetaSFL(),
         FixPressure(),
-        FixIota(),
+        FixCurrent(),
         FixPsi(),
         FixAxisR(),
         FixAxisZ(),
@@ -239,9 +289,9 @@ def test_fixed_axis_solve():
         constraints=constraints,
     )
 
-    np.testing.assert_almost_equal(orig_R_val, eq.axis.R_n)
-    np.testing.assert_almost_equal(orig_Z_val, eq.axis.Z_n)
-    np.testing.assert_array_equal(np.zeros_like(eq.L_lmn), eq.L_lmn)
+    np.testing.assert_allclose(orig_R_val, eq.axis.R_n, atol=1e-14)
+    np.testing.assert_allclose(orig_Z_val, eq.axis.Z_n, atol=1e-14)
+    np.testing.assert_allclose(np.zeros_like(eq.L_lmn), eq.L_lmn, atol=1e-14)
 
 
 @pytest.mark.unit
@@ -677,7 +727,6 @@ def test_FixBoundary_with_single_weight():
     np.testing.assert_array_equal(FixR.weight, w)
 
 
-# TODO: also test this for FixMode and FixSumMode and FixAxis
 @pytest.mark.unit
 def test_FixBoundary_passed_target_no_passed_modes_error():
     """Test Fixing boundary with no passed-in modes."""
@@ -694,3 +743,86 @@ def test_FixBoundary_passed_target_no_passed_modes_error():
     FixR = FixBoundaryR(modes=False, fixed_boundary=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
+
+
+@pytest.mark.unit
+def test_FixAxis_passed_target_no_passed_modes_error():
+    """Test Fixing Axis with no passed-in modes."""
+    eq = Equilibrium()
+    FixZ = FixAxisZ(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixZ = FixAxisZ(modes=False, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixR = FixAxisR(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+    FixR = FixAxisR(modes=False, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+
+
+@pytest.mark.unit
+def test_FixMode_passed_target_no_passed_modes_error():
+    """Test Fixing Modes with no passed-in modes."""
+    eq = Equilibrium()
+    FixZ = FixModeZ(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixZ.build(eq)
+    FixR = FixModeR(modes=True, target=np.array([[0]]))
+    with pytest.raises(RuntimeError):
+        FixR.build(eq)
+
+
+@pytest.mark.unit
+def test_FixSumModes_passed_target_too_long():
+    """Test Fixing Modes with more than a size-1 target."""
+    # TODO: remove this test if FixSumModes is generalized
+    # to accept multiple targets and sets of modes at a time
+    with pytest.raises(ValueError):
+        FixSumModesZ(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesR(modes=np.array([[0, 0, 0], [1, 1, 1]]), target=np.array([[0, 1]]))
+
+
+@pytest.mark.unit
+def test_FixMode_False_or_None_modes():
+    """Test Fixing Modes without specifying modes or All modes."""
+    with pytest.raises(ValueError):
+        FixModeR(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeR(modes=None, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeZ(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixModeZ(modes=None, target=np.array([[0, 1]]))
+
+
+@pytest.mark.unit
+def test_FixSumModes_False_or_None_modes():
+    """Test Fixing Sum Modes without specifying modes or All modes."""
+    with pytest.raises(ValueError):
+        FixSumModesZ(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesZ(modes=None, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesR(modes=False, target=np.array([[0, 1]]))
+    with pytest.raises(ValueError):
+        FixSumModesR(modes=None, target=np.array([[0, 1]]))
+
+
+@pytest.mark.unit
+def test_FixAxis_util_correct_objectives():
+    """Test util for fix axis constraints."""
+    cs = get_fixed_axis_constraints(iota=False)
+    correct_cs = (
+        FixAxisR(),
+        FixAxisZ(),
+        FixLambdaGauge(),
+        FixPsi(),
+        FixPressure(),
+        FixCurrent(),
+    )
+    for c, cc in zip(cs, correct_cs):
+        assert type(c) == type(cc)

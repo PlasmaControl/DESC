@@ -25,7 +25,6 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
-    FixLambdaZero,
     FixPressure,
     FixPsi,
 )
@@ -104,8 +103,8 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
 
     """
     constraints = (
-        FixAxisR(fixed_boundary=True),
-        FixAxisZ(fixed_boundary=True),
+        FixAxisR(),
+        FixAxisZ(),
         FixLambdaGauge(),
         FixPsi(),
     )
@@ -145,8 +144,7 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
     constraints = (
         FixAxisR(),
         FixAxisZ(),
-        FixLambdaZero(),
-        # lambda=0 as the mapping from NAE->DESC assumes theta is boozer angle
+        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:
@@ -267,6 +265,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         if obj.fixed and obj.dim_f == dimensions[obj.target_arg]:
             # if all coefficients are fixed the constraint matrices are not needed
             xp = put(xp, x_idx[obj.target_arg], obj.target)
+
         else:
             A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
             # using obj.compute instead of obj.target to allow for correct scale/weight
@@ -302,10 +301,6 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
                 )
                 arg_obj_lists[arg] += [obj]
 
-                # FIXME: this test will throw error if the same constraint
-                # is used  twice i.e. R_111 = 1 and 2*R_111=2
-                # do we want to detect and say that is ok? I vote no
-
                 b[arg] = jnp.hstack((b[arg], b_))
     # find inverse of the now-combined constraint matrices for each arg
     for key in list(A.keys()):
@@ -315,18 +310,6 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
             Ainv[key] = _A_unweighted[
                 key
             ].T  # make inverse matrices using already unweighted A
-            unfixed_args.append(arg)
-            A_ = obj.derivatives["jac"][arg](jnp.zeros(dimensions[arg]))
-            # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute_scaled(jnp.zeros(obj.dimensions[arg]))
-            if A_.shape[0]:
-                Ainv_, Z_ = svd_inv_null(A_)
-            else:
-                Ainv_ = A_.T
-            A[arg] = A_
-            b[arg] = b_
-            # need to undo scaling here to work with perturbations
-            Ainv[arg] = Ainv_ * obj.weight / obj.normalization
 
     # catch any arguments that are not constrained
     for arg in x_idx.keys():

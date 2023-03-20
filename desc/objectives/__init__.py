@@ -1,5 +1,6 @@
 """Classes defining objectives for equilibrium and optimization."""
 
+from ._bootstrap import BootstrapRedlConsistency
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -18,9 +19,10 @@ from ._geometry import (
 )
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
-from ._wrappers import WrappedEquilibriumObjective
 from .linear_objectives import (
     FixAtomicNumber,
+    FixAxisR,
+    FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -29,8 +31,18 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixModeR,
+    FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesR,
+    FixSumModesZ,
+    FixThetaSFL,
 )
 from .objective_funs import ObjectiveFunction
-from .utils import get_equilibrium_objective, get_fixed_boundary_constraints
+from .utils import (
+    get_equilibrium_objective,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
+    get_NAE_constraints,
+)

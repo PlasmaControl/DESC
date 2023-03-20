@@ -365,6 +365,8 @@ class Equilibrium(_Configuration, IOAble):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
+        # TODO: could make this an OCS grid to improve fitting, need to figure out
+        # how concentric grids work with QSC
         grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.nphi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
@@ -382,21 +384,38 @@ class Equilibrium(_Configuration, IOAble):
             sym="sin" if not na_eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
+        basis_L = FourierZernikeBasis(
+            L=L,
+            M=M,
+            N=N,
+            NFP=na_eq.nfp,
+            sym="sin" if not na_eq.lasym else False,
+            spectral_indexing=spectral_indexing,
+        )
+
         transform_R = Transform(grid, basis_R, build_pinv=True)
         transform_Z = Transform(grid, basis_Z, build_pinv=True)
+        transform_L = Transform(grid, basis_L, build_pinv=True)
 
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
-
+        L_1D = np.zeros((grid.num_nodes,))
         for rho_i in rho:
             idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
-            R_2D, Z_2D, _ = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+            R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+            phi_cyl_ax = np.linspace(
+                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
+            )
+            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
+            phi_B = phi_cyl_ax + nu_B_ax
+            nu_B = phi_B - phi0_2D
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
+            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)
-        inputs["L_lmn"] = np.zeros_like(inputs["Z_lmn"])
+        inputs["L_lmn"] = transform_L.fit(L_1D)
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -525,7 +544,7 @@ class Equilibrium(_Configuration, IOAble):
         self,
         objective=None,
         constraints=None,
-        optimizer="lsq-exact",
+        optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
         gtol=None,

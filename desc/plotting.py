@@ -16,7 +16,7 @@ from termcolor import colored
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
-from desc.grid import Grid, LinearGrid, QuadratureGrid
+from desc.grid import Grid, LinearGrid
 from desc.utils import flatten_list
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -254,14 +254,6 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Computed quantity.
 
     """
-    if (
-        eq.iota is None
-    ):  # avoid issue of plot grid needing to be used for computing FSAs
-        #     by making a temp eq with iota calculated already
-        compute_eq = eq.copy()
-        compute_eq.iota = compute_eq.get_profile("iota")
-    else:
-        compute_eq = eq
     if name not in data_index:
         raise ValueError("Unrecognized value '{}'.".format(name))
     assert component in [
@@ -280,7 +272,8 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
-        data = compute_eq.compute(name, grid=grid)[name]
+        warnings.simplefilter("ignore")
+        data = eq.compute(name, grid=grid)[name]
 
     if data_index[name]["dim"] > 1:
         if component is None:
@@ -614,9 +607,10 @@ def plot_2d(
             norm_name = "|grad(|B|^2)|/2mu0"
             norm_data, _ = _compute(eq, norm_name, grid)
         else:  # normalize force balance with pressure by gradient of pressure
-            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
             norm_name = "<|grad(p)|>_vol"
-            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+            # we can use the regular grid here because eq.compute will automatically
+            # use the correct quad grid for volume avg
+            norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -1033,9 +1027,10 @@ def plot_fsa(
             norm_name = "|grad(|B|^2)|/2mu0"
             norm_data, _ = _compute(eq, norm_name, grid)
         else:  # normalize force balance with pressure by gradient of pressure
-            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
             norm_name = "<|grad(p)|>_vol"
-            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+            # we can use the regular grid here because eq.compute will automatically
+            # use the correct quad grid for volume avg
+            norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
@@ -1178,9 +1173,10 @@ def plot_section(
             norm_name = "|grad(|B|^2)|/2mu0"
             norm_data, _ = _compute(eq, norm_name, grid)
         else:  # normalize force balance with pressure by gradient of pressure
-            compute_grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid)
             norm_name = "<|grad(p)|>_vol"
-            norm_data, _ = _compute(eq, norm_name, compute_grid, reshape=False)
+            # we can use the regular grid here because eq.compute will automatically
+            # use the correct quad grid for volume avg
+            norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
@@ -1194,7 +1190,9 @@ def plot_section(
     )
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute(["R", "Z"], grid=grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute(["R", "Z"], grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1419,7 +1417,9 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
-    r_coords = eq.compute(["R", "Z"], grid=r_grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r_coords = eq.compute(["R", "Z"], grid=r_grid)
     Rr = r_coords["R"].reshape(
         (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
     )
@@ -1430,7 +1430,9 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
 
     if plot_theta:
         # vartheta contours
-        v_coords = eq.compute(["R", "Z"], grid=v_grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            v_coords = eq.compute(["R", "Z"], grid=v_grid)
         Rv = v_coords["R"].reshape(
             (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
         )
@@ -1597,7 +1599,9 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     if isinstance(ls, str):
         ls = [ls for i in range(grid.num_zeta - 1)]
 
-    coords = eq.compute(["R", "Z"], grid=grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute(["R", "Z"], grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1740,8 +1744,9 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
             "zeta": zeta if eqs[i].N > 0 else 2,
         }
         grid = _get_grid(**grid_kwargs)
-
-        coords = eqs[i].compute(["R", "Z"], grid=grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            coords = eqs[i].compute(["R", "Z"], grid=grid)
         R = coords["R"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )
@@ -2169,7 +2174,9 @@ def plot_boozer_modes(
         transforms = get_transforms(
             "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
-        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
         if i == 0:
             matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
@@ -2323,7 +2330,9 @@ def plot_boozer_surface(
     transforms_plot = get_transforms(
         "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
-    data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
     data = transforms_plot["B"].transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
@@ -2471,7 +2480,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     markers = kwargs.pop("markers", ["o", "o", "o"])
     labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
 
-    data = eq.compute(["R0", "|B|"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute(["R0", "|B|"])
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
@@ -2492,12 +2503,18 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                     helicity=helicity,
                     NFP=transforms["B"].basis.NFP,
                 )
-            data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = eq.compute(
+                    ["|B|_mn", "B modes"], grid=grid, transforms=transforms
+                )
             B_mn = matrix @ data["|B|_mn"]
             f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
             f_B = np.append(f_B, f_b)
         if fC:
-            data = eq.compute("f_C", grid=grid, helicity=helicity)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = eq.compute("f_C", grid=grid, helicity=helicity)
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -2505,7 +2522,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             )
             f_C = np.append(f_C, f_c)
         if fT:
-            data = eq.compute("f_T", grid=grid)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = eq.compute("f_T", grid=grid)
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])

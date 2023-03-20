@@ -132,7 +132,7 @@ class TestObjectiveFunction:
             iota = obj.compute(*obj.xs(eq))
             iota_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
-            np.testing.assert_allclose(iota_scaled, -2 / 3)
+            np.testing.assert_allclose(iota_scaled, -2 / np.sqrt(3))
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -146,7 +146,7 @@ class TestObjectiveFunction:
             I = obj.compute(*obj.xs(eq))
             I_scaled = obj.compute_scaled(*obj.xs(eq))
             np.testing.assert_allclose(I, 0)
-            np.testing.assert_allclose(I_scaled, -2 / 3)
+            np.testing.assert_allclose(I_scaled, -2 / np.sqrt(3))
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
@@ -192,13 +192,19 @@ class TestObjectiveFunction:
             M_booz=M_booz,
             N_booz=N_booz,
         )
-        matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
+        matrix, modes, idx = ptolemy_linear_transform(
+            transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
+        )
         data = eq.compute("|B|_mn", helicity=helicity, grid=grid, transforms=transforms)
         B_mn = matrix @ data["|B|_mn"]
         idx_B = np.argsort(np.abs(B_mn))
 
-        # check that objective returns the lowest amplitude modes, since example is QH
-        np.testing.assert_allclose(f[idx_f], B_mn[idx_B[: obj.dim_f]])
+        # check that largest amplitudes are the QH modes
+        np.testing.assert_allclose(B_mn[idx_B[-3:]], np.flip(B_mn[~idx][:3]))
+        # check that these QH modes are not returned by the objective
+        assert [b not in f for b in B_mn[idx_B[-3:]]]
+        # check that the objective returns the lowest amplitudes
+        np.testing.assert_allclose(f[idx_f][:131], B_mn[idx_B][:131])
 
     @pytest.mark.unit
     def test_qs_twoterm(self):
@@ -476,3 +482,55 @@ def test_principal_curvature():
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()
+
+
+@pytest.mark.unit
+def test_objective_print(capsys):
+    """Test that the profile objectives prints correctly."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+
+    def test(obj, values, normalize=False):
+
+        obj.print_value(*obj.xs(eq))
+        out = capsys.readouterr()
+
+        corr_out = str(
+            "Precomputing transforms\n"
+            + "Maximum "
+            + obj._print_value_fmt.format(np.max(values))
+            + obj._units
+            + "\n"
+            + "Minimum "
+            + obj._print_value_fmt.format(np.min(values))
+            + obj._units
+            + "\n"
+            + "Average "
+            + obj._print_value_fmt.format(np.mean(values))
+            + obj._units
+            + "\n"
+        )
+        if normalize:
+            corr_out += str(
+                "Maximum "
+                + obj._print_value_fmt.format(np.max(values / obj.normalization))
+                + "(normalized)"
+                + "\n"
+                + "Minimum "
+                + obj._print_value_fmt.format(np.min(values / obj.normalization))
+                + "(normalized)"
+                + "\n"
+                + "Average "
+                + obj._print_value_fmt.format(np.mean(values / obj.normalization))
+                + "(normalized)"
+                + "\n"
+            )
+
+        assert out.out == corr_out
+
+    iota = eq.compute("iota", grid=grid)["iota"]
+    obj = RotationalTransform(eq=eq, grid=grid)
+    test(obj, iota)
+    curr = eq.compute("current", grid=grid)["current"]
+    obj = ToroidalCurrent(eq=eq, grid=grid)
+    test(obj, curr, normalize=True)

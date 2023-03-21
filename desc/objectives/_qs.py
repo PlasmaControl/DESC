@@ -714,7 +714,9 @@ class QuasiIsodynamic(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        weights = 1 + (self.well_weight - 1) * jnp.cos(data["zeta-bar_QI"])
+        weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
+            data["zeta-bar_QI"]
+        )
         return data["f_QI"] * weights
 
     def _set_dimensions(self, eq):

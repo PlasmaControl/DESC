@@ -585,6 +585,32 @@ def test_NAE_QSC_solve():
     lam_av_nae = np.mean(lam_nae, axis=0)
     np.testing.assert_allclose(lam_av_nae, -eq.iota * eq.nu_spline(phi), atol=1e-5)
 
+    # check |B| on axis
+
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(1e-6))
+    # Evaluate B modes near the axis
+    data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
+    modes = data_nae["B modes"]
+    B_mn_nae = data_nae["|B|_mn"]
+    # Evaluate B on an angular grid
+    theta = np.linspace(0, 2 * np.pi, 150)
+    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
+    th, ph = np.meshgrid(theta, phi)
+    B_nae = np.zeros((qsc.nphi, 150))
+
+    for i, (l, m, n) in enumerate(modes):
+        if m >= 0 and n >= 0:
+            B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
+        elif m >= 0 and n < 0:
+            B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
+        elif m < 0 and n >= 0:
+            B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
+        elif m < 0 and n < 0:
+            B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
+    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    B_av_nae = np.mean(B_nae, axis=1)
+    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=1e-4)
+
 
 @pytest.mark.regression
 @pytest.mark.solve
@@ -656,7 +682,33 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -eq.iota * eq.nu_spline(phi), atol=4e-5)
+    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=4e-5)
+
+    # check |B| on axis
+
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(1e-6))
+    # Evaluate B modes near the axis
+    data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
+    modes = data_nae["B modes"]
+    B_mn_nae = data_nae["|B|_mn"]
+    # Evaluate B on an angular grid
+    theta = np.linspace(0, 2 * np.pi, 150)
+    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
+    th, ph = np.meshgrid(theta, phi)
+    B_nae = np.zeros((qsc.nphi, 150))
+
+    for i, (l, m, n) in enumerate(modes):
+        if m >= 0 and n >= 0:
+            B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
+        elif m >= 0 and n < 0:
+            B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
+        elif m < 0 and n >= 0:
+            B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
+        elif m < 0 and n < 0:
+            B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
+    # Eliminate the poloidal angle to focus on the toroidal behaviour
+    B_av_nae = np.mean(B_nae, axis=1)
+    np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)
 
 
 class TestGetExample:

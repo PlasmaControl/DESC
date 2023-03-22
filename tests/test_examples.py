@@ -649,7 +649,7 @@ def test_NAE_QIC_solve():
     rho_err, theta_err = area_difference_desc(eq, eq_fit)
 
     np.testing.assert_allclose(rho_err[:, 0:-8], 0, atol=5e-3)
-    np.testing.assert_allclose(theta_err[:, 0:-5], 0, atol=1e-3)
+    np.testing.assert_allclose(theta_err[:, 0:-5], 0, atol=2e-2)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
     grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)

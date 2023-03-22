@@ -32,6 +32,7 @@ from desc.objectives import (
     FixThetaSFL,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
@@ -750,3 +751,19 @@ def test_FixSumModes_False_or_None_modes():
         FixSumModesR(modes=False, target=np.array([[0, 1]]))
     with pytest.raises(ValueError):
         FixSumModesR(modes=None, target=np.array([[0, 1]]))
+
+
+@pytest.mark.unit
+def test_FixAxis_util_correct_objectives():
+    """Test util for fix axis constraints."""
+    cs = get_fixed_axis_constraints(iota=False)
+    correct_cs = (
+        FixAxisR(),
+        FixAxisZ(),
+        FixLambdaGauge(),
+        FixPsi(),
+        FixPressure(),
+        FixCurrent(),
+    )
+    for c, cc in zip(cs, correct_cs):
+        assert type(c) == type(cc)

@@ -115,8 +115,9 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
 
     """
     constraints = (
-        FixAxisR(fixed_boundary=True),
-        FixAxisZ(fixed_boundary=True),
+        FixAxisR(),
+        FixAxisZ(),
+        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:

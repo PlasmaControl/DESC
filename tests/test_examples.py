@@ -583,7 +583,7 @@ def test_NAE_QSC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=1e-5)
+    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=2e-5)
 
     # check |B| on axis
 

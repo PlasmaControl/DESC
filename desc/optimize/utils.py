@@ -1,100 +1,127 @@
+"""Utility functions used in optimization problems."""
+
 import numpy as np
-from desc.backend import jnp
-import scipy.sparse
+
+from desc.backend import cond, jit, jnp
 
 
-def min_eig_est(A, tol=1e-2):
-    """Estimate the minimum eigenvalue of a matrix
+@jit
+def gershgorin_bounds(H):
+    """Upper and lower bounds for eigenvalues of a square matrix.
 
-    Uses Lanzcos method through scipy.sparse.linalg
+    Given a square matrix ``H`` compute upper
+    and lower bounds for its eigenvalues (Gregoshgorin Bounds).
+    Defined ref. [1].
+
+    References
+    ----------
+    [1] Conn, A. R., Gould, N. I., & Toint, P. L.
+           Trust region methods. 2000. Siam. pp. 19.
+    """
+    H_diag = jnp.diag(H)
+    H_diag_abs = jnp.abs(H_diag)
+    H_row_sums = jnp.sum(jnp.abs(H), axis=1)
+    lb = jnp.min(H_diag + H_diag_abs - H_row_sums)
+    ub = jnp.max(H_diag - H_diag_abs + H_row_sums)
+
+    return lb, ub
+
+
+@jit
+def _cholmod(A, maxiter=4):
+    """Modified Cholesky factorization of indefinite matrix.
+
+    Uses Gershgorin bounds and bisection search to find the
+    smallest diagonal correction alpha such that A + alpha*I is
+    positive definite, and returns the cholesky factorization
+    of A + alpha*I.
+
+    Attempts to find smallest alpha to the nearest order of magnitude,
+    in maxiter steps (so 2**maxiter values of alpha will be scanned over).
+    Scans over values of -log(abs(lb))< log(alpha) < log(abs(lb))
+
+    Cost is approximately maxiter times the cost of a single cholesky
+    factorization.
 
     Parameters
     ----------
     A : ndarray
-        matrix, should be square
-    tol : float
-        precision for estimate of eigenvalue
+        Matrix to factorize. Should be hermitian. No checking is done.
+    maxiter : int
+        Maximum number of bisection search steps
 
     Returns
     -------
-    e1 : float
-        estimate for the minimum eigenvalue. Should be
-        accurate to with +/- tol
-    v1 : ndarray
-        approximate eigenvector corresponding to e1
+    L : ndarray
+        Lower triangular cholesky factor, such that L@L.T ~ A
+
     """
-
-    return scipy.sparse.linalg.eigsh(A, k=1, which="SA", tol=tol)
-
-
-def make_spd(A, delta=1e-2, tol=1e-2):
-    """Modify a matrix to make it positive definite
-
-    Shifts the spectrum to make all eigenvalues > delta.
-    Uses iterative Lanzcos method to approximate the smallest
-    eigenvalue.
-
-    Parameters
-    -----------
-    A : ndarray
-        matrix, should be square and symmetric
-    delta : float
-        minimum allowed eigenvalue
-    tol : float
-        precision for estimate of minimum eigenvalue
-
-    Returns
-    -------
-    A : ndarray
-        A, but shifted by tau*I where tau is an approximation to
-        the minimum eigenvalue
-    """
-
-    A = np.asarray(A)
+    assert int(maxiter) == maxiter
+    maxiter = int(maxiter)
+    k = 2**maxiter  # number of values to try
+    A = jnp.asarray(A)
     n = A.shape[0]
-    eig_1, eigvec_1 = min_eig_est(A, tol)
-    tau = max(0, (1 + tol) * (delta - eig_1))
-    A = A + tau * np.eye(n)
-    return 0.5 * (A + A.T)
+    eye = jnp.eye(n)
+    # upper and lower bounds on eig(A)
+    lb, ub = gershgorin_bounds(A)
+    # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
+    # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure
+    # that it's actually greater than the maximum alpha
+    ub = jnp.log10(jnp.abs(lb)) + 1
+    # we know alpha > 0 because otherwise initial factorization would have succeeded
+    # but we'd like to be a bit better (in log scaling). This is just a heuristic but
+    # seems ok in practice
+    m = jnp.mean(jnp.abs(A))
+    lb = ub - 2 * abs(ub) - abs(jnp.log10(m))
+    # values to try
+    alphas = jnp.logspace(lb, ub, k)
+    kbest = k // 2
+    klow = 0
+    khigh = k
+    # first we try alpha = max, which we know will succeed by gershgorin bounds
+    # but might be too big a correction, so then we try to reduce it while keeping
+    # A + alpha*I positive definite
+    Lbest = jnp.linalg.cholesky(A + alphas[k] * eye)
+    for i in range(maxiter):
+        L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
+        # check if it succeeded
+        isnan = jnp.any(jnp.isnan(L))
+        # adjust bounds for correction
+        klow = isnan * kbest + (1 - isnan) * klow
+        khigh = isnan * khigh + (1 - isnan) * kbest
+        kbest = (klow + khigh) // 2
+        # if it succeeded, mark it as the best so far
+        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, 1)
+    return Lbest
 
 
-def chol_U_update(U, x, alpha):
-    """Rank 1 update to a cholesky decomposition
+@jit
+def chol(A):
+    """Cholesky factorization of possibly indefinite matrix.
 
-    Given cholesky decomposition A = U.T * U
-    compute cholesky decomposition to A + alpha*x.T*x where
-    x is a vector and alpha is a scalar.
+    If matrix is positive definite, returns the regular Cholesky factorization,
+    otherwise performs a modified factorization to ensure the factors are positive
+    definite.
 
     Parameters
     ----------
-    U : ndarray
-        upper triangular cholesky factor
-    x : ndarray
-        rank 1 update vector
-    alpha : float
-        scalar coefficient
+    A : ndarray
+        Matrix to factorize. Should be hermitian. No checking is done.
 
     Returns
     -------
-    U : ndarray
-        updated cholesky factor
+    L : ndarray
+        Lower triangular (approximate) cholesky factor, such that L@L.T ~ A
+
     """
-    U = U.copy()
-    sign = np.sign(alpha)
-    a = np.sqrt(np.abs(alpha))
-    x = a * x
-    for k in range(x.size):
-        r = np.sqrt(U[k, k] ** 2 + sign * x[k] ** 2)
-        c = r / U[k, k]
-        s = x[k] / U[k, k]
-        U[k, k] = r
-        U[k, k + 1 :] = (U[k, k + 1 :] + sign * s * x[k + 1 :]) / c
-        x[k + 1 :] = c * x[k + 1 :] - s * U[k, k + 1 :]
-    return U
+    L = jnp.linalg.cholesky(A)
+    L = cond(jnp.any(jnp.isnan(L)), lambda A: _cholmod(A), lambda A: L, A)
+    return L
 
 
-def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
-    """Compute values of a quadratic function arising in least squares.
+def evaluate_quadratic_form_hess(x, f, g, H, scale=None):
+    """Compute values of a quadratic function arising in trust region subproblem.
+
     The function is 0.5 * x.T * H * x + g.T * x + f.
 
     Parameters
@@ -105,8 +132,8 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
         constant term
     g : ndarray, shape(n,)
         Gradient, defines the linear term.
-    HorJ : ndarray, LinearOperator or OptimizerDerivative
-        Hessian/Jacobian matrix or operator
+    H : ndarray
+        Hessian matrix
     scale : ndarray, shape(n,)
         scaling to apply. Scales hess -> scale*hess*scale, g-> scale*g
 
@@ -116,146 +143,13 @@ def evaluate_quadratic_form(x, f, g, HorJ, scale=None):
         Value of the function.
     """
     scale = scale if scale is not None else 1
-    q = HorJ.quadratic(x * scale, x * scale)
+    q = (x * scale) @ H @ (x * scale)
     l = jnp.dot(scale * g, x)
 
     return f + l + 1 / 2 * q
 
 
-def print_header_nonlinear():
-    print(
-        "{0:^15}{1:^15}{2:^15}{3:^15}{4:^15}{5:^15}".format(
-            "Iteration",
-            "Total nfev",
-            "Cost",
-            "Cost reduction",
-            "Step norm",
-            "Optimality",
-        )
-    )
-
-
-def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality
-):
-    if iteration is None or abs(iteration) == np.inf:
-        iteration = " " * 15
-    else:
-        iteration = "{:^15}".format(iteration)
-
-    if nfev is None or abs(nfev) == np.inf:
-        nfev = " " * 15
-    else:
-        nfev = "{:^15}".format(nfev)
-
-    if cost is None or abs(cost) == np.inf:
-        cost = " " * 15
-    else:
-        cost = "{0:^15.4e}".format(cost)
-
-    if cost_reduction is None or abs(cost_reduction) == np.inf:
-        cost_reduction = " " * 15
-    else:
-        cost_reduction = "{0:^15.2e}".format(cost_reduction)
-
-    if step_norm is None or abs(step_norm) == np.inf:
-        step_norm = " " * 15
-    else:
-        step_norm = "{0:^15.2e}".format(step_norm)
-
-    if optimality is None or abs(optimality) == np.inf:
-        optimality = " " * 15
-    else:
-        optimality = "{0:^15.2e}".format(optimality)
-
-    print(
-        "{0}{1}{2}{3}{4}{5}".format(
-            iteration, nfev, cost, cost_reduction, step_norm, optimality
-        )
-    )
-
-
-status_messages = {
-    "success": "Optimization terminated successfully.",
-    "xtol": "`xtol` condition satisfied.",
-    "ftol": "`ftol` condition satisfied.",
-    "gtol": "`gtol` condition satisfied.",
-    "max_nfev": "Maximum number of function evaluations has been exceeded.",
-    "max_ngev": "Maximum number of gradient evaluations has been exceeded.",
-    "max_nhev": "Maximum number of jacobian/hessian evaluations has been exceeded.",
-    "maxiter": "Maximum number of iterations has been exceeded.",
-    "pr_loss": "Desired error not necessarily achieved due to precision loss.",
-    "nan": "NaN result encountered.",
-    "out_of_bounds": "The result is outside of the provided bounds.",
-    "err": "A linalg error occurred, such as a non-psd Hessian.",
-    "approx": "A bad approximation caused failure to predict improvement.",
-    "callback": "User supplied callback triggered termination",
-    None: None,
-}
-
-
-def check_termination(
-    dF,
-    F,
-    dx_norm,
-    x_norm,
-    g_norm,
-    ratio,
-    ftol,
-    xtol,
-    gtol,
-    iteration,
-    maxiter,
-    nfev,
-    max_nfev,
-    ngev,
-    max_ngev,
-    nhev,
-    max_nhev,
-):
-    """Check termination condition and get message."""
-    ftol_satisfied = dF < abs(ftol * F) and ratio > 0.25
-    xtol_satisfied = dx_norm < xtol * (xtol + x_norm)
-    gtol_satisfied = g_norm < gtol
-
-    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
-        message = status_messages["success"]
-        success = True
-        if ftol_satisfied:
-            message += "\n" + status_messages["ftol"]
-        if xtol_satisfied:
-            message += "\n" + status_messages["xtol"]
-        if gtol_satisfied:
-            message += "\n" + status_messages["gtol"]
-    elif iteration >= maxiter:
-        success = False
-        message = status_messages["maxiter"]
-    elif nfev >= max_nfev:
-        success = False
-        message = status_messages["max_nfev"]
-    elif ngev >= max_ngev:
-        success = False
-        message = status_messages["max_ngev"]
-    elif nhev >= max_nhev:
-        success = False
-        message = status_messages["max_nhev"]
-    else:
-        success = None
-        message = None
-
-    return success, message
-
-
-def compute_jac_scale(A, prev_scale_inv=None):
-    scale_inv = jnp.sum(A ** 2, axis=0) ** 0.5
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
-
-    if prev_scale_inv is not None:
-        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
-    return 1 / scale_inv, scale_inv
-
-
-def evaluate_quadratic(J, g, s, diag=None):
+def evaluate_quadratic_form_jac(J, g, s, diag=None):
     """Compute values of a quadratic function arising in least squares.
 
     The function is 0.5 * s.T * (J.T * J + diag) * s + g.T * s.
@@ -285,10 +179,191 @@ def evaluate_quadratic(J, g, s, diag=None):
             q += jnp.dot(s * diag, s)
     else:
         Js = J.dot(s.T)
-        q = jnp.sum(Js ** 2, axis=0)
+        q = jnp.sum(Js**2, axis=0)
         if diag is not None:
-            q += jnp.sum(diag * s ** 2, axis=1)
+            q += jnp.sum(diag * s**2, axis=1)
 
     l = jnp.dot(s, g)
 
     return 0.5 * q + l
+
+
+def print_header_nonlinear():
+    """Print a pretty header."""
+    print(
+        "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
+            "Iteration",
+            "Total nfev",
+            "Cost",
+            "Cost reduction",
+            "Step norm",
+            "Optimality",
+        )
+    )
+
+
+def print_iteration_nonlinear(
+    iteration, nfev, cost, cost_reduction, step_norm, optimality
+):
+    """Print a line of optimizer output."""
+    if iteration is None or abs(iteration) == np.inf:
+        iteration = " " * 15
+    else:
+        iteration = "{:^15}".format(iteration)
+
+    if nfev is None or abs(nfev) == np.inf:
+        nfev = " " * 15
+    else:
+        nfev = "{:^15}".format(nfev)
+
+    if cost is None or abs(cost) == np.inf:
+        cost = " " * 15
+    else:
+        cost = "{:^15.4e}".format(cost)
+
+    if cost_reduction is None or abs(cost_reduction) == np.inf:
+        cost_reduction = " " * 15
+    else:
+        cost_reduction = "{:^15.2e}".format(cost_reduction)
+
+    if step_norm is None or abs(step_norm) == np.inf:
+        step_norm = " " * 15
+    else:
+        step_norm = "{:^15.2e}".format(step_norm)
+
+    if optimality is None or abs(optimality) == np.inf:
+        optimality = " " * 15
+    else:
+        optimality = "{:^15.2e}".format(optimality)
+
+    print(
+        "{}{}{}{}{}{}".format(
+            iteration, nfev, cost, cost_reduction, step_norm, optimality
+        )
+    )
+
+
+STATUS_MESSAGES = {
+    "success": "Optimization terminated successfully.",
+    "xtol": "`xtol` condition satisfied.",
+    "ftol": "`ftol` condition satisfied.",
+    "gtol": "`gtol` condition satisfied.",
+    "max_nfev": "Maximum number of function evaluations has been exceeded.",
+    "max_ngev": "Maximum number of gradient evaluations has been exceeded.",
+    "max_nhev": "Maximum number of Jacobian/Hessian evaluations has been exceeded.",
+    "maxiter": "Maximum number of iterations has been exceeded.",
+    "pr_loss": "Desired error not necessarily achieved due to precision loss.",
+    "nan": "NaN result encountered.",
+    "out_of_bounds": "The result is outside of the provided bounds.",
+    "err": "A linalg error occurred, such as a non-psd Hessian.",
+    "approx": "A bad approximation caused failure to predict improvement.",
+    "callback": "User supplied callback triggered termination",
+    None: None,
+}
+
+
+def check_termination(
+    dF,
+    F,
+    dx_norm,
+    x_norm,
+    g_norm,
+    reduction_ratio,
+    ftol,
+    xtol,
+    gtol,
+    iteration,
+    maxiter,
+    nfev,
+    max_nfev,
+    ngev,
+    max_ngev,
+    nhev,
+    max_nhev,
+    **kwargs,
+):
+    """Check termination condition and get message."""
+    ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
+    xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
+    gtol_satisfied = g_norm < gtol
+
+    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
+        message = STATUS_MESSAGES["success"]
+        success = True
+        if ftol_satisfied:
+            message += "\n" + STATUS_MESSAGES["ftol"]
+        if xtol_satisfied:
+            message += "\n" + STATUS_MESSAGES["xtol"]
+        if gtol_satisfied:
+            message += "\n" + STATUS_MESSAGES["gtol"]
+    elif iteration >= maxiter:
+        success = False
+        message = STATUS_MESSAGES["maxiter"]
+    elif nfev >= max_nfev:
+        success = False
+        message = STATUS_MESSAGES["max_nfev"]
+    elif ngev >= max_ngev:
+        success = False
+        message = STATUS_MESSAGES["max_ngev"]
+    elif nhev >= max_nhev:
+        success = False
+        message = STATUS_MESSAGES["max_nhev"]
+    elif dx_norm < kwargs.get("min_trust_radius", np.finfo(x_norm.dtype).eps):
+        success = False
+        message = STATUS_MESSAGES["approx"]
+    elif kwargs.get("dx_total", 0) > kwargs.get("max_dx", np.inf):
+        success = False
+        message = STATUS_MESSAGES["out_of_bounds"]
+    else:
+        success = None
+        message = None
+
+    return success, message
+
+
+def compute_jac_scale(A, prev_scale_inv=None):
+    """Compute scaling factor based on column norm of Jacobian matrix."""
+    scale_inv = jnp.sum(A**2, axis=0) ** 0.5
+    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1 / scale_inv, scale_inv
+
+
+def compute_hess_scale(H, prev_scale_inv=None):
+    """Compute scaling factors based on diagonal of Hessian matrix."""
+    scale_inv = jnp.abs(jnp.diag(H))
+    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+
+    if prev_scale_inv is not None:
+        scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
+    return 1 / scale_inv, scale_inv
+
+
+def f_where_x(x, xs, fs):
+    """Return fs where x==xs.
+
+    Parameters
+    ----------
+    x : ndarray, shape(k,)
+        array to find
+    xs : list of ndarray of shape(k,)
+        list to compare x against
+    fs : list of float, ndarray
+        list of values to return value from
+
+    Returns
+    -------
+    f : float or ndarray
+        value of fs[i] where x==xs[i]
+    """
+    x, xs, fs = map(np.asarray, (x, xs, fs))
+    assert len(xs) == len(fs)
+    assert len(xs) == 0 or x.shape == xs[0].shape
+    eps = np.finfo(x.dtype).eps
+    i = np.where(np.all(np.isclose(x, xs, rtol=eps, atol=eps), axis=1))[0]
+    # sometimes two things are within eps of x, we want the most recent one
+    if len(i) > 1:
+        i = i[-1]
+    return fs[i].squeeze()

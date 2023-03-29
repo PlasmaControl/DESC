@@ -1,45 +1,67 @@
+"""Module for getting precomputed example equilibria."""
+
 import os
+
 import desc.io
 
 
-def get(name, which=None):
-    """Get example equilibria and data
+def listall():
+    """Return a list of examples that DESC has."""
+    here = os.path.abspath(os.path.dirname(__file__))
+    h5s = [f for f in os.listdir(here) if f.endswith(".h5")]
+    names_stripped = [f.replace("_output.h5", "") for f in h5s]
+    return names_stripped
+
+
+def get(name, data=None):
+    """Get example equilibria and data.
 
     Returns a solved equilibrium or selected attributes for one of several examples.
 
-    current examples include: dshape, solovev, atf, heliotron
+    A full list of valid names can be found with ``desc.examples.listall()``
 
     Parameters
     ----------
-    name : str
-        name of the example equilibrium to load from, should be one from list above
-    which : {None, "all", "boundary", "pressure", "iota"}
-        what data to return. None returns the final solved equilibrium. "all" returns
-        the intermediate solutions from the continuation method as an EquilibriaFamily.
-        "boundary" returns a representation for the LCFS. "pressure" and "iota" return
-        profile objects.
+    name : str (case insensitive)
+        Name of the example equilibrium to load from, should be one from
+        ``desc.examples.listall()``.
+    data : {None, "all", "boundary", "pressure", "iota", "current"}
+        Data to return. None returns the final solved equilibrium. "all" returns the
+        intermediate solutions from the continuation method as an EquilibriaFamily.
+        "boundary" returns a representation for the last closed flux surface.
+        "pressure", "iota", and "current" return the profile objects.
 
     Returns
     -------
     data : varies
-        data requested, see "which" argument for more details
+        Data requested, see "data" argument for more details.
 
     """
+    assert data in {None, "all", "boundary", "pressure", "iota", "current"}
+    here = os.path.abspath(os.path.dirname(__file__))
+    h5s = [f for f in os.listdir(here) if f.endswith(".h5")]
+    h5s_lower = [f.lower() for f in h5s]
+    filename = name.lower() + "_output.h5"
+    try:
+        idx = h5s_lower.index(filename)
+    except ValueError as e:
+        raise ValueError(
+            "example {} not found, should be one of {}".format(name, listall())
+        ) from e
+    path = here + "/" + h5s[idx]
+    assert os.path.exists(path)
 
-    assert which in {None, "all", "boundary", "pressure", "iota"}
-    here = os.path.abspath(os.path.dirname(__file__)) + "/"
-    path = here + name.upper() + "_output.h5"
-    if os.path.exists(path):
-        eqf = desc.io.load(path)
-    else:
-        raise ValueError("example {} not found".format(path))
-    if which is None:
+    eqf = desc.io.load(path)
+
+    if data is None:
         return eqf[-1]
-    if which == "all":
+    if data == "all":
         return eqf
-    if which == "boundary":
+    if data == "boundary":
         return eqf[-1].get_surface_at(rho=1)
-    if which == "pressure":
+    if data == "pressure":
         return eqf[-1].pressure
-    if which == "iota":
+    if data == "iota":
         return eqf[-1].iota
+    if data == "current":
+        return eqf[-1].current

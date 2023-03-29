@@ -1,12 +1,14 @@
-import numpy as np
-import scipy.linalg
-from itertools import permutations, combinations_with_replacement
-from termcolor import colored
+"""Class to transform from spectral basis to real space."""
+
 import warnings
 
+import numpy as np
+import scipy.linalg
+from termcolor import colored
+
 from desc.backend import jnp, put
-from desc.utils import issorted, isalmostequal, islinspaced
 from desc.io import IOAble
+from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
 
 
 class Transform(IOAble):
@@ -23,7 +25,7 @@ class Transform(IOAble):
         * if an array, derivative orders specified explicitly. Shape should be (N,3),
           where each row is one set of partial derivatives [dr, dt, dz]
     rcond : float
-         relative cutoff for singular values for inverse fitting
+        relative cutoff for singular values for inverse fitting
     build : bool
         whether to precompute the transforms now or do it later
     build_pinv : bool
@@ -54,6 +56,20 @@ class Transform(IOAble):
         self._grid = grid
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
+
+        if (
+            not np.all(self.grid.nodes[:, 2] == 0)
+            and not (self.grid.NFP == self.basis.NFP)
+            and grid.node_pattern != "custom"
+        ):
+            warnings.warn(
+                colored(
+                    "Unequal number of field periods for grid {} and basis {}.".format(
+                        self.grid.NFP, self.basis.NFP
+                    ),
+                    "yellow",
+                )
+            )
 
         self._derivatives = self._get_derivatives(derivs)
         self._sort_derivatives()
@@ -98,18 +114,7 @@ class Transform(IOAble):
 
         """
         if isinstance(derivs, int) and derivs >= 0:
-            derivatives = np.array([[]])
-            combos = combinations_with_replacement(range(derivs + 1), 3)
-            for combo in list(combos):
-                perms = set(permutations(combo))
-                for perm in list(perms):
-                    if derivatives.shape[1] == 3:
-                        derivatives = np.vstack([derivatives, np.array(perm)])
-                    else:
-                        derivatives = np.array([perm])
-            derivatives = derivatives[
-                derivatives.sum(axis=1) <= derivs
-            ]  # remove higher orders
+            derivatives = combination_permutation(3, derivs, False)
         elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
         elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:
@@ -121,7 +126,9 @@ class Transform(IOAble):
                     "red",
                 )
             )
-
+        # always include the 0,0,0 derivative
+        if not (np.array([0, 0, 0]) == derivatives).all(axis=-1).any():
+            derivatives = np.concatenate([derivatives, np.array([[0, 0, 0]])])
         return derivatives
 
     def _sort_derivatives(self):
@@ -135,7 +142,8 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for fft method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "fft"
+            self._method = "direct1"
+            return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
 
@@ -273,7 +281,7 @@ class Transform(IOAble):
         """Check that inputs are formatted correctly for direct2 method."""
         if grid.num_nodes == 0 or basis.num_modes == 0:
             # trivial case where we just return all zeros, so it doesn't matter
-            self._method = "direct2"
+            self._method = "direct1"
             return
 
         zeta_vals, zeta_cts = np.unique(grid.nodes[:, 2], return_counts=True)
@@ -393,14 +401,37 @@ class Transform(IOAble):
         """Build the pseudoinverse for fitting."""
         if self.built_pinv:
             return
-        A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
-        # for weighted least squares
-        A = self.grid.weights[:, np.newaxis] * A
         rcond = None if self.rcond == "auto" else self.rcond
-        if A.size:
-            self._matrices["pinv"] = scipy.linalg.pinv(A, rcond=rcond)
-        else:
-            self._matrices["pinv"] = np.zeros_like(A.T)
+        if self.method == "direct1":
+            A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
+            self._matrices["pinv"] = (
+                scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
+            )
+        elif self.method == "direct2":
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            temp_modes = np.hstack(
+                [np.zeros((self.num_n_modes, 2)), self.n_modes[:, np.newaxis]]
+            )
+            B = self.basis.evaluate(
+                self.dft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            self.matrices["pinvA"] = (
+                scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
+            )
+            self.matrices["pinvB"] = (
+                scipy.linalg.pinv(B, rcond=rcond) if B.size else np.zeros_like(B.T)
+            )
+        elif self.method == "fft":
+            temp_modes = np.hstack([self.lm_modes, np.zeros((self.num_lm_modes, 1))])
+            A = self.basis.evaluate(
+                self.fft_nodes, np.array([0, 0, 0]), modes=temp_modes, unique=True
+            )
+            self.matrices["pinvA"] = (
+                scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
+            )
         self._built_pinv = True
 
     def transform(self, c, dr=0, dt=0, dz=0):
@@ -473,7 +504,7 @@ class Transform(IOAble):
             c_mtrx = put(c_mtrx, self.fft_index, c).reshape((-1, self.num_n_modes))
 
             # differentiate
-            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk ** dz * (-1) ** (dz > 1)
+            c_diff = c_mtrx[:, :: (-1) ** dz] * self.dk**dz * (-1) ** (dz > 1)
 
             # re-format in complex notation
             c_real = jnp.pad(
@@ -510,13 +541,29 @@ class Transform(IOAble):
         """
         if not self.built_pinv:
             raise RuntimeError(
-                "Transform must be precomputed with transform.build_pinv() before being used"
+                "Transform must be built with transform.build_pinv() before being used"
             )
-        if x.ndim > 1:
-            weights = self.grid.weights.reshape((-1, 1))
-        else:
-            weights = self.grid.weights
-        return jnp.matmul(self.matrices["pinv"], weights * x)
+
+        if self.method == "direct1":
+            Ainv = self.matrices["pinv"]
+            c = jnp.matmul(Ainv, x)
+        elif self.method == "direct2":
+            Ainv = self.matrices["pinvA"]
+            Binv = self.matrices["pinvB"]
+            yy = jnp.matmul(Ainv, x.reshape((-1, self.num_z_nodes), order="F"))
+            c = jnp.matmul(Binv, yy.T).T.flatten()[self.fft_index]
+        elif self.method == "fft":
+            Ainv = self.matrices["pinvA"]
+            c_fft = jnp.matmul(Ainv, x.reshape((Ainv.shape[1], -1), order="F"))
+            c_cplx = jnp.fft.fft(c_fft)
+            c_real = c_cplx[:, 1 : c_cplx.shape[1] // 2 + 1]
+            c_unpad = c_real[:, : c_real.shape[1] - self.pad_dim]
+            c0 = c_cplx[:, :1].real / self.num_z_nodes
+            c2 = c_unpad.real / (self.num_z_nodes / 2)
+            c1 = -c_unpad.imag[:, ::-1] / (self.num_z_nodes / 2)
+            c_diff = jnp.hstack([c1, c0, c2])
+            c = c_diff.flatten()[self.fft_index]
+        return c
 
     def project(self, y):
         """Project vector y onto basis.
@@ -692,7 +739,7 @@ class Transform(IOAble):
 
     @property
     def matrices(self):
-        """dict of ndarray : transform matrices such that x=A*c."""
+        """dict: transform matrices such that x=A*c."""
         return self.__dict__.setdefault(
             "_matrices",
             {
@@ -707,12 +754,12 @@ class Transform(IOAble):
 
     @property
     def num_nodes(self):
-        """int : number of nodes in the collocation grid."""
+        """int: number of nodes in the collocation grid."""
         return self.grid.num_nodes
 
     @property
     def num_modes(self):
-        """int : number of modes in the spectral basis."""
+        """int: number of modes in the spectral basis."""
         return self.basis.num_modes
 
     @property
@@ -727,12 +774,12 @@ class Transform(IOAble):
 
     @property
     def built(self):
-        """bool : whether the transform matrices have been built."""
+        """bool: whether the transform matrices have been built."""
         return self.__dict__.setdefault("_built", False)
 
     @property
     def built_pinv(self):
-        """bool : whether the pseudoinverse matrix has been built."""
+        """bool: whether the pseudoinverse matrix has been built."""
         return self.__dict__.setdefault("_built_pinv", False)
 
     @property

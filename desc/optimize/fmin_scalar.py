@@ -1,23 +1,27 @@
+"""Function for minimizing a scalar function of multiple variables."""
+
 import numpy as np
+from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
+
 from desc.backend import jnp
-from .derivative import CholeskyHessian
-from .utils import (
-    check_termination,
-    evaluate_quadratic_form,
-    print_header_nonlinear,
-    print_iteration_nonlinear,
-    status_messages,
-)
+
 from .tr_subproblems import (
-    solve_trust_region_dogleg,
     solve_trust_region_2d_subspace,
+    solve_trust_region_dogleg,
     update_tr_radius,
 )
-from scipy.optimize import OptimizeResult
+from .utils import (
+    STATUS_MESSAGES,
+    check_termination,
+    compute_hess_scale,
+    evaluate_quadratic_form_hess,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
-def fmintr(
+def fmintr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     grad,
@@ -33,7 +37,7 @@ def fmintr(
     callback=None,
     options={},
 ):
-    """Minimize a scalar function using a (quasi)-Newton trust region method
+    """Minimize a scalar function using a (quasi)-Newton trust region method.
 
     Parameters
     ----------
@@ -44,8 +48,8 @@ def fmintr(
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
     hess : callable or ``'bfgs'``, optional:
-        function to compute hessian matrix of fun, or ``'bfgs'`` in which case the BFGS method
-        will be used to approximate the hessian.
+        function to compute Hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
+        method will be used to approximate the Hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
     method : ``'dogleg'`` or ``'subspace'``
@@ -58,7 +62,7 @@ def fmintr(
         be achieved by setting ``x_scale`` such that a step of a given size
         along any of the scaled variables has a similar effect on the cost
         function. If set to ``'hess'``, the scale is iteratively updated using the
-        inverse norms of the columns of the hessian matrix.
+        inverse norms of the columns of the Hessian matrix.
     ftol : float or None, optional
         Tolerance for termination by the change of the cost function. Default
         is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
@@ -102,7 +106,6 @@ def fmintr(
         Boolean flag indicating if the optimizer exited successfully.
 
     """
-
     nfev = 0
     ngev = 0
     nhev = 0
@@ -114,6 +117,27 @@ def fmintr(
     nfev += 1
     g = grad(x, *args)
     ngev += 1
+
+    if callable(hess):
+        H = hess(x, *args)
+        nhev += 1
+        bfgs = False
+    elif isinstance(hess, str) and hess.lower() == "bfgs":
+        hess_init_scale = options.pop("hessian_init_scale", "auto")
+        hess_exception_strategy = options.pop(
+            "hessian_exception_strategy", "damp_update"
+        )
+        hess_min_curvature = options.pop("hessian_minimum_curvature", None)
+        hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
+        hess.initialize(N, "hess")
+        H = hess.get_matrix()
+        bfgs = True
+    elif isinstance(hess, BFGS):
+        hess.initialize(N, "hess")
+        bfgs = True
+        H = hess.get_matrix()
+    else:
+        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
 
     if method == "dogleg":
         subproblem = solve_trust_region_dogleg
@@ -131,63 +155,46 @@ def fmintr(
     max_nhev = options.pop("max_nhev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    step_accept_threshold = options.pop("step_accept_threshold", 0.15)
-    init_hess = options.pop("init_hess", "auto")
-    hess_recompute_freq = options.pop(
-        "hessian_recompute_interval", 1 if callable(hess) else 0
-    )
-    hess_damp_ratio = options.pop("hessian_damping_ratio", 0.2)
-    hess_exception_strategy = options.pop("hessian_exception_strategy", "damp_update")
-    hess_min_curvature = options.pop("hessian_minimum_curvature", None)
     ga_fd_step = options.pop("ga_fd_step", 0.1)
     ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
+    max_dx = options.pop("max_dx", np.inf)
 
-    if np.size(hess_recompute_freq) == 1 and hess_recompute_freq > 0 and callable(hess):
-        hess_recompute_iters = np.arange(0, maxiter, hess_recompute_freq)
-    elif np.size(hess_recompute_freq) == 1 or not callable(hess):  # never recompute
-        hess_recompute_iters = []
-    else:
-        hess_recompute_iters = hess_recompute_freq
-
-    if hess == "bfgs":
-        hess = CholeskyHessian(
-            N,
-            init_hess,
-            hessfun=None,
-            hessfun_args=(),
-            exception_strategy=hess_exception_strategy,
-            min_curvature=hess_min_curvature,
-            damp_ratio=hess_damp_ratio,
-        )
-
-    elif callable(hess):
-        hess = CholeskyHessian(
-            N,
-            init_hess,
-            hessfun=hess,
-            hessfun_args=tuple(args),
-            exception_strategy=hess_exception_strategy,
-            min_curvature=hess_min_curvature,
-            damp_ratio=hess_damp_ratio,
-        )
-    else:
-        raise ValueError(colored("hess should either be a callable or 'bfgs'", "red"))
-
-    hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
+    auto_scale = str(x_scale) == "auto"
+    x_scale = 1 if auto_scale and bfgs else ("hess" if auto_scale else x_scale)
+    hess_scale = str(x_scale) == "hess"
+    assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
     if hess_scale:
-        scale, scale_inv = hess.get_scale()
+        scale, scale_inv = compute_hess_scale(H)
     else:
         x_scale = np.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
-    # initial trust region radius
+    g_h = g * scale
+    H_h = scale * H * scale[:, None]
+
     g_norm = np.linalg.norm(g, ord=gnorm_ord)
     x_norm = np.linalg.norm(x, ord=xnorm_ord)
-    trust_radius = options.pop("initial_trust_radius", np.linalg.norm(x * scale_inv))
+    # initial trust region radius is based on the geometric mean of 2 possible rules:
+    # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
+    # second is the norm of the scaled x, as used in scipy
+    # in practice for our problems the C&G one is too small, while scipy is too big,
+    # but the geometric mean seems to work well
+    init_tr = {
+        "scipy": np.linalg.norm(x * scale_inv),
+        "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
+        "mix": np.sqrt(
+            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * np.linalg.norm(x * scale_inv)
+        ),
+    }
+    trust_radius = options.pop("initial_trust_radius", "scipy")
+    tr_ratio = options.pop("initial_trust_ratio", 1.0)
+    trust_radius = init_tr.get(trust_radius, trust_radius)
+    trust_radius *= tr_ratio
+
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
-    min_trust_radius = options.pop("min_trust_radius", 0)
+    min_trust_radius = options.pop("min_trust_radius", np.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
@@ -201,6 +208,7 @@ def fmintr(
         )
 
     success = None
+    message = None
     step_norm = np.inf
     actual_reduction = np.inf
     ratio = 1  # ratio between actual reduction and predicted reduction
@@ -216,12 +224,6 @@ def fmintr(
     alpha = np.nan  # "Levenberg-Marquardt" parameter
 
     while True:
-
-        if iteration in hess_recompute_iters:
-            hess.recompute(x)
-            nhev += 1
-            if hess_scale:
-                scale, scale_inv = hess.get_scale(scale_inv)
 
         success, message = check_termination(
             actual_reduction,
@@ -241,22 +243,25 @@ def fmintr(
             max_ngev,
             nhev,
             max_nhev,
+            min_trust_radius=min_trust_radius,
+            dx_total=np.linalg.norm(x - x0),
+            max_dx=max_dx,
         )
         if success is not None:
             break
 
         actual_reduction = -1
-        while actual_reduction <= 0 and nfev < max_nfev:
+        while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
             try:
-                step_h, hits_boundary, alpha = subproblem(g, hess, scale, trust_radius)
+                step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius)
 
             except np.linalg.linalg.LinAlgError:
-                success = (False,)
-                message = (status_messages["err"],)
+                success = False
+                message = STATUS_MESSAGES["err"]
                 break
 
             # geodesic acceleration
@@ -264,8 +269,10 @@ def fmintr(
                 g0 = g
                 g1 = grad(x + ga_fd_step * step_h * scale, *args)
                 ngev += 1
-                dg = (g1 - g0) / ga_fd_step ** 2
-                ga_step_h = -scale_inv * hess.solve(dg) + 1 / ga_fd_step * step_h
+                dg = (g1 - g0) / ga_fd_step**2
+                ga_step_h = (
+                    -scale_inv * jnp.linalg.solve(H, dg) + 1 / ga_fd_step * step_h
+                )
                 ga_ratio = np.linalg.norm(
                     scale * ga_step_h, ord=xnorm_ord
                 ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
@@ -276,9 +283,7 @@ def fmintr(
                 ga_step_h = np.zeros_like(step_h)
 
             # calculate the predicted value at the proposed point
-            predicted_reduction = f - evaluate_quadratic_form(
-                step_h, f, g, hess, scale=scale
-            )
+            predicted_reduction = f - evaluate_quadratic_form_hess(step_h, f, g_h, H_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
@@ -290,7 +295,7 @@ def fmintr(
             actual_reduction = f - f_new
 
             # update the trust radius according to the actual/predicted ratio
-            trust_radius, ratio = update_tr_radius(
+            trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
                 predicted_reduction,
@@ -312,7 +317,7 @@ def fmintr(
                 step_norm,
                 x_norm,
                 g_norm,
-                ratio,
+                reduction_ratio,
                 ftol,
                 xtol,
                 gtol,
@@ -324,6 +329,9 @@ def fmintr(
                 max_ngev,
                 nhev,
                 max_nhev,
+                min_trust_radius=min_trust_radius,
+                dx_total=np.linalg.norm(x - x0),
+                max_dx=max_dx,
             )
             if success is not None:
                 break
@@ -338,12 +346,19 @@ def fmintr(
             ngev += 1
             g_norm = np.linalg.norm(g, ord=gnorm_ord)
             x_norm = np.linalg.norm(x, ord=xnorm_ord)
-            # don't update the hessian if we're going to recompute on the next iteration
-            if iteration + 1 not in hess_recompute_iters:
-                hess.update(x_new, x_old, g, g_old)
+            if bfgs:
+                hess.update(x - x_old, g - g_old)
+                H = hess.get_matrix()
+            else:
+                H = hess(x, *args)
+                nhev += 1
 
             if hess_scale:
-                scale, scale_inv = hess.get_scale(scale_inv)
+                scale, scale_inv = compute_hess_scale(H)
+
+            g_h = g * scale
+            H_h = scale * H * scale[:, None]
+
             if verbose > 1:
                 print_iteration_nonlinear(
                     iteration, nfev, f, actual_reduction, step_norm, g_norm
@@ -353,7 +368,7 @@ def fmintr(
                 stop = callback(np.copy(x), *args)
                 if stop:
                     success = False
-                    message = status_messages["callback"]
+                    message = STATUS_MESSAGES["callback"]
                     break
 
             if return_all:
@@ -369,7 +384,7 @@ def fmintr(
         success=success,
         fun=f,
         grad=g,
-        hess=hess.get_matrix(),
+        hess=H,
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,
@@ -383,13 +398,13 @@ def fmintr(
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))
         print("         Hessian evaluations: {:d}".format(result["nhev"]))
-
     if return_all:
-        result["allvecs"] = allx
+        result["allx"] = allx
     if return_tr:
         result["alltr"] = alltr
     return result

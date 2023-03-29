@@ -1,8 +1,11 @@
-import numpy as np
+"""Wrapper classes for JAX automatic differentiation and finite differences."""
+
 from abc import ABC, abstractmethod
+
+import numpy as np
 from termcolor import colored
 
-from desc.backend import use_jax, put, jnp
+from desc.backend import jnp, put, use_jax
 
 if use_jax:
     import jax
@@ -45,7 +48,7 @@ class _Derivative(ABC):
 
     @property
     def fun(self):
-        """callable : function being differentiated"""
+        """Callable : function being differentiated."""
         return self._fun
 
     @fun.setter
@@ -54,7 +57,7 @@ class _Derivative(ABC):
 
     @property
     def argnum(self):
-        """int : argument being differentiated with respect to"""
+        """Integer : argument being differentiated with respect to."""
         return self._argnum
 
     @argnum.setter
@@ -63,7 +66,7 @@ class _Derivative(ABC):
 
     @property
     def mode(self):
-        """str : the kind of derivative being computed (eg ``'grad'``, ``'hess'``, etc)"""
+        """String : the kind of derivative being computed (eg ``'grad'``)."""
         return self._mode
 
     def __call__(self, *args):
@@ -108,13 +111,11 @@ class AutoDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
-        ``'hess'`` (hessian of a scalar function),
-        or ``'jvp'`` (jacobian vector product)
+        ``'hess'`` (Hessian of a scalar function),
+        or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
-    use_jit : bool, optional
-        whether to use just-in-time compilation
 
     Raises
     ------
@@ -122,11 +123,10 @@ class AutoDiffDerivative(_Derivative):
 
     """
 
-    def __init__(self, fun, argnum=0, mode="fwd", use_jit=False, **kwargs):
+    def __init__(self, fun, argnum=0, mode="fwd", **kwargs):
 
         self._fun = fun
         self._argnum = argnum
-        self._use_jit = use_jit
 
         self._set_mode(mode)
 
@@ -167,7 +167,7 @@ class AutoDiffDerivative(_Derivative):
         Returns
         -------
         jvp : array-like
-            jacobian times vectors v, summed over different argnums
+            Jacobian times vectors v, summed over different argnums
 
         """
         tangents = list(nested_zeros_like(args))
@@ -280,28 +280,16 @@ class AutoDiffDerivative(_Derivative):
             )
 
         self._mode = mode
-        if self._use_jit:
-            if self._mode == "fwd":
-                self._compute = jax.jit(jax.jacfwd(self._fun, self._argnum))
-            elif self._mode == "rev":
-                self._compute = jax.jit(jax.jacrev(self._fun, self._argnum))
-            elif self._mode == "grad":
-                self._compute = jax.jit(jax.grad(self._fun, self._argnum))
-            elif self._mode == "hess":
-                self._compute = jax.jit(jax.hessian(self._fun, self._argnum))
-            elif self._mode == "jvp":
-                self._compute = self._compute_jvp
-        else:
-            if self._mode == "fwd":
-                self._compute = jax.jacfwd(self._fun, self._argnum)
-            elif self._mode == "rev":
-                self._compute = jax.jacrev(self._fun, self._argnum)
-            elif self._mode == "grad":
-                self._compute = jax.grad(self._fun, self._argnum)
-            elif self._mode == "hess":
-                self._compute = jax.hessian(self._fun, self._argnum)
-            elif self._mode == "jvp":
-                self._compute = self._compute_jvp
+        if self._mode == "fwd":
+            self._compute = jax.jacfwd(self._fun, self._argnum)
+        elif self._mode == "rev":
+            self._compute = jax.jacrev(self._fun, self._argnum)
+        elif self._mode == "grad":
+            self._compute = jax.grad(self._fun, self._argnum)
+        elif self._mode == "hess":
+            self._compute = jax.hessian(self._fun, self._argnum)
+        elif self._mode == "jvp":
+            self._compute = self._compute_jvp
 
 
 class FiniteDiffDerivative(_Derivative):
@@ -315,10 +303,10 @@ class FiniteDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
-        ``'hess'`` (hessian of a scalar function),
-        or ``'jvp'`` (jacobian vector product)
+        ``'hess'`` (Hessian of a scalar function),
+        or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
     rel_step : float, optional
         Relative step size: dx = max(1, abs(x))*rel_step
@@ -334,7 +322,7 @@ class FiniteDiffDerivative(_Derivative):
         self._set_mode(mode)
 
     def _compute_hessian(self, *args):
-        """Compute the hessian matrix using 2nd order centered finite differences.
+        """Compute the Hessian matrix using 2nd order centered finite differences.
 
         Parameters
         ----------
@@ -359,7 +347,6 @@ class FiniteDiffDerivative(_Derivative):
         fx = f(x)
         h = np.maximum(1.0, np.abs(x)) * self.rel_step
         ee = np.diag(h)
-        dtype = fx.dtype
         hess = np.outer(h, h)
 
         for i in range(n):
@@ -378,7 +365,7 @@ class FiniteDiffDerivative(_Derivative):
         return hess
 
     def _compute_grad_or_jac(self, *args):
-        """Compute the gradient or jacobian matrix (ie, first derivative).
+        """Compute the gradient or Jacobian matrix (ie, first derivative).
 
         Parameters
         ----------
@@ -436,7 +423,7 @@ class FiniteDiffDerivative(_Derivative):
         Returns
         -------
         jvp : array-like
-            jacobian times vectors v, summed over different argnums
+            Jacobian times vectors v, summed over different argnums
 
         """
         rel_step = kwargs.get("rel_step", 1e-3)
@@ -551,7 +538,7 @@ class FiniteDiffDerivative(_Derivative):
 
     @classmethod
     def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
-        """Compute a jvp wrt to a single argument."""
+        """Compute a jvp wrt a single argument."""
         rel_step = kwargs.get("rel_step", 1e-3)
         normv = np.linalg.norm(v)
         if normv != 0:
@@ -609,7 +596,7 @@ class FiniteDiffDerivative(_Derivative):
 
 
 def nested_zeros_like(x):
-
+    """Get a nested pytree of zeros like a given pytree."""
     if x is None:
         return None
     if jnp.isscalar(x):

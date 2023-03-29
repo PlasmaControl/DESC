@@ -17,6 +17,16 @@ Basis
     desc.basis.FourierZernikeBasis
 
 
+Continuation
+************
+.. autosummary::
+    :toctree: _api/continuation
+    :recursive:
+
+    desc.continuation.solve_continuation
+    desc.continuation.solve_continuation_automatic
+
+
 Derivatives
 ***********
 Note that the ``derivative`` module also exposes the ``Derivative`` class, which is an alias for ``AutoDiffDerivative`` if JAX is installed, or ``FiniteDiffDerivative`` if not.
@@ -33,7 +43,7 @@ Note that the ``derivative`` module also exposes the ``Derivative`` class, which
 Equilibrium
 ***********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/equilibrium
     :recursive:
     :template: class.rst
@@ -50,6 +60,7 @@ Examples
     :recursive:
 
     desc.examples.get
+    desc.examples.listall
 
 
 Geometry
@@ -65,7 +76,7 @@ Geometry
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
     desc.geometry.ZernikeRZToroidalSection
-    
+
 Grid
 ****
 
@@ -99,24 +110,45 @@ Objective Functions
     :template: class.rst
 
     desc.objectives.AspectRatio
+    desc.objectives.BootstrapRedlConsistency
     desc.objectives.CurrentDensity
+    desc.objectives.Elongation
     desc.objectives.Energy
-    desc.objectives.FixBoundaryR
-    desc.objectives.FixBoundaryZ
-    desc.objectives.FixIota
-    desc.objectives.FixLambdaGauge
-    desc.objectives.FixPressure
-    desc.objectives.FixPsi
+    desc.objectives.FixAtomicNumber,
+    desc.objectives.FixAxisR,
+    desc.objectives.FixAxisZ,
+    desc.objectives.FixBoundaryR,
+    desc.objectives.FixBoundaryZ,
+    desc.objectives.FixCurrent,
+    desc.objectives.FixElectronDensity,
+    desc.objectives.FixElectronTemperature,
+    desc.objectives.FixIonTemperature,
+    desc.objectives.FixIota,
+    desc.objectives.FixModeR,
+    desc.objectives.FixModeZ,
+    desc.objectives.FixPressure,
+    desc.objectives.FixPsi,
+    desc.objectives.FixSumModesR,
+    desc.objectives.FixSumModesZ,
+    desc.objectives.FixThetaSFL,
     desc.objectives.ForceBalance
     desc.objectives.GenericObjective
-    desc.objectives.get_fixed_boundary_constraints
-    desc.objectives.get_equilibrium_objective
+    desc.objectives.get_equilibrium_objective,
+    desc.objectives.get_fixed_axis_constraints,
+    desc.objectives.get_fixed_boundary_constraints,
+    desc.objectives.get_NAE_constraints,
     desc.objectives.HelicalForceBalance
-    desc.objectives.ObjectiveFunction   
+    desc.objectives.MagneticWell
+    desc.objectives.MeanCurvature
+    desc.objectives.MercierStability
+    desc.objectives.ObjectiveFunction
+    desc.objectives.PlasmaVesselDistance
+    desc.objectives.PrincipalCurvature
     desc.objectives.QuasisymmetryBoozer
     desc.objectives.QuasisymmetryTwoTerm
     desc.objectives.QuasisymmetryTripleProduct
     desc.objectives.RadialForceBalance
+    desc.objectives.RotationalTransform
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 
@@ -124,7 +156,7 @@ Objective Functions
 Optimize
 ********
 
-.. autosummary:: 
+.. autosummary::
    :toctree: _api/optimize
    :recursive:
    :template: class.rst
@@ -136,17 +168,18 @@ Optimize
 Perturbations
 *************
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/perturbations
     :recursive:
 
+    desc.perturbations.get_deltas
     desc.perturbations.perturb
     desc.perturbations.optimal_perturb
 
 Plotting
 ********
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/plotting
     :recursive:
 
@@ -156,8 +189,12 @@ Plotting
     desc.plotting.plot_basis
     desc.plotting.plot_boozer_modes
     desc.plotting.plot_boozer_surface
-    desc.plotting.plot_coefficients	   
+    desc.plotting.plot_boundaries
+    desc.plotting.plot_boundary
+    desc.plotting.plot_coefficients
+    desc.plotting.plot_coils
     desc.plotting.plot_comparison
+    desc.plotting.plot_field_lines_sfl
     desc.plotting.plot_fsa
     desc.plotting.plot_grid
     desc.plotting.plot_logo
@@ -172,11 +209,14 @@ Profiles
     :toctree: _api/profiles
     :recursive:
     :template: class.rst
-	       
+
     desc.profiles.PowerSeriesProfile
     desc.profiles.SplineProfile
     desc.profiles.MTanhProfile
-    
+    desc.profiles.ScaledProfile
+    desc.profiles.SumProfile
+    desc.profiles.ProductProfile
+
 Transform
 *********
 
@@ -190,7 +230,7 @@ Transform
 VMEC
 ****
 
-.. autosummary:: 
+.. autosummary::
     :toctree: _api/vmec/
     :recursive:
     :template: class.rst

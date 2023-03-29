@@ -1,10 +1,14 @@
-import numpy as np
-import mpmath
+"""Classes for spectral bases and functions for evaluation."""
+
 from abc import ABC, abstractmethod
 from math import factorial
-from desc.utils import flatten_list, copy_coeffs
+
+import mpmath
+import numpy as np
+
+from desc.backend import fori_loop, gammaln, jit, jnp, sign
 from desc.io import IOAble
-from desc.backend import jnp, jit, sign, fori_loop, gammaln
+from desc.utils import flatten_list
 
 __all__ = [
     "PowerSeries",
@@ -35,7 +39,7 @@ class Basis(IOAble, ABC):
         self._create_idx()
 
     def _set_up(self):
-        """Called after loading or changing resolution."""
+        """Do things after loading or changing resolution."""
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
@@ -78,7 +82,7 @@ class Basis(IOAble, ABC):
                 self._idx[L][M] = {}
             self._idx[L][M][N] = idx
 
-    def get_idx(self, L=0, M=0, N=0):
+    def get_idx(self, L=0, M=0, N=0, error=True):
         """Get the index of the ``'modes'`` array corresponding to given mode numbers.
 
         Parameters
@@ -89,6 +93,8 @@ class Basis(IOAble, ABC):
             Poloidal mode number.
         N : int
             Toroidal mode number.
+        error : bool
+            whether to raise exception if mode is not in basis, or return empty array
 
         Returns
         -------
@@ -99,9 +105,12 @@ class Basis(IOAble, ABC):
         try:
             return self._idx[L][M][N]
         except KeyError as e:
-            raise ValueError(
-                "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
-            ) from e
+            if error:
+                raise ValueError(
+                    "mode ({}, {}, {}) is not in basis {}".format(L, M, N, str(self))
+                ) from e
+            else:
+                return np.array([]).astype(int)
 
     @abstractmethod
     def _get_modes(self):
@@ -181,7 +190,7 @@ class Basis(IOAble, ABC):
         return self.__dict__.setdefault("_spectral_indexing", "linear")
 
     def __repr__(self):
-        """String form of the object."""
+        """Get the string form of the object."""
         return (
             type(self).__name__
             + " at "
@@ -570,7 +579,7 @@ class ZernikePolynomial(Basis):
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
     spectral_indexing : {``'ansi'``, ``'fringe'``}
-        Indexing method, default value = ``'fringe'``
+        Indexing method, default value = ``'ansi'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -589,7 +598,7 @@ class ZernikePolynomial(Basis):
 
     """
 
-    def __init__(self, L, M, sym=False, spectral_indexing="fringe"):
+    def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
 
         self._L = L
         self._M = M
@@ -604,7 +613,7 @@ class ZernikePolynomial(Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, spectral_indexing="fringe"):
+    def _get_modes(self, L=-1, M=0, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -614,7 +623,7 @@ class ZernikePolynomial(Basis):
         M : int
             Maximum poloidal resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
-            Indexing method, default value = ``'fringe'``
+            Indexing method, default value = ``'ansi'``
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -665,7 +674,6 @@ class ZernikePolynomial(Basis):
                 for d in range(0, L + 1, 2)
             ]
             if L > 2 * M:
-                Ladd = L - 2 * M
                 pol_posm += [
                     [(l - m, m) for m in range(0, M + 1)]
                     for l in range(2 * M, L + 1, 2)
@@ -785,7 +793,7 @@ class FourierZernikeBasis(Basis):
         * ``'sin'`` for sin(m*t-n*z) symmetry
         * ``False`` for no symmetry (Default)
     spectral_indexing : {``'ansi'``, ``'fringe'``}
-        Indexing method, default value = ``'fringe'``
+        Indexing method, default value = ``'ansi'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -804,7 +812,7 @@ class FourierZernikeBasis(Basis):
 
     """
 
-    def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="fringe"):
+    def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
 
         self._L = L
         self._M = M
@@ -819,7 +827,7 @@ class FourierZernikeBasis(Basis):
 
         super().__init__()
 
-    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="fringe"):
+    def _get_modes(self, L=-1, M=0, N=0, spectral_indexing="ansi"):
         """Get mode numbers for Fourier-Zernike basis functions.
 
         Parameters
@@ -831,7 +839,7 @@ class FourierZernikeBasis(Basis):
         N : int
             Maximum toroidal resolution.
         spectral_indexing : {``'ansi'``, ``'fringe'``}
-            Indexing method, default value = ``'fringe'``
+            Indexing method, default value = ``'ansi'``
 
             For L=0, all methods are equivalent and give a "chevron" shaped
             basis (only the outer edge of the zernike pyramid of width M).
@@ -882,7 +890,6 @@ class FourierZernikeBasis(Basis):
                 for d in range(0, L + 1, 2)
             ]
             if L > 2 * M:
-                Ladd = L - 2 * M
                 pol_posm += [
                     [(l - m, m) for m in range(0, M + 1)]
                     for l in range(2 * M, L + 1, 2)
@@ -1106,11 +1113,10 @@ def zernike_radial_coeffs(l, m, exact=True):
     coeffs : ndarray
 
 
-    Notes:
-        integer representation is exact up to l~54, so
-        leaving `exact` arg as False can speed up
-        evaluation with no loss in accuracy
-
+    Notes
+    -----
+    Integer representation is exact up to l~54, so leaving `exact` arg as False
+    can speed up evaluation with no loss in accuracy
     """
     l = np.atleast_1d(l).astype(int)
     m = np.atleast_1d(np.abs(m)).astype(int)
@@ -1211,25 +1217,25 @@ def zernike_radial(r, l, m, dr=0):
     n = (l - m) // 2
     s = (-1) ** n
     if dr == 0:
-        out = r ** m * _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
+        out = r**m * _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
     elif dr == 1:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
         out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
     elif dr == 2:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
         out = (
             m * (m - 1) * r ** jnp.maximum((m - 2), 0) * f
-            - 2 * 4 * m * r ** m * df
-            + r ** m * (16 * r ** 2 * d2f - 4 * df)
+            - 2 * 4 * m * r**m * df
+            + r**m * (16 * r**2 * d2f - 4 * df)
         )
     elif dr == 3:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 2)
-        d3f = _jacobi(n, alpha, beta, 1 - 2 * r ** 2, 3)
+        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
+        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
+        d3f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 3)
         out = (
             (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
             - 12 * (m - 1) * m * r ** jnp.maximum(m - 1, 0) * df
@@ -1240,7 +1246,8 @@ def zernike_radial(r, l, m, dr=0):
         )
     else:
         raise NotImplementedError(
-            "Analytic radial derivatives of zernike polynomials for order>3 have not been implemented"
+            "Analytic radial derivatives of zernike polynomials for order>3 "
+            + "have not been implemented"
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)
 
@@ -1272,7 +1279,7 @@ def powers(rho, l, dr=0):
     Parameters
     ----------
     rho : ndarray, shape(N,)
-        radial coordiantes to evaluate basis
+        radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
     dr : int
@@ -1314,14 +1321,7 @@ def fourier(theta, m, NFP=1, dt=0):
     m_pos = (m >= 0).astype(int)
     m_abs = jnp.abs(m) * NFP
     shift = m_pos * jnp.pi / 2 + dt * jnp.pi / 2
-    return m_abs ** dt * jnp.sin(m_abs * theta + shift)
-
-
-def _binom_body_fun(i, b_n):
-    b, n = b_n
-    num = n + 1 - i
-    den = i
-    return (b * num / den, n)
+    return m_abs**dt * jnp.sin(m_abs * theta + shift)
 
 
 @jit
@@ -1343,30 +1343,30 @@ def _binom(n, k):
     val : int, float, array-like
         number of possible combinations
     """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L68
+
     n, k = map(jnp.asarray, (n, k))
-    # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L68
+
+    def _binom_body_fun(i, b_n):
+        b, n = b_n
+        num = n + 1 - i
+        den = i
+        return (b * num / den, n)
+
     kx = k.astype(int)
     b, n = fori_loop(1, 1 + kx, _binom_body_fun, (1.0, n))
     return b
 
 
-def _jacobi_body_fun(kk, d_p_a_b_x):
-    d, p, alpha, beta, x = d_p_a_b_x
-    k = kk + 1.0
-    t = 2 * k + alpha + beta
-    d = ((t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d) / (
-        2 * (k + alpha + 1) * (k + alpha + beta + 1) * t
-    )
-    p = d + p
-    return (d, p, alpha, beta, x)
-
-
 @jit
 @jnp.vectorize
 def _jacobi(n, alpha, beta, x, dx=0):
-    """Jacobi polynomial evaluation
+    """Jacobi polynomial evaluation.
 
-    Implementation is only correct for non-negative integer coefficients, returns 0 otherwise
+    Implementation is only correct for non-negative integer coefficients,
+    returns 0 otherwise.
 
     Parameters
     ----------
@@ -1384,8 +1384,22 @@ def _jacobi(n, alpha, beta, x, dx=0):
     P : ndarray
         Values of the Jacobi polynomial
     """
+    # adapted from scipy:
+    # https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/
+    # scipy/special/orthogonal_eval.pxd#L144
+
+    def _jacobi_body_fun(kk, d_p_a_b_x):
+        d, p, alpha, beta, x = d_p_a_b_x
+        k = kk + 1.0
+        t = 2 * k + alpha + beta
+        d = (
+            (t * (t + 1) * (t + 2)) * (x - 1) * p + 2 * k * (k + beta) * (t + 2) * d
+        ) / (2 * (k + alpha + 1) * (k + alpha + beta + 1) * t)
+        p = d + p
+        return (d, p, alpha, beta, x)
+
     n, alpha, beta, x = map(jnp.asarray, (n, alpha, beta, x))
-    # adapted from scipy: https://github.com/scipy/scipy/blob/701ffcc8a6f04509d115aac5e5681c538b5265a2/scipy/special/orthogonal_eval.pxd#L144
+
     # coefficient for derivative
     c = (
         gammaln(alpha + beta + n + 1 + dx)

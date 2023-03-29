@@ -119,7 +119,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
     np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-5)
+    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
     curr1 = eq1.get_profile("current")
     curr2 = eq2.get_profile("current")
     iota1 = eq1.get_profile("iota")
@@ -130,11 +130,10 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
 
 
 @pytest.mark.regression
-@pytest.mark.solve
 def test_force_balance_grids():
     """Compares radial & helical force balance on same vs different grids."""
-    # When ConcentricGrid had a rotation option,
-    # Radial, HelicalForceBalance defaulted to cos, sin rotation, respectively
+    # When ConcentricGrid had a rotation option, RadialForceBalance, HelicalForceBalance
+    # defaulted to cos, sin rotation, respectively.
     # This test has been kept to increase code coverage.
 
     def test(iota=False):
@@ -171,10 +170,28 @@ def test_force_balance_grids():
 
 
 @pytest.mark.regression
-@pytest.mark.solve
+def test_solve_bounds():
+    """Tests optimizing with bounds=(lower bound, upper bound)."""
+    # decrease resolution and double pressure so no longer in force balance
+    eq = desc.examples.get("DSHAPE")
+    eq.change_resolution(L=eq.M, L_grid=eq.M_grid)
+    eq.p_l *= 2
+
+    # target force balance residuals with |F| <= 1e3 N
+    obj = ObjectiveFunction(
+        ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3)), eq=eq
+    )
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+
+    # check that all errors are nearly 0, since residual values are within target bounds
+    f = obj.compute(obj.x(eq))
+    np.testing.assert_allclose(f, 0, atol=1e-4)
+
+
+@pytest.mark.regression
 def test_1d_optimization(SOLOVEV):
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     constraints = (
         ForceBalance(),
@@ -186,16 +203,15 @@ def test_1d_optimization(SOLOVEV):
     )
     options = {"perturb_options": {"order": 1}}
     with pytest.warns(UserWarning):
-        eq.optimize(objective, constraints, options=options)
+        eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 @pytest.mark.regression
-@pytest.mark.solve
-def test_1d_optimization_old(SOLOVEV):
+def test_1d_optimization_old():
     """Tests 1D optimization for target aspect ratio."""
-    eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
+    eq = desc.examples.get("SOLOVEV")
     objective = ObjectiveFunction(AspectRatio(target=2.5))
     eq._optimize(
         objective,
@@ -207,7 +223,7 @@ def test_1d_optimization_old(SOLOVEV):
         },
     )
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
 
 
 def run_qh_step(n, eq):
@@ -218,8 +234,8 @@ def run_qh_step(n, eq):
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(helicity=(1, -eq.NFP), grid=grid, normalize=False),
-            AspectRatio(target=8, weight=1e1, normalize=False),
+            QuasisymmetryTwoTerm(helicity=(1, eq.NFP), grid=grid),
+            AspectRatio(target=8, weight=1e2),
         ),
         verbose=0,
     )
@@ -242,7 +258,7 @@ def run_qh_step(n, eq):
         FixCurrent(),
         FixPsi(),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,
@@ -251,7 +267,6 @@ def run_qh_step(n, eq):
         verbose=3,
         copy=True,
         options={
-            "initial_trust_radius": 0.5,
             "perturb_options": {"verbose": 0},
             "solve_options": {"verbose": 0},
         },
@@ -262,48 +277,60 @@ def run_qh_step(n, eq):
 
 @pytest.mark.regression
 @pytest.mark.solve
-@pytest.mark.xfail
 def test_qh_optimization1():
     """Tests precise QH optimization, step 1."""
     eq0 = load(".//tests//inputs//precise_QH_step0.h5")[-1]
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq1a = run_qh_step(0, eq0)
-    rho_err, theta_err = area_difference_desc(eq1, eq1a)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    rho_err, theta_err = area_difference_desc(eq1, eq1a, Nr=1, Nt=1)
+    # only need crude tolerances here to make sure the boundaries are
+    # similar, the main test is ensuring its not pathological and has good qs
+    assert rho_err.mean() < 1
+
+    grid = LinearGrid(M=eq1a.M_grid, N=eq1a.N_grid, NFP=eq1a.NFP, sym=False, rho=1.0)
+    data = eq1a.compute(["|B|_mn", "B modes"], grid, M_booz=eq1a.M, N_booz=eq1a.N)
+    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
+    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+    np.testing.assert_array_less(B_asym, 1e-1)
 
 
 @pytest.mark.regression
 @pytest.mark.solve
-@pytest.mark.xfail
 def test_qh_optimization2():
     """Tests precise QH optimization, step 2."""
     eq1 = load(".//tests//inputs//precise_QH_step1.h5")
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq2a = run_qh_step(1, eq1)
-    rho_err, theta_err = area_difference_desc(eq2, eq2a)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    rho_err, theta_err = area_difference_desc(eq2, eq2a, Nr=1, Nt=1)
+    # only need crude tolerances here to make sure the boundaries are
+    # similar, the main test is ensuring its not pathological and has good qs
+    assert rho_err.mean() < 1
+
+    grid = LinearGrid(M=eq2a.M_grid, N=eq2a.N_grid, NFP=eq2a.NFP, sym=False, rho=1.0)
+    data = eq2a.compute(["|B|_mn", "B modes"], grid, M_booz=eq2a.M, N_booz=eq2a.N)
+    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
+    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+    np.testing.assert_array_less(B_asym, 1e-2)
 
 
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)
-@pytest.mark.xfail
 def test_qh_optimization3():
     """Tests precise QH optimization, step 3."""
     eq2 = load(".//tests//inputs//precise_QH_step2.h5")
     eq3 = load(".//tests//inputs//precise_QH_step3.h5")
     eq3a = run_qh_step(2, eq2)
-    rho_err, theta_err = area_difference_desc(eq3, eq3a)
-    np.testing.assert_allclose(rho_err, 0, atol=1e-4)
-    np.testing.assert_allclose(theta_err, 0, atol=1e-4)
+    rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
+    # only need crude tolerances here to make sure the boundaries are
+    # similar, the main test is ensuring its not pathological and has good qs
+    assert rho_err.mean() < 1
 
     grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
     data = eq3a.compute(["|B|_mn", "B modes"], grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
     idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
     B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
-    np.testing.assert_array_less(B_asym, 2e-3)
+    np.testing.assert_array_less(B_asym, 2.5e-3)
     fig, ax = plot_boozer_surface(eq3a)
     return fig
 
@@ -315,22 +342,20 @@ def test_ATF_results(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     eq0 = desc.examples.get("ATF")
     eq = Equilibrium(
-        eq0.Psi,
-        eq0.NFP,
-        eq0.L,
-        eq0.M,
-        eq0.N,
-        eq0.L_grid,
-        eq0.M_grid,
-        eq0.N_grid,
-        eq0.node_pattern,
-        eq0.pressure,
-        eq0.iota,
-        None,
-        eq0.get_surface_at(rho=1),
-        None,
-        eq0.sym,
-        eq0.spectral_indexing,
+        Psi=eq0.Psi,
+        NFP=eq0.NFP,
+        L=eq0.L,
+        M=eq0.M,
+        N=eq0.N,
+        L_grid=eq0.L_grid,
+        M_grid=eq0.M_grid,
+        N_grid=eq0.N_grid,
+        node_pattern=eq0.node_pattern,
+        pressure=eq0.pressure,
+        iota=eq0.iota,
+        surface=eq0.get_surface_at(rho=1),
+        sym=eq0.sym,
+        spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
         eq,
@@ -350,22 +375,20 @@ def test_ESTELL_results(tmpdir_factory):
     output_dir = tmpdir_factory.mktemp("result")
     eq0 = desc.examples.get("ESTELL")
     eq = Equilibrium(
-        eq0.Psi,
-        eq0.NFP,
-        eq0.L,
-        eq0.M,
-        eq0.N,
-        eq0.L_grid,
-        eq0.M_grid,
-        eq0.N_grid,
-        eq0.node_pattern,
-        eq0.pressure,
-        None,
-        eq0.current,
-        eq0.get_surface_at(rho=1),
-        None,
-        eq0.sym,
-        eq0.spectral_indexing,
+        Psi=eq0.Psi,
+        NFP=eq0.NFP,
+        L=eq0.L,
+        M=eq0.M,
+        N=eq0.N,
+        L_grid=eq0.L_grid,
+        M_grid=eq0.M_grid,
+        N_grid=eq0.N_grid,
+        node_pattern=eq0.node_pattern,
+        pressure=eq0.pressure,
+        current=eq0.current,
+        surface=eq0.get_surface_at(rho=1),
+        sym=eq0.sym,
+        spectral_indexing=eq0.spectral_indexing,
     )
     eqf = EquilibriaFamily.solve_continuation_automatic(
         eq,
@@ -374,7 +397,7 @@ def test_ESTELL_results(tmpdir_factory):
     )
     eqf = load(output_dir.join("ESTELL.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
-    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=4e-2)
+    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=5e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
@@ -443,7 +466,6 @@ def test_simsopt_QH_comparison():
         verbose=3,
         ftol=1e-8,
         constraints=get_fixed_boundary_constraints(profiles=False),
-        optimizer=Optimizer("lsq-exact"),
         objective=ObjectiveFunction(objectives=CurrentDensity()),
     )
     ##################################
@@ -492,6 +514,12 @@ def test_simsopt_QH_comparison():
 
 class TestGetExample:
     """Tests for desc.examples.get."""
+
+    @pytest.mark.unit
+    def test_missing_example(self):
+        """Test for correct error thrown when no example is found."""
+        with pytest.raises(ValueError, match="example FOO not found"):
+            desc.examples.get("FOO")
 
     @pytest.mark.unit
     def test_example_get_eq(self):

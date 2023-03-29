@@ -41,6 +41,14 @@
 
 .. toctree::
    :maxdepth: 1
+   :caption: Developer guides
+
+   compute
+   objectives
+   notebooks/dev_guide/grid.ipynb
+
+.. toctree::
+   :maxdepth: 1
    :caption: Public API
 
    api

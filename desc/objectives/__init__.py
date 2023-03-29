@@ -1,5 +1,6 @@
 """Classes defining objectives for equilibrium and optimization."""
 
+from ._bootstrap import BootstrapRedlConsistency
 from ._equilibrium import (
     CurrentDensity,
     Energy,
@@ -8,14 +9,25 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
-from ._geometry import AspectRatio, Volume
+from ._geometry import (
+    AspectRatio,
+    Elongation,
+    MeanCurvature,
+    PlasmaVesselDistance,
+    PrincipalCurvature,
+    Volume,
+)
 from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
 from ._stability import MagneticWell, MercierStability
-from ._wrappers import WrappedEquilibriumObjective, GXWrapper
+from ._gx import GXWrapper
 from .linear_objectives import (
+    FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixPressure,

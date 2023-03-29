@@ -6,13 +6,37 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp
+from desc.backend import fori_loop, jnp, put
 from desc.grid import ConcentricGrid
 
 from .data_index import data_index
 
 # defines the order in which objective arguments get concatenated into the state vector
-arg_order = ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi", "Rb_lmn", "Zb_lmn")
+arg_order = (
+    "R_lmn",
+    "Z_lmn",
+    "L_lmn",
+    "p_l",
+    "i_l",
+    "c_l",
+    "Psi",
+    "Te_l",
+    "ne_l",
+    "Ti_l",
+    "Zeff_l",
+    "Rb_lmn",
+    "Zb_lmn",
+)
+# map from profile name to equilibrium parameter name
+profile_names = {
+    "pressure": "p_l",
+    "iota": "i_l",
+    "current": "c_l",
+    "electron_temperature": "Te_l",
+    "electron_density": "ne_l",
+    "ion_temperature": "Ti_l",
+    "atomic_number": "Zeff_l",
+}
 
 
 def _sort_args(args):
@@ -414,30 +438,44 @@ def _get_grid_surface(grid, surface_label):
         The column in the grid corresponding to this surface_label's nodes.
     unique_idx : ndarray
         The indices of the unique values of the surface_label in grid.nodes.
+    inverse_idx : ndarray
+        Indexing array to go from unique values to full grid.
     ds : ndarray
         The differential elements (dtheta * dzeta for rho surface).
     max_surface_val : float
         The supremum of this surface_label.
+    has_endpoint_dupe : bool
+        Whether this surface label's nodes have a duplicate at the endpoint
+        of a periodic domain. (e.g. a node at 0 and 2pi).
 
     """
     assert surface_label in {"rho", "theta", "zeta"}
     if surface_label == "rho":
         nodes = grid.nodes[:, 0]
         unique_idx = grid.unique_rho_idx
+        inverse_idx = grid.inverse_rho_idx
         ds = grid.spacing[:, 1:].prod(axis=1)
         max_surface_val = 1
     elif surface_label == "theta":
         nodes = grid.nodes[:, 1]
         unique_idx = grid.unique_theta_idx
+        inverse_idx = grid.inverse_theta_idx
         ds = grid.spacing[:, [0, 2]].prod(axis=1)
         max_surface_val = 2 * jnp.pi
     else:
         nodes = grid.nodes[:, 2]
         unique_idx = grid.unique_zeta_idx
+        inverse_idx = grid.inverse_zeta_idx
         ds = grid.spacing[:, :2].prod(axis=1)
-        max_surface_val = 2 * jnp.pi
+        max_surface_val = 2 * jnp.pi / grid.NFP
 
-    return nodes, unique_idx, ds, max_surface_val
+    assert nodes[unique_idx[-1]] <= max_surface_val
+    has_endpoint_dupe = (
+        surface_label != "rho"
+        and nodes[unique_idx[0]] == 0
+        and nodes[unique_idx[-1]] == max_surface_val
+    )
+    return nodes, unique_idx, inverse_idx, ds, max_surface_val, has_endpoint_dupe
 
 
 def compress(grid, x, surface_label="rho"):
@@ -508,7 +546,7 @@ def expand(grid, x, surface_label="rho"):
         return x[grid.inverse_zeta_idx]
 
 
-def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
+def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=False):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
@@ -519,6 +557,9 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         Quantity to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute integration over.
+    max_surface : bool
+        If True, only computes the surface integral on the flux surface with the
+        maximum radial coordinate (as opposed to on all flux surfaces).
 
     Returns
     -------
@@ -536,14 +577,54 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         )
 
     q = jnp.atleast_1d(q)
-    nodes, unique_idx, ds, max_surface_val = _get_grid_surface(grid, surface_label)
+    nodes, unique_idx, _, ds, max_surface_val, has_endpoint_dupe = _get_grid_surface(
+        grid, surface_label
+    )
+
+    if max_surface:
+        # assumes surface label is zeta, does a line integral
+        max_rho = grid.nodes[grid.unique_rho_idx[-1], 0]
+        idx = np.nonzero(grid.nodes[:, 0] == max_rho)[0]
+        q = q[idx]
+        nodes = nodes[idx]
+        unique_idx = (unique_idx / grid.num_rho).astype(int)
+        ds = ds[idx] / grid.spacing[idx, 0] / max_rho
 
     # Separate nodes into bins with boundaries at unique values of the surface label.
     # This groups nodes with identical surface label values.
     # Each is assigned a weight of their contribution to the integral.
     # The elements of each bin are summed, performing the integration.
     bins = jnp.append(nodes[unique_idx], max_surface_val)
-    integrals = jnp.histogram(nodes, bins=bins, weights=ds * q)[0]
+
+    # to group duplicate nodes together
+    nodes_modulo = nodes % max_surface_val if has_endpoint_dupe else nodes
+    # Longer explanation:
+    #     Imagine a torus cross-section at zeta=pi.
+    # A grid with a duplicate zeta=pi node has 2 of those cross-sections.
+    #     In grid.py, we multiply by 1/n the areas of surfaces with
+    # duplicity n. This prevents the area of that surface from being
+    # double-counted, as surfaces with the same node value are combined
+    # into 1 integral, which sums their areas. Thus, if the zeta=pi
+    # cross-section has duplicity 2, we ensure that the area on the zeta=pi
+    # surface will have the correct total area of pi+pi = 2pi.
+    #     An edge case exists if the duplicate surface has nodes with
+    # different values for the surface label, which only occurs when
+    # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
+    # has a duplicate surface at surface_label=0 and
+    # surface_label=max_surface_val. Although the modulo of these values
+    # are equal, their numeric values are not, so jnp.histogram would treat
+    # them as different surfaces. We solve this issue by modulating
+    # 'nodes', so that the duplicate surface has nodes with the same
+    # surface label and is treated as one, like in the previous paragraph.
+
+    integrals = jnp.histogram(nodes_modulo, bins=bins, weights=ds * q)[0]
+    if has_endpoint_dupe:
+        # By modulating nodes, we 'moved' all the area from
+        # surface_label=max_surface_val to the surface_label=0 surface.
+        # With the correct value of the integral on this surface stored
+        # in integrals[0], we copy it to the duplicate surface at integrals[-1].
+        assert integrals[-1] == 0
+        integrals = put(integrals, -1, integrals[0])
     return expand(grid, integrals, surface_label)
 
 
@@ -591,3 +672,63 @@ def surface_averages(
 
     averages = surface_integrals(grid, sqrt_g * q, surface_label) / denominator
     return averages
+
+
+def surface_max(grid, x, surface_label="rho"):
+    """Get the max of x for each surface in the grid.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    x : ndarray
+        Quantity to find max.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute max over.
+
+    Returns
+    -------
+    maxs : ndarray
+        Maximum of x over each surface in grid.
+
+    """
+    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
+    inverse_idx = jnp.asarray(inverse_idx)
+    x = jnp.asarray(x)
+    maxs = -jnp.inf * jnp.ones(unique_idx.size)
+
+    def body(i, maxs):
+        maxs = put(maxs, inverse_idx[i], jnp.maximum(x[i], maxs[inverse_idx[i]]))
+        return maxs
+
+    return fori_loop(0, len(inverse_idx), body, maxs)
+
+
+def surface_min(grid, x, surface_label="rho"):
+    """Get the min of x for each surface in the grid.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    x : ndarray
+        Quantity to find min.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute min over.
+
+    Returns
+    -------
+    mins : ndarray
+        Minimum of x over each surface in grid.
+
+    """
+    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
+    inverse_idx = jnp.asarray(inverse_idx)
+    x = jnp.asarray(x)
+    mins = jnp.inf * jnp.ones(unique_idx.size)
+
+    def body(i, mins):
+        mins = put(mins, inverse_idx[i], jnp.minimum(x[i], mins[inverse_idx[i]]))
+        return mins
+
+    return fori_loop(0, len(inverse_idx), body, mins)

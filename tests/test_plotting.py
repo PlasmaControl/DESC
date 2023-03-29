@@ -34,6 +34,7 @@ from desc.plotting import (
     plot_section,
     plot_surfaces,
 )
+from desc.utils import isalmostequal
 
 tol_1d = 7.8
 tol_2d = 15
@@ -686,25 +687,29 @@ class TestPlotFieldLines:
 
 
 @pytest.mark.unit
-@pytest.mark.solve
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_plot_boozer_modes(DSHAPE_current):
+def test_plot_boozer_modes():
     """Test plotting boozer spectrum."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_boozer_modes(eq, return_data=True)
-    ax.set_ylim([1e-12, 1e0])
-    for string in ["B_mn", "B_modes", "rho"]:
+    eq = get("WISTELL-A")
+    fig, ax, data = plot_boozer_modes(
+        eq, M_booz=eq.M, N_booz=eq.N, num_modes=7, return_data=True
+    )
+    ax.set_ylim([1e-6, 5e0])
+    for string in ["|B|_mn", "B modes", "rho"]:
         assert string in data.keys()
     return fig
 
 
 @pytest.mark.unit
-@pytest.mark.solve
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
-def test_plot_boozer_surface(DSHAPE_current):
+def test_plot_boozer_surface():
     """Test plotting B in boozer coordinates."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_boozer_surface(eq, figsize=(4, 4), return_data=True, fill=True)
+    eq = get("WISTELL-A")
+    fig, ax, data = plot_boozer_surface(
+        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, fill=True
+    )
     for string in [
         "|B|",
         "theta_Boozer",
@@ -715,14 +720,21 @@ def test_plot_boozer_surface(DSHAPE_current):
 
 
 @pytest.mark.unit
-@pytest.mark.solve
+@pytest.mark.slow
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
-def test_plot_qs_error(DSHAPE_current):
+def test_plot_qs_error():
     """Test plotting qs error metrics."""
-    eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax, data = plot_qs_error(eq, helicity=(0, 0), log=False, return_data=True)
+    eq = get("WISTELL-A")
+    fig, ax, data = plot_qs_error(
+        eq, helicity=(1, -eq.NFP), M_booz=eq.M, N_booz=eq.N, log=True, return_data=True
+    )
+    ax.set_ylim([1e-3, 2e-1])
     for string in ["rho", "f_T", "f_B", "f_C"]:
         assert string in data.keys()
+        if string != "rho":
+            # ensure that there is different QS data for each surface
+            # related to gh PR #400
+            assert not isalmostequal(data[string])
     return fig
 
 

@@ -23,6 +23,7 @@ def calc_grad(fun,x,dx):
     return grad
 
 def sgd(
+    obj,
     fun,
     x0,
     grad,
@@ -108,15 +109,12 @@ def sgd(
     print("x is " + str(x))
     v = np.zeros_like(x)
     f = fun(x, *args)
+    xopt = x
+    fopt = f
     print("f is " + str(f))
     nfev += 1
     g = grad(x,x0)
     print("g is " + str(g))
-    while np.linalg.norm(g) > 5000:
-        print("DECREASING g")
-        g = g / 10
-        print("g is " + str(g))
-
     ngev += 1
     
    
@@ -127,10 +125,10 @@ def sgd(
     g_norm = np.linalg.norm(g, ord=gnorm_ord)
     x_norm = np.linalg.norm(x, ord=xnorm_ord)
     return_all = options.pop("return_all", True)
-    alpha = options.pop("alpha", 1e-2 * x_norm / g_norm)
+    alpha = options.pop("alpha", 2e-2 * x_norm / g_norm)
     beta = options.pop("beta", 0.9)
     assert len(options) == 0, "sgd got an unexpected option {}".format(options.keys())
-
+    
     success = None
     message = None
     step_norm = np.inf
@@ -143,10 +141,17 @@ def sgd(
         allx = [x]
     v = beta * v + (1 - beta) * g
     print("v is " + str(v))
+    print("alpha is " + str(alpha))
     x = x - alpha * v
     print("x is " + str(x))
+    print("updating eq")
+    obj._objective._update_equilibrium(obj.recover(x),store=True)
+
     fnew = fun(x, *args)
     print("new f is " + str(fnew))
+    if fnew < fopt:
+        fopt = fnew
+        xopt = x
     iteration += 1
     while True:
         success, message = check_termination(
@@ -172,20 +177,20 @@ def sgd(
             break
         
         g = grad(x,x0)
-        while np.linalg.norm(g) > 5000:
-            print("DECREASING g")
-            g = g / 10
-            print("g is " + str(g))
-
-
         print("g is " + str(g))
         v = beta * v + (1 - beta) * g
         print("v is " + str(v))
         x = x - alpha * v
         print("x is " + str(x))
+        
+        print("updating eq")
+        obj._objective._update_equilibrium(obj.recover(x),store=True)
         fnew = fun(x, *args)
         print("new f is " + str(fnew))
-        
+        if fnew < fopt:
+            fopt = fnew
+            xopt = x
+
         ngev += 1
         step_norm = np.linalg.norm(alpha * v, ord=xnorm_ord)
         g_norm = np.linalg.norm(g, ord=gnorm_ord)
@@ -205,14 +210,16 @@ def sgd(
                 message = STATUS_MESSAGES["callback"]
 
         iteration += 1
-    flast = fun(x,*args)
-    xlast = x
+#    flast = fun(x,*args)
+#    xlast = x
+    obj._objective._update_equilibrium(obj.recover(xopt),store=True)
+
     success = True
     message = STATUS_MESSAGES["success"]
     result = OptimizeResult(
-        x=xlast,
+        x=xopt,
         success=success,
-        fun=flast,
+        fun=fopt,
         grad=g,
         optimality=g_norm,
         nfev=nfev,

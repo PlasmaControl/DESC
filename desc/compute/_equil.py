@@ -5,7 +5,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot
+from .utils import dot, surface_averages
 
 
 @register_compute_fun(
@@ -157,11 +157,66 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J_rho",
+    label="J_{\\rho}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant radial component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_rho"],
+)
+def _J_sub_rho(params, transforms, profiles, data, **kwargs):
+    data["J_rho"] = dot(data["J"], data["e_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="J_theta",
+    label="J_{\\theta}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant poloidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_theta"],
+)
+def _J_sub_theta(params, transforms, profiles, data, **kwargs):
+    data["J_theta"] = dot(data["J"], data["e_theta"])
+    return data
+
+
+@register_compute_fun(
+    name="J_zeta",
+    label="J_{\\zeta}",
+    units="A / m",
+    units_long="Amperes / meter",
+    description="Covariant toroidal component of plasma current density",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["J", "e_zeta"],
+)
+def _J_sub_zeta(params, transforms, profiles, data, **kwargs):
+    data["J_zeta"] = dot(data["J"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
     name="J*B",
     label="\\mathbf{J} \\cdot \\mathbf{B}",
     units="N / m^{3}",
     units_long="Newtons / cubic meter",
-    description="Bootstrap current (note units are not Amperes)",
+    description="Current density parallel to magnetic field, times field strength "
+    + "(note units are not Amperes)",
     dim=1,
     params=[],
     transforms={},
@@ -171,6 +226,28 @@ def _Jmag(params, transforms, profiles, data, **kwargs):
 )
 def _J_dot_B(params, transforms, profiles, data, **kwargs):
     data["J*B"] = dot(data["J"], data["B"])
+    return data
+
+
+@register_compute_fun(
+    name="<J*B>",
+    label="\\langle \\mathbf{J} \\cdot \\mathbf{B} \\rangle",
+    units="N / m^{3}",
+    units_long="Newtons / cubic meter",
+    description="Flux surface average of current density dotted into magnetic field",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="r",
+    data=["J*B", "sqrt(g)"],
+)
+def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
+    data["<J*B>"] = surface_averages(
+        transforms["grid"],
+        data["J*B"],
+        sqrt_g=data["sqrt(g)"],
+    )
     return data
 
 
@@ -438,5 +515,5 @@ def _W(params, transforms, profiles, data, **kwargs):
     data=["W_p", "W_B"],
 )
 def _beta_vol(params, transforms, profiles, data, **kwargs):
-    data["<beta>_vol"] = data["W_p"] / data["W_B"]
+    data["<beta>_vol"] = jnp.abs(data["W_p"] / data["W_B"])
     return data

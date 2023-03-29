@@ -4,19 +4,25 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    FixAtomicNumber,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixPressure,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -128,6 +134,23 @@ def test_constrain_asserts():
 
 
 @pytest.mark.unit
+def test_factorize_linear_constraints_asserts():
+    """Test error checking for factorize_linear_constraints."""
+    eq = Equilibrium()
+    constraints = get_fixed_boundary_constraints(iota=False)
+    for con in constraints:
+        con.build(eq, verbose=0)
+    constraints[3].bounds = (0, 1)  # bounds on FixPsi
+
+    from desc.objectives.utils import factorize_linear_constraints
+
+    with pytest.raises(ValueError):
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, arg_order
+        )
+
+
+@pytest.mark.unit
 def test_build_init():
     """Ensure that passing an equilibrium to init builds the objective correctly.
 
@@ -187,6 +210,32 @@ def test_build_init():
     A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
+
+
+@pytest.mark.unit
+def test_kinetic_constraints():
+    """Make sure errors are raised when trying to constrain nonexistent profiles."""
+    eqp = Equilibrium(L=3, M=3, N=3, pressure=np.array([1, 0, -1]))
+    eqk = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        electron_temperature=np.array([1, 0, -1]),
+        electron_density=np.array([2, 0, -2]),
+    )
+    pcon = (FixPressure(),)
+    kcon = (
+        FixAtomicNumber(),
+        FixElectronDensity(),
+        FixElectronTemperature(),
+        FixIonTemperature(),
+    )
+    for con in pcon:
+        with pytest.raises(RuntimeError):
+            con.build(eqk)
+    for con in kcon:
+        with pytest.raises(RuntimeError):
+            con.build(eqp)
 
 
 @pytest.mark.unit

@@ -618,8 +618,7 @@ def test_NAE_QSC_solve():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qsc = Qic.from_paper("QI NFP2 r2", nphi=301, order="r1")
-    qsc.lasym = False  # don't need to consider stell asym for order 1 constraints
+    qsc = Qic.from_paper("QI NFP2 r2", nphi=301, order="r2")
     ntheta = 75
     r = 0.01
     N = 11

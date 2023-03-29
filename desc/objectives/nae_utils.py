@@ -9,7 +9,7 @@ from desc.transform import Transform
 from .linear_objectives import FixSumModesR, FixSumModesZ
 
 
-def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
+def _calc_1st_order_NAE_coeffs(qsc, desc_eq, threshold=1e-12):
     """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -20,6 +20,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
+    threshold : float, default 1e-12
+        minimum magnitude of NAE coefficient to keep. NAE Fourier amplitudes
+        below this value will be ignored.
 
     Returns
     -------
@@ -28,15 +31,10 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
         X is R or Z, L is 1 or 2, and M is 0,1, or 2, are the
         NAE Fourier (in toroidal angle phi) coeffs of
         radial order L and poloidal order M.
-    bases : dict
-        dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
-        the FourierSeries basis objects used to obtain the coefficients, where
-        _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
-        symmetry is such that the R or Z coefficients is stellarator symmetric
-        i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
-        stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
-        and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
-        since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
+    modes : dict
+        dictionary of R_1_1_n_modes, R_1_neg1_n_modes, Z_1_1_n_modes, Z_1_neg1_n_modes,
+        the Fourier toroidal modes n corresponding to the coefficients.
+        Note: these are only the modes with coefficient magnitudes > threshold
     """
     phi = qsc.phi
 
@@ -98,22 +96,28 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     Z_1_1_n = Ztrans_sin.fit(Z_1_1)
     Z_1_neg1_n = Ztrans.fit(Z_1_neg1)
 
-    bases = {}
-    bases["Rbasis_cos"] = Rbasis
-    bases["Rbasis_sin"] = Rbasis_sin
-    bases["Zbasis_cos"] = Zbasis
-    bases["Zbasis_sin"] = Zbasis_sin
-
     coeffs = {}
-    coeffs["R_1_1_n"] = R_1_1_n
-    coeffs["R_1_neg1_n"] = R_1_neg1_n
-    coeffs["Z_1_1_n"] = Z_1_1_n
-    coeffs["Z_1_neg1_n"] = Z_1_neg1_n
+    coeffs["R_1_1_n"] = R_1_1_n[np.where(np.abs(R_1_1_n) > threshold)]
+    coeffs["R_1_neg1_n"] = R_1_neg1_n[np.where(np.abs(R_1_neg1_n) > threshold)]
+    coeffs["Z_1_1_n"] = Z_1_1_n[np.where(np.abs(Z_1_1_n) > threshold)]
+    coeffs["Z_1_neg1_n"] = Z_1_neg1_n[np.where(np.abs(Z_1_neg1_n) > threshold)]
 
-    return coeffs, bases
+    modes = {}
+    modes["R_1_1_n_modes"] = Rbasis.modes[:, 2][np.where(np.abs(R_1_1_n) > threshold)]
+    modes["R_1_neg1_n_modes"] = Rbasis_sin.modes[:, 2][
+        np.where(np.abs(R_1_neg1_n) > threshold)
+    ]
+    modes["Z_1_1_n_modes"] = Zbasis_sin.modes[:, 2][
+        np.where(np.abs(Z_1_1_n) > threshold)
+    ]
+    modes["Z_1_neg1_n_modes"] = Zbasis.modes[:, 2][
+        np.where(np.abs(Z_1_neg1_n) > threshold)
+    ]
+
+    return coeffs, modes
 
 
-def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
+def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, modes):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
 
     Parameters
@@ -127,15 +131,10 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         X is R or Z, L is 1 , and M is 1, are the
         NAE Fourier (in toroidal angle phi) coeffs of
         radial order L and poloidal order M.
-    bases : dict
-        dictionary of Rbasis_cos, Rbasis_sin, Zbasis_cos, Zbasis_sin,
-        the FourierSeries basis objects used to obtain the coefficients, where
-        _cos or _sin denotes the symmetry of the (toroidal) Fourier series.
-        symmetry is such that the R or Z coefficients is stellarator symmetric
-        i.e. R_1_1_n uses the Rbasis_cos, since cos(theta)*cos(phi) is
-        stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
-        and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
-        since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
+    modes : dict
+        dictionary of R_1_1_n_modes, R_1_neg1_n_modes, Z_1_1_n_modes, Z_1_neg1_n_modes,
+        the Fourier toroidal modes n corresponding to the coefficients.
+        Note: these are only the modes with coefficient magnitudes > threshold
 
     Returns
     -------
@@ -151,59 +150,55 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
 
     Rconstraints = ()
     Zconstraints = ()
-    Rbasis_cos = bases["Rbasis_cos"]
-    Zbasis_cos = bases["Zbasis_cos"]
-    Rbasis_sin = bases["Rbasis_sin"]
-    Zbasis_sin = bases["Zbasis_sin"]
 
     # R_1_1_n
-    for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
+    for n, NAEcoeff in zip(modes["R_1_1_n_modes"], coeffs["R_1_1_n"]):
         sum_weights = []
-        modes = []
+        zernike_modes = []
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, 1, n])
+            zernike_modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
-        modes = np.atleast_2d(modes)
+        zernike_modes = np.atleast_2d(zernike_modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=zernike_modes)
         Rconstraints += (Rcon,)
     # Z_1_neg1_n
-    for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
+    for n, NAEcoeff in zip(modes["Z_1_neg1_n_modes"], coeffs["Z_1_neg1_n"]):
         sum_weights = []
-        modes = []
+        zernike_modes = []
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, -1, n])
+            zernike_modes.append([2 * k - 1, -1, n])
             sum_weights.append([(-1) ** k * k])
-        modes = np.atleast_2d(modes)
+        zernike_modes = np.atleast_2d(zernike_modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=zernike_modes)
         Zconstraints += (Zcon,)
 
     # R_1_neg1_n
-    for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
+    for n, NAEcoeff in zip(modes["R_1_neg1_n_modes"], coeffs["R_1_neg1_n"]):
         sum_weights = []
-        modes = []
+        zernike_modes = []
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, -1, n])
+            zernike_modes.append([2 * k - 1, -1, n])
             sum_weights.append([(-1) ** k * k])
-        modes = np.atleast_2d(modes)
+        zernike_modes = np.atleast_2d(zernike_modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=zernike_modes)
         Rconstraints += (Rcon,)
     # Z_1_1_n
-    for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
+    for n, NAEcoeff in zip(modes["Z_1_1_n_modes"], coeffs["Z_1_1_n"]):
         sum_weights = []
-        modes = []
+        zernike_modes = []
         target = NAEcoeff * r
         for k in range(1, int((desc_eq.L + 1) / 2) + 1):
-            modes.append([2 * k - 1, 1, n])
+            zernike_modes.append([2 * k - 1, 1, n])
             sum_weights.append([(-1) ** k * k])
-        modes = np.atleast_2d(modes)
+        zernike_modes = np.atleast_2d(zernike_modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=zernike_modes)
         Zconstraints += (Zcon,)
 
     return Rconstraints, Zconstraints
@@ -231,7 +226,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
     Rconstraints = ()
     Zconstraints = ()
 
-    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq)
-    Rconstraints, Zconstraints = _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases)
+    coeffs, modes = _calc_1st_order_NAE_coeffs(qsc, desc_eq)
+    Rconstraints, Zconstraints = _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, modes)
 
     return Rconstraints + Zconstraints

@@ -15,7 +15,7 @@ from .data_index import register_compute_fun
     params=[],
     transforms={"grid": []},
     profiles=[],
-    coordinates="",
+    coordinates="rtz",
     data=[],
 )
 def _0(params, transforms, profiles, data, **kwargs):
@@ -75,6 +75,96 @@ def _theta(params, transforms, profiles, data, **kwargs):
 )
 def _zeta(params, transforms, profiles, data, **kwargs):
     data["zeta"] = transforms["grid"].nodes[:, 2]
+    return data
+
+
+@register_compute_fun(
+    name="theta_sfl",
+    label="\\vartheta",
+    units="rad",
+    units_long="radians",
+    description="PEST straight field line poloidal angular coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta", "lambda"],
+)
+def _theta_sfl(params, transforms, profiles, data, **kwargs):
+    data["theta_sfl"] = data["theta"] + data["lambda"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha",
+    label="\\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta_sfl", "zeta", "iota"],
+)
+def _alpha(params, transforms, profiles, data, **kwargs):
+    data["alpha"] = data["theta_sfl"] - data["iota"] * data["zeta"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_r",
+    label="\\partial_\\rho \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_r", "zeta", "iota_r"],
+)
+def _alpha_r(params, transforms, profiles, data, **kwargs):
+    data["alpha_r"] = data["lambda_r"] - data["iota_r"] * data["zeta"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_t",
+    label="\\partial_\\theta \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt poloidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_t"],
+)
+def _alpha_t(params, transforms, profiles, data, **kwargs):
+    data["alpha_t"] = 1 + data["lambda_t"]
+    return data
+
+
+@register_compute_fun(
+    name="alpha_z",
+    label="\\partial_\\zeta \\alpha",
+    units="~",
+    units_long="None",
+    description="Field line label, derivative wrt toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["lambda_z", "iota"],
+)
+def _alpha_z(params, transforms, profiles, data, **kwargs):
+    data["alpha_z"] = data["lambda_z"] - data["iota"]
     return data
 
 

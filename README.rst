@@ -50,12 +50,12 @@ Repository Contents
 
 - desc_ contains the source code including the main script and supplemental files. Refer to the API_ documentation for details on all of the available functions and classes.
 - docs_ contains the documentation files.
-- examples_ contains example input files along with corresponding VMEC solutions.
+- examples_ contains example input files along with corresponding DESC solutions, which are also accessible using the `desc.examples.get` function.
 - tests_ contains routines for automatic testing.
 
 .. _desc: https://github.com/PlasmaControl/DESC/tree/master/desc
 .. _docs: https://github.com/PlasmaControl/DESC/tree/master/docs
-.. _examples: https://github.com/PlasmaControl/DESC/tree/master/examples
+.. _examples: https://github.com/PlasmaControl/DESC/tree/master/desc/examples
 .. _tests: https://github.com/PlasmaControl/DESC/tree/master/tests
 .. _API: https://desc-docs.readthedocs.io/en/latest/api.html
 
@@ -87,7 +87,7 @@ Contribute
     :target: https://github.com/PlasmaControl/DESC/actions/workflows/regression_test.yml
     :alt: RegressionTests
 
-.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z 
+.. |Codecov| image:: https://codecov.io/gh/PlasmaControl/DESC/branch/master/graph/badge.svg?token=5LDR4B1O7Z
     :target: https://codecov.io/github/PlasmaControl/DESC
     :alt: Coverage
 

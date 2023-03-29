@@ -1,6 +1,45 @@
 Changelog
 =========
 
+v0.8.0
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.2...v0.8.0)
+
+New Features
+- Add profiles for kinetic quantities to `Equilibrium`
+- Add compute functions and objectives for the bootstrap current for stellarators near quasisymmetry.
+- Added ability to solve equilibria with the axis held fixed, or by constraining the O(rho) behavior from a near axis expansion.
+- New objective for penalizing plasma-vessel distance
+- All objectives now have a `bounds` argument, and the loss will be zero if within bounds.
+- Added compute functions for field line quantities such as field line label `alpha`, unit vector `b`, field line curvature `kappa` etc.
+- Add compute functions for covariant components of current.
+- `Equilibrium.compute` will now automatically use the correct grids for surface and volume averages.
+- Added a number of fields to VMEC output from DESC equilibria.
+
+Minor Changes
+- Improved handling of indefinite hessian matrices in `fmintr`
+
+Bug Fixes
+- Fix issue with composite profiles parsing parameters incorrectly
+- Loading an equilibrium from VMEC now uses spline profiles to ensure consistency, as VMEC does not always save the input profile
+
+
+v0.7.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
+
+What's Changed
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+symmetric due to different Fourier series conventions.
+* Improve speed of functions for converting between VMEC and DESC Fourier representations.
+* Add objectives for penalizing strong shaping.
+    - `MeanCurvature` targets values for the mean curvature of the flux surfaces
+    (average of principal curvatures)
+    - `PrincipalCurvature` penalizes the largest magnitude of the principal curvatures
+* Improve default tolerances when converting input file from VMEC to DESC
+
 v0.7.1
 ------
 

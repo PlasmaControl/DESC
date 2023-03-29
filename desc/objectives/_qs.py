@@ -673,7 +673,7 @@ class QuasiIsodynamic(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = jnp.mean(self.QI_l)
+            self._normalization = jnp.mean(self.QI_l) / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

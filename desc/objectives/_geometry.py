@@ -255,15 +255,15 @@ class Elongation(_Objective):
         return data["a_major/a_minor"]
 
 
-class Volume(_Objective):
-    """Plasma volume.
+class FluxGradient(_Objective):
+    """Penalizes |grad(psi)| as a proxy for elongation.
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
@@ -277,7 +277,6 @@ class Volume(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-        be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -285,10 +284,10 @@ class Volume(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
-    _units = "(m^3)"
-    _print_value_fmt = "Plasma volume: {:10.3e} "
+    _units = "(Wb/m)"
+    _print_value_fmt = "Flux gradient: {:10.3e} "
 
     def __init__(
         self,
@@ -299,7 +298,7 @@ class Volume(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="volume",
+        name="flux gradient",
     ):
 
         self.grid = grid
@@ -327,12 +326,133 @@ class Volume(_Objective):
 
         """
         if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = 1
-        self._data_keys = ["V"]
+        self._data_keys = ["|grad(psi)|"]
+        self._args = get_params(self._data_keys)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute flux gradient.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        |grad(psi)| : float
+            Toroidal flux gradient (normalized by 2pi), Webers per meter.
+
+        """
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        return data["|grad(psi)|"]
+
+
+class MeanCurvature(_Objective):
+    """Target a particular value for the mean curvature.
+
+    The mean curvature H of a surface is an extrinsic measure of curvature that locally
+    describes the curvature of an embedded surface in Euclidean space.
+
+    Positive mean curvature generally corresponds to "concave" regions of the plasma
+    boundary which may be difficult to create with coils or magnets.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+    _units = "(m^-1)"
+    _print_value_fmt = "Mean curvature: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=(-np.inf, 0),
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="mean-curvature",
+    ):
+
+        self.grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+
+        self._dim_f = self.grid.num_nodes
+        self._data_keys = ["curvature_H"]
         self._args = get_params(self._data_keys)
 
         timer = Timer()
@@ -349,12 +469,12 @@ class Volume(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["V"]
+            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
-        """Compute plasma volume.
+        """Compute mean curvature.
 
         Parameters
         ----------
@@ -365,8 +485,8 @@ class Volume(_Objective):
 
         Returns
         -------
-        V : float
-            Plasma volume (m^3).
+        H : ndarray, shape(self.grid.num_nodes,)
+            Mean curvature at each point (m^-1).
 
         """
         params = self._parse_args(*args, **kwargs)
@@ -376,7 +496,7 @@ class Volume(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return data["V"]
+        return data["curvature_H"]
 
 
 class PlasmaVesselDistance(_Objective):
@@ -526,133 +646,6 @@ class PlasmaVesselDistance(_Objective):
         return d.min(axis=0)
 
 
-class MeanCurvature(_Objective):
-    """Target a particular value for the mean curvature.
-
-    The mean curvature H of a surface is an extrinsic measure of curvature that locally
-    describes the curvature of an embedded surface in Euclidean space.
-
-    Positive mean curvature generally corresponds to "concave" regions of the plasma
-    boundary which may be difficult to create with coils or magnets.
-
-    Parameters
-    ----------
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Target value(s) of the objective.
-        len(target) must be equal to Objective.dim_f
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-    grid : Grid, ndarray, optional
-        Collocation grid containing the nodes to evaluate at.
-    name : str
-        Name of the objective function.
-
-    """
-
-    _scalar = True
-    _linear = False
-    _units = "(m^-1)"
-    _print_value_fmt = "Mean curvature: {:10.3e} "
-
-    def __init__(
-        self,
-        eq=None,
-        target=None,
-        bounds=(-np.inf, 0),
-        weight=1,
-        normalize=True,
-        normalize_target=True,
-        grid=None,
-        name="mean-curvature",
-    ):
-
-        self.grid = grid
-        super().__init__(
-            eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
-            name=name,
-        )
-
-    def build(self, eq, use_jit=True, verbose=1):
-        """Build constant arrays.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        use_jit : bool, optional
-            Whether to just-in-time compile the objective and derivatives.
-        verbose : int, optional
-            Level of output.
-
-        """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-
-        self._dim_f = self.grid.num_nodes
-        self._data_keys = ["curvature_H"]
-        self._args = get_params(self._data_keys)
-
-        timer = Timer()
-        if verbose > 0:
-            print("Precomputing transforms")
-        timer.start("Precomputing transforms")
-
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
-
-        timer.stop("Precomputing transforms")
-        if verbose > 1:
-            timer.disp("Precomputing transforms")
-
-        if self._normalize:
-            scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
-
-        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
-
-    def compute(self, *args, **kwargs):
-        """Compute mean curvature.
-
-        Parameters
-        ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
-
-        Returns
-        -------
-        H : ndarray, shape(self.grid.num_nodes,)
-            Mean curvature at each point (m^-1).
-
-        """
-        params = self._parse_args(*args, **kwargs)
-        data = compute_fun(
-            self._data_keys,
-            params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-        )
-        return data["curvature_H"]
-
-
 class PrincipalCurvature(_Objective):
     """Target a particular value for the (unsigned) maximum principal curvature.
 
@@ -784,3 +777,127 @@ class PrincipalCurvature(_Objective):
         return jnp.max(
             jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
         )
+
+
+class Volume(_Objective):
+    """Plasma volume.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+        be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+    _units = "(m^3)"
+    _print_value_fmt = "Plasma volume: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=1,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="volume",
+    ):
+
+        self.grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self.grid is None:
+            self.grid = QuadratureGrid(
+                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
+            )
+
+        self._dim_f = 1
+        self._data_keys = ["V"]
+        self._args = get_params(self._data_keys)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["V"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute plasma volume.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        V : float
+            Plasma volume (m^3).
+
+        """
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        return data["V"]

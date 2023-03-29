@@ -17,6 +17,7 @@ from ._generic import (
 from ._geometry import (
     AspectRatio,
     Elongation,
+    FluxGradient,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,

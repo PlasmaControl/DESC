@@ -5,7 +5,6 @@ import numbers
 import numpy as np
 
 from desc.backend import jnp
-from desc.equilibrium import Equilibrium
 from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
 
 
@@ -84,49 +83,3 @@ def scale_profile(profile, inner_rho):
             f"Expected PowerSeriesProfile or SplineProfile, got {type(profile)}"
         )
     return new_profile
-
-
-def contract_equilibrium(eq, inner_rho):
-    """Create a new equilibrium by using an inner surface of the passed-in equilibrium.
-
-    Args
-    ----
-        eq (Equilibrium): Equilibrium to contract.
-        inner_rho (float): rho value (<1) to contract the Equilibrium to
-
-    Returns
-    -------
-        eq_inner: New Equilibrium object, contracted from the old one such that
-            eq.pressure(rho=inner_rho) = eq_inner.pressure(rho=1), and
-            eq_inner LCFS = eq's rho=inner_rho surface
-    """
-    # create new profiles for contracted equilibrium
-    # pressure
-    pressure = scale_profile(eq.pressure, inner_rho)
-    current = None
-    iota = None
-    if eq.iota is not None:
-        iota = scale_profile(eq.iota, inner_rho)
-    elif eq.current is not None:
-        current = scale_profile(eq.current, inner_rho)
-
-    surf_inner = eq.get_surface_at(rho=inner_rho)
-
-    eq_inner = Equilibrium(
-        surface=surf_inner,
-        pressure=pressure,
-        iota=iota,
-        current=current,
-        Psi=eq.Psi
-        * inner_rho**2,  # flux (in Webers) within the last closed flux surface
-        NFP=eq.NFP,
-        L=eq.L,
-        M=eq.M,
-        N=eq.N,
-        L_grid=eq.L_grid,
-        M_grid=eq.M_grid,
-        N_grid=eq.N_grid,
-        sym=eq.sym,
-        bdry_mode=eq.bdry_mode,
-    )
-    return eq_inner

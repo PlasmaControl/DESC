@@ -1055,7 +1055,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] += numbers[k]
+                        inputs["axis"][idx[0], 1] = numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1075,7 +1075,7 @@ class InputReader:
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] += -numbers[k]
+                        inputs["axis"][idx[0], 1] = -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1095,7 +1095,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] += numbers[k]
+                        inputs["axis"][idx[0], 2] = numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1115,7 +1115,7 @@ class InputReader:
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] += -numbers[k]
+                        inputs["axis"][idx[0], 2] = -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1154,7 +1154,7 @@ class InputReader:
                     n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 2] += m_sgn * RBS
+                        inputs["surface"][m_idx[idx[0]], 2] = m_sgn * RBS
                     else:
                         inputs["surface"] = np.pad(
                             inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1165,7 +1165,7 @@ class InputReader:
                     n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 2] += -n_sgn * RBS
+                        inputs["surface"][m_idx[idx[0]], 2] = -n_sgn * RBS
                     else:
                         inputs["surface"] = np.pad(
                             inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1202,7 +1202,7 @@ class InputReader:
                 n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
                 if np.size(idx):
-                    inputs["surface"][m_idx[idx[0]], 2] += RBC
+                    inputs["surface"][m_idx[idx[0]], 2] = RBC
                 else:
                     inputs["surface"] = np.pad(
                         inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1213,7 +1213,7 @@ class InputReader:
                     n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 2] += m_sgn * n_sgn * RBC
+                        inputs["surface"][m_idx[idx[0]], 2] = m_sgn * n_sgn * RBC
                     else:
                         inputs["surface"] = np.pad(
                             inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1252,7 +1252,7 @@ class InputReader:
                     n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 3] += m_sgn * ZBS
+                        inputs["surface"][m_idx[idx[0]], 3] = m_sgn * ZBS
                     else:
                         inputs["surface"] = np.pad(
                             inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1263,7 +1263,7 @@ class InputReader:
                     n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 3] += -n_sgn * ZBS
+                        inputs["surface"][m_idx[idx[0]], 3] = -n_sgn * ZBS
                     else:
                         inputs["surface"] = np.pad(
                             inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1300,7 +1300,7 @@ class InputReader:
                 n_idx = np.where(inputs["surface"][:, 1] == n)[0]
                 idx = np.where(np.isin(m_idx, n_idx))[0]
                 if np.size(idx):
-                    inputs["surface"][m_idx[idx[0]], 3] += ZBC
+                    inputs["surface"][m_idx[idx[0]], 3] = ZBC
                 else:
                     inputs["surface"] = np.pad(
                         inputs["surface"], ((0, 1), (0, 0)), mode="constant"
@@ -1311,7 +1311,7 @@ class InputReader:
                     n_idx = np.where(inputs["surface"][:, 1] == -n)[0]
                     idx = np.where(np.isin(m_idx, n_idx))[0]
                     if np.size(idx):
-                        inputs["surface"][m_idx[idx[0]], 3] += m_sgn * n_sgn * ZBC
+                        inputs["surface"][m_idx[idx[0]], 3] = m_sgn * n_sgn * ZBC
                     else:
                         inputs["surface"] = np.pad(
                             inputs["surface"], ((0, 1), (0, 0)), mode="constant"

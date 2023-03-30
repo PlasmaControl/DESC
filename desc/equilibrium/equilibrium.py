@@ -343,7 +343,7 @@ class Equilibrium(_Configuration, IOAble):
                 ntheta = 2 * M + 1
 
             inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.spsi * na_eq.Bbar
+            inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L
             inputs["M"] = M

@@ -492,7 +492,8 @@ class FixThetaSFL(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _print_value_fmt = "Theta - Theta SFL error: {:10.3e} (m)"
+    _units = "(radians)"
+    _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
     def __init__(self, eq=None, target=0, weight=1, name="Theta SFL"):
 
@@ -569,7 +570,8 @@ class FixAxisR(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _print_value_fmt = "R axis error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "R axis error: {:10.3e} "
 
     def __init__(
         self,
@@ -717,7 +719,8 @@ class FixAxisZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _print_value_fmt = "Z axis error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Z axis error: {:10.3e} "
 
     def __init__(
         self,
@@ -865,7 +868,8 @@ class FixModeR(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _print_value_fmt = "Fixed-R modes error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Fixed-R modes error: {:10.3e} "
 
     def __init__(
         self,
@@ -996,7 +1000,8 @@ class FixModeZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = True
-    _print_value_fmt = "Fixed-Z modes error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Z modes error: {:10.3e} "
 
     def __init__(
         self,
@@ -1134,7 +1139,8 @@ class FixSumModesR(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Fixed-R sum modes error: {:10.3e} "
 
     def __init__(
         self,
@@ -1285,7 +1291,8 @@ class FixSumModesZ(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} (m)"
+    _units = "(m)"
+    _print_value_fmt = "Fixed-Z sum modes error: {:10.3e} "
 
     def __init__(
         self,

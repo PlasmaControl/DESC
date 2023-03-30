@@ -801,7 +801,7 @@ def _print_iteration_summary(
     **kwargs,
 ):
     print("================")
-    print(f"Step {ii+1}" + "" if nn is None else f"/{nn}")
+    print(f"Step {ii+1}" + ("" if nn is None else f"/{nn}"))
     print("================")
     eq.resolution_summary()
     print("Boundary ratio = {}".format(bdry_ratio))

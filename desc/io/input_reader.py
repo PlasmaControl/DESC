@@ -1355,49 +1355,7 @@ class InputReader:
 
         vmec_file.close()
 
-        # default continuation stuff
-        res_step = 6
-        pres_step = 1 / 2
-        bdry_step = 1 / 4
-
-        # first we solve vacuum until we reach full L,M
-        # then pressure
-        # then 3d shaping
-        res_steps = max(inputs["L"] // res_step, 1)
-        pres_steps = (
-            0 if (inputs["pressure"][:, 1] == 0).all() else int(np.ceil(1 / pres_step))
-        )
-        bdry_steps = 0 if inputs["N"] == 0 else int(np.ceil(1 / bdry_step))
-
-        total_steps = res_steps + pres_steps + bdry_steps
-        inputs_arr = [inputs.copy() for _ in range(total_steps)]
-        for i in range(total_steps):
-            if i < res_steps:
-                inputs_arr[i]["L"] = min((i + 1) * res_step, inputs["L"])
-                inputs_arr[i]["L_grid"] = 2 * inputs_arr[i]["L"]
-                inputs_arr[i]["N"] = 0
-                inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = 0.0
-                inputs_arr[i]["curr_ratio"] = 0.0
-                if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0.0
-                else:
-                    inputs_arr[i]["bdry_ratio"] = 1.0
-            elif i < (res_steps + pres_steps):
-                inputs_arr[i]["N"] = 0
-                inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = (i - res_steps + 1) * pres_step
-                inputs_arr[i]["curr_ratio"] = (i - res_steps + 1) * pres_step
-                inputs_arr[i]["pert_order"] = 2
-                if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0.0
-                else:
-                    inputs_arr[i]["bdry_ratio"] = 1.0
-            else:
-                inputs_arr[i]["pert_order"] = 2
-                inputs_arr[i]["bdry_ratio"] = (
-                    i - res_steps - pres_steps + 1
-                ) * bdry_step
+        inputs_arr = [inputs]
 
         return inputs_arr
 

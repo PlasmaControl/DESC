@@ -110,6 +110,10 @@ def _modes_x_to_mnsc(vmec_modes, x):
     _, xm, xn = vmec_modes[cmask].T
     if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
         _, xm, xn = vmec_modes[smask].T
+        # concatenate the 0,0 mode
+        xm = np.insert(xm, 0, 0)
+        xn = np.insert(xn, 0, 0)
+
     c = (x.T[cmask]).T
     s = (x.T[smask]).T
     if not len(s.T):

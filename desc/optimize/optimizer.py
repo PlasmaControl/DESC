@@ -150,7 +150,11 @@ class Optimizer(IOAble):
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if optimizers[method]["scalar"] else "lsq"
-            objective.compile(mode, verbose)
+            try:
+                objective.compile(mode, verbose)
+            except ValueError:
+                objective.build(eq, verbose=verbose)
+                objective.compile(mode, verbose=verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(

@@ -19,6 +19,7 @@ from desc.objectives import (
     AspectRatio,
     Elongation,
     Energy,
+    ForceBalance,
     GenericObjective,
     MagneticWell,
     MeanCurvature,
@@ -534,3 +535,27 @@ def test_objective_print(capsys):
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, grid=grid)
     test(obj, curr, normalize=True)
+
+
+@pytest.mark.unit
+def test_rebuild():
+    """Test that the objective is rebuilt correctly when needed."""
+    eq = Equilibrium(L=3, M=3)
+    f_obj = ForceBalance()
+    obj = ObjectiveFunction(f_obj)
+    eq.solve(maxiter=2, objective=obj)
+
+    # this would fail before v0.8.2 when trying to get objective.x
+    eq.change_resolution(L=5, M=5)
+    obj.build(eq)
+    eq.solve(maxiter=2, objective=obj)
+
+    eq = Equilibrium(L=3, M=3)
+    f_obj = ForceBalance()
+    obj = ObjectiveFunction(f_obj)
+    eq.solve(maxiter=2, objective=obj)
+    eq.change_resolution(L=5, M=5)
+    # this would fail at objective.compile
+    obj = ObjectiveFunction(f_obj)
+    obj.build(eq)
+    eq.solve(maxiter=2, objective=obj)

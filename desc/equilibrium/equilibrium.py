@@ -860,12 +860,6 @@ class Equilibrium(_Configuration, IOAble):
                 kinetic=self.electron_temperature is not None,
             )
 
-        if not objective.built:
-            objective.build(self, verbose=verbose)
-        for constraint in constraints:
-            if not constraint.built:
-                constraint.build(self, verbose=verbose)
-
         eq = perturb(
             self,
             objective,

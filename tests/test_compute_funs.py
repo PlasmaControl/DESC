@@ -81,7 +81,6 @@ def test_surface_areas():
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
-# TODO: remove or combine with above
 @pytest.mark.unit
 def test_surface_areas_2():
     """Alternate test that the flux surface areas match known analytic formulas."""

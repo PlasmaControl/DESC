@@ -101,8 +101,8 @@ Spectral Resolution
 - ``M_pol`` (int): Maximum poloidal mode number for the Fourier-Zernike basis, :math:`M`. Required.
 - ``N_tor`` (int): Maximum toroidal mode number for the Fourier-Zernike basis, :math:`N`. Default = 0.
 - ``L_grid`` (int): Radial resolution of nodes in collocation grid. Default = ``M_grid`` if ``spectral_indexing = ANSI``, or ``2*M_grid`` if ``spectral_indexing = Fringe``.
-- ``M_grid`` (int): Poloidal resolution of nodes in collocation grid. Default = ``round(1.5*M_pol)``.
-- ``N_grid`` (int): Toroidal resolution of nodes in collocation grid. Default = ``round(1.5*N_tor)``.
+- ``M_grid`` (int): Poloidal resolution of nodes in collocation grid. Default = ``2*M_pol``.
+- ``N_grid`` (int): Toroidal resolution of nodes in collocation grid. Default = ``2*N_tor``.
 
 When ``M_grid = M_pol`` the number of collocation nodes in each toroidal cross-section is equal to the number of Zernike polynomial in the basis set.
 When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal to the number of terms in the toroidal Fourier series.
@@ -134,7 +134,8 @@ These arguments are also passed as arrays for each iteration, with the same nota
 This example will start by solving a vacuum tokamak, then perturb the pressure profile to solve a finite-beta tokamak, and finally perturb the boundary to solve the finite-beta stellarator.
 If only one value is given, as with ``pert_order`` in this example, that value will be used for all iterations.
 
-If ``pres_ratio`` and ``bdry_ratio`` are not present in the input file, they will be determined automatically during the continuation method.
+If ``pres_ratio`` and ``bdry_ratio`` are not present in the input file, and only 1 set of resolutions are specified,
+an adaptive automatic continuation method will be used.
 
 Solver Tolerances
 *****************

@@ -170,7 +170,7 @@ def _solve_axisym(
             warnings.warn(
                 colored(
                     "WARNING: Automatic continuation failed with "
-                    + f"mres_step={mres_step}, retrying with mres_step={mres_step/2}",
+                    + f"mres_step={mres_step}, retrying with mres_step={mres_step//2}",
                     "yellow",
                 )
             )
@@ -468,9 +468,9 @@ def solve_continuation_automatic(  # noqa: C901
     """Solve for an equilibrium using an automatic continuation method.
 
     By default, the method first solves for a no pressure tokamak, then a finite beta
-    tokamak, then a finite beta stellarator. Currently hard coded to take a fixed
-    number of perturbation steps based on conservative estimates and testing. In the
-    future, continuation stepping will be done adaptively.
+    tokamak, then a finite beta stellarator. Steps in resolution, pressure, and 3D
+    shaping are determined adaptively, and the method may backtrack to use smaller steps
+    if the initial steps are too large.
 
     Parameters
     ----------

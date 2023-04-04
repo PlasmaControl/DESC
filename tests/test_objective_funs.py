@@ -20,6 +20,7 @@ from desc.objectives import (
     Elongation,
     Energy,
     GenericObjective,
+    Isodynamicity,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -226,6 +227,18 @@ class TestObjectiveFunction:
             obj = QuasisymmetryTripleProduct(eq=eq)
             ft = obj.compute(*obj.xs(eq))
             np.testing.assert_allclose(ft, 0)
+
+        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_isodynamicity(self):
+        """Test calculation of isodynamicity metric."""
+
+        def test(eq):
+            obj = Isodynamicity(eq=eq)
+            iso = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(iso, 0, atol=1e-14)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))

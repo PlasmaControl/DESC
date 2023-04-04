@@ -88,7 +88,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
     for i, inp in enumerate(ir2.inputs):
         assert inp["ftol"] == correct_ftols[i]
 
-    # now check that the written line is the
+    # now check that the written line is
     # the correct "ftol = 1e-2, 1e-3"
     # and that gtol is NOT written anywhere,
     # since only None was passed in for that input

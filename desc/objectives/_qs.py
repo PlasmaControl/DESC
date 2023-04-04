@@ -587,9 +587,7 @@ class Isodynamicity(_Objective):
 
         """
         if self.grid is None:
-            self.grid = LinearGrid(
-                L=5, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
-            )
+            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
         self._dim_f = self.grid.num_nodes
         self._data_keys = ["isodynamicity"]

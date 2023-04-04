@@ -32,7 +32,11 @@ def main(cl_args=sys.argv[1:]):
         print("Outputs will be written to {}".format(ir.output_path))
 
     inputs = ir.inputs
-    if (inputs[-1]["pres_ratio"] is None) and (inputs[-1]["bdry_ratio"] is None):
+    if (
+        len(inputs) == 1
+        and (inputs[-1]["pres_ratio"] is None)
+        and (inputs[-1]["bdry_ratio"] is None)
+    ):
         eq = Equilibrium(**inputs[-1])
         equil_fam = EquilibriaFamily.solve_continuation_automatic(
             eq,

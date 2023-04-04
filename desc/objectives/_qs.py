@@ -547,7 +547,7 @@ class Isodynamicity(_Objective):
 
     _scalar = False
     _linear = False
-    _units = "(~)"
+    _units = "(dimensionless)"
     _print_value_fmt = "Isodynamicity error: {:10.3e} "
 
     def __init__(

@@ -691,7 +691,7 @@ class InputReader:
         for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
             inputs_not_None = []
             for inp in inputs:
-                if inp[key] is not None:
+                if inp.get(key) is not None:
                     inputs_not_None.append(inp)
             if not inputs_not_None:  # an  empty list evals to False
                 continue  # don't write line if all input tolerance are None

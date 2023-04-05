@@ -2575,6 +2575,29 @@ def _gradB2mag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<|grad(|B|^2)|/2mu0>_vol",
+    label="\\langle |\\nabla B^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons per cubic meter",
+    description="Volume average of magnitude of magnetic pressure gradient",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|grad(|B|^2)|/2mu0", "sqrt(g)", "V"],
+)
+def _gradB2mag_vol(params, transforms, profiles, data, **kwargs):
+    data["<|grad(|B|^2)|/2mu0>_vol"] = (
+        jnp.sum(
+            data["|grad(|B|^2)|/2mu0"] * data["sqrt(g)"] * transforms["grid"].weights
+        )
+        / data["V"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="(curl(B)xB)_rho",
     label="((\\nabla \\times \\mathbf{B}) \\times \\mathbf{B})_{\\rho}",
     units="T^{2}",

@@ -1,7 +1,7 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 from scipy.interpolate import interp1d

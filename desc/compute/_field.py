@@ -2775,6 +2775,27 @@ def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="<|(B*grad)B|>_vol",
+    label="\\langle |(\\mathbf{B} \\cdot \\nabla) \\mathbf{B}| \\rangle_{vol}",
+    units="T^{2} \\cdot m^{-1}",
+    units_long="Tesla squared / meters",
+    description="Magnetic tension magnitude",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|(B*grad)B|", "sqrt(g)", "V"],
+)
+def _B_dot_grad_B_mag_vol(params, transforms, profiles, data, **kwargs):
+    data["<|(B*grad)B|>_vol"] = (
+        jnp.sum(data["|(B*grad)B|"] * data["sqrt(g)"] * transforms["grid"].weights)
+        / data["V"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="B*grad(|B|)",
     label="\\mathbf{B} \\cdot \\nabla B",
     units="T^2 \\cdot m^{-1}",

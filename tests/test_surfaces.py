@@ -78,11 +78,11 @@ class TestFourierRZToroidalSurface:
         assert c.name in str(c)
         assert "FourierRZToroidalSurface" in str(c)
 
-        with pytest.warns(UserWarning):
-            c.NFP = 3
+        c.NFP = 3
         assert c.NFP == 3
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
+        assert c.grid.NFP == 3
 
     @pytest.mark.unit
     def test_from_input_file(self):

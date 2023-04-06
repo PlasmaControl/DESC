@@ -283,7 +283,7 @@ def test_fsa_G(DSHAPE_current):
 def test_fsa_F_normalized(DSHAPE_current):
     """Test plotting flux surface average normalized force error on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True, normalize_with_pressure=True)
     ax.set_ylim([1e-5, 1e-2])
     return fig
 

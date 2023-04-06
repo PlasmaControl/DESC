@@ -247,6 +247,7 @@ Name,Label,Units,Description,Module
 ``((B*grad)B)_theta``,:math:`((\mathbf{B} \cdot \nabla) \mathbf{B})_{\theta}`,Tesla squared,Covariant poloidal component of magnetic tension,``desc.compute._field``
 ``((B*grad)B)_zeta``,:math:`((\mathbf{B} \cdot \nabla) \mathbf{B})_{\zeta}`,Tesla squared,Covariant toroidal component of magnetic tension,``desc.compute._field``
 ``|(B*grad)B|``,:math:`|(\mathbf{B} \cdot \nabla) \mathbf{B}|`,Tesla squared / meters,Magnitude of magnetic tension,``desc.compute._field``
+``<|(B*grad)B|>_vol``,:math:`\langle |(\mathbf{B} \cdot \nabla) \mathbf{B}| \rangle_{vol}`,Tesla squared / meters,Magnetic tension magnitude,``desc.compute._field``
 ``B*grad(|B|)``,:math:`\mathbf{B} \cdot \nabla B`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_t``,:math:`\partial_{\theta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_z``,:math:`\partial_{\zeta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``

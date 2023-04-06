@@ -519,6 +519,7 @@ class FourierRZToroidalSurface(Surface):
         )
         return surf
 
+    # TODO: add k value for number of rotations per field period
     @classmethod
     def from_near_axis(
         cls,
@@ -568,21 +569,21 @@ class FourierRZToroidalSurface(Surface):
 
         R_lmn = np.array(
             [
-                major_radius,
-                -(elongation + 1) * b / 2 * iota_sign,
-                -major_radius / (1 + 4 * NFP**2),
-                a * epsilon * iota_sign,
-                -(elongation - 1) * b / 2 * iota_sign,
-                -(elongation - 1) * b / 2,
+                major_radius,  # m=0, n=0
+                -(elongation + 1) * b / 2 * iota_sign,  # m=1, n=0
+                -major_radius / (1 + 4 * NFP**2),  # m=0, n=2
+                a * epsilon * iota_sign,  # m=1, n=1
+                -(elongation - 1) * b / 2 * iota_sign,  # m=1, n=2
+                -(elongation - 1) * b / 2,  # m=-1, n=-2
             ]
         )
         Z_lmn = np.array(
             [
-                (elongation + 1) * b / 2 * iota_sign,
-                axis_Z,
-                -b * epsilon * iota_sign,
-                (elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2 * iota_sign,
+                (elongation + 1) * b / 2 * iota_sign,  # m=-1, n=0
+                axis_Z,  # m=0, n=-2
+                -b * epsilon * iota_sign,  # m=-1, n=1
+                (elongation - 1) * b / 2,  # m=1, n=-2
+                -(elongation - 1) * b / 2 * iota_sign,  # m=-1, n=2
             ]
         )
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])

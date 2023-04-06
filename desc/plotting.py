@@ -2415,7 +2415,7 @@ def plot_boozer_surface(
 
 
 # FIXME: QI_l & QI_mn need to be passed in (no longer Equilibrium attributes)
-def plot_qi_surface(eq, grid=None, fill=True, ncontours=100, ax=None, **kwargs):
+def plot_qi_surface(eq, QI_l, QI_mn, M_QI, N_QI, grid=None, fill=False, ncontours=30, ax=None, **kwargs):
     """Plot :math:`|B|_{QI}` on a surface vs the Boozer poloidal and toroidal angles.
 
     Parameters
@@ -2460,8 +2460,9 @@ def plot_qi_surface(eq, grid=None, fill=True, ncontours=100, ax=None, **kwargs):
         grid = _get_grid(**grid_kwargs)
     title_font_size = kwargs.pop("title_font_size", None)
 
-    data = eq.compute("|B|_QI", grid)
-    grid.nodes[:, 2] = data["zeta_B"]
+    data = eq.compute(["|B|_QI", "zeta_QI"], grid, M_QI=M_QI, N_QI=N_QI, QI_l=QI_l, QI_mn=QI_mn)
+    grid.nodes[:, 1] = data["theta"] + data["iota"] * data["zeta_QI"]
+    grid.nodes[:, 2] = data["zeta_QI"]
     data = data["|B|_QI"].reshape((grid.num_theta, grid.num_zeta), order="F")
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))

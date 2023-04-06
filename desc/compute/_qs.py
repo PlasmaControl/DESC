@@ -399,8 +399,8 @@ def _qi_zeta(params, transforms, profiles, data, **kwargs):
     QI_m0 = jnp.sum(QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
     QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
 
-    # theta is being used as a placeholder for alpha (field-line label)
-    nodes = jnp.array([data["rho"], data["theta"], data["zeta-bar_QI"]]).T
+    alpha = data["theta"]  # theta is used as a placeholder for alpha (field-line label)
+    nodes = jnp.array([data["rho"], alpha, data["zeta-bar_QI"]]).T
     zeta_bar = data["zeta-bar_QI"] + jnp.matmul(
         transforms["zeta"].basis.evaluate(nodes), QI_mn
     )
@@ -445,8 +445,9 @@ def _qi_B(params, transforms, profiles, data, **kwargs):
     data=["|B|_mn", "|B|_QI", "rho", "theta", "zeta_QI", "iota"],
 )
 def _f_QI(params, transforms, profiles, data, **kwargs):
+    alpha = data["theta"]  # theta is used as a placeholder for alpha (field-line label)
     nodes = jnp.array(  # alpha = theta_B - iota * zeta_B
-        [data["rho"], data["theta"] + data["iota"] * data["zeta_QI"], data["zeta_QI"]]
+        [data["rho"], alpha + data["iota"] * data["zeta_QI"], data["zeta_QI"]]
     ).T
     B = jnp.matmul(transforms["B"].basis.evaluate(nodes), data["|B|_mn"])
     data["f_QI"] = B - data["|B|_QI"]

@@ -12,6 +12,7 @@ from desc.magnetic_fields import (
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
+    dommaschk_potential,
     field_line_integrate,
 )
 
@@ -150,3 +151,19 @@ def test_dommaschk_CN_CD_m_0():
         res1 = CN_m_k(R, m, 0)
         res2 = 0.5 * (R**m - R ** (-m)) / m
         np.testing.assert_allclose(res1, res2)
+
+
+@pytest.mark.unit
+def test_dommaschk_potential_arr_equal_error():
+    """Test the assert statement of the potential function."""
+    phi = 1
+    R = 1
+    Z = 1
+    ms = [1]
+    ls = [1]
+    a_arr = [1]
+    b_arr = [1]
+    c_arr = [1]
+    d_arr = [1, 1]
+    with pytest.raises(AssertionError):
+        dommaschk_potential(R, Z, phi, ms, ls, a_arr, b_arr, c_arr, d_arr)

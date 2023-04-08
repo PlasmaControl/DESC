@@ -5,6 +5,8 @@ import pytest
 
 from desc.backend import jnp
 from desc.magnetic_fields import (
+    CD_m_k,
+    CN_m_k,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -130,3 +132,21 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.unit
+def test_dommaschk_CN_CD_m_0():
+    """Test of CD_m_k and CN_m_k when k=0."""
+    # based off eqn 8 and 9 of Dommaschk paper
+    # TODO: put paper DOI here
+    for m in range(1, 6):
+        # test of CD_m_k based off eqn 8
+        R = np.linspace(0.1, 1, 100)
+        res1 = CD_m_k(R, m, 0)
+        res2 = 0.5 * (R**m + R ** (-m))
+        np.testing.assert_allclose(res1, res2)
+
+        # test of CN_m_k based off eqn 9
+        res1 = CN_m_k(R, m, 0)
+        res2 = 0.5 * (R**m - R ** (-m)) / m
+        np.testing.assert_allclose(res1, res2)

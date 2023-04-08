@@ -795,3 +795,182 @@ def field_line_integrate(
     r = x[:, :, 0].T.reshape((len(phis), *rshape))
     z = x[:, :, 2].T.reshape((len(phis), *rshape))
     return r, z
+
+
+### Dommaschk potential utility functions ###
+
+# based off Representations for vacuum potentials in stellarators
+# https://doi.org/10.1016/0010-4655(86)90109-8
+
+# written with naive for loops initially and can jaxify later
+
+
+def gamma(n):
+    """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
+    return jnp.prod(jnp.arange(1, n))
+
+
+def alpha(m, n):
+    """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
+    return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2 ** (2 * n + m))
+
+
+def alphastar(m, n):
+    """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
+    return (2 * n + m) * alpha(m, n)
+
+
+def beta(m, n):
+    """Beta of eq 28."""
+    return gamma(m - n) / (gamma(n + 1) * 2 ** (2 * n - m + 1))
+
+
+def betastar(m, n):
+    """Betastar of eq 28."""
+    return (2 * n - m) * beta(m, n)
+
+
+def CD_m_k(R, m, k):
+    """Eq 25 of Dommaschk paper."""
+    if m == k == 0:  # the initial term, defined in eqn 8
+        return jnp.ones_like(R)
+
+    sum1 = 0
+    for j in range(k + 1):
+        sum1 += alpha(m, j) * betastar(m, k - j) * R ** (2 * j)
+    sum2 = 0
+    for j in range(k + 1):
+        sum2 += alphastar(m, k - j) * beta(m, j) * R ** (2 * j)
+    return -(R ** (m)) * sum1 + R ** (-m) * sum2
+
+
+def CN_m_k(R, m, k):
+    """Eq 26 of Dommaschk paper."""
+    if m == k == 0:  # the initial term, defined in eqn 9
+        return jnp.log(R)
+
+    sum1 = 0
+    for j in range(k + 1):
+        sum1 += alpha(m, j) * beta(m, k - j) * R ** (2 * j)
+    sum2 = 0
+    for j in range(k + 1):
+        sum2 += alpha(m, k - j) * beta(m, j) * R ** (2 * j)
+    return R ** (m) * sum1 - R ** (-m) * sum2
+
+
+def D_m_n(R, Z, m, n):
+    """D_m_n term in eqn 8 of Dommaschk paper."""
+    # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
+
+    max_ind = (
+        n // 2
+    )  # find the top of the summation ind, the range should be up to and including this
+    # i.e. this is the index of k at
+    # which 2k<=n, and 2(max_ind+1) would be > n and so not included in the sum
+    result = 0
+    for k in range(max_ind + 1):
+        result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
+    return result
+
+
+def N_m_n(R, Z, m, n):
+    """N_m_n term in eqn 9 of Dommaschk paper."""
+    # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
+
+    max_ind = (
+        n // 2
+    )  # find the top of the summation ind, the range should be up to and including this
+    # i.e. this is the index of k at
+    #  which 2k<=n, and 2(max_ind+1) would be > n and so not included in the sum
+    result = 0
+    for k in range(max_ind + 1):
+        result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
+    return result
+
+
+# TODO: note on how stell sym affects, i.e.
+# if stell sym then a=d=0 for even l and b=c=0 for odd l
+
+
+def V_m_l(R, Z, phi, m, l, a, b, c, d):
+    """Eq 12 of Dommaschk paper.
+
+    Parameters
+    ----------
+    R,Z,phi : array-like
+        Cylindrical coordinates (1-D arrays of each of size num_eval_pts)
+            to evaluate the Dommaschk potential term at.
+    m : int
+        first index of V_m_l term
+    l : int
+        second index of V_m_l term
+    a : float
+        a_m_l coefficient of V_m_l term, which multiplies cos(m*phi)*D_m_l
+    b : float
+        b_m_l coefficient of V_m_l term, which multiplies sin(m*phi)*D_m_l
+    c : float
+        c_m_l coefficient of V_m_l term, which multiplies cos(m*phi)*N_m_l-1
+    d : float
+        d_m_l coefficient of V_m_l term, which multiplies sin(m*phi)*N_m_l-1
+
+    Returns
+    -------
+    value : array-like
+        Value of this V_m_l term evaluated at the given R,phi,Z points
+        (same size as the size of the given R,phi, or Z arrays).
+
+    """
+    return (a * jnp.cos(m * phi) + b * jnp.sin(m * phi)) * D_m_n(R, Z, m, l) + (
+        c * jnp.cos(m * phi) + d * jnp.sin(m * phi)
+    ) * N_m_n(R, Z, m, l - 1)
+
+
+def dommaschk_potential(R, Z, phi, ms, ls, a_arr, b_arr, c_arr, d_arr):
+    """Eq 1 of Dommaschk paper.
+
+        this is the total dommaschk potential for
+        a given set of m,l indices and their corresponding
+        coefficients a_ml, b_ml, c_ml d_ml.
+
+    Parameters
+    ----------
+    R,Z,phi : array-like
+        Cylindrical coordinates (1-D arrays of each of size num_eval_pts)
+        to evaluate the Dommaschk potential term at.
+    ms : 1D array-like of int
+        first indices of V_m_l terms
+    ls : 1D array-like of int
+        second indices of V_m_l terms
+    a_arr : 1D array-like of float
+        a_m_l coefficients of V_m_l terms, which multiplies cos(m*phi)*D_m_l
+    b_arr : 1D array-like of float
+        b_m_l coefficients of V_m_l terms, which multiplies sin(m*phi)*D_m_l
+    c_arr : 1D array-like of float
+        c_m_l coefficients of V_m_l terms, which multiplies cos(m*phi)*N_m_l-1
+    d_arr : 1D array-like of float
+        d_m_l coefficients of V_m_l terms, which multiplies sin(m*phi)*N_m_l-1
+
+    Returns
+    -------
+    value : array-like
+        Value of the total dommaschk potential evaluated
+        at the given R,phi,Z points
+        (same size as the size of the given R,phi, or Z arrays).
+    """
+    value = phi  # phi term
+
+    # make sure all are 1D arrays
+    ms = jnp.atleast_1d(ms)
+    ls = jnp.atleast_1d(ls)
+    a_arr = jnp.atleast_1d(a_arr)
+    b_arr = jnp.atleast_1d(b_arr)
+    c_arr = jnp.atleast_1d(c_arr)
+    d_arr = jnp.atleast_1d(d_arr)
+
+    assert (
+        ms.size == ls.size == a_arr.size == b_arr.size == c_arr.size == d_arr.size
+    ), "Passed in arrays must all be of the same size!"
+
+    for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
+        value += V_m_l(R, Z, phi, m, l, a, b, c, d)
+    return value

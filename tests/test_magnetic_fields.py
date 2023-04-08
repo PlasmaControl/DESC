@@ -138,7 +138,7 @@ class TestMagneticFields:
 def test_dommaschk_CN_CD_m_0():
     """Test of CD_m_k and CN_m_k when k=0."""
     # based off eqn 8 and 9 of Dommaschk paper
-    # TODO: put paper DOI here
+    # https://doi.org/10.1016/0010-4655(86)90109-8
     for m in range(1, 6):
         # test of CD_m_k based off eqn 8
         R = np.linspace(0.1, 1, 100)

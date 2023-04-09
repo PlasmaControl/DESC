@@ -7,6 +7,7 @@ from desc.backend import jnp
 from desc.magnetic_fields import (
     CD_m_k,
     CN_m_k,
+    DommaschkPotentialField,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -155,7 +156,7 @@ def test_dommaschk_CN_CD_m_0():
 
 @pytest.mark.unit
 def test_dommaschk_potential_arr_equal_error():
-    """Test the assert statement of the potential function."""
+    """Test the assert statement of the Dommaschk potential function."""
     phi = 1
     R = 1
     Z = 1
@@ -164,6 +165,51 @@ def test_dommaschk_potential_arr_equal_error():
     a_arr = [1]
     b_arr = [1]
     c_arr = [1]
-    d_arr = [1, 1]
+    d_arr = [1, 1]  # length is not equal to the rest shuld
     with pytest.raises(AssertionError):
         dommaschk_potential(R, Z, phi, ms, ls, a_arr, b_arr, c_arr, d_arr)
+
+
+@pytest.mark.unit
+def test_dommaschk_radial_field():
+    """Test the Dommaschk potential for a pure toroidal (Bphi~1/R) field."""
+    phi = np.linspace(0, 2 * np.pi, 10)
+    R = np.linspace(0.1, 1.5, 50)
+    Z = np.linspace(-0.05, 0.5, 50)
+    R, phi, Z = np.meshgrid(R, phi, Z)
+    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    ms = [0]
+    ls = [0]
+    a_arr = [0]
+    b_arr = [0]
+    c_arr = [0]
+    d_arr = [0]
+    B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
+    B_dom = B.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B_dom[:, 0], 0)
+    np.testing.assert_array_equal(B_dom[:, 1], 1 / R.flatten())
+    np.testing.assert_allclose(B_dom[:, 2], 0)
+
+
+@pytest.mark.unit
+def test_dommaschk_vertical_field():
+    """Test the Dommaschk potential for a 1/R toroidal + pure vertical field."""
+    phi = np.linspace(0, 2 * np.pi, 10)
+    R = np.linspace(0.1, 1.5, 50)
+    Z = np.linspace(-0.05, 0.5, 50)
+    R, phi, Z = np.meshgrid(R, phi, Z)
+    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    ms = [0]
+    ls = [1]
+    a_arr = [1]
+    b_arr = [0]
+    c_arr = [0]
+    d_arr = [0]
+    B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
+    B_dom = B.compute_magnetic_field(coords)
+    ones = np.ones_like(B_dom[:, 0])
+    np.testing.assert_allclose(B_dom[:, 0], 0)
+    np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten())
+    np.testing.assert_array_equal(B_dom[:, 2], ones)

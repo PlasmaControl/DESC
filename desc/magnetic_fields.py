@@ -746,6 +746,45 @@ class ScalarPotentialField(MagneticField):
         return B
 
 
+class DommaschkPotentialField(ScalarPotentialField):
+    """Magnetic field due to a Dommaschk scalar magnetic potential in rpz coordinates.
+
+        From Dommaschk 1986 paper https://doi.org/10.1016/0010-4655(86)90109-8
+
+        this is the field due to the dommaschk potential (eq. 1) for
+        a given set of m,l indices and their corresponding
+        coefficients a_ml, b_ml, c_ml d_ml.
+
+    Parameters
+    ----------
+    ms : 1D array-like of int
+        first indices of V_m_l terms (eq. 12 of reference)
+    ls : 1D array-like of int
+        second indices of V_m_l terms (eq. 12 of reference)
+    a_arr : 1D array-like of float
+        a_m_l coefficients of V_m_l terms, which multiply the cos(m*phi)*D_m_l terms
+    b_arr : 1D array-like of float
+        b_m_l coefficients of V_m_l terms, which multiply the sin(m*phi)*D_m_l terms
+    c_arr : 1D array-like of float
+        c_m_l coefficients of V_m_l terms, which multiply the cos(m*phi)*N_m_l-1 term
+    d_arr : 1D array-like of float
+        d_m_l coefficients of V_m_l terms, which multiply the sin(m*phi)*N_m_l-1 terms
+
+
+    """
+
+    def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr):
+        params = {}
+        params["ms"] = ms
+        params["ls"] = ls
+        params["a_arr"] = a_arr
+        params["b_arr"] = b_arr
+        params["c_arr"] = c_arr
+        params["d_arr"] = d_arr
+
+        super().__init__(dommaschk_potential, params)
+
+
 def field_line_integrate(
     r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
@@ -925,7 +964,7 @@ def V_m_l(R, Z, phi, m, l, a, b, c, d):
     ) * N_m_n(R, Z, m, l - 1)
 
 
-def dommaschk_potential(R, Z, phi, ms, ls, a_arr, b_arr, c_arr, d_arr):
+def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr):
     """Eq 1 of Dommaschk paper.
 
         this is the total dommaschk potential for
@@ -972,5 +1011,5 @@ def dommaschk_potential(R, Z, phi, ms, ls, a_arr, b_arr, c_arr, d_arr):
     ), "Passed in arrays must all be of the same size!"
 
     for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
-        value += V_m_l(R, Z, phi, m, l, a, b, c, d)
+        value += V_m_l(R, phi, Z, m, l, a, b, c, d)
     return value

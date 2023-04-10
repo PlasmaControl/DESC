@@ -775,11 +775,11 @@ class TestGrid:
                 dr[1:-1] = (r_unique[2:] - r_unique[:-2]) / 2
                 dr[-1] = 1 - (r_unique[-2] + r_unique[-1]) / 2
             else:
-                dr = np.ones(grid.num_rho) / grid.num_rho
+                dr = 1 / grid.num_rho
             expected_integral = np.sum(dr * compress(grid, function_of_rho))
             true_integral = np.log(1.35 / 0.35)
-            midpoint_rule_error_bound = max(dr) ** 2 / 24 * (2 / 0.35**3)
-            right_riemann_error_bound = dr[0] * (1 / 0.35 - 1 / 1.35)
+            midpoint_rule_error_bound = np.max(dr) ** 2 / 24 * (2 / 0.35**3)
+            right_riemann_error_bound = dr * (1 / 0.35 - 1 / 1.35)
             np.testing.assert_allclose(
                 expected_integral,
                 true_integral,

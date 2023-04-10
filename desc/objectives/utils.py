@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.compute import arg_order
-from desc.utils import svd_inv_null
+from desc.utils import Index, svd_inv_null
 
 from ._equilibrium import (
     CurrentDensity,
@@ -282,13 +282,18 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         b_full = put(
             b_full, fixed_rows, b_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)
         )
+        A_full = put(
+            A_full,
+            Index[fixed_rows, :],
+            A_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)[:, None],
+        )
         xp = put(xp, fixed_idx, b_full[fixed_rows])
         # some values might be fixed, but they still show up in other constraints
         # this is where the fixed cols have >1 nonzero val
         # for fixed variables, we delete that row and col of A, but that means
         # we need to subtract the fixed value from b so that the equation is balanced.
-        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    x1 = 1.5
-        # combining gives 3 x2 + 1 x3 = 1, with x1 now removed
+        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    4 x1 = 2
+        # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
         b_full = put(
             b_full,
             unfixed_rows,

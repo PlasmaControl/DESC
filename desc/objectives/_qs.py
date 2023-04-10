@@ -315,7 +315,7 @@ class QuasisymmetryTwoTerm(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["B"] ** 3 / jnp.sqrt(self._dim_f)
+            self._normalization = scales["B"] ** 3
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -351,7 +351,11 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=self._profiles,
             helicity=self.helicity,
         )
-        return data["f_C"] * self.grid.weights
+        return data["f_C"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
 
     @property
     def helicity(self):
@@ -470,9 +474,7 @@ class QuasisymmetryTripleProduct(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = (
-                scales["B"] ** 4 / scales["a"] ** 2 / jnp.sqrt(self._dim_f)
-            )
+            self._normalization = scales["B"] ** 4 / scales["a"] ** 2
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -507,4 +509,8 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return data["f_T"] * self.grid.weights
+        return data["f_T"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)

@@ -140,8 +140,7 @@ class ForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -187,12 +186,16 @@ class ForceBalance(_Objective):
             profiles=self._profiles,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * self.grid.weights
+        fr = fr * data["sqrt(g)"]
 
         fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * self.grid.weights
+        fb = fb * data["sqrt(g)"]
 
         return jnp.concatenate([fr, fb])
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
 
 
 class RadialForceBalance(_Objective):
@@ -311,8 +314,7 @@ class RadialForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -358,7 +360,11 @@ class RadialForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"] * self.grid.weights
+        return f * data["sqrt(g)"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
 
 
 class HelicalForceBalance(_Objective):
@@ -478,8 +484,7 @@ class HelicalForceBalance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["f"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["f"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -525,7 +530,11 @@ class HelicalForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"] * self.grid.weights
+        return f * data["sqrt(g)"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
 
 
 class Energy(_Objective):
@@ -831,8 +840,7 @@ class CurrentDensity(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            # local quantity, want to divide by number of nodes
-            self._normalization = scales["J"] * scales["V"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["J"] * scales["V"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -867,8 +875,12 @@ class CurrentDensity(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
-        jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
+        jr = data["J^rho"] * data["sqrt(g)"]
+        jt = data["J^theta"] * data["sqrt(g)"]
+        jz = data["J^zeta"] * data["sqrt(g)"]
 
         return jnp.concatenate([jr, jt, jz])
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)

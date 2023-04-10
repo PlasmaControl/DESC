@@ -124,9 +124,13 @@ class GenericObjective(_Objective):
             profiles=self._profiles,
         )
         f = data[self.f]
-        if not self.scalar:
-            f = (f.T * self.grid.weights).flatten()
         return f
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        if not self.scalar:
+            return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
+        return super().compute_scaled(*args, **kwargs)
 
 
 class ToroidalCurrent(_Objective):

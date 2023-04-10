@@ -14,11 +14,13 @@ from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.geometry import FourierRZToroidalSurface
-from desc.grid import LinearGrid
+from desc.grid import ConcentricGrid, LinearGrid
 from desc.objectives import (
     AspectRatio,
+    CurrentDensity,
     Elongation,
     Energy,
+    ForceBalance,
     GenericObjective,
     MagneticWell,
     MeanCurvature,
@@ -270,6 +272,47 @@ class TestObjectiveFunction:
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
+
+
+@pytest.mark.unit
+def test_compute_scalar_resolution():
+    """Test that compute_scalar values are independent of grid resolution."""
+    eq = get("HELIOTRON")
+    res_array = np.arange(8, 17)
+
+    # GenericObjective (volume)
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(
+            GenericObjective("sqrt(g)", grid=grid), eq=eq, verbose=0
+        )
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[0], rtol=2e-2)
+
+    # ForceBalance
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(ForceBalance(grid=grid), eq=eq, verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[0], atol=1e-8)
+
+    # CurrentDensity
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(CurrentDensity(grid=grid), eq=eq, verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[0], rtol=2e-2)
+
+    # QuasisymmetryTripleProduct
+    f = np.zeros_like(res_array, dtype=float)
+    for i, res in enumerate(res_array):
+        grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)
+        obj = ObjectiveFunction(QuasisymmetryTripleProduct(grid=grid), eq=eq, verbose=0)
+        f[i] = obj.compute_scalar(obj.x(eq))
+    np.testing.assert_allclose(f, f[0], rtol=5e-2)
 
 
 @pytest.mark.unit

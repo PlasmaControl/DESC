@@ -195,7 +195,8 @@ class ForceBalance(_Objective):
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
+        w = jnp.sqrt(self.grid.weights)
+        return super().compute_scaled(*args, **kwargs) * jnp.tile(w, 2)
 
 
 class RadialForceBalance(_Objective):
@@ -883,4 +884,5 @@ class CurrentDensity(_Objective):
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(self.grid.weights)
+        w = jnp.sqrt(self.grid.weights)
+        return super().compute_scaled(*args, **kwargs) * jnp.tile(w, 3)

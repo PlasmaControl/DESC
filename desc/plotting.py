@@ -272,6 +272,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
     label = data_index[name]["label"]
 
     with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
         data = eq.compute(name, grid=grid)[name]
 
     if data_index[name]["dim"] > 1:
@@ -1189,7 +1190,9 @@ def plot_section(
     )
     ax = np.atleast_1d(ax).flatten()
 
-    coords = eq.compute(["R", "Z"], grid=grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute(["R", "Z"], grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1407,14 +1410,16 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     }
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
-        # anlge in PEST-like flux coordinates
+        # angle in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
         v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)
     cols = np.ceil(nzeta / rows).astype(int)
 
     # rho contours
-    r_coords = eq.compute(["R", "Z"], grid=r_grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r_coords = eq.compute(["R", "Z"], grid=r_grid)
     Rr = r_coords["R"].reshape(
         (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
     )
@@ -1425,7 +1430,9 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
 
     if plot_theta:
         # vartheta contours
-        v_coords = eq.compute(["R", "Z"], grid=v_grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            v_coords = eq.compute(["R", "Z"], grid=v_grid)
         Rv = v_coords["R"].reshape(
             (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
         )
@@ -1592,7 +1599,9 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     if isinstance(ls, str):
         ls = [ls for i in range(grid.num_zeta - 1)]
 
-    coords = eq.compute(["R", "Z"], grid=grid)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        coords = eq.compute(["R", "Z"], grid=grid)
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
 
@@ -1735,8 +1744,9 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
             "zeta": zeta if eqs[i].N > 0 else 2,
         }
         grid = _get_grid(**grid_kwargs)
-
-        coords = eqs[i].compute(["R", "Z"], grid=grid)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            coords = eqs[i].compute(["R", "Z"], grid=grid)
         R = coords["R"].reshape(
             (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
         )
@@ -2164,7 +2174,9 @@ def plot_boozer_modes(
         transforms = get_transforms(
             "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
-        data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            data = eq.compute("|B|_mn", grid=grid, transforms=transforms)
         if i == 0:
             matrix, modes = ptolemy_linear_transform(transforms["B"].basis.modes)
         b_mn = np.atleast_2d(matrix @ data["|B|_mn"])
@@ -2318,7 +2330,9 @@ def plot_boozer_surface(
     transforms_plot = get_transforms(
         "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
-    data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
     data = transforms_plot["B"].transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
@@ -2466,7 +2480,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     markers = kwargs.pop("markers", ["o", "o", "o"])
     labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
 
-    data = eq.compute(["R0", "|B|"])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        data = eq.compute(["R0", "|B|"])
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
@@ -2487,12 +2503,18 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                     helicity=helicity,
                     NFP=transforms["B"].basis.NFP,
                 )
-            data = eq.compute(["|B|_mn", "B modes"], grid=grid, transforms=transforms)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = eq.compute(
+                    ["|B|_mn", "B modes"], grid=grid, transforms=transforms
+                )
             B_mn = matrix @ data["|B|_mn"]
             f_b = np.sqrt(np.sum(B_mn[idx] ** 2)) / np.sqrt(np.sum(B_mn**2))
             f_B = np.append(f_B, f_b)
         if fC:
-            data = eq.compute("f_C", grid=grid, helicity=helicity)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = eq.compute("f_C", grid=grid, helicity=helicity)
             f_c = (
                 np.mean(np.abs(data["f_C"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])
@@ -2500,7 +2522,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
             )
             f_C = np.append(f_C, f_c)
         if fT:
-            data = eq.compute("f_T", grid=grid)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                data = eq.compute("f_T", grid=grid)
             f_t = (
                 np.mean(np.abs(data["f_T"]) * data["sqrt(g)"])
                 / np.mean(data["sqrt(g)"])

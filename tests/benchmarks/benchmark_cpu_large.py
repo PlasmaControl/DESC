@@ -257,14 +257,14 @@ def test_perturb_1(SOLOVEV, benchmark):
         dp = np.zeros_like(eq.p_l)
         objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-
+        deltas = {"p_l": dp}
         args = (
             eq,
             objective,
             constraints,
         )
         kwargs = {
-            "dp": dp,
+            "deltas": deltas,
             "tr_ratio": tr_ratio,
             "order": 1,
             "verbose": 2,
@@ -289,14 +289,14 @@ def test_perturb_2(SOLOVEV, benchmark):
         dp = np.zeros_like(eq.p_l)
         objective.build(eq)
         dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
-
+        deltas = {"p_l": dp}
         args = (
             eq,
             objective,
             constraints,
         )
         kwargs = {
-            "dp": dp,
+            "deltas": deltas,
             "tr_ratio": tr_ratio,
             "order": 2,
             "verbose": 2,

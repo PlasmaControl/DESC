@@ -856,7 +856,9 @@ class _Configuration(IOAble, ABC):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        self._axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP)
+        self._axis = FourierRZCurve(
+            R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym
+        )
         return self._axis
 
     @property

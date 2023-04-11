@@ -2779,7 +2779,7 @@ def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
     label="\\langle |(\\mathbf{B} \\cdot \\nabla) \\mathbf{B}| \\rangle_{vol}",
     units="T^{2} \\cdot m^{-1}",
     units_long="Tesla squared / meters",
-    description="Magnetic tension magnitude",
+    description="Volume average magnetic tension magnitude",
     dim=0,
     params=[],
     transforms={"grid": []},

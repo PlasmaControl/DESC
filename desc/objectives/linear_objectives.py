@@ -88,6 +88,10 @@ class BoundaryRSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
+            else:
+                raise NotImplementedError(
+                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -166,6 +170,10 @@ class BoundaryZSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
+            else:
+                raise NotImplementedError(
+                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

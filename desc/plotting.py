@@ -600,11 +600,8 @@ def plot_2d(
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        assert name == "|F|", "Can only normalize |F|."
         # normalize force by B pressure gradient
-        norm_name = "<|grad(|B|^2)|/2mu0>_vol"
-        if kwargs.pop("normalize_with_pressure", False):
-            norm_name = "<|grad(p)|>_vol"
+        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
         norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
@@ -1015,11 +1012,8 @@ def plot_fsa(
     values = compress(grid, values)
 
     if norm_F:
-        assert name == "|F|", "Can only normalize |F|."
         # normalize force by B pressure gradient
-        norm_name = "<|grad(|B|^2)|/2mu0>_vol"
-        if kwargs.pop("normalize_with_pressure", False):
-            norm_name = "<|grad(p)|>_vol"
+        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
         norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
@@ -1156,11 +1150,8 @@ def plot_section(
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
-        assert name == "|F|", "Can only normalize |F|."
         # normalize force by B pressure gradient
-        norm_name = "<|grad(|B|^2)|/2mu0>_vol"
-        if kwargs.pop("normalize_with_pressure", False):
-            norm_name = "<|grad(p)|>_vol"
+        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
         norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 

@@ -936,7 +936,7 @@ def V_m_l(R, phi, Z, m, l, a, b, c, d):
 
     Parameters
     ----------
-    R,Z,phi : array-like
+    R,phi,Z : array-like
         Cylindrical coordinates (1-D arrays of each of size num_eval_pts)
             to evaluate the Dommaschk potential term at.
     m : int
@@ -973,7 +973,7 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr):
 
     Parameters
     ----------
-    R,Z,phi : array-like
+    R,phi,Z : array-like
         Cylindrical coordinates (1-D arrays of each of size num_eval_pts)
         to evaluate the Dommaschk potential term at.
     ms : 1D array-like of int

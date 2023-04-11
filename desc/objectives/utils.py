@@ -25,6 +25,7 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixOmegaGauge,
     FixPressure,
     FixPsi,
 )
@@ -62,6 +63,7 @@ def get_fixed_boundary_constraints(
             fixed_boundary=True, normalize=normalize, normalize_target=normalize
         ),
         FixLambdaGauge(normalize=normalize, normalize_target=normalize),
+        FixOmegaGauge(normalize=normalize, normalize_target=normalize),
         FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:

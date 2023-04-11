@@ -359,7 +359,7 @@ class FixBoundaryZ(_Objective):
 
 
 class FixLambdaGauge(_Objective):
-    """Fixes gauge freedom for lambda: lambda(rho=0)=0 and lambda(theta=0,zeta=0)=0.
+    """Fixes gauge freedom for lambda: lambda(theta=0,zeta=0)=0.
 
     Parameters
     ----------
@@ -470,6 +470,120 @@ class FixLambdaGauge(_Objective):
 
         """
         return jnp.dot(self._A, L_lmn)
+
+
+class FixOmegaGauge(_Objective):
+    """Fixes gauge freedom for omega: and omega(theta=0,zeta=0)=0.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Value to fix omega to at (theta=0,zeta=0)
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(radians)"
+    _print_value_fmt = "omega gauge error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="omega gauge",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        W_basis = eq.W_basis
+
+        if W_basis.sym:
+            self._A = np.zeros((0, W_basis.num_modes))
+        else:
+            # w(rho,0,0) = 0
+            # at theta=zeta=0, basis for omega reduces to just a polynomial in rho
+            # what this constraint does is make all the coefficients of each power
+            # of rho equal to zero
+            # i.e. if omega = (W_200 + 2*W_310) rho**2 + (W_100 + 2*W_210)*rho
+            # this constraint will make
+            # W_200 + 2*W_310 = 0
+            # W_100 + 2*W_210 = 0
+            W_modes = W_basis.modes
+            mnpos = np.where((W_modes[:, 1:] >= [0, 0]).all(axis=1))[0]
+            w_lmn = W_modes[mnpos, :]
+            if len(w_lmn) > 0:
+                c = zernike_radial_coeffs(w_lmn[:, 0], w_lmn[:, 1])
+            else:
+                c = np.zeros((0, 0))
+
+            A = np.zeros((c.shape[1], W_basis.num_modes))
+            A[:, mnpos] = c.T
+            self._A = A
+
+        self._dim_f = self._A.shape[0]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, W_lmn, **kwargs):
+        """Compute omega gauge symmetry errors.
+
+        Parameters
+        ----------
+        W_lmn : ndarray
+            Spectral coefficients of w(rho,theta,zeta) -- toroidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            omega gauge symmetry errors.
+
+        """
+        return jnp.dot(self._A, W_lmn)
 
 
 class FixThetaSFL(_Objective):

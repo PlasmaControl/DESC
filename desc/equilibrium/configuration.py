@@ -105,9 +105,11 @@ class _Configuration(IOAble, ABC):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
+        "_W_lmn",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
+        "_W_basis",
         "_surface",
         "_axis",
         "_pressure",
@@ -238,6 +240,14 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self.spectral_indexing,
         )
         self._L_basis = FourierZernikeBasis(
+            L=self.L,
+            M=self.M,
+            N=self.N,
+            NFP=self.NFP,
+            sym=self._Z_sym,
+            spectral_indexing=self.spectral_indexing,
+        )
+        self._W_basis = FourierZernikeBasis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -414,6 +424,7 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
+        self._W_lmn = np.zeros(self.W_basis.num_modes)
         self.set_initial_guess()
         if "R_lmn" in kwargs:
             self.R_lmn = kwargs.pop("R_lmn")
@@ -421,6 +432,8 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+        if "W_lmn" in kwargs:
+            self.W_lmn = kwargs.pop("W_lmn")
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -434,6 +447,10 @@ class _Configuration(IOAble, ABC):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if self.W_basis is None:
+            self._W_basis = self.L_basis.copy()
+        if self.W_lmn is None:
+            self._W_lmn = np.zeros(self.W_basis.num_modes)
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
@@ -537,10 +554,12 @@ class _Configuration(IOAble, ABC):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
+        old_modes_W = self.W_basis.modes
 
         self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
+        self.W_basis.change_resolution(self.L, self.M, self.N, self.NFP)
 
         for profile in [
             "pressure",
@@ -560,6 +579,7 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        self._W_lmn = copy_coeffs(self.W_lmn, old_modes_W, self.W_basis.modes)
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -801,6 +821,15 @@ class _Configuration(IOAble, ABC):
     @L_lmn.setter
     def L_lmn(self, L_lmn):
         self._L_lmn[:] = L_lmn
+
+    @property
+    def W_lmn(self):
+        """ndarray: Spectral coefficients of omega."""
+        return self._W_lmn
+
+    @W_lmn.setter
+    def W_lmn(self, W_lmn):
+        self._W_lmn[:] = W_lmn
 
     @property
     def Rb_lmn(self):
@@ -1047,6 +1076,11 @@ class _Configuration(IOAble, ABC):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
 
+    @property
+    def W_basis(self):
+        """FourierZernikeBasis: Spectral basis for lambda."""
+        return self._W_basis
+
     def compute(
         self,
         names,
@@ -1209,7 +1243,7 @@ class _Configuration(IOAble, ABC):
             self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, W_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -1222,11 +1256,11 @@ class _Configuration(IOAble, ABC):
 
         Parameters
         ----------
-        grid  :  Grid, optional
+        grid : Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn : ndarray, optional
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, W_lmn : ndarray, optional
+            spectral coefficients for R and Z, omega. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1236,7 +1270,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, W_lmn, msg)
 
     def to_sfl(
         self,

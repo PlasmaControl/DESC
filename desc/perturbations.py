@@ -235,6 +235,11 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                     objective.x_idx["L_lmn"],
                     (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
+                w = put(
+                    w,
+                    objective.x_idx["W_lmn"],
+                    (abs(eq.W_basis.modes[:, :2]).sum(axis=1) + 1),
+                )
             weight = w
         weight = jnp.atleast_1d(weight)
         assert (
@@ -383,6 +388,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dR=False,
     dZ=False,
     dL=False,
+    dW=False,
     dp=False,
     di=False,
     dPsi=False,
@@ -405,7 +411,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Objective function to satisfy.
     objective_g : ObjectiveFunction
         Objective function to optimize.
-    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
+    dR, dZ, dL, dW, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
         Array of indices of modes to include in the perturbations of R, Z, lambda,
         pressure, rotational transform, total magnetic flux, R_boundary, and Z_boundary.
         Setting to True (False) includes (excludes) all modes.
@@ -472,6 +478,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             deltas["L_lmn"] = jnp.ones((objective_f.dimensions["L_lmn"],), dtype=bool)
     elif jnp.any(dL):
         deltas["L_lmn"] = dL
+    if type(dW) is bool or dW is None:
+        if dW is True:
+            deltas["W_lmn"] = jnp.ones((objective_f.dimensions["W_lmn"],), dtype=bool)
+    elif jnp.any(dW):
+        deltas["W_lmn"] = dW
     if type(dp) is bool or dp is None:
         if dp is True:
             deltas["p_l"] = jnp.ones((objective_f.dimensions["p_l"],), dtype=bool)
@@ -563,7 +574,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if len(
         [
             arg
-            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi")
+            for arg in ("R_lmn", "Z_lmn", "L_lmn", "W_lmn", "p_l", "i_l", "Psi")
             if arg in deltas.keys()
         ]
     ):

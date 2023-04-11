@@ -16,6 +16,7 @@ arg_order = (
     "R_lmn",
     "Z_lmn",
     "L_lmn",
+    "W_lmn",
     "p_l",
     "i_l",
     "c_l",
@@ -282,7 +283,7 @@ def get_transforms(keys, eq, grid, **kwargs):
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys)
     transforms = {"grid": grid}
-    for c in ["R", "L", "Z"]:
+    for c in ["R", "L", "Z", "W"]:
         if c in derivs:
             transforms[c] = Transform(
                 grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
@@ -365,7 +366,7 @@ def _has_profiles(qty, profiles):
 def _has_transforms(qty, transforms):
     flags = {}
     derivs = data_index[qty]["dependencies"]["transforms"]
-    for key in ["R", "Z", "L", "w", "B"]:
+    for key in ["R", "Z", "L", "W", "w", "B"]:
         if key not in derivs:
             flags[key] = True
         elif key not in transforms:

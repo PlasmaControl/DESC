@@ -147,7 +147,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
     """
     # r is the ratio  r_NAE / rho_DESC
-    r = np.sqrt(2 * desc_eq.Psi / qsc.Bbar / 2 / np.pi)
+    r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)
 
     Rconstraints = ()
     Zconstraints = ()
@@ -167,7 +167,6 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
         Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
-        desc_eq.R_lmn
         Rconstraints += (Rcon,)
     # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):

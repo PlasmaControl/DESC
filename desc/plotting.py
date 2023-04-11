@@ -1410,7 +1410,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         "NFP": nfp,
     }
     if plot_theta:
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # anlge in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
         v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
@@ -3343,7 +3343,7 @@ def plot_field_lines_sfl(
 
     Traces field lines at specified initial vartheta (:math:`\\vartheta`) seed
     locations, then plots them.
-    Field lines traced by first finding the corresponding straight-field-line (SFL)
+    Field lines traced by first finding the corresponding straight field line (SFL)
     coordinates :math:`(\\rho,\\vartheta,\\phi)` for each field line, then
     converting those to the computational :math:`(\\rho,\\theta,\\phi)` coordinates,
     then finally computing from those the toroidal :math:`(R,\\phi,Z)` coordinates of

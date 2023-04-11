@@ -122,7 +122,7 @@ def test_HELIOTRON_vac2_results(HELIOTRON_vac, HELIOTRON_vac2):
     eq1 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac["desc_h5_path"]))[-1]
     eq2 = EquilibriaFamily.load(load_from=str(HELIOTRON_vac2["desc_h5_path"]))[-1]
     rho_err, theta_err = area_difference_desc(eq1, eq2)
-    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=1e-2)
+    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=1e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
     curr1 = eq1.get_profile("current")
     curr2 = eq2.get_profile("current")

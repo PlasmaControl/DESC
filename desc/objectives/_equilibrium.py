@@ -185,11 +185,8 @@ class ForceBalance(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"]
-
-        fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"]
+        fr = data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
+        fb = data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
         return jnp.concatenate([fr, fb])
 
@@ -360,8 +357,7 @@ class RadialForceBalance(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"]
+        return data["F_rho"] * data["|grad(rho)|"] * data["sqrt(g)"]
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
@@ -530,8 +526,7 @@ class HelicalForceBalance(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"]
+        return data["F_helical"] * data["|e^helical|"] * data["sqrt(g)"]
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""

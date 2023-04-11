@@ -59,7 +59,7 @@ class TestObjectiveFunction:
             }
             np.testing.assert_allclose(
                 obj.compute(**kwargs),
-                eq.compute(f, grid=obj.grid)[f] * obj.grid.weights,
+                eq.compute(f, grid=obj.grid)[f],
             )
 
         test("sqrt(g)", Equilibrium())

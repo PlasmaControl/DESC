@@ -358,6 +358,181 @@ class FixBoundaryZ(_Objective):
         return "Zb_lmn"
 
 
+class FixBoundaryW(_Objective):
+    """Boundary condition on the omega/phi boundary parameters.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Boundary surface coefficients to fix. If None, uses surface coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    fixed_boundary : bool, optional
+        True to enforce the boundary condition on flux surfaces,
+        or False to fix the boundary surface coefficients (default).
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the surface modes.
+    surface_label : float
+        Surface to enforce boundary conditions on. Defaults to Equilibrium.surface.rho
+    name : str
+        Name of the objective function.
+
+
+    Notes
+    -----
+    If specifying particular modes to fix, the rows of the resulting constraint `A`
+    matrix and `target` vector will be re-sorted according to the ordering of
+    `basis.modes` which may be different from the order that was passed in.
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(m)"
+    _print_value_fmt = "W boundary error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        fixed_boundary=False,
+        modes=True,
+        surface_label=None,
+        name="lcfs W",
+    ):
+
+        self._fixed_boundary = fixed_boundary
+        self._modes = modes
+        self._surface_label = surface_label
+        self._args = ["W_lmn"] if self._fixed_boundary else ["Wb_lmn"]
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if hasattr(eq.surface, "W_basis"):
+            basis = eq.surface.W_basis
+        else:
+            basis = eq.surface.Z_basis.copy()  # should have the same symmetry
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = basis.modes
+            idx = np.arange(basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of basis.modes
+            # and eq.surface.Z_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = idx.size
+        if self.target is not None:  # rearrange given target to match modes order
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for W boundary modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            self.target = self.target[modes_idx]
+
+        if self._fixed_boundary:  # W_lmn -> Wb_lmn boundary condition
+            self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+            for i, (l, m, n) in enumerate(eq.W_basis.modes):
+                if eq.bdry_mode == "lcfs":
+                    j = np.argwhere((modes[:, 1:] == [m, n]).all(axis=1))
+                    surf = (
+                        eq.surface.rho
+                        if self._surface_label is None
+                        else self._surface_label
+                    )
+                    self._A[j, i] = zernike_radial(surf, l, m)
+        else:  # Wb_lmn -> Wb optimization space
+            self._A = np.eye(basis.num_modes)[idx, :]
+
+        # use surface parameters as target if needed
+        if self.target is None:
+            if hasattr(eq.surface, "W_lmn"):
+                self.target = eq.surface.W_lmn[idx]
+            else:
+                self.target = np.zeros(idx.size)
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute deviation from desired boundary."""
+        if len(args):
+            x = kwargs.get(self.args[0], args[0])
+        else:
+            x = kwargs.get(self.args[0])
+        return jnp.dot(self._A, x)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Wb_lmn"
+
+
 class FixLambdaGauge(_Objective):
     """Fixes gauge freedom for lambda: lambda(theta=0,zeta=0)=0.
 

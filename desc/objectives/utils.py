@@ -18,6 +18,7 @@ from .linear_objectives import (
     FixAxisR,
     FixAxisZ,
     FixBoundaryR,
+    FixBoundaryW,
     FixBoundaryZ,
     FixCurrent,
     FixElectronDensity,
@@ -60,6 +61,9 @@ def get_fixed_boundary_constraints(
             fixed_boundary=True, normalize=normalize, normalize_target=normalize
         ),
         FixBoundaryZ(
+            fixed_boundary=True, normalize=normalize, normalize_target=normalize
+        ),
+        FixBoundaryW(
             fixed_boundary=True, normalize=normalize, normalize_target=normalize
         ),
         FixLambdaGauge(normalize=normalize, normalize_target=normalize),

@@ -850,6 +850,20 @@ class _Configuration(IOAble, ABC):
         self.surface.Z_lmn = Zb_lmn
 
     @property
+    def Wb_lmn(self):
+        """ndarray: Spectral coefficients of omega at the boundary."""
+        if hasattr(self.surface, "W_lmn"):
+            return self.surface.W_lmn
+        else:
+            return np.zeros_like(self.Zb_lmn)
+
+    @Wb_lmn.setter
+    def Wb_lmn(self, Wb_lmn):
+        if hasattr(self.surface, "W_lmn"):
+            self.surface.W_lmn = Wb_lmn
+        # TODO: raise error?
+
+    @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
         return self.axis.R_n

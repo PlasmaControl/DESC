@@ -197,7 +197,7 @@ def test_dommaschk_vertical_field():
     """Test the Dommaschk potential for a 1/R toroidal + pure vertical field."""
     phi = np.linspace(0, 2 * np.pi, 10)
     R = np.linspace(0.1, 1.5, 50)
-    Z = np.linspace(-0.05, 0.5, 50)
+    Z = np.linspace(-0.5, 0.5, 50)
     R, phi, Z = np.meshgrid(R, phi, Z)
     coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
 

@@ -931,7 +931,7 @@ def N_m_n(R, Z, m, n):
 # if stell sym then a=d=0 for even l and b=c=0 for odd l
 
 
-def V_m_l(R, Z, phi, m, l, a, b, c, d):
+def V_m_l(R, phi, Z, m, l, a, b, c, d):
     """Eq 12 of Dommaschk paper.
 
     Parameters

@@ -167,7 +167,7 @@ def test_dommaschk_potential_arr_equal_error():
     c_arr = [1]
     d_arr = [1, 1]  # length is not equal to the rest shuld
     with pytest.raises(AssertionError):
-        dommaschk_potential(R, Z, phi, ms, ls, a_arr, b_arr, c_arr, d_arr)
+        dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr)
 
 
 @pytest.mark.unit

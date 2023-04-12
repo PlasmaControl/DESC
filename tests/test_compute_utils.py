@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-import desc.io
 from desc.compute.utils import (
     _get_grid_surface,
     compress,

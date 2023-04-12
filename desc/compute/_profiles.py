@@ -697,7 +697,6 @@ def _iota_0_num_r(params, transforms, profiles, data, **kwargs):
     ) / data["sqrt(g)"] - num * data["sqrt(g)_r"] / data["sqrt(g)"]
     data["iota_0_num_r"] = surface_averages(transforms["grid"], num_r)
     # TODO: limit at axis
-    #    I will need to check if limit and derivative interchangeable.
     return data
 
 
@@ -752,7 +751,6 @@ def _iota_0_num_rr(params, transforms, profiles, data, **kwargs):
     ) / data["sqrt(g)"]
     data["iota_0_num_rr"] = surface_averages(transforms["grid"], num_rr)
     # TODO: limit at axis
-    #    I will need to check if limit and derivative interchangeable.
     return data
 
 
@@ -799,7 +797,6 @@ def _iota_0_den_r(params, transforms, profiles, data, **kwargs):
     den_r = (data["g_tt_r"] - den * data["sqrt(g)_r"]) / data["sqrt(g)"]
     data["iota_0_den_r"] = surface_averages(transforms["grid"], den_r)
     # TODO: limit at axis
-    #    I will need to check if limit and derivative interchangeable.
     return data
 
 
@@ -824,7 +821,6 @@ def _iota_0_den_rr(params, transforms, profiles, data, **kwargs):
     ) / data["sqrt(g)"]
     data["iota_0_den_rr"] = surface_averages(transforms["grid"], den_rr)
     # TODO: limit at axis
-    #    I will need to check if limit and derivative interchangeable.
     return data
 
 

@@ -1410,7 +1410,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     }
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
-        # anlge in PEST-like flux coordinates
+        # angle in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
         v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)

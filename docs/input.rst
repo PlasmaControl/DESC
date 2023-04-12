@@ -350,8 +350,7 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
 
 .. code-block:: text
 
-   # This DESC input file was auto generated from the VMEC input file
-   # /DESC/examples/VMEC/input.HELIOTRON
+   # This DESC input file was auto generated from a VMEC input file
    # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
    # global parameters

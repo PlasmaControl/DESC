@@ -121,8 +121,7 @@ class TestConstrainCurrent:
     @pytest.mark.unit
     @pytest.mark.solve
     def test_compute_rotational_transform_axis(self, DSHAPE_current):
-        "Test that the limit at rho=0 axis is computed accurately."
-
+        """Test that the limit at rho=0 axis is computed accurately."""
         # test should be done on equilibria with fixed current profiles
         def test(eq, expected_at_axis):
             delta = 1e-3

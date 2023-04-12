@@ -73,7 +73,7 @@ class QuasisymmetryBoozer(_Objective):
 
         assert len(helicity) == 2
         assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
-        self.grid = grid
+        self._grid = grid
         self.helicity = helicity
         self.M_booz = M_booz
         self.N_booz = N_booz
@@ -107,32 +107,32 @@ class QuasisymmetryBoozer(_Objective):
             Level of output.
 
         """
-        if self.M_booz is None:
-            self.M_booz = 2 * eq.M
-        if self.N_booz is None:
-            self.N_booz = 2 * eq.N
-        if self.grid is None:
-            self.grid = LinearGrid(
-                M=2 * self.M_booz, N=2 * self.N_booz, NFP=eq.NFP, sym=False
-            )
+        M_booz = self.M_booz or 2 * eq.M
+        N_booz = self.N_booz or 2 * eq.N
+
+        if self._grid is None:
+            grid = LinearGrid(M=2 * M_booz, N=2 * N_booz, NFP=eq.NFP, sym=False)
+        else:
+            grid = self._grid
+
         self._data_keys = ["|B|_mn"]
         self._args = get_params(self._data_keys)
 
-        assert self.grid.sym is False
-        assert self.grid.num_rho == 1
+        assert grid.sym is False
+        assert grid.num_rho == 1
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(
             self._data_keys,
             eq=eq,
-            grid=self.grid,
-            M_booz=self.M_booz,
-            N_booz=self.N_booz,
+            grid=grid,
+            M_booz=M_booz,
+            N_booz=N_booz,
         )
         self._matrix, self._modes, self._idx = ptolemy_linear_transform(
             self._transforms["B"].basis.modes,
@@ -262,7 +262,7 @@ class QuasisymmetryTwoTerm(_Objective):
         name="QS two-term",
     ):
 
-        self.grid = grid
+        self._grid = grid
         self.helicity = helicity
         super().__init__(
             eq=eq,
@@ -294,10 +294,12 @@ class QuasisymmetryTwoTerm(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
         self._args = get_params(self._data_keys)
 
@@ -306,8 +308,8 @@ class QuasisymmetryTwoTerm(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -351,7 +353,7 @@ class QuasisymmetryTwoTerm(_Objective):
             profiles=self._profiles,
             helicity=self.helicity,
         )
-        return data["f_C"] * self.grid.weights
+        return data["f_C"] * self._transforms["grid"].weights
 
     @property
     def helicity(self):
@@ -425,7 +427,7 @@ class QuasisymmetryTripleProduct(_Objective):
         name="QS triple product",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -449,10 +451,12 @@ class QuasisymmetryTripleProduct(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
         self._args = get_params(self._data_keys)
 
@@ -461,8 +465,8 @@ class QuasisymmetryTripleProduct(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -507,7 +511,7 @@ class QuasisymmetryTripleProduct(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return data["f_T"] * self.grid.weights
+        return data["f_T"] * self._transforms["grid"].weights
 
 
 class Isodynamicity(_Objective):
@@ -562,7 +566,7 @@ class Isodynamicity(_Objective):
         name="Isodynamicity",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -586,10 +590,12 @@ class Isodynamicity(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]
         self._args = get_params(self._data_keys)
 
@@ -598,8 +604,8 @@ class Isodynamicity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -638,4 +644,4 @@ class Isodynamicity(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return data["isodynamicity"] * self.grid.weights
+        return data["isodynamicity"] * self._transforms["grid"].weights

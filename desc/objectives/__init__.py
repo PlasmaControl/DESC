@@ -25,6 +25,8 @@ from ._qs import (
 )
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,

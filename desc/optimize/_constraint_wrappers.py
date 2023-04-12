@@ -5,6 +5,8 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import arg_order
 from desc.objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     CurrentDensity,
     ForceBalance,
     HelicalForceBalance,
@@ -15,8 +17,9 @@ from desc.objectives.utils import (
     align_jacobian,
     factorize_linear_constraints,
     get_fixed_boundary_constraints,
+    maybe_add_self_consistency,
 )
-from desc.utils import Timer
+from desc.utils import Timer, get_instance
 
 from .utils import compute_jac_scale, f_where_x
 
@@ -30,7 +33,7 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     We can write any feasible x=xp + Z*x_reduced where xp is a particular solution to
     Ax=b (taken to be the least norm solution), Z is a representation for the null
-    space of A (A*Z=0) and x_reduced is conconstrained. This transforms the problem into
+    space of A (A*Z=0) and x_reduced is unconstrained. This transforms the problem into
 
     min_x_reduced f(x_reduced)
 
@@ -58,6 +61,7 @@ class LinearConstraintProjection(ObjectiveFunction):
                     + "cannot handle nonlinear constraint {}.".format(con)
                 )
         self._objective = objective
+        self._objectives = [objective]
         self._constraints = constraints
         self._built = False
         # don't want to compile this, just use the compiled objective
@@ -84,18 +88,27 @@ class LinearConstraintProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Linear constraint projection build")
 
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(eq, verbose=verbose)
         for con in self._constraints:
             if not con.built:
                 con.build(eq, verbose=verbose)
-        self._args = self._objective.args
+
+        args = np.concatenate([obj.args for obj in self._constraints])
+        args = np.concatenate((args, self._objective.args))
+        # this is all args used by both constraints and objective
+        self._args = [arg for arg in arg_order if arg in args]
         self._dim_f = self._objective.dim_f
         self._scalar = self._objective.scalar
+        self._dimensions = self._objective.dimensions
+        self._objective.set_args(*self._args)
+        self.set_args()
         (
             self._xp,
             self._A,
-            self._Ainv,
             self._b,
             self._Z,
             self._unfixed_idx,
@@ -103,10 +116,10 @@ class LinearConstraintProjection(ObjectiveFunction):
             self._recover,
         ) = factorize_linear_constraints(
             self._constraints,
-            self._objective.args,
+            self._args,
         )
+        self._dim_x_full = self._dim_x
         self._dim_x = self._Z.shape[1]
-        self._dim_x_full = self._objective.dim_x
 
         self._built = True
         timer.stop("Linear constraint projection build")
@@ -138,7 +151,9 @@ class LinearConstraintProjection(ObjectiveFunction):
 
     def x(self, eq):
         """Return the reduced state vector from the Equilibrium eq."""
-        x = self._objective.x(eq)
+        x = np.zeros((self._dim_x_full,))
+        for arg in self.args:
+            x[self.x_idx[arg]] = getattr(eq, arg)
         return self.project(x)
 
     def unpack_state(self, x):
@@ -155,8 +170,12 @@ class LinearConstraintProjection(ObjectiveFunction):
             Dictionary of the state components with argument names as keys.
 
         """
-        if len(x) == self._dim_x:
-            x = self.recover(x)
+        if x.size != self.dim_x:
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self.dim_x} got {x.size}."
+            )
+        x = self.recover(x)
         return self._objective.unpack_state(x)
 
     def compute(self, x_reduced):
@@ -304,6 +323,7 @@ class ProximalProjection(ObjectiveFunction):
                 )
         self._objective = objective
         self._constraint = constraint
+        self._objectives = [objective, constraint]
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
         solve_options.setdefault("verbose", 0)
@@ -316,6 +336,89 @@ class ProximalProjection(ObjectiveFunction):
 
         if eq is not None:
             self.build(eq, verbose=verbose)
+
+    def set_args(self, *args):
+        """Set which arguments the objective should expect.
+
+        Defaults to args from all sub-objectives. Additional arguments can be passed in.
+        """
+        # this is everything taken by either objective
+        self._full_args = (
+            self._constraint.args
+            + self._objective.args
+            + list(np.concatenate([obj.args for obj in self._linear_constraints]))
+        )
+        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+
+        # arguments being optimized are all args, but with internal degrees of freedom
+        # replaced by boundary terms
+        self._args = self._full_args.copy() + list(args)
+        self._args = [arg for arg in arg_order if arg in self._args]
+        if "L_lmn" in self._args:
+            self._args.remove("L_lmn")
+        if "R_lmn" in self._args:
+            self._args.remove("R_lmn")
+            if "Rb_lmn" not in self._args:
+                self._args.append("Rb_lmn")
+        if "Z_lmn" in self._args:
+            self._args.remove("Z_lmn")
+            if "Zb_lmn" not in self._args:
+                self._args.append("Zb_lmn")
+        self._set_state_vector()
+
+    def _set_state_vector(self):
+        self._dimensions = self._objective.dimensions
+        self._dim_x = 0
+        self._x_idx = {}
+        for arg in self.args:
+            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
+            self._dim_x += self.dimensions[arg]
+        self._dim_x_full = 0
+        self._x_idx_full = {}
+        for arg in self._full_args:
+            self._x_idx_full[arg] = np.arange(
+                self._dim_x_full, self._dim_x_full + self.dimensions[arg]
+            )
+            self._dim_x_full += self.dimensions[arg]
+
+        (
+            xp,
+            A,
+            b,
+            self._Z,
+            self._unfixed_idx,
+            project,
+            recover,
+        ) = factorize_linear_constraints(self._linear_constraints, self._full_args)
+
+        # dx/dc - goes from the full state to optimization variables
+        x_idx = np.concatenate(
+            [
+                self._x_idx_full[arg]
+                for arg in self._args
+                if arg not in ["Rb_lmn", "Zb_lmn"]
+            ]
+        )
+        x_idx.sort(kind="mergesort")
+        self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
+        if "Rb_lmn" in self._args:
+            c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
+            A = c.derivatives["jac"]["R_lmn"](
+                *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
+            )
+            A = (c.normalization * (A.T / c.weight)).T
+            Ainv = np.linalg.pinv(A)
+            dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
+            self._dxdc = np.hstack((self._dxdc, dxdRb))
+        if "Zb_lmn" in self._args:
+            c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
+            A = c.derivatives["jac"]["Z_lmn"](
+                *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
+            )
+            A = (c.normalization * (A.T / c.weight)).T
+            Ainv = np.linalg.pinv(A)
+            dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
+            self._dxdc = np.hstack((self._dxdc, dxdZb))
 
     def build(self, eq, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
@@ -340,22 +443,18 @@ class ProximalProjection(ObjectiveFunction):
             and self._eq.iota is not None,
             kinetic=eq.electron_temperature is not None,
         )
+        self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
 
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(self._eq, verbose=verbose)
         if not self._constraint.built:
             self._constraint.build(self._eq, verbose=verbose)
-        # remove constraints that aren't necessary
-        self._linear_constraints = tuple(
-            [
-                con
-                for con in self._linear_constraints
-                if con.args[0] in self._constraint.args
-            ]
-        )
+
         for constraint in self._linear_constraints:
             constraint.build(self._eq, verbose=verbose)
-        self._objectives = self._objective.objectives
 
         self._dim_f = self._objective.dim_f
         if self._dim_f == 1:
@@ -363,72 +462,9 @@ class ProximalProjection(ObjectiveFunction):
         else:
             self._scalar = False
 
-        # this is everything taken by either objective
-        self._full_args = self._constraint.args + self._objective.args
-        self._full_args = [arg for arg in arg_order if arg in self._full_args]
-
-        # arguments being optimized are all args, but with internal degrees of freedom
-        # replaced by boundary terms
-        self._args = self._full_args.copy()
-        if "L_lmn" in self._args:
-            self._args.remove("L_lmn")
-        if "R_lmn" in self._args:
-            self._args.remove("R_lmn")
-            if "Rb_lmn" not in self._args:
-                self._args.append("Rb_lmn")
-        if "Z_lmn" in self._args:
-            self._args.remove("Z_lmn")
-            if "Zb_lmn" not in self._args:
-                self._args.append("Zb_lmn")
-
-        self._dimensions = self._objective.dimensions
-        self._dim_x = 0
-        self._x_idx = {}
-        for arg in self.args:
-            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
-            self._dim_x += self.dimensions[arg]
-        self._dim_x_full = 0
-        self._x_idx_full = {}
-        for arg in self._full_args:
-            self._x_idx_full[arg] = np.arange(
-                self._dim_x_full, self._dim_x_full + self.dimensions[arg]
-            )
-            self._dim_x_full += self.dimensions[arg]
-
-        (
-            xp,
-            A,
-            self._Ainv,
-            b,
-            self._Z,
-            self._unfixed_idx,
-            project,
-            recover,
-        ) = factorize_linear_constraints(self._linear_constraints, self._full_args)
-
-        # dx/dc - goes from the full state to optimization variables
-        x_idx = np.concatenate(
-            [
-                self._x_idx_full[arg]
-                for arg in self._args
-                if arg not in ["Rb_lmn", "Zb_lmn"]
-            ]
-        )
-        x_idx.sort(kind="mergesort")
-        self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
-        if "Rb_lmn" in self._args:
-            dxdRb = (
-                np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]]
-                @ self._Ainv["R_lmn"]
-            )
-            self._dxdc = np.hstack((self._dxdc, dxdRb))
-        if "Zb_lmn" in self._args:
-            dxdZb = (
-                np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]]
-                @ self._Ainv["Z_lmn"]
-            )
-            self._dxdc = np.hstack((self._dxdc, dxdZb))
-
+        self.set_args()
+        self._objective.set_args(*self._full_args)
+        self._constraint.set_args(*self._full_args)
         # history and caching
         self._x_old = np.zeros((self._dim_x,))
         for arg in self.args:
@@ -491,12 +527,12 @@ class ProximalProjection(ObjectiveFunction):
                 objective=self._constraint,
                 constraints=self._linear_constraints,
                 deltas=deltas,
-                **self._perturb_options
+                **self._perturb_options,
             )
             self._eq.solve(
                 objective=self._constraint,
                 constraints=self._linear_constraints,
-                **self._solve_options
+                **self._solve_options,
             )
             xopt = self._objective.x(self._eq)
             xeq = self._constraint.x(self._eq)

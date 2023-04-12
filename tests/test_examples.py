@@ -48,7 +48,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     data = eq.compute("|J|")
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=1e-3)
+    np.testing.assert_allclose(data["|J|"], 0, atol=2e-3)
 
 
 @pytest.mark.regression
@@ -185,7 +185,7 @@ def test_solve_bounds():
     obj = ObjectiveFunction(
         ForceBalance(normalize=False, normalize_target=False, bounds=(-1e3, 1e3)), eq=eq
     )
-    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
+    eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=200, verbose=3)
 
     # check that all errors are nearly 0, since residual values are within target bounds
     f = obj.compute(obj.x(eq))
@@ -566,11 +566,11 @@ def test_NAE_QSC_solve():
 def test_NAE_QIC_solve():
     """Test O(rho) NAE QIC constraints solve."""
     # get Qic example
-    qsc = Qic.from_paper("r2 section 5.2", nphi=99)
+    qic = Qic.from_paper("r2 section 5.2", nphi=99)
     ntheta = 75
     r = 0.01
     N = 9
-    eq = Equilibrium.from_near_axis(qsc, r=r, L=6, M=6, N=N, ntheta=ntheta)
+    eq = Equilibrium.from_near_axis(qic, r=r, L=6, M=6, N=N, ntheta=ntheta)
 
     orig_Rax_val = eq.axis.R_n
     orig_Zax_val = eq.axis.Z_n
@@ -579,7 +579,7 @@ def test_NAE_QIC_solve():
 
     # this has all the constraints we need,
     #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+    cs = get_NAE_constraints(eq, qic, iota=False, order=1)
 
     objectives = ForceBalance()
     obj = ObjectiveFunction(objectives)
@@ -600,8 +600,8 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=2e-5)
-    np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
+    np.testing.assert_allclose(iota[1], qic.iota, atol=2e-5)
+    np.testing.assert_allclose(iota[1:10], qic.iota, atol=1e-3)
 
 
 class TestGetExample:

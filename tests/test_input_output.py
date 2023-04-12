@@ -49,10 +49,9 @@ def test_vmec_input(tmpdir_factory):
     with open(path_converted_file) as f:
         lines_converted = f.readlines()
     # skip first 3 lines as they have date and pwd info
-    for line1, line2 in zip(lines_correct[3:], lines_converted[3:]):
+    for line1, line2 in zip(lines_correct[3:], lines_converted[4:]):
         assert line1.strip() == line2.strip()
-    # skip first 4 here as the directly written file lacks a header
-    for line1, line2 in zip(lines_correct[4:], lines_direct):
+    for line1, line2 in zip(lines_correct[3:], lines_direct):
         assert line1.strip() == line2.strip()
 
 

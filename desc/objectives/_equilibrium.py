@@ -68,7 +68,7 @@ class ForceBalance(_Objective):
         name="force",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -92,7 +92,7 @@ class ForceBalance(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -100,7 +100,7 @@ class ForceBalance(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -110,14 +110,16 @@ class ForceBalance(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = 2 * self.grid.num_nodes
+        self._dim_f = 2 * grid.num_nodes
         self._data_keys = [
             "F_rho",
             "|grad(rho)|",
@@ -132,8 +134,8 @@ class ForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -188,10 +190,10 @@ class ForceBalance(_Objective):
             profiles=self._profiles,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * self.grid.weights
+        fr = fr * data["sqrt(g)"] * self._transforms["grid"].weights
 
         fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * self.grid.weights
+        fb = fb * data["sqrt(g)"] * self._transforms["grid"].weights
 
         return jnp.concatenate([fr, fb])
 
@@ -246,7 +248,7 @@ class RadialForceBalance(_Objective):
         name="radial force",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -270,7 +272,7 @@ class RadialForceBalance(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -278,7 +280,7 @@ class RadialForceBalance(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -288,14 +290,16 @@ class RadialForceBalance(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
         self._args = get_params(self._data_keys)
 
@@ -304,8 +308,8 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -360,7 +364,7 @@ class RadialForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"] * self.grid.weights
+        return f * data["sqrt(g)"] * self._transforms["grid"].weights
 
 
 class HelicalForceBalance(_Objective):
@@ -414,7 +418,7 @@ class HelicalForceBalance(_Objective):
         name="helical force",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -438,7 +442,7 @@ class HelicalForceBalance(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -446,7 +450,7 @@ class HelicalForceBalance(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -456,14 +460,16 @@ class HelicalForceBalance(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
         self._args = get_params(self._data_keys)
 
@@ -472,8 +478,8 @@ class HelicalForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -528,7 +534,7 @@ class HelicalForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"] * self.grid.weights
+        return f * data["sqrt(g)"] * self._transforms["grid"].weights
 
 
 class Energy(_Objective):
@@ -585,7 +591,7 @@ class Energy(_Objective):
         name="energy",
     ):
 
-        self.grid = grid
+        self._grid = grid
         self.gamma = gamma
         super().__init__(
             eq=eq,
@@ -610,7 +616,7 @@ class Energy(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -626,7 +632,7 @@ class Energy(_Objective):
                         "yellow",
                     )
                 )
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -637,12 +643,14 @@ class Energy(_Objective):
                 )
 
             else:
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["W"]
@@ -653,8 +661,8 @@ class Energy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -769,7 +777,7 @@ class CurrentDensity(_Objective):
         name="current density",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -793,7 +801,7 @@ class CurrentDensity(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -801,7 +809,7 @@ class CurrentDensity(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -811,14 +819,16 @@ class CurrentDensity(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = 3 * self.grid.num_nodes
+        self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
         self._args = get_params(self._data_keys)
 
@@ -827,8 +837,8 @@ class CurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -872,8 +882,8 @@ class CurrentDensity(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
-        jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
+        jr = data["J^rho"] * data["sqrt(g)"] * self._transforms["grid"].weights
+        jt = data["J^theta"] * data["sqrt(g)"] * self._transforms["grid"].weights
+        jz = data["J^zeta"] * data["sqrt(g)"] * self._transforms["grid"].weights
 
         return jnp.concatenate([jr, jt, jz])

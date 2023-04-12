@@ -203,10 +203,9 @@ class ObjectiveFunction(IOAble):
         # build objectives
         self._dim_f = 0
         for objective in self.objectives:
-            if not objective.built:
-                if verbose > 0:
-                    print("Building objective: " + objective.name)
-                objective.build(eq, use_jit=self.use_jit, verbose=verbose)
+            if verbose > 0:
+                print("Building objective: " + objective.name)
+            objective.build(eq, use_jit=self.use_jit, verbose=verbose)
             self._dim_f += objective.dim_f
         if self._dim_f == 1:
             self._scalar = True

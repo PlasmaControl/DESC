@@ -84,11 +84,15 @@ class LinearConstraintProjection(ObjectiveFunction):
         timer = Timer()
         timer.start("Linear constraint projection build")
 
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(eq, verbose=verbose)
         for con in self._constraints:
             if not con.built:
                 con.build(eq, verbose=verbose)
+
         args = np.concatenate([obj.args for obj in self._constraints])
         args = np.concatenate((args, self._objective.args))
         # this is all args used by both constraints and objective
@@ -479,6 +483,9 @@ class ProximalProjection(ObjectiveFunction):
         )
         self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
 
+        # we don't always build here because in ~all cases the user doesn't interact
+        # with this directly, so if the user wants to manually rebuild they should
+        # do it before this wrapper is created for them.
         if not self._objective.built:
             self._objective.build(self._eq, verbose=verbose)
         if not self._constraint.built:

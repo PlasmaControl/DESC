@@ -88,6 +88,10 @@ class BoundaryRSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
+            else:
+                raise NotImplementedError(
+                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -166,6 +170,10 @@ class BoundaryZSelfConsistency(_Objective):
                     else self._surface_label
                 )
                 self._A[j, i] = zernike_radial(surf, l, m)
+            else:
+                raise NotImplementedError(
+                    "bdry_mode is not lcfs, yell at Dario to finish poincare stuff"
+                )
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -233,6 +241,7 @@ class FixBoundaryR(_Objective):
     ):
 
         self._modes = modes
+        self._target_from_user = target
         self._surface_label = surface_label
         self._args = ["Rb_lmn"]
         super().__init__(
@@ -290,7 +299,7 @@ class FixBoundaryR(_Objective):
                 )
 
         self._dim_f = idx.size
-        if self.target is not None:  # rearrange given target to match modes order
+        if self._target_from_user is not None:
             if self._modes is True or self._modes is False:
                 raise RuntimeError(
                     "Attempting to provide target for R boundary modes without "
@@ -298,13 +307,14 @@ class FixBoundaryR(_Objective):
                     + "You must pass in the modes corresponding to the"
                     + "provided target"
                 )
-            self.target = self.target[modes_idx]
+            # rearrange given target to match modes order
+            self.target = self._target_from_user[modes_idx]
 
         # Rb_lmn -> Rb optimization space
         self._A = np.eye(eq.surface.R_basis.num_modes)[idx, :]
 
         # use surface parameters as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = eq.surface.R_lmn[idx]
 
         if self._normalize:
@@ -382,6 +392,7 @@ class FixBoundaryZ(_Objective):
     ):
 
         self._modes = modes
+        self._target_from_user = target
         self._surface_label = surface_label
         self._args = ["Zb_lmn"]
         super().__init__(
@@ -439,7 +450,7 @@ class FixBoundaryZ(_Objective):
                 )
 
         self._dim_f = idx.size
-        if self.target is not None:  # rearrange given target to match modes order
+        if self._target_from_user is not None:
             if self._modes is True or self._modes is False:
                 raise RuntimeError(
                     "Attempting to provide target for Z boundary modes without "
@@ -447,13 +458,14 @@ class FixBoundaryZ(_Objective):
                     + "You must pass in the modes corresponding to the"
                     + "provided target"
                 )
-            self.target = self.target[modes_idx]
+            # rearrange given target to match modes order
+            self.target = self._target_from_user[modes_idx]
 
         # Zb_lmn -> Zb optimization space
         self._A = np.eye(eq.surface.Z_basis.num_modes)[idx, :]
 
         # use surface parameters as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = eq.surface.Z_lmn[idx]
 
         if self._normalize:
@@ -703,6 +715,7 @@ class FixAxisR(_Objective):
     ):
 
         self._modes = modes
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -778,7 +791,7 @@ class FixAxisR(_Objective):
                 self._A[j, i] = -1
 
         # use axis parameters as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = np.zeros(self._dim_f)
             for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
                 j = np.argwhere(ns == n)
@@ -791,7 +804,7 @@ class FixAxisR(_Objective):
                     + "You must pass in the modes corresponding to the"
                     + "provided target axis"
                 )
-            self.target = self.target[modes_idx]
+            self.target = self._target_from_user[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -852,6 +865,7 @@ class FixAxisZ(_Objective):
     ):
 
         self._modes = modes
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -925,7 +939,7 @@ class FixAxisZ(_Objective):
                 self._A[j, i] = -1
 
         # use axis parameters as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = np.zeros(self._dim_f)
             for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
                 j = np.argwhere(ns == n)
@@ -938,7 +952,7 @@ class FixAxisZ(_Objective):
                     + "You must pass in the modes corresponding to the"
                     + "provided target axis"
                 )
-            self.target = self.target[modes_idx]
+            self.target = self._target_from_user[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1005,6 +1019,7 @@ class FixModeR(_Objective):
             raise ValueError(
                 f"modes kwarg must be specified or True with FixModeR! got {modes}"
             )
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -1055,7 +1070,7 @@ class FixModeR(_Objective):
         self._dim_f = modes_idx.size
 
         # use current eq's coefficients as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = eq.R_lmn[self._idx]
         else:  # rearrange given target to match modes order
             if self._modes is True or self._modes is False:
@@ -1065,7 +1080,7 @@ class FixModeR(_Objective):
                     + "You must pass in the modes corresponding to the"
                     + "provided target modes"
                 )
-            self.target = self.target[modes_idx]
+            self.target = self._target_from_user[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1137,7 +1152,7 @@ class FixModeZ(_Objective):
             raise ValueError(
                 f"modes kwarg must be specified or True with FixModeZ! got {modes}"
             )
-
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -1188,7 +1203,7 @@ class FixModeZ(_Objective):
         self._dim_f = modes_idx.size
 
         # use current eq's coefficients as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = eq.Z_lmn[self._idx]
         else:  # rearrange given target to match modes order
             if self._modes is True or self._modes is False:
@@ -1198,7 +1213,7 @@ class FixModeZ(_Objective):
                     + "You must pass in the modes corresponding to the"
                     + "provided target modes"
                 )
-            self.target = self.target[modes_idx]
+            self.target = self._target_from_user[modes_idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1285,6 +1300,7 @@ class FixSumModesR(_Objective):
                     + " FixSumModesR objectives if you wish to have multiple"
                     + " sets of constrained mode sums!"
                 )
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -1349,7 +1365,7 @@ class FixSumModesR(_Objective):
             self._A[0, j] = sum_weights[i]
 
         # use current sum as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = np.dot(sum_weights.T, eq.R_lmn[self._idx])
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
@@ -1437,6 +1453,7 @@ class FixSumModesZ(_Objective):
                     + " FixSumModesZ objectives if you wish to have multiple sets of"
                     + " constrained mode sums!"
                 )
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -1502,7 +1519,7 @@ class FixSumModesZ(_Objective):
             self._A[0, j] = sum_weights[i]
 
         # use current sum as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = np.dot(sum_weights.T, eq.Z_lmn[self._idx])
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
@@ -1587,6 +1604,7 @@ class _FixProfile(_Objective, ABC):
 
         self._profile = profile
         self._indices = indices
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -1625,7 +1643,7 @@ class _FixProfile(_Objective, ABC):
 
         self._dim_f = self._idx.size
         # use profile parameters as target if needed
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = self._profile.params[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
@@ -2453,7 +2471,7 @@ class FixPsi(_Objective):
         normalize_target=True,
         name="fixed-Psi",
     ):
-
+        self._target_from_user = target
         super().__init__(
             eq=eq,
             target=target,
@@ -2479,7 +2497,7 @@ class FixPsi(_Objective):
         """
         self._dim_f = 1
 
-        if self.target is None:
+        if self._target_from_user is None:
             self.target = eq.Psi
 
         if self._normalize:

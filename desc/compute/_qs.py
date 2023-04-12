@@ -358,97 +358,119 @@ def _f_T(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="zeta-bar_QI",
-    label="\\bar{\\zeta}_{QI}",
+    name="M*theta_B+N*zeta_B",
+    label="M\\theta_{B}+N\\zeta_{B}",
     units="rad",
     units_long="radians",
-    description="Toroidal angle used for intermediate QI computations",
+    description="Helical coordinate to make the field omnigeneous",
     dim=1,
-    params=[],
+    params=["QI_mn"],
+    transforms={"eta": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["rho", "theta", "zeta", "NFP"],
+)
+def _helical_angle(params, transforms, profiles, data, **kwargs):
+    # theta is used as a placeholder for alpha (field line label)
+    alpha = data["theta"]
+    # zeta is used as a placeholder for eta (angle along field lines)
+    eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+    nodes = jnp.array([data["rho"], alpha, eta]).T
+
+    # apply eta=0 boundary conditions
+    QI_mn_arr = params["QI_mn"].reshape((transforms["eta"].basis.N, -1))
+    nn = (
+        transforms["eta"].basis.modes[:, 2].reshape((transforms["eta"].basis.N + 1, -1))
+    )
+    QI_m0 = jnp.sum(QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
+    QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
+
+    data["M*theta_B+N*zeta_B"] = (
+        jnp.matmul(transforms["eta"].basis.evaluate(nodes), QI_mn) + 2 * eta + jnp.pi
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|B|_omni",
+    label="|\\mathbf{B}_{omni}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of omnigeneous magnetic field",
+    dim=1,
+    params=["QI_l"],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=["zeta", "NFP"],
 )
-def _qi_zeta_bar(params, transforms, profiles, data, **kwargs):
-    # -pi/2 <= zeta_bar <= +pi/2
-    data["zeta-bar_QI"] = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+def _B_omni(params, transforms, profiles, data, **kwargs):
+    # zeta is used as a placeholder for eta (angle along field lines)
+    eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+
+    B_input = jnp.sort(params["QI_l"])  # sort to ensure monotonicity
+    eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
+
+    # |B|_omnigeneous is an even function so B(-eta) = B(+eta)
+    data["|B|_omni"] = interp1d(jnp.abs(eta), eta_input, B_input, method="monotonic-0")
     return data
 
 
 @register_compute_fun(
-    name="zeta_QI",
-    label="\\zeta_{QI}",
-    units="rad",
-    units_long="radians",
-    description="Boozer toroidal angular coordinate to make the field quasi-isodynamic",
-    dim=1,
-    params=["QI_mn"],
-    transforms={"zeta": [[0, 0, 0]]},
-    profiles=[],
-    coordinates="rtz",
-    data=["rho", "theta", "zeta-bar_QI"],
-)
-def _qi_zeta(params, transforms, profiles, data, **kwargs):
-    QI_mn_arr = params["QI_mn"].reshape((transforms["zeta"].basis.N, -1))
-    nn = (
-        transforms["zeta"]
-        .basis.modes[:, 2]
-        .reshape((transforms["zeta"].basis.N + 1, -1))
-    )
-    QI_m0 = jnp.sum(QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
-    QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
-
-    alpha = data["theta"]  # theta is used as a placeholder for alpha (field-line label)
-    nodes = jnp.array([data["rho"], alpha, data["zeta-bar_QI"]]).T
-    zeta_bar = data["zeta-bar_QI"] + jnp.matmul(
-        transforms["zeta"].basis.evaluate(nodes), QI_mn
-    )
-    data["zeta_QI"] = (2 * zeta_bar + jnp.pi) / transforms["zeta"].basis.NFP
-    return data
-
-
-@register_compute_fun(
-    name="|B|_QI",
-    label="|B|_{QI}",
+    name="|B|(alpha,eta)",
+    label="|\\mathbf{B}|(\\alpha,\\eta)",
     units="T",
     units_long="Tesla",
-    description="Magnitude of quasi-isodynamic magnetic field",
-    dim=1,
-    params=["QI_l"],
-    transforms={},
-    profiles=[],
-    coordinates="z",
-    data=["zeta-bar_QI"],
-)
-def _qi_B(params, transforms, profiles, data, **kwargs):
-    B = jnp.sort(params["QI_l"])  # sort to ensure monotonicity
-    zeta_bar = jnp.linspace(0, jnp.pi / 2, num=B.size)
-    # |B|_QI is an even function so B(-zeta_bar) = B(+zeta_bar)
-    data["|B|_QI"] = interp1d(
-        jnp.abs(data["zeta-bar_QI"]), zeta_bar, B, method="monotonic-0"
-    )
-    return data
-
-
-@register_compute_fun(
-    name="f_QI",
-    label="f_{QI}",
-    units="T",
-    units_long="Tesla",
-    description="Quasi-isodynamic error",
+    description="Magnitude of magnetic field at (alpha,eta) coordinates",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["|B|_mn", "|B|_QI", "rho", "theta", "zeta_QI", "iota"],
+    data=["theta", "M*theta_B+N*zeta_B", "iota", "|B|_mn"],
+    helicity="helicity",
 )
-def _f_QI(params, transforms, profiles, data, **kwargs):
-    alpha = data["theta"]  # theta is used as a placeholder for alpha (field-line label)
-    nodes = jnp.array(  # alpha = theta_B - iota * zeta_B
-        [data["rho"], alpha + data["iota"] * data["zeta_QI"], data["zeta_QI"]]
-    ).T
-    B = jnp.matmul(transforms["B"].basis.evaluate(nodes), data["|B|_mn"])
-    data["f_QI"] = B - data["|B|_QI"]
+def _B_omni_coords(params, transforms, profiles, data, **kwargs):
+    M, N = kwargs.get("helicity", (0, 1))
+    iota = data["iota"][0]
+    q = 1 / iota
+    if M == 0 and N == 1:
+        matrix = jnp.array([[N, iota], [-M, 1]]) / (M * iota + N)
+    elif M == 1 and N == 0:
+        matrix = jnp.array([[-N, 1], [M, q]]) / (M + q * N)
+    else:
+        matrix = jnp.array([[2 * N, iota - 1], [-2 * M, 1 - q]]) / (
+            N * (1 - q) - M * (1 - iota)
+        )
+
+    # theta is used as a placeholder for alpha (field line label)
+    alpha = data["theta"]
+
+    # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
+    booz = matrix @ jnp.vstack((alpha, data["M*theta_B+N*zeta_B"]))
+    data["theta_B(alpha,eta)"] = booz[0, :]
+    data["zeta_B(alpha,eta)"] = booz[1, :]
+
+    nodes = jnp.vstack((data["rho"], booz)).T
+    data["|B|(alpha,eta)"] = jnp.matmul(
+        transforms["B"].basis.evaluate(nodes), data["|B|_mn"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="f_omni",
+    label="f_{omni}",
+    units="T",
+    units_long="Tesla",
+    description="Omnigenity error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_omni", "|B|(alpha,eta)"],
+)
+def _f_omni(params, transforms, profiles, data, **kwargs):
+    data["f_QI"] = data["|B|(alpha,eta)"] - data["|B|_omni"]
     return data

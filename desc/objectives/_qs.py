@@ -537,6 +537,8 @@ class QuasiIsodynamic(_Objective):
         this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
+    helicity : tuple, optional
+        Type of omnigenity (M, N). Default = quasi-isodynamic (0, 1).
     L_QI : int
         Size of QI_l parameter. Default = 3.
     M_QI : int
@@ -575,6 +577,7 @@ class QuasiIsodynamic(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
+        helicity=(1, 0),
         L_QI=3,
         M_QI=1,
         N_QI=1,
@@ -586,7 +589,10 @@ class QuasiIsodynamic(_Objective):
         name="QI",
     ):
 
+        assert len(helicity) == 2
+        assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self.grid = grid
+        self.helicity = helicity
         self.L_QI = L_QI
         self.M_QI = M_QI
         self.N_QI = N_QI
@@ -715,7 +721,7 @@ class QuasiIsodynamic(_Objective):
             profiles=self._profiles,
         )
         weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
-            data["zeta-bar_QI"]
+            data["eta"]
         )
         return data["f_QI"] * weights
 
@@ -762,6 +768,32 @@ class QuasiIsodynamic(_Objective):
             self.M_QI = M_QI
             self.N_QI = N_QI
         return self.QI_l, self.QI_mn
+
+    @property
+    def helicity(self):
+        """tuple: Type of quasi-symmetry (M, N)."""
+        return self._helicity
+
+    @helicity.setter
+    def helicity(self, helicity):
+        assert (
+            (len(helicity) == 2)
+            and (int(helicity[0]) == helicity[0])
+            and (int(helicity[1]) == helicity[1])
+        )
+        if hasattr(self, "_helicity") and self._helicity != helicity:
+            self._built = False
+        self._helicity = helicity
+        if hasattr(self, "_print_value_fmt"):
+            units = "(T)"
+            self._print_value_fmt = (
+                "Quasi-symmetry ({},{}) Boozer error: ".format(
+                    self.helicity[0], self.helicity[1]
+                )
+                + "{:10.3e} "
+                + units
+            )
+        warnings.warn("Re-build objective after changing the helicity!")
 
     @property
     def QI_l(self):

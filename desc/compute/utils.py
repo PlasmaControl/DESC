@@ -322,8 +322,8 @@ def get_transforms(keys, eq, grid, **kwargs):
             build=True,
             build_pinv=True,
         )
-    if "zeta" in derivs:
-        transforms["zeta"] = Transform(
+    if "eta" in derivs:
+        transforms["eta"] = Transform(
             grid,
             DoubleFourierSeries(
                 M=M_QI,
@@ -331,7 +331,7 @@ def get_transforms(keys, eq, grid, **kwargs):
                 NFP=eq.NFP,
                 sym="cos(z)",
             ),
-            derivs=derivs["zeta"],
+            derivs=derivs["eta"],
             build=True,
             build_pinv=True,
         )

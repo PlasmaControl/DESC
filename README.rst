@@ -2,18 +2,16 @@
 
 .. inclusion-marker-do-not-remove
 
-##############################
-Stellarator Equilibrium Solver
-##############################
+################################
+Stellarator Optimization Package
+################################
 |License| |DOI| |Issues| |Pypi|
 
 |Docs| |UnitTests| |RegressionTests| |Codecov|
 
-DESC computes 3D MHD equilibria by solving the force balance equations.
-It can also be used for perturbation analysis and sensitivity studies to see how the equilibria change as input parameters are varied.
+DESC solves for and optimizes 3D MHD equilibria using pseudo-spectral numerical methods and automatic differentiation.
 
-The theoretical approach and numerical methods used by DESC are presented in these papers [1]_ [2]_ [3]_ [4]_
-and documented at Theory_.
+The theoretical approach and implementation details used by DESC are presented in these papers [1]_ [2]_ [3]_ [4]_ and documented at Theory_.
 Please cite our work if you use DESC!
 
 .. [1] Dudt, D. & Kolemen, E. (2020). DESC: A Stellarator Equilibrium Solver. [`Physics of Plasmas <https://aip.scitation.org/doi/full/10.1063/5.0020743>`__]    [`pdf <https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf>`__]

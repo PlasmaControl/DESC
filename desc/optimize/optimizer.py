@@ -393,11 +393,13 @@ optimizers = {}
 
 def register_optimizer(
     name,
+    description,
     scalar,
     equality_constraints,
     inequality_constraints,
     stochastic,
     hessian,
+    GPU=False,
     **kwargs,
 ):
     """Decorator to wrap a function for optimization.
@@ -435,6 +437,8 @@ def register_optimizer(
     name : str or array-like of str
         Name of the optimizer method. If one function supports multiple methods,
         provide a list of names.
+    description : str or array-like of str
+        Short description of the optimizer method, with references if possible.
     scalar : bool or array-like of bool
         Whether the method assumes a scalar residual, or a vector of residuals for
         least squares.
@@ -446,45 +450,62 @@ def register_optimizer(
         Whether the method can handle noisy objectives.
     hessian : bool or array-like of bool
         Whether the method requires calculation of the full hessian matrix.
+    GPU : bool or array-like of bool
+        Whether the method supports running on GPU
     """
     (
         name,
+        description,
         scalar,
         equality_constraints,
         inequality_constraints,
         stochastic,
         hessian,
+        GPU,
     ) = map(
         np.atleast_1d,
         (
             name,
+            description,
             scalar,
             equality_constraints,
             inequality_constraints,
             stochastic,
             hessian,
+            GPU,
         ),
     )
     (
         name,
+        description,
         scalar,
         equality_constraints,
         inequality_constraints,
         stochastic,
         hessian,
+        GPU,
     ) = np.broadcast_arrays(
-        name, scalar, equality_constraints, inequality_constraints, stochastic, hessian
+        name,
+        description,
+        scalar,
+        equality_constraints,
+        inequality_constraints,
+        stochastic,
+        hessian,
+        GPU,
     )
 
     def _decorator(func):
 
         for i, nm in enumerate(name):
             d = {
+                "description": description[i % len(name)],
                 "scalar": scalar[i % len(name)],
                 "equality_constraints": equality_constraints[i % len(name)],
                 "inequality_constraints": inequality_constraints[i % len(name)],
                 "stochastic": stochastic[i % len(name)],
                 "hessian": hessian[i % len(name)],
+                "GPU": GPU[i % len(name)],
                 "fun": func,
             }
             optimizers[nm] = d

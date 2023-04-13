@@ -27,11 +27,31 @@ from .utils import (
         "scipy-trust-ncg",
         "scipy-trust-krylov",
     ],
+    description=[
+        "BFGS quasi-newton method with line search. See https://docs.scipy.org/doc/"
+        + "scipy/reference/optimize.minimize-bfgs.html",
+        "Nonlinear conjugate gradient method. See https://docs.scipy.org/doc/"
+        + "scipy/reference/optimize.minimize-cg.html",
+        "Newton conjugate gradient method. See https://docs.scipy.org/doc/"
+        + "scipy/reference/optimize.minimize-newtoncg.html",
+        "Trust region method with dogleg step. Requires the hessian to be positive "
+        + "definite. See https://docs.scipy.org/doc/scipy/reference/"
+        + "optimize.minimize-dogleg.html",
+        "Trust region method using 'exact' method to solve subproblem. See "
+        + "https://docs.scipy.org/doc/scipy/reference/"
+        + "optimize.minimize-trustexact.html",
+        "Trust region method using conjugate gradient to solve subproblem. See "
+        + "https://docs.scipy.org/doc/scipy/reference/optimize.minimize-trustncg.html",
+        "Trust region method using Kyrlov iterations to solve subproblem. See "
+        + "https://docs.scipy.org/doc/scipy/reference/"
+        + "optimize.minimize-trustkrylov.html",
+    ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
     hessian=[False, False, True, True, True, True, True],
+    GPU=False,
 )
 def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
@@ -246,11 +266,20 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 
 @register_optimizer(
     name=["scipy-trf", "scipy-lm", "scipy-dogbox"],
+    description=[
+        "Trust region least squares method. See https://docs.scipy.org/doc/scipy/"
+        + "reference/generated/scipy.optimize.least_squares.html",
+        "Levenberg-Marquardt implicit trust region method. See https://docs.scipy.org/"
+        + "doc/scipy/reference/generated/scipy.optimize.least_squares.html",
+        "Dogleg method with box shaped trust region. See https://docs.scipy.org/doc/"
+        + "scipy/reference/generated/scipy.optimize.least_squares.html",
+    ],
     scalar=False,
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
     hessian=False,
+    GPU=False,
 )
 def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
@@ -443,11 +472,18 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         "scipy-trust-constr",
         "scipy-SLSQP",
     ],
+    description=[
+        "Trust region interior point method. See https://docs.scipy.org/doc/scipy/"
+        + "reference/optimize.minimize-trustconstr.html",
+        "Sequential least squares programming method. See https://docs.scipy.org/doc/"
+        + "scipy/reference/optimize.minimize-slsqp.html",
+    ],
     scalar=True,
     equality_constraints=True,
     inequality_constraints=True,
     stochastic=False,
     hessian=[True, False],
+    GPU=False,
 )
 def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None

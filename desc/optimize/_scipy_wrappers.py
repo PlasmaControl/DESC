@@ -501,10 +501,11 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
 
     if constraint is not None:
-        if constraint.dim_f > len(x0):
+        num_equality = np.count_nonzero(constraint.bounds[0] == constraint.bounds[1])
+        if num_equality > len(x0):
             raise ValueError(
                 "scipy constrained optimizers cannot handle systems with more "
-                + "constraints than free variables. Suggest reducing the grid "
+                + "equality constraints than free variables. Suggest reducing the grid "
                 + "resolution of constraints"
             )
         constraint_wrapped = NonlinearConstraint(
@@ -647,6 +648,9 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         result["ngev"] = len(grad_allx)
         result["nhev"] = len(hess_allx)
         result["nit"] = len(allx)
+        result["constr_violation"] = np.max(
+            np.abs(constraint.compute_scaled(result["x"]))
+        )
     except StopIteration:
         x = grad_allx[-1]
         f = f_where_x(x, func_allx, func_allf)

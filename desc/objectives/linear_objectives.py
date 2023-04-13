@@ -1587,7 +1587,7 @@ class _FixProfile(_Objective, ABC):
     _scalar = False
     _linear = True
     _fixed = True
-    _print_value_fmt = "Fix-profile error: {:.3e} "
+    _print_value_fmt = "Fix-profile error: {:10.3e} "
 
     def __init__(
         self,

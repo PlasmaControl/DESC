@@ -444,7 +444,10 @@ class ObjectiveFunction(IOAble):
         x = np.zeros((self.dim_x,))
 
         if verbose > 0:
-            print("Compiling objective function and derivatives")
+            print(
+                "Compiling objective function and derivatives: "
+                + f"{[obj.name for obj in self.objectives]}"
+            )
         timer.start("Total compilation time")
 
         if mode in ["scalar", "bfgs", "all"]:

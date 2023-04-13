@@ -203,6 +203,16 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Number of parameters: {}".format(x0.size))
             print("Number of objectives: {}".format(objective.dim_f))
+            if nonlinear_constraint is not None:
+                num_equality = np.count_nonzero(
+                    nonlinear_constraint.bounds[0] == nonlinear_constraint.bounds[1]
+                )
+                print("Number of equality constraints: {}".format(num_equality))
+                print(
+                    "Number of inequality constraints: {}".format(
+                        nonlinear_constraint.dim_f - num_equality
+                    )
+                )
 
         if verbose > 0:
             print("Starting optimization")

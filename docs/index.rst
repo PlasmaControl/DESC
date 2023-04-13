@@ -45,8 +45,9 @@
    :maxdepth: 1
    :caption: Developer guides
 
-   compute
-   objectives
+   adding_compute_funs
+   adding_objectives
+   adding_optimizers
    notebooks/dev_guide/grid.ipynb
 
 .. toctree::

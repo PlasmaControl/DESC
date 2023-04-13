@@ -1173,3 +1173,180 @@ class FourierPlanarCurve(Curve):
         T = jnp.linalg.norm(T, axis=1)
         theta = transform.grid.nodes[:, 2]
         return jnp.trapz(T, theta)
+
+
+class XYZCurve(Curve):
+    """Curve parameterized by points in X,Y,Z.
+
+    Parameters
+    ----------
+    X, Y, Z: array-like
+        points for X, Y, Z descriving a closed curve
+    name : str
+        name for this curve
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_basis", "_transform"]
+
+    def __init__(
+        self,
+        X,
+        Y,
+        Z,
+        grid=None,
+        name="",
+    ):
+        super().__init__(name)
+        X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
+
+        self._X = X
+        self._Y = Y
+        self._Z = Z
+        self._grid = None
+
+    @property
+    def X(self):
+        """Coordinates for X."""
+        return self._X
+
+    @X.setter
+    def X(self, new):
+        self._X = jnp.asarray(new)
+
+    @property
+    def Y(self):
+        """Coordinates for Y."""
+        return self._Y
+
+    @Y.setter
+    def Y(self, new):
+        self._Y = jnp.asarray(new)
+
+    @property
+    def Z(self):
+        """Coordinates for Z."""
+        return self._Z
+
+    @Z.setter
+    def Z(self, new):
+        self._Z = jnp.asarray(new)
+
+    # TODO: what grid to have when we only have XYZ points?
+    @property
+    def grid(self):
+        """Default grid for computation."""
+        return self._grid
+
+    @grid.setter  # FIXME: add this method
+    def grid(self, new):
+        return None
+
+    def compute_coordinates(self, X=None, Y=None, Z=None, dt=0, basis="xyz"):
+        """Compute values using specified coefficients.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        values : ndarray, shape(k,3)
+            X, Y, Z or R, phi, Z coordinates of the curve
+        """
+        coords = jnp.stack([X, Y, Z], axis=1)
+        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
+        if basis.lower() == "rpz":
+            if dt > 0:
+                raise NotImplementedError("Derivatives not implemented for XYZCurve ")
+            else:
+                coords = xyz2rpz(coords)
+        return self.coords
+
+    def compute_frenet_frame(
+        self, X_n=None, Y_n=None, Z_n=None, grid=None, basis="xyz"
+    ):
+        """Compute Frenet frame vectors using specified coefficients.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        T, N, B : ndarrays, shape(k,3)
+            tangent, normal, and binormal vectors of the curve at specified grid
+            locations
+
+        """
+        raise NotImplementedError("Frenet Frame not implemented for XYZCurve ")
+
+    def compute_curvature(self, X_n=None, Y_n=None, Z_n=None, grid=None):
+        """Compute curvature using specified coefficients.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        kappa : ndarray, shape(k,)
+            curvature of the curve at specified grid locations in phi
+        """
+        raise NotImplementedError("Curvature not implemented for XYZCurve ")
+
+    def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
+        """Compute torsion using specified coefficientsnp.empty((0, 3)).
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        tau : ndarray, shape(k,)
+            torsion of the curve at specified grid locations in phi
+        """
+        raise NotImplementedError("Torsion not implemented for XYZCurve ")
+
+    def compute_length(self, X=None, Y=None, Z=None):
+        """Compute the length of the curve specified by given cartesian points.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+
+        Returns
+        -------
+        length : float
+            length of the curve.
+        """
+        raise NotImplementedError("length not implemented for XYZCurve ")
+
+    # TODO: methods for converting between representations

@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 import numpy as np
 
 from desc.backend import jnp
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
 from desc.geometry.utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
@@ -166,6 +166,9 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         super().__init__(current, X_n, Y_n, Z_n, modes, grid, name)
 
 
+# TODO: add a from_XYZ?
+
+
 class FourierPlanarCoil(Coil, FourierPlanarCurve):
     """Coil that lines in a plane.
 
@@ -205,6 +208,38 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         name="",
     ):
         super().__init__(current, center, normal, r_n, modes, grid, name)
+
+
+class XYZCoil(Coil, XYZCurve):
+    """Coil parameterized by points in X,Y,Z.
+
+    Parameters
+    ----------
+    current : float
+        current through coil, in Amperes
+    X, Y, Z: array-like
+        points for X, Y, Z descriving a closed curve
+    name : str
+        name for this coil
+
+    """
+
+    _io_attrs_ = Coil._io_attrs_
+
+    def __init__(
+        self,
+        current,
+        X,
+        Y,
+        Z,
+        grid=None,
+        name="",
+    ):
+        super().__init__(current, X, Y, Z, grid, name)
+        self.X = X
+        self.Y = Y
+        self.Z = Z
+        self.coords = np.vstack((X, Y, Z)).T
 
 
 class CoilSet(Coil, MutableSequence):

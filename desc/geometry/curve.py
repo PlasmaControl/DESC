@@ -1001,7 +1001,7 @@ class FourierPlanarCurve(Curve):
         transform = self._get_transforms(grid)
         r = transform.transform(r_n, dz=0)
         t = transform.grid.nodes[:, -1]
-        Z = np.zeros_like(r)
+        Z = jnp.zeros_like(r)
 
         if dt == 0:
             X = r * jnp.cos(t)
@@ -1260,6 +1260,13 @@ class XYZCurve(Curve):
         values : ndarray, shape(k,3)
             X, Y, Z or R, phi, Z coordinates of the curve
         """
+        if X is None:
+            X = self._X
+        if Y is None:
+            Y = self._Y
+        if Z is None:
+            Z = self._Z
+
         coords = jnp.stack([X, Y, Z], axis=1)
         coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
         if basis.lower() == "rpz":

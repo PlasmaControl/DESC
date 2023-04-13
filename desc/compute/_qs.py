@@ -5,6 +5,7 @@ import numpy as np
 from desc.backend import jnp, put, sign
 
 from .data_index import register_compute_fun
+from .utils import cross, dot
 
 
 @register_compute_fun(
@@ -295,8 +296,8 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="f_C",
-    label="(\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B - "
-    + "(M G + N I) / (M \\iota - N) \\mathbf{B} \\cdot \\nabla B",
+    label="(M \\iota - N) (\\mathbf{B} \\times \\nabla \\psi) \\cdot \\nabla B"
+    + " - (M G + N I) \\mathbf{B} \\cdot \\nabla B",
     units="T^{3}",
     units_long="Tesla cubed",
     description="Two-term quasisymmetry metric",
@@ -352,5 +353,26 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="isodynamicity",
+    label="1/B^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
+    units="~",
+    units_long="None",
+    description="Measure of cross field drift at each point, "
+    + "unweighted by particle energy",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["b", "grad(|B|)", "|B|", "grad(psi)"],
+)
+def _isodynamicity(params, transforms, profiles, data, **kwargs):
+    data["isodynamicity"] = (
+        dot(cross(data["b"], data["grad(|B|)"]), data["grad(psi)"]) / data["|B|"] ** 2
     )
     return data

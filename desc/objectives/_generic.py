@@ -22,8 +22,11 @@ class GenericObjective(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
@@ -31,10 +34,9 @@ class GenericObjective(_Objective):
         Whether to compute the error in physical units or non-dimensionalize.
         Note: has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -52,18 +54,20 @@ class GenericObjective(_Objective):
         f,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
-        normalize=False,
-        normalize_target=False,
+        normalize=True,
+        normalize_target=True,
         grid=None,
         name="generic",
     ):
 
         self.f = f
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -84,18 +88,20 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        if self._grid is None:
+            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        else:
+            grid = self._grid
 
         if data_index[self.f]["dim"] == 0:
             self._dim_f = 1
             self._scalar = True
         else:
-            self._dim_f = self.grid.num_nodes * data_index[self.f]["dim"]
+            self._dim_f = grid.num_nodes * data_index[self.f]["dim"]
             self._scalar = False
         self._args = get_params(self.f)
-        self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self.f, eq=eq, grid=grid)
+        self._transforms = get_transforms(self.f, eq=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -121,8 +127,8 @@ class GenericObjective(_Objective):
         )
         f = data[self.f]
         if not self.scalar:
-            f = (f.T * self.grid.weights).flatten()
-        return self._shift_scale(f)
+            f = (f.T * self._transforms["grid"].weights).flatten()
+        return f
 
 
 class ToroidalCurrent(_Objective):
@@ -132,19 +138,21 @@ class ToroidalCurrent(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Profile, float, ndarray, optional
-        Target value(s) of the objective.
-        If a Profile, target the values of that profile at nodes specified by grid.
-        If an array, len(target) must be equal to Objective.dim_f == grid.num_rho
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f == grid.num_rho
+        len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -152,7 +160,7 @@ class ToroidalCurrent(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(A)"
     _print_value_fmt = "Toroidal current: {:10.3e} "
@@ -161,6 +169,7 @@ class ToroidalCurrent(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -168,10 +177,11 @@ class ToroidalCurrent(_Objective):
         name="toroidal current",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -191,8 +201,8 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -200,11 +210,13 @@ class ToroidalCurrent(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
+        else:
+            grid = self._grid
 
         if isinstance(self._target, Profile):
-            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
+            self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["current"]
         self._args = get_params(self._data_keys)
 
@@ -213,8 +225,8 @@ class ToroidalCurrent(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -222,7 +234,7 @@ class ToroidalCurrent(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["I"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["I"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -257,9 +269,40 @@ class ToroidalCurrent(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        I = compress(self.grid, data["current"], surface_label="rho")
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(I) * w
+        return compress(self._transforms["grid"], data["current"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
 
 
 class RotationalTransform(_Objective):
@@ -269,25 +312,28 @@ class RotationalTransform(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : Profile, float, ndarray, optional
-        Target value(s) of the objective.
-        If a Profile, target the values of that profile at nodes specified by grid.
-        If an array, len(target) must be equal to Objective.dim_f == grid.num_rho
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f == grid.num_rho
+        len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
         Note: has no effect for this objective.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
         Note: has no effect for this objective.
     grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -299,6 +345,7 @@ class RotationalTransform(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -306,10 +353,11 @@ class RotationalTransform(_Objective):
         name="rotational transform",
     ):
 
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -327,9 +375,10 @@ class RotationalTransform(_Objective):
             Whether to just-in-time compile the objective and derivatives.
         verbose : int, optional
             Level of output.
+
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -337,10 +386,13 @@ class RotationalTransform(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
-        if isinstance(self._target, Profile):
-            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        if isinstance(self._target, Profile):
+            self._target = self._target(grid.nodes[grid.unique_rho_idx])
+
+        self._dim_f = grid.num_rho
         self._data_keys = ["iota"]
         self._args = get_params(self._data_keys)
 
@@ -349,8 +401,8 @@ class RotationalTransform(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -380,6 +432,7 @@ class RotationalTransform(_Objective):
         -------
         iota : ndarray
             rotational transform on specified flux surfaces.
+
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
@@ -388,6 +441,20 @@ class RotationalTransform(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        iota = compress(self.grid, data["iota"], surface_label="rho")
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return self._shift_scale(iota) * w
+        return compress(self._transforms["grid"], data["iota"], surface_label="rho")
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)

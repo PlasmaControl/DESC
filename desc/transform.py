@@ -1,7 +1,6 @@
 """Class to transform from spectral basis to real space."""
 
 import warnings
-from itertools import combinations_with_replacement, permutations
 
 import numpy as np
 import scipy.linalg
@@ -9,7 +8,7 @@ from termcolor import colored
 
 from desc.backend import jnp, put
 from desc.io import IOAble
-from desc.utils import isalmostequal, islinspaced, issorted
+from desc.utils import combination_permutation, isalmostequal, islinspaced, issorted
 
 
 class Transform(IOAble):
@@ -26,7 +25,7 @@ class Transform(IOAble):
         * if an array, derivative orders specified explicitly. Shape should be (N,3),
           where each row is one set of partial derivatives [dr, dt, dz]
     rcond : float
-         relative cutoff for singular values for inverse fitting
+        relative cutoff for singular values for inverse fitting
     build : bool
         whether to precompute the transforms now or do it later
     build_pinv : bool
@@ -58,7 +57,11 @@ class Transform(IOAble):
         self._basis = basis
         self._rcond = rcond if rcond is not None else "auto"
 
-        if not (self.grid.NFP == self.basis.NFP) and grid.node_pattern != "custom":
+        if (
+            not np.all(self.grid.nodes[:, 2] == 0)
+            and not (self.grid.NFP == self.basis.NFP)
+            and grid.node_pattern != "custom"
+        ):
             warnings.warn(
                 colored(
                     "Unequal number of field periods for grid {} and basis {}.".format(
@@ -111,18 +114,7 @@ class Transform(IOAble):
 
         """
         if isinstance(derivs, int) and derivs >= 0:
-            derivatives = np.array([[]])
-            combos = combinations_with_replacement(range(derivs + 1), 3)
-            for combo in list(combos):
-                perms = set(permutations(combo))
-                for perm in list(perms):
-                    if derivatives.shape[1] == 3:
-                        derivatives = np.vstack([derivatives, np.array(perm)])
-                    else:
-                        derivatives = np.array([perm])
-            derivatives = derivatives[
-                derivatives.sum(axis=1) <= derivs
-            ]  # remove higher orders
+            derivatives = combination_permutation(3, derivs, False)
         elif np.atleast_1d(derivs).ndim == 1 and len(derivs) == 3:
             derivatives = np.asarray(derivs).reshape((1, 3))
         elif np.atleast_2d(derivs).ndim == 2 and np.atleast_2d(derivs).shape[1] == 3:

@@ -5,7 +5,7 @@ dependencies:
   # standard install
   - colorama
   - h5py >= 3.0.0
-  - matplotlib >= 3.3.0, <= 3.6.0, ~= 3.4.3
+  - matplotlib >= 3.3.0, <= 3.6.0, != 3.4.3
   - mpmath >= 1.0.0
   - netcdf4 >= 1.5.4
   - numpy >= 1.20.0
@@ -18,13 +18,14 @@ dependencies:
     - nvgpu
     # testing and benchmarking
     - qsc
+    - qicna @ git+https://github.com/rogeriojorge/pyQIC/
 
   # building the docs
   - nbsphinx > 0.8.5
   - sphinx > 3.0.0
   - sphinx-argparse
   - sphinx-copybutton
-  - sphinx_rtd_theme
+  - sphinx_rtd_theme >= 1.0, < 2.0
 
   # linting
   - black = 22.10.0
@@ -34,7 +35,6 @@ dependencies:
   - flake8-isort >=5.0.0, <= 6.0.0
 
   # testing and benchmarking
-  - codecov
   - markupsafe = 2.0.1
   - nbmake
   - pytest >= 5.0.0

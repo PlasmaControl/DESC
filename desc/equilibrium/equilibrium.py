@@ -63,6 +63,20 @@ class Equilibrium(_Configuration, IOAble):
     current : Profile or ndarray shape(k,2) (optional)
         Toroidal current profile or array of mode numbers and spectral coefficients
         Default is a PowerSeriesProfile with zero toroidal current
+    electron_temperature : Profile or ndarray shape(k,2) (optional)
+        Electron temperature (eV) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding density.
+        Cannot specify both kinetic profiles and pressure.
+    electron_density : Profile or ndarray shape(k,2) (optional)
+        Electron density (m^-3) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding temperature.
+        Cannot specify both kinetic profiles and pressure.
+    ion_temperature : Profile or ndarray shape(k,2) (optional)
+        Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
+        Default is to assume electrons and ions have the same temperature.
+    atomic_number : Profile or ndarray shape(k,2) (optional)
+        Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
+        coefficients. Default is 1
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -99,6 +113,10 @@ class Equilibrium(_Configuration, IOAble):
         pressure=None,
         iota=None,
         current=None,
+        electron_temperature=None,
+        electron_density=None,
+        ion_temperature=None,
+        atomic_number=None,
         surface=None,
         axis=None,
         sym=None,
@@ -115,6 +133,10 @@ class Equilibrium(_Configuration, IOAble):
             pressure,
             iota,
             current,
+            electron_temperature,
+            electron_density,
+            ion_temperature,
+            atomic_number,
             surface,
             axis,
             sym,
@@ -321,7 +343,7 @@ class Equilibrium(_Configuration, IOAble):
                 ntheta = 2 * M + 1
 
             inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.spsi * na_eq.Bbar
+            inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L
             inputs["M"] = M
@@ -343,7 +365,9 @@ class Equilibrium(_Configuration, IOAble):
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 
         rho, _ = special.js_roots(L, 2, 2)
-        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.nphi, NFP=na_eq.nfp)
+        # TODO: could make this an OCS grid to improve fitting, need to figure out
+        # how concentric grids work with QSC
+        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,
@@ -360,21 +384,38 @@ class Equilibrium(_Configuration, IOAble):
             sym="sin" if not na_eq.lasym else False,
             spectral_indexing=spectral_indexing,
         )
+        basis_L = FourierZernikeBasis(
+            L=L,
+            M=M,
+            N=N,
+            NFP=na_eq.nfp,
+            sym="sin" if not na_eq.lasym else False,
+            spectral_indexing=spectral_indexing,
+        )
+
         transform_R = Transform(grid, basis_R, build_pinv=True)
         transform_Z = Transform(grid, basis_Z, build_pinv=True)
+        transform_L = Transform(grid, basis_L, build_pinv=True)
 
         R_1D = np.zeros((grid.num_nodes,))
         Z_1D = np.zeros((grid.num_nodes,))
-
+        L_1D = np.zeros((grid.num_nodes,))
         for rho_i in rho:
             idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
-            R_2D, Z_2D, _ = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+            R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
+            phi_cyl_ax = np.linspace(
+                0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
+            )
+            nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
+            phi_B = phi_cyl_ax + nu_B_ax
+            nu_B = phi_B - phi0_2D
             R_1D[idx] = R_2D.flatten(order="F")
             Z_1D[idx] = Z_2D.flatten(order="F")
+            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)
-        inputs["L_lmn"] = np.zeros_like(inputs["Z_lmn"])
+        inputs["L_lmn"] = transform_L.fit(L_1D)
 
         eq = Equilibrium(**inputs)
         eq.surface = eq.get_surface_at(rho=1)
@@ -391,7 +432,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -441,7 +482,8 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
-                iota=objective != "vacuum" and self.iota is not None
+                iota=objective != "vacuum" and self.iota is not None,
+                kinetic=self.electron_temperature is not None,
             )
         if not isinstance(objective, ObjectiveFunction):
             objective = get_equilibrium_objective(objective)
@@ -488,7 +530,7 @@ class Equilibrium(_Configuration, IOAble):
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value[-1].size:
+            if value[-1].size:
                 setattr(eq, key, value[-1])
 
         if verbose > 0:
@@ -502,13 +544,13 @@ class Equilibrium(_Configuration, IOAble):
         self,
         objective=None,
         constraints=None,
-        optimizer="lsq-exact",
+        optimizer="proximal-lsq-exact",
         ftol=None,
         xtol=None,
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -558,7 +600,10 @@ class Equilibrium(_Configuration, IOAble):
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
+            constraints = get_fixed_boundary_constraints(
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
             constraints = (ForceBalance(), *constraints)
 
         if copy:
@@ -584,7 +629,7 @@ class Equilibrium(_Configuration, IOAble):
             objective.print_value(objective.x(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
-            if not (key == "c_l" or key == "i_l") or value[-1].size:
+            if value[-1].size:
                 setattr(eq, key, value[-1])
         if verbose > 0:
             print("End of solver")
@@ -593,7 +638,7 @@ class Equilibrium(_Configuration, IOAble):
         eq.solved = result["success"]
         return eq, result
 
-    def _optimize(
+    def _optimize(  # noqa: C901
         self,
         objective,
         constraint=None,
@@ -752,22 +797,15 @@ class Equilibrium(_Configuration, IOAble):
             return eq
         else:
             for attr in self._io_attrs_:
-                setattr(self, attr, getattr(eq, attr))
+                val = getattr(eq, attr)
+                setattr(self, attr, val)
             return self
 
     def perturb(
         self,
+        deltas,
         objective=None,
         constraints=None,
-        dR=None,
-        dZ=None,
-        dL=None,
-        dRb=None,
-        dZb=None,
-        dp=None,
-        di=None,
-        dc=None,
-        dPsi=None,
         order=2,
         tr_ratio=0.1,
         weight="auto",
@@ -783,10 +821,10 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to satisfy. Default = force balance.
         constraints : Objective or tuple of Objective
             Constraint function to satisfy. Default = fixed-boundary.
-        dR, dZ, dL, dRb, dZb, dp, di, dc, dPsi : ndarray or float
-            Deltas for perturbations of R, Z, lambda, R_boundary, Z_boundary, pressure,
-            rotational transform, toroidal current, and total toroidal magnetic flux.
-            Setting to None or zero ignores that term in the expansion.
+        deltas : dict of ndarray
+            Deltas for perturbations. Keys should names of Equilibrium attributes
+            ("p_l",  "Rb_lmn", "L_lmn" etc.) and values of arrays of desired change in
+            the attribute.
         order : {0,1,2,3}
             Order of perturbation (0=none, 1=linear, 2=quadratic, etc.)
         tr_ratio : float or array of float
@@ -817,27 +855,16 @@ class Equilibrium(_Configuration, IOAble):
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(iota=self.iota is not None)
-
-        if not objective.built:
-            objective.build(self, verbose=verbose)
-        for constraint in constraints:
-            if not constraint.built:
-                constraint.build(self, verbose=verbose)
+            constraints = get_fixed_boundary_constraints(
+                iota=self.iota is not None,
+                kinetic=self.electron_temperature is not None,
+            )
 
         eq = perturb(
             self,
             objective,
             constraints,
-            dR=dR,
-            dZ=dZ,
-            dL=dL,
-            dRb=dRb,
-            dZb=dZb,
-            dp=dp,
-            di=di,
-            dc=dc,
-            dPsi=dPsi,
+            deltas,
             order=order,
             tr_ratio=tr_ratio,
             weight=weight,

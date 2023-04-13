@@ -12,6 +12,7 @@
    notebooks/perturbations
    notebooks/zernike_eval
    variables
+   optimizers
 
 .. toctree::
    :maxdepth: 1

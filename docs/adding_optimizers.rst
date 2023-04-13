@@ -1,49 +1,54 @@
+.. _adding-optimizers:
+
 Adding new optimizers
 ----------------------
 
 This guide walks through adding an interface to a new optimizer. As an example, we will
-write an interface to the popular open source `ipopt` interior point method.
+write an interface to the popular open source ``ipopt`` interior point method.
 
-We will first need to install the python interface to `ipopt`, called `cyipopt` from
-https://github.com/mechmotum/cyipopt_
+We will first need to install the python interface to ``ipopt``, called ``cyipopt`` from
+https://github.com/mechmotum/cyipopt
 
 The main steps are to define a wrapper function to handle the interface, and decorate
-the wrapper with the `@register_optimizer` decorator to tell DESC that the optimizer
+the wrapper with the ``@register_optimizer`` decorator to tell DESC that the optimizer
 exists and how to use it.
 
-The `register_optimizer` decorator takes 6 arguments. In all cases the values can either
+The ``register_optimizer`` decorator takes 6 arguments. In all cases the values can either
 be single entries or lists, to register multiple versions of the same basic algorithm.
-For example, here we register a standard version of `ipopt` that uses all derivative
-information, and `ipopt-bfgs` which only uses approximate Hessians. The necessary fields
+For example, here we register a standard version of ``ipopt`` that uses all derivative
+information, and ``ipopt-bfgs`` which only uses approximate Hessians. The necessary fields
 are:
 
-- `name` (`str`) : name you want to give the optimization method. This is what you will
-pass to `desc.optimize.Optimizer` to select the given method.
-- `scalar` (`bool`): whether the method expects a scalar objective or a vector (for least squares).
-- `equality_constraints` (`bool`) : whether the method can handle equality constraints.
-- `inequality_constraints` (`bool`) : whether the method can handle inequality constraints.
-- `stochastic` (`bool`) : whether the optimizer can be used for stochastic/noisy objectives.
-- `hessian` (`bool`) : whether the optimzer uses hessian information.
+
+- ``name`` (``str``) : name you want to give the optimization method. This is what you will
+  pass to ``desc.optimize.Optimizer`` to select the given method.
+- ``description`` (``str``) : A short description of the method, with relevant links
+- ``scalar`` (``bool``): whether the method expects a scalar objective or a vector (for least squares).
+- ``equality_constraints`` (``bool``) : whether the method can handle equality constraints.
+- ``inequality_constraints`` (``bool``) : whether the method can handle inequality constraints.
+- ``stochastic`` (``bool``) : whether the optimizer can be used for stochastic/noisy objectives.
+- ``hessian`` (``bool``) : whether the optimzer uses hessian information.
+- ``GPU`` (``bool``) : whether the optimizer can run on GPUs
 
 
 The wrapper function itself should take the following arguments:
 
-- `objective` (`ObjectiveFunction`) : Function to minimize.
-- `constraint` (`ObjectiveFunction`) : Constraint to satisfy.
-- `x0` (`ndarray`) : Starting point.
-- `method` (`str`) : Name of the method to use (this will be the same as the name
-the method was registered with)
-- `x_scale` (`array_like`) : Characteristic scale of each variable.
-- `verbose` (`int`) : level of output to console
-    * 0  : work silently.
-    * 1 : display a termination report.
-    * 2 : display progress during iterations
-- `stoptol` (`dict`) : Dictionary of stopping tolerances, with keys {"xtol", "ftol",
-"gtol", "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
-- `options` (`dict`) : Optional dictionary of additional keyword arguments to override
-default solver settings.
 
-The wrapper should return a `scipy.optimize.OptimizeResult` object.
+- ``objective`` (``ObjectiveFunction``) : Function to minimize.
+- ``constraint`` (``ObjectiveFunction``) : Constraint to satisfy.
+- ``x0`` (``ndarray``) : Starting point.
+- ``method`` (``str``) : Name of the method to use (this will be the same as the name
+  the method was registered with)
+- ``x_scale`` (``array_like``) : Characteristic scale of each variable.
+- ``verbose`` (``int``) : level of output to console - 0  : work silently,
+  1 : display a termination report, 2 : display progress during iterations
+- ``stoptol`` (``dict``) : Dictionary of stopping tolerances, with keys ``{"xtol", "ftol",
+  "gtol", "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}``
+- ``options`` (``dict``) : Optional dictionary of additional keyword arguments to override
+  default solver settings.
+
+
+The wrapper should return a ``scipy.optimize.OptimizeResult`` object.
 
 A full listing of the wrapper function is shown below, with comments to explain the basic
 procedure.
@@ -62,11 +67,13 @@ procedure.
             "ipopt",
             "ipopt-bfgs",
         ],
+        description="Interior point optimizer, see https://cyipopt.readthedocs.io/en/latest/"
         scalar=True,
         equality_constraints=True,
         inequality_constraints=True,
         stochastic=False,
         hessian=[True, False],
+        GPU=False
     )
     def _optimize_ipopt(
         objective, constraint, x0, method, x_scale, verbose, stoptol, options=None

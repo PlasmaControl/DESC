@@ -163,10 +163,10 @@ class InputReader:
             "L_grid": np.atleast_1d(None),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
-            "pres_ratio": np.atleast_1d(1.0),
-            "curr_ratio": np.atleast_1d(1.0),
-            "bdry_ratio": np.atleast_1d(1.0),
-            "pert_order": np.atleast_1d(1),
+            "pres_ratio": np.atleast_1d(None),
+            "curr_ratio": np.atleast_1d(None),
+            "bdry_ratio": np.atleast_1d(None),
+            "pert_order": np.atleast_1d(2),
             "ftol": np.atleast_1d(None),
             "xtol": np.atleast_1d(None),
             "gtol": np.atleast_1d(None),
@@ -625,16 +625,20 @@ class InputReader:
                 else:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
-            inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
+            if inputs_ii["pres_ratio"] is not None:
+                inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
             # apply current ratio
-            if "current" in inputs_ii:
+            if "current" in inputs_ii and inputs_ii["curr_ratio"] is not None:
                 inputs_ii["current"][:, 1] *= inputs_ii["curr_ratio"]
+            else:
+                del inputs_ii["curr_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
                 inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1.0
             )
-            inputs_ii["surface"][:, 3] *= bdry_factor
-            inputs_ii["surface"][:, 4] *= bdry_factor
+            if inputs_ii["bdry_ratio"] is not None:
+                inputs_ii["surface"][:, 3] *= bdry_factor
+                inputs_ii["surface"][:, 4] *= bdry_factor
             inputs_list.append(inputs_ii)
 
         return inputs_list
@@ -685,9 +689,18 @@ class InputReader:
 
         f.write("\n# continuation parameters\n")
         for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
+            inputs_not_None = []
+            for inp in inputs:
+                if inp.get(key) is not None:
+                    inputs_not_None.append(inp)
+            if not inputs_not_None:  # an  empty list evals to False
+                continue  # don't write line if all input tolerance are None
+
             f.write(
                 key
-                + " = {} \n".format(", ".join([str(float(inp[key])) for inp in inputs]))
+                + " = {} \n".format(
+                    ", ".join([str(float(inp[key])) for inp in inputs_not_None])
+                )
             )
 
         f.write("\n# solver tolerances\n")
@@ -810,10 +823,10 @@ class InputReader:
             "L_grid": None,
             "M_grid": 0,
             "N_grid": 0,
-            "pres_ratio": 1.0,
-            "curr_ratio": 1.0,
-            "bdry_ratio": 1.0,
-            "pert_order": 1,
+            "pres_ratio": None,
+            "curr_ratio": None,
+            "bdry_ratio": None,
+            "pert_order": 2,
             "ftol": None,
             "xtol": None,
             "gtol": None,
@@ -1342,49 +1355,7 @@ class InputReader:
 
         vmec_file.close()
 
-        # default continuation stuff
-        res_step = 6
-        pres_step = 1 / 2
-        bdry_step = 1 / 4
-
-        # first we solve vacuum until we reach full L,M
-        # then pressure
-        # then 3d shaping
-        res_steps = max(inputs["L"] // res_step, 1)
-        pres_steps = (
-            0 if (inputs["pressure"][:, 1] == 0).all() else int(np.ceil(1 / pres_step))
-        )
-        bdry_steps = 0 if inputs["N"] == 0 else int(np.ceil(1 / bdry_step))
-
-        total_steps = res_steps + pres_steps + bdry_steps
-        inputs_arr = [inputs.copy() for _ in range(total_steps)]
-        for i in range(total_steps):
-            if i < res_steps:
-                inputs_arr[i]["L"] = min((i + 1) * res_step, inputs["L"])
-                inputs_arr[i]["L_grid"] = 2 * inputs_arr[i]["L"]
-                inputs_arr[i]["N"] = 0
-                inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = 0.0
-                inputs_arr[i]["curr_ratio"] = 0.0
-                if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0.0
-                else:
-                    inputs_arr[i]["bdry_ratio"] = 1.0
-            elif i < (res_steps + pres_steps):
-                inputs_arr[i]["N"] = 0
-                inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = (i - res_steps + 1) * pres_step
-                inputs_arr[i]["curr_ratio"] = (i - res_steps + 1) * pres_step
-                inputs_arr[i]["pert_order"] = 2
-                if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0.0
-                else:
-                    inputs_arr[i]["bdry_ratio"] = 1.0
-            else:
-                inputs_arr[i]["pert_order"] = 2
-                inputs_arr[i]["bdry_ratio"] = (
-                    i - res_steps - pres_steps + 1
-                ) * bdry_step
+        inputs_arr = [inputs]
 
         return inputs_arr
 

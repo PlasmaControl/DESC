@@ -328,7 +328,7 @@ class FluxGradient(_Objective):
         if self.grid is None:
             self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
 
-        self._dim_f = 1
+        self._dim_f = self.grid.num_nodes
         self._data_keys = ["|grad(psi)|"]
         self._args = get_params(self._data_keys)
 
@@ -343,6 +343,10 @@ class FluxGradient(_Objective):
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["Psi"] / scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -370,6 +374,12 @@ class FluxGradient(_Objective):
             profiles=self._profiles,
         )
         return data["|grad(psi)|"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
+        )
 
 
 class MeanCurvature(_Objective):

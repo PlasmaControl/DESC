@@ -654,7 +654,7 @@ class QuasiIsodynamic(_Objective):
             self._QI_mn = np.zeros(((2 * self.M_QI + 1) * self.N_QI,))
 
         self._dim_f = grid.num_nodes
-        self._data_keys = ["f_QI"]
+        self._data_keys = ["omnigenity"]
         self._args = get_params(self._data_keys)
         self._args = list(
             map(
@@ -736,7 +736,7 @@ class QuasiIsodynamic(_Objective):
         weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
             data["eta"]
         )
-        return data["f_QI"] * weights
+        return data["omnigenity"] * weights
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""

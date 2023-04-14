@@ -460,8 +460,8 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="f_omni",
-    label="f_{omni}",
+    name="omnigenity",
+    label="f_{omnigenity}",
     units="T",
     units_long="Tesla",
     description="Omnigenity error",
@@ -472,8 +472,8 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["|B|_omni", "|B|(alpha,eta)"],
 )
-def _f_omni(params, transforms, profiles, data, **kwargs):
-    data["f_QI"] = data["|B|(alpha,eta)"] - data["|B|_omni"]
+def _omnigenity(params, transforms, profiles, data, **kwargs):
+    data["omnigenity"] = data["|B|(alpha,eta)"] - data["|B|_omni"]
     return data
 
 

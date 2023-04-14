@@ -604,7 +604,7 @@ class QuasiIsodynamic(_Objective):
 
         assert len(helicity) == 2
         assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
-        self.grid = grid
+        self._grid = grid
         self.helicity = helicity
         self.L_QI = L_QI
         self.M_QI = M_QI
@@ -646,7 +646,7 @@ class QuasiIsodynamic(_Objective):
             grid = self._grid
 
         if self.QI_l is None:
-            data = eq.compute(["mirror ratio"], grid=self.grid)
+            data = eq.compute(["mirror ratio"], grid=grid)
             self._QI_l = np.linspace(
                 min(data["min_tz |B|"]), max(data["max_tz |B|"]), num=self.L_QI
             )

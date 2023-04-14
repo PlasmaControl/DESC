@@ -653,7 +653,7 @@ class QuasiIsodynamic(_Objective):
         if self.QI_mn is None:
             self._QI_mn = np.zeros(((2 * self.M_QI + 1) * self.N_QI,))
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["f_QI"]
         self._args = get_params(self._data_keys)
         self._args = list(

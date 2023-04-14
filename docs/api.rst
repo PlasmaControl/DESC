@@ -138,6 +138,7 @@ Objective Functions
     desc.objectives.get_fixed_boundary_constraints,
     desc.objectives.get_NAE_constraints,
     desc.objectives.HelicalForceBalance
+    desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability

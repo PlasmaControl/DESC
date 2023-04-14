@@ -22,6 +22,7 @@ from desc.objectives import (
     Energy,
     ForceBalance,
     GenericObjective,
+    Isodynamicity,
     MagneticWell,
     MeanCurvature,
     MercierStability,
@@ -58,8 +59,7 @@ class TestObjectiveFunction:
                 "Psi": eq.Psi,
             }
             np.testing.assert_allclose(
-                obj.compute(**kwargs),
-                eq.compute(f, grid=obj.grid)[f],
+                obj.compute(**kwargs), eq.compute(f, grid=obj._transforms["grid"])[f]
             )
 
         test("sqrt(g)", Equilibrium())
@@ -233,6 +233,18 @@ class TestObjectiveFunction:
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_isodynamicity(self):
+        """Test calculation of isodynamicity metric."""
+
+        def test(eq):
+            obj = Isodynamicity(eq=eq)
+            iso = obj.compute(*obj.xs(eq))
+            np.testing.assert_allclose(iso, 0, atol=1e-14)
+
+        test(Equilibrium(iota=PowerSeriesProfile(0)))
+        test(Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
     def test_qs_boozer_grids(self):
         """Test grid compatability with QS objectives."""
         eq = get("QAS")
@@ -254,7 +266,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = MercierStability(eq=eq)
             DMerc = obj.compute(*obj.xs(eq))
-            np.testing.assert_equal(len(DMerc), obj.grid.num_rho)
+            np.testing.assert_equal(len(DMerc), obj._transforms["grid"].num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -267,7 +279,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = MagneticWell(eq=eq)
             magnetic_well = obj.compute(*obj.xs(eq))
-            np.testing.assert_equal(len(magnetic_well), obj.grid.num_rho)
+            np.testing.assert_equal(len(magnetic_well), obj._transforms["grid"].num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -439,12 +451,16 @@ def test_target_profiles():
     obji = RotationalTransform(target=iota)
     obji.build(eqc)
     np.testing.assert_allclose(
-        obji.target, iota(obji.grid.nodes[obji.grid.unique_rho_idx])
+        obji.target,
+        iota(obji._transforms["grid"].nodes[obji._transforms["grid"].unique_rho_idx]),
     )
     objc = ToroidalCurrent(target=current)
     objc.build(eqi)
     np.testing.assert_allclose(
-        objc.target, current(objc.grid.nodes[objc.grid.unique_rho_idx])
+        objc.target,
+        current(
+            objc._transforms["grid"].nodes[objc._transforms["grid"].unique_rho_idx]
+        ),
     )
 
 
@@ -577,3 +593,27 @@ def test_objective_print(capsys):
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, grid=grid)
     test(obj, curr, normalize=True)
+
+
+@pytest.mark.unit
+def test_rebuild():
+    """Test that the objective is rebuilt correctly when needed."""
+    eq = Equilibrium(L=3, M=3)
+    f_obj = ForceBalance()
+    obj = ObjectiveFunction(f_obj)
+    eq.solve(maxiter=2, objective=obj)
+
+    # this would fail before v0.8.2 when trying to get objective.x
+    eq.change_resolution(L=5, M=5)
+    obj.build(eq)
+    eq.solve(maxiter=2, objective=obj)
+
+    eq = Equilibrium(L=3, M=3)
+    f_obj = ForceBalance()
+    obj = ObjectiveFunction(f_obj)
+    eq.solve(maxiter=2, objective=obj)
+    eq.change_resolution(L=5, M=5)
+    # this would fail at objective.compile
+    obj = ObjectiveFunction(f_obj)
+    obj.build(eq)
+    eq.solve(maxiter=2, objective=obj)

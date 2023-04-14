@@ -481,7 +481,7 @@ class MeanCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
+            self._normalization = 1 / scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -509,6 +509,12 @@ class MeanCurvature(_Objective):
             profiles=self._profiles,
         )
         return data["curvature_H"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
+        )
 
 
 class PlasmaVesselDistance(_Objective):
@@ -626,7 +632,7 @@ class PlasmaVesselDistance(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = scales["a"] / jnp.sqrt(self._dim_f)
+            self._normalization = scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -658,6 +664,12 @@ class PlasmaVesselDistance(_Objective):
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
         return d.min(axis=0)
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
+        )
 
 
 class PrincipalCurvature(_Objective):
@@ -699,7 +711,7 @@ class PrincipalCurvature(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(m^-1)"
     _print_value_fmt = "Principal curvature: {:10.3e} "
@@ -763,7 +775,7 @@ class PrincipalCurvature(_Objective):
 
         if self._normalize:
             scales = compute_scaling_factors(eq)
-            self._normalization = 1 / scales["a"] / jnp.sqrt(self._dim_f)
+            self._normalization = 1 / scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -792,6 +804,12 @@ class PrincipalCurvature(_Objective):
         )
         return jnp.max(
             jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+        )
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
         )
 
 
@@ -825,7 +843,7 @@ class Volume(_Objective):
 
     """
 
-    _scalar = True
+    _scalar = False
     _linear = False
     _units = "(m^3)"
     _print_value_fmt = "Plasma volume: {:10.3e} "

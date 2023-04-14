@@ -292,7 +292,7 @@ def test_compute_scalar_resolution():
     eq = get("HELIOTRON")
     res_array = np.arange(8, 17)
 
-    # GenericObjective (volume)
+    # GenericObjective
     f = np.zeros_like(res_array, dtype=float)
     for i, res in enumerate(res_array):
         grid = ConcentricGrid(L=res, M=res, N=res, NFP=eq.NFP, sym=eq.sym)

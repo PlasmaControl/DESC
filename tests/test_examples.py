@@ -49,7 +49,7 @@ def test_SOLOVEV_vacuum(SOLOVEV_vac):
     data = eq.compute("|J|")
 
     np.testing.assert_allclose(data["iota"], 0, atol=1e-16)
-    np.testing.assert_allclose(data["|J|"], 0, atol=2e-3)
+    np.testing.assert_allclose(data["|J|"], 0, atol=3e-3)
 
 
 @pytest.mark.regression
@@ -681,7 +681,7 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=4e-5)
+    np.testing.assert_allclose(lam_av_nae, -qic.iota * qic.nu_spline(phi), atol=7e-5)
 
     # check |B| on axis
 

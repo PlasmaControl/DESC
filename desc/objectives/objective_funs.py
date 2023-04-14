@@ -56,14 +56,22 @@ class ObjectiveFunction(IOAble):
         if eq is not None:
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
+    def set_args(self, *args):
+        """Set which arguments the objective should expect.
+
+        Defaults to args from all sub-objectives. Additional arguments can be passed in.
+        """
+        self._args = list(np.concatenate([obj.args for obj in self.objectives]))
+        self._args += list(args)
+        self._args = [arg for arg in arg_order if arg in self._args]
+        self._set_state_vector()
+
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
-        self._args = np.concatenate([obj.args for obj in self.objectives])
-        self._args = [arg for arg in arg_order if arg in self._args]
+        self._dimensions = self.objectives[0].dimensions
 
         # args not in arg_order
         self._QI_dict = {}
-        self._dimensions = {}
         objective_names = [obj.name for obj in self.objectives]
         for i, obj in enumerate(self.objectives):
             assert objective_names.count(obj.name) == 1
@@ -191,7 +199,7 @@ class ObjectiveFunction(IOAble):
         else:
             self._scalar = False
 
-        self._set_state_vector()
+        self.set_args()
         self._set_derivatives()
         if self.use_jit:
             self.jit()
@@ -279,7 +287,10 @@ class ObjectiveFunction(IOAble):
 
         x = jnp.atleast_1d(x)
         if x.size != self.dim_x:
-            raise ValueError("Input vector dimension is invalid.")
+            raise ValueError(
+                "Input vector dimension is invalid, expected "
+                + f"{self.dim_x} got {x.size}."
+            )
 
         kwargs = {}
         for arg in self.args:
@@ -559,13 +570,19 @@ class _Objective(IOAble, ABC):
                     mode="hess",
                 )
             else:  # these derivatives are always zero
-                self._derivatives["jac"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["jac"][
+                    arg
+                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
                     (self.dim_f, self.dimensions[arg])
                 )
-                self._derivatives["grad"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["grad"][
+                    arg
+                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
                     (1, self.dimensions[arg])
                 )
-                self._derivatives["hess"][arg] = lambda *args, **kwargs: jnp.zeros(
+                self._derivatives["hess"][
+                    arg
+                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
                     (self.dimensions[arg], self.dimensions[arg])
                 )
 

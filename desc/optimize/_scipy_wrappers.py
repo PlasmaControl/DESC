@@ -77,9 +77,11 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 
     """
     assert constraint is None, f"method {method} doesn't support constraints"
+    x_scale = 1 if x_scale == "auto" else x_scale
     options = {} if options is None else options
     options.setdefault("maxiter", np.iinfo(np.int32).max)
-    x_scale = 1 if x_scale == "auto" else x_scale
+    if method in ["scipy-trust-exact", "scipy-trust-ncg"]:
+        options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0))
     if isinstance(x_scale, str):
         raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
@@ -124,8 +126,8 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 
     def callback(x1):
         allx.append(x1)
-        f1 = f_where_x(x1, func_allx, func_allf)
-        g1 = f_where_x(x1, grad_allx, grad_allf)
+        f1 = f_where_x(x1, func_allx, func_allf, dim=0)
+        g1 = f_where_x(x1, grad_allx, grad_allf, dim=1)
         g_norm = np.linalg.norm(g1, ord=np.inf)
         x_norm = np.linalg.norm(x1)
 
@@ -135,12 +137,12 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             reduction_ratio = 0
         else:
             x2 = allx[-2]
-            f2 = f_where_x(x2, func_allx, func_allf)
+            f2 = f_where_x(x2, func_allx, func_allf, dim=0)
             df = f2 - f1
             dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
             if len(hess_allx):
-                H1 = f_where_x(x1, hess_allx, hess_allf)
+                H1 = f_where_x(x1, hess_allx, hess_allf, dim=2)
             else:
                 H1 = np.eye(x1.size) / dx_norm
             if not H1.size:
@@ -203,10 +205,10 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         result["nit"] = len(allx)
     except StopIteration:
         x = grad_allx[-1]
-        f = f_where_x(x, func_allx, func_allf)
-        g = f_where_x(x, grad_allx, grad_allf)
+        f = f_where_x(x, func_allx, func_allf, dim=0)
+        g = f_where_x(x, grad_allx, grad_allf, dim=1)
         if len(hess_allx):
-            H = f_where_x(x, hess_allx, hess_allf)
+            H = f_where_x(x, hess_allx, hess_allf, dim=2)
         else:
             H = None
         result = OptimizeResult(
@@ -305,7 +307,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
     def fun_wrapped(x):
         # record all the xs and fs we see
         fun_allx.append(x)
-        f = fun(x)
+        f = jnp.atleast_1d(fun(x))
         fun_allf.append(f)
         return f
 
@@ -318,10 +320,11 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         return J
 
     def callback(x1):
-        f1 = f_where_x(x1, fun_allx, fun_allf)
+        f1 = f_where_x(x1, fun_allx, fun_allf, dim=1)
         c1 = 1 / 2 * np.dot(f1, f1)
-        J1 = f_where_x(x1, jac_allx, jac_allf)
+        J1 = f_where_x(x1, jac_allx, jac_allf, dim=2)
         g1 = J1.T @ f1
+
         g_norm = np.linalg.norm(g1, ord=np.inf)
         x_norm = np.linalg.norm(x1)
 
@@ -331,11 +334,11 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             reduction_ratio = 0
         else:
             x2 = jac_allx[-2]
-            f2 = f_where_x(x2, fun_allx, fun_allf)
+            f2 = f_where_x(x2, fun_allx, fun_allf, dim=1)
             c2 = 1 / 2 * np.dot(f2, f2)
             df = c2 - c1
-            dx = x1 - x2
-            dx_norm = jnp.linalg.norm(dx)
+            dx = np.atleast_1d(x1 - x2)
+            dx_norm = np.linalg.norm(dx)
 
             predicted_reduction = -evaluate_quadratic_form_jac(J1, g1, dx)
             if predicted_reduction > 0:
@@ -399,10 +402,10 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         result["nit"] = len(jac_allx)
     except StopIteration:
         x = jac_allx[-1]
-        f = f_where_x(x, fun_allx, fun_allf)
+        f = f_where_x(x, fun_allx, fun_allf, dim=1)
         c = 1 / 2 * np.dot(f, f)
-        J = f_where_x(x, jac_allx, jac_allf)
-        g = J.T @ f
+        J = f_where_x(x, jac_allx, jac_allf, dim=2)
+        g = np.atleast_1d(J.T @ f)
         result = OptimizeResult(
             x=x,
             success=success[0],

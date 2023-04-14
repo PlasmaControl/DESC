@@ -341,7 +341,7 @@ def compute_hess_scale(H, prev_scale_inv=None):
     return 1 / scale_inv, scale_inv
 
 
-def f_where_x(x, xs, fs):
+def f_where_x(x, xs, fs, dim=0):
     """Return fs where x==xs.
 
     Parameters
@@ -352,6 +352,8 @@ def f_where_x(x, xs, fs):
         list to compare x against
     fs : list of float, ndarray
         list of values to return value from
+    dim : int
+        number of dimensions the output should have
 
     Returns
     -------
@@ -367,4 +369,9 @@ def f_where_x(x, xs, fs):
     # sometimes two things are within eps of x, we want the most recent one
     if len(i) > 1:
         i = i[-1]
-    return fs[i].squeeze()
+    f = fs[i].squeeze()
+    if dim == 1:
+        f = np.atleast_1d(f)
+    if dim == 2:
+        f = np.atleast_2d(f.T).T
+    return f

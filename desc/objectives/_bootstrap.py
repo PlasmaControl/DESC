@@ -80,7 +80,7 @@ class BootstrapRedlConsistency(_Objective):
 
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
-        self.grid = grid
+        self._grid = grid
         self.helicity = helicity
         super().__init__(
             eq=eq,
@@ -105,19 +105,21 @@ class BootstrapRedlConsistency(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=np.linspace(1 / 5, 1, 5),
             )
+        else:
+            grid = self._grid
 
         assert (
             self.helicity[1] == 0 or abs(self.helicity[1]) == eq.NFP
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
         self._args = get_params(self._data_keys)
 
@@ -137,7 +139,7 @@ class BootstrapRedlConsistency(_Objective):
 
         # Try to catch cases in which density or temperatures are specified in the
         # wrong units. Densities should be ~ 10^20, temperatures are ~ 10^3.
-        rho = eq.compute("rho", grid=self.grid)["rho"]
+        rho = eq.compute("rho", grid=grid)["rho"]
         if jnp.any(eq.electron_density(rho) > 1e22):
             warnings.warn(
                 "Electron density is surprisingly high. It should have units of "
@@ -172,8 +174,8 @@ class BootstrapRedlConsistency(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -204,12 +206,18 @@ class BootstrapRedlConsistency(_Objective):
         )
 
         return compress(
-            self.grid, data["<J*B>"] - data["<J*B> Redl"], surface_label="rho"
+            self._transforms["grid"],
+            data["<J*B>"] - data["<J*B> Redl"],
+            surface_label="rho",
         )
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
         return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

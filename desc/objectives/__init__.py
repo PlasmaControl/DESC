@@ -24,13 +24,16 @@ from ._geometry import (
     Volume,
 )
 from ._qs import (
+    Isodynamicity,
     QuasiIsodynamic,
     QuasisymmetryBoozer,
-    QuasisymmetryTwoTerm,
     QuasisymmetryTripleProduct,
+    QuasisymmetryTwoTerm,
 )
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,

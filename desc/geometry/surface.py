@@ -214,12 +214,18 @@ class FourierRZToroidalSurface(Surface):
             N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
+
             self.R_basis.change_resolution(
                 M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
             )
             self.Z_basis.change_resolution(
                 M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
+            if hasattr(self.grid, "change_resolution"):
+                self.grid.change_resolution(
+                    self.grid.L, self.grid.M, self.grid.N, self.NFP
+                )
+
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)

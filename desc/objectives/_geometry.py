@@ -330,7 +330,7 @@ class FluxGradient(_Objective):
         else:
             grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["|grad(psi)|"]
         self._args = get_params(self._data_keys)
 

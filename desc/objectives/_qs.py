@@ -590,7 +590,7 @@ class QuasiIsodynamic(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        helicity=(1, 0),
+        helicity=(0, 1),
         L_QI=3,
         M_QI=1,
         N_QI=1,

@@ -36,7 +36,13 @@ class ObjectiveFunction(IOAble):
     _io_attrs_ = ["_objectives"]
 
     def __init__(
-        self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
+        self,
+        objectives,
+        eq=None,
+        use_jit=True,
+        deriv_mode="batched",
+        verbose=1,
+        name=None,
     ):
 
         if not isinstance(objectives, (tuple, list)):
@@ -52,6 +58,7 @@ class ObjectiveFunction(IOAble):
         self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
+        self._name = name
 
         if eq is not None:
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
@@ -469,6 +476,11 @@ class ObjectiveFunction(IOAble):
         if not self.built:
             raise RuntimeError("ObjectiveFunction must be built first.")
         return self._dim_f
+
+    @property
+    def name(self):
+        """Name of objective function (str)."""
+        return self._name
 
 
 class _Objective(IOAble, ABC):

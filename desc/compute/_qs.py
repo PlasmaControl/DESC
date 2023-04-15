@@ -365,7 +365,7 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Helical coordinate to make the field omnigeneous",
     dim=1,
-    params=["QI_mn"],
+    params=["omni_mn"],
     transforms={"eta": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
@@ -379,15 +379,15 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], alpha, eta]).T
 
     # apply eta=0 boundary conditions
-    QI_mn_arr = params["QI_mn"].reshape((transforms["eta"].basis.N, -1))
+    omni_mn_arr = params["omni_mn"].reshape((transforms["eta"].basis.N, -1))
     nn = (
         transforms["eta"].basis.modes[:, 2].reshape((transforms["eta"].basis.N + 1, -1))
     )
-    QI_m0 = jnp.sum(QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
-    QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
+    omni_m0 = jnp.sum(omni_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
+    omni_mn = jnp.concatenate((omni_m0, params["omni_mn"]))
 
     data["M*theta_B+N*zeta_B"] = (
-        jnp.matmul(transforms["eta"].basis.evaluate(nodes), QI_mn) + 2 * eta + jnp.pi
+        jnp.matmul(transforms["eta"].basis.evaluate(nodes), omni_mn) + 2 * eta + jnp.pi
     )
     return data
 
@@ -399,7 +399,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigeneous magnetic field",
     dim=1,
-    params=["QI_l"],
+    params=["omni_l"],
     transforms={},
     profiles=[],
     coordinates="rtz",
@@ -409,7 +409,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     # zeta is used as a placeholder for eta (angle along field lines)
     eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
 
-    B_input = jnp.sort(params["QI_l"])  # sort to ensure monotonicity
+    B_input = jnp.sort(params["omni_l"])  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta)

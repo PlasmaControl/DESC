@@ -74,7 +74,7 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
     for name in names:
         if name not in data_index:
             raise ValueError("Unrecognized value '{}'.".format(name))
-    allowed_kwargs = {"gamma", "helicity", "M_booz", "N_booz", "M_omni", "N_omni"}
+    allowed_kwargs = {"gamma", "helicity", "M_booz", "N_booz"}
     bad_kwargs = set(kwargs.keys()).difference(allowed_kwargs)
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -283,8 +283,6 @@ def get_transforms(keys, eq, grid, **kwargs):
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    M_omni = kwargs.pop("M_omni", None)
-    N_omni = kwargs.pop("N_omni", None)
 
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys)
@@ -324,8 +322,8 @@ def get_transforms(keys, eq, grid, **kwargs):
         transforms["eta"] = Transform(
             grid,
             DoubleFourierSeries(
-                M=M_omni,
-                N=N_omni,
+                M=eq.M_omni,
+                N=eq.N_omni,
                 NFP=eq.NFP,
                 sym="cos(z)",
             ),

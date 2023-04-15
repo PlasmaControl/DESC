@@ -21,21 +21,13 @@ color3 = "#2c7bb6"  # blue
 
 helicity = (0, 1)
 iota = 1 / (1 + np.sqrt(5)) - 0.1
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
 
-eq = Equilibrium(iota=np.array([iota]))
-z = np.linspace(0, np.pi / 2, num=QI_l.size)
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
+z = np.linspace(0, np.pi / 2, num=omni_l.size)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 
 alpha = data["theta"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
 eta = (
@@ -72,7 +64,7 @@ ax0.plot(
     lw=6,
     label=r"spline interpolation",
 )
-ax0.plot(z, QI_l, color=color1, linestyle="", marker="o", ms=12, label=r"$x_l$")
+ax0.plot(z, omni_l, color=color1, linestyle="", marker="o", ms=12, label=r"$x_l$")
 ax0.set_xlim([-np.pi / 2, np.pi / 2])
 ax0.set_xticks([-np.pi / 2, -np.pi / 3, -np.pi / 6, 0, np.pi / 6, np.pi / 3, np.pi / 2])
 ax0.set_xticklabels(
@@ -150,7 +142,11 @@ B_mn[np.nonzero((basis.modes == [0, -2, 0]).all(axis=1))[0]] = -np.pi / 4
 B_mn[np.nonzero((basis.modes == [0, 0, 4]).all(axis=1))[0]] = np.pi / 6
 B_mn[np.nonzero((basis.modes == [0, 1, 1]).all(axis=1))[0]] = np.pi / 3
 B_mn[np.nonzero((basis.modes == [0, 2, -3]).all(axis=1))[0]] = -np.pi / 5
-B = transform.transform(B_mn).reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
+B = (
+    transform.transform(B_mn)
+    .reshape((grid.num_theta, grid.num_zeta), order="F")
+    .squeeze()
+)
 theta = grid.nodes[:, 1].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
 zeta = grid.nodes[:, 2].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
 fig, ax = plt.subplots(figsize=(10, 10))
@@ -174,19 +170,11 @@ plt.savefig("general.eps")
 # omnigenity poloidal (QI)
 helicity = (0, 1)
 iota = 0.3
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
-eq = Equilibrium(iota=np.array([iota]))
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 theta = (
     data["theta_B(alpha,eta)"]
     .reshape((grid.num_theta, grid.num_zeta), order="F")
@@ -223,19 +211,11 @@ plt.savefig("omnigenity_M0_N1.eps")
 # omnigenity helical
 helicity = (1, 1)
 iota = 0.5
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
-eq = Equilibrium(iota=np.array([iota]))
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 theta = (
     data["theta_B(alpha,eta)"]
     .reshape((grid.num_theta, grid.num_zeta), order="F")
@@ -272,19 +252,11 @@ plt.savefig("omnigenity_M1_N1.eps")
 # omnigenity toroidal
 helicity = (1, 0)
 iota = 1.3
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
-eq = Equilibrium(iota=np.array([iota]))
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 theta = (
     data["theta_B(alpha,eta)"]
     .reshape((grid.num_theta, grid.num_zeta), order="F")
@@ -321,19 +293,11 @@ plt.savefig("omnigenity_M1_N0.eps")
 # quasi-symmetry poloidal (QP)
 helicity = (0, 1)
 iota = 0.3
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([0, -np.pi / 8, 0])
-eq = Equilibrium(iota=np.array([iota]))
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([0, -np.pi / 8, 0])
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 theta = (
     data["theta_B(alpha,eta)"]
     .reshape((grid.num_theta, grid.num_zeta), order="F")
@@ -370,19 +334,11 @@ plt.savefig("quasisymmetry_M0_N1.eps")
 # quasi-symmetry helical (QH)
 helicity = (1, 1)
 iota = 0.5
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([0, -np.pi / 8, 0])
-eq = Equilibrium(iota=np.array([iota]))
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([0, -np.pi / 8, 0])
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 theta = (
     data["theta_B(alpha,eta)"]
     .reshape((grid.num_theta, grid.num_zeta), order="F")
@@ -419,19 +375,11 @@ plt.savefig("quasisymmetry_M1_N1.eps")
 # quasi-symmetry toroidal (QA)
 helicity = (1, 0)
 iota = 1.3
-QI_l = np.array([1, 1.3, 1.8, 2])
-QI_mn = np.array([0, -np.pi / 8, 0])
-eq = Equilibrium(iota=np.array([iota]))
+omni_l = np.array([1, 1.3, 1.8, 2])
+omni_mn = np.array([0, -np.pi / 8, 0])
+eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
-data = eq.compute(
-    ["|B|_omni", "|B|(alpha,eta)"],
-    grid=grid,
-    helicity=helicity,
-    M_QI=1,
-    N_QI=1,
-    QI_l=QI_l,
-    QI_mn=QI_mn,
-)
+data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
 theta = (
     data["theta_B(alpha,eta)"]
     .reshape((grid.num_theta, grid.num_zeta), order="F")

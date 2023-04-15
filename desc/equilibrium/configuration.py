@@ -427,8 +427,8 @@ class _Configuration(IOAble, ABC):
             self.L_lmn = kwargs.pop("L_lmn")
 
         # initialize omnigenity parameters
-        self.M_omni = kwargs.pop("M_omni", 1)
-        self.N_omni = kwargs.pop("N_omni", 1)
+        self._M_omni = kwargs.pop("M_omni", 1)
+        self._N_omni = kwargs.pop("N_omni", 1)
         self._omni_l = kwargs.pop("omni_l", np.linspace(1, 2, 3))
         self._omni_mn = kwargs.pop(
             "omni_mn", np.zeros((2 * self.M_omni + 1) * self.N_omni)
@@ -883,6 +883,7 @@ class _Configuration(IOAble, ABC):
 
     @omni_mn.setter
     def omni_mn(self, omni_mn):
+        assert omni_mn.size == (2 * self.M_omni + 1) * self.N_omni
         self._omni_mn[:] = omni_mn
 
     @property
@@ -1147,7 +1148,7 @@ class _Configuration(IOAble, ABC):
         if profiles is None:
             profiles = get_profiles(names, eq=self, grid=grid, **kwargs)
         if transforms is None:
-            transforms = get_transforms(names, eq=self, grid=grid, **kwargs, **kwargs)
+            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
         if data is None:
             data = {}
 

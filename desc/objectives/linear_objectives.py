@@ -2913,7 +2913,7 @@ class FixOmni_l(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, omni_l, **kwargs):
         """Compute fixed omni_l error.
 
         Parameters
@@ -2928,8 +2928,7 @@ class FixOmni_l(_Objective):
             Total QI magnetic well shape error.
 
         """
-        params = self._parse_args(*args, **kwargs)
-        return params["omni_l"][self._idx]
+        return omni_l[self._idx]
 
     @property
     def target_arg(self):
@@ -3020,7 +3019,7 @@ class FixOmni_mn(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, *args, **kwargs):
+    def compute(self, omni_mn, **kwargs):
         """Compute fixed omni_mn error.
 
         Parameters
@@ -3035,8 +3034,7 @@ class FixOmni_mn(_Objective):
             Total QI magnetic well shift error.
 
         """
-        params = self._parse_args(*args, **kwargs)
-        return params["omni_mn"][self._idx]
+        return omni_mn[self._idx]
 
     @property
     def target_arg(self):

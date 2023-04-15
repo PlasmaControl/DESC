@@ -359,6 +359,25 @@ def _f_T(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="eta",
+    label="\\eta",
+    units="rad",
+    units_long="radians",
+    description="Intermediate omnigenity coordinate along field lines",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["NFP", "zeta"],
+)
+def _eta(params, transforms, profiles, data, **kwargs):
+    # zeta is used as a placeholder for eta (angle along field lines)
+    data["eta"] = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+    return data
+
+
+@register_compute_fun(
     name="M*theta_B+N*zeta_B",
     label="M\\theta_{B}+N\\zeta_{B}",
     units="rad",
@@ -369,14 +388,11 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     transforms={"eta": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["NFP", "rho", "theta", "zeta"],
+    data=["rho", "theta", "eta"],
 )
 def _helical_angle(params, transforms, profiles, data, **kwargs):
-    # theta is used as a placeholder for alpha (field line label)
-    alpha = data["theta"]
-    # zeta is used as a placeholder for eta (angle along field lines)
-    eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
-    nodes = jnp.array([data["rho"], alpha, eta]).T
+    alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
+    nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
 
     # apply eta=0 boundary conditions
     omni_mn_arr = params["omni_mn"].reshape((transforms["eta"].basis.N, -1))
@@ -387,7 +403,9 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     omni_mn = jnp.concatenate((omni_m0, params["omni_mn"]))
 
     data["M*theta_B+N*zeta_B"] = (
-        jnp.matmul(transforms["eta"].basis.evaluate(nodes), omni_mn) + 2 * eta + jnp.pi
+        jnp.matmul(transforms["eta"].basis.evaluate(nodes), omni_mn)
+        + 2 * data["eta"]
+        + jnp.pi
     )
     return data
 
@@ -403,17 +421,16 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["NFP", "zeta"],
+    data=["eta"],
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
-    # zeta is used as a placeholder for eta (angle along field lines)
-    eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
-
     B_input = jnp.sort(params["omni_l"])  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta)
-    data["|B|_omni"] = interp1d(jnp.abs(eta), eta_input, B_input, method="monotonic-0")
+    data["|B|_omni"] = interp1d(
+        jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
+    )
     return data
 
 
@@ -444,8 +461,7 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
             N * (1 - q) - M * (1 - iota)
         )
 
-    # theta is used as a placeholder for alpha (field line label)
-    alpha = data["theta"]
+    alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
 
     # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
     booz = matrix @ jnp.vstack((alpha, data["M*theta_B+N*zeta_B"]))

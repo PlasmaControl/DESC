@@ -119,6 +119,10 @@ class _Configuration(IOAble, ABC):
         "_atomic_number",
         "_spectral_indexing",
         "_bdry_mode",
+        "_M_omni",
+        "_N_omni",
+        "_omni_l",
+        "_omni_mn",
     ]
 
     def __init__(  # noqa: C901 - FIXME: break this up into simpler pieces
@@ -421,6 +425,14 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
+
+        # initialize omnigenity parameters
+        self.M_omni = kwargs.pop("M_omni", 1)
+        self.N_omni = kwargs.pop("N_omni", 1)
+        self._omni_l = kwargs.pop("omni_l", np.linspace(1, 2, 3))
+        self._omni_mn = kwargs.pop(
+            "omni_mn", np.zeros((2 * self.M_omni + 1) * self.N_omni)
+        )
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -844,6 +856,34 @@ class _Configuration(IOAble, ABC):
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
         return self.axis.Z_n
+
+    @property
+    def M_omni(self):
+        """int: Poloidal resolution of omni_mn."""
+        return self._M_omni
+
+    @property
+    def N_omni(self):
+        """int: Toroidal resolution of omni_mn."""
+        return self._N_omni
+
+    @property
+    def omni_l(self):
+        """ndarray: Omnigenity magnetic well shape parameters."""
+        return self._omni_l
+
+    @omni_l.setter
+    def omni_l(self, omni_l):
+        self._omni_l[:] = omni_l
+
+    @property
+    def omni_mn(self):
+        """ndarray: Omnigenity magnetic well shift parameters."""
+        return self._omni_mn
+
+    @omni_mn.setter
+    def omni_mn(self, omni_mn):
+        self._omni_mn[:] = omni_mn
 
     @property
     def axis(self):

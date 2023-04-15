@@ -23,7 +23,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._qs import (
+from ._omnigenity import (
     Isodynamicity,
     Omnigenity,
     QuasisymmetryBoozer,

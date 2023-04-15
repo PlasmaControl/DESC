@@ -34,8 +34,8 @@ from . import (
     _field,
     _geometry,
     _metric,
+    _omnigenity,
     _profiles,
-    _qs,
     _stability,
 )
 from .data_index import data_index

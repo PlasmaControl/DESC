@@ -130,8 +130,8 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
     return constraints
 
 
-def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
-    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
+def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):  # noqa: D205
+    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem.
 
     Parameters
     ----------
@@ -151,8 +151,8 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
     -------
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
-    """
 
+    """
     constraints = (
         FixAxisR(),
         FixAxisZ(),
@@ -189,6 +189,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     -------
     objective, ObjectiveFunction
         An objective function with default force balance objectives.
+
     """
     if mode == "energy":
         objectives = Energy(normalize=normalize, normalize_target=normalize)
@@ -212,7 +213,6 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
     and the null space Z st. Axp=b and AZ=0, so that the full space of solutions to
     Ax=b can be written as x=xp + Zy where y is now unconstrained.
-
 
     Parameters
     ----------
@@ -354,6 +354,7 @@ def align_jacobian(Fx, objective_f, objective_g):
     A : ndarray
         Jacobian matrix, reordered and padded so that it broadcasts
         correctly against the other Jacobian
+
     """
     x_idx = objective_f.x_idx
     args = objective_f.args

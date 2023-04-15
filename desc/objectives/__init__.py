@@ -8,10 +8,16 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
+from ._generic import (
+    GenericObjective,
+    MirrorRatio,
+    RotationalTransform,
+    ToroidalCurrent,
+)
 from ._geometry import (
     AspectRatio,
     Elongation,
+    FluxGradient,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -19,6 +25,7 @@ from ._geometry import (
 )
 from ._qs import (
     Isodynamicity,
+    Omnigenity,
     QuasisymmetryBoozer,
     QuasisymmetryTripleProduct,
     QuasisymmetryTwoTerm,
@@ -37,14 +44,19 @@ from .linear_objectives import (
     FixElectronTemperature,
     FixIonTemperature,
     FixIota,
+    FixLambda,
     FixLambdaGauge,
     FixModeR,
     FixModeZ,
+    FixOmni_l,
+    FixOmni_mn,
     FixPressure,
     FixPsi,
+    FixR,
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixZ,
 )
 from .objective_funs import ObjectiveFunction
 from .utils import (

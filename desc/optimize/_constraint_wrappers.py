@@ -48,6 +48,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         Equilibrium that will be optimized to satisfy the objectives.
     verbose : int, optional
         Level of output.
+
     """
 
     def __init__(self, objective, constraints, eq=None, verbose=1):
@@ -225,6 +226,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         -------
         g : ndarray
             gradient vector.
+
         """
         x = self.recover(x_reduced)
         df = self._objective.grad(x)
@@ -242,6 +244,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         -------
         H : ndarray
             Hessian matrix.
+
         """
         x = self.recover(x_reduced)
         df = self._objective.hess(x)
@@ -259,6 +262,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         -------
         J : ndarray
             Jacobian matrix.
+
         """
         x = self.recover(x_reduced)
         df = self._objective.jac(x)
@@ -290,6 +294,7 @@ class ProximalProjection(ObjectiveFunction):
     perturb_options, solve_options : dict
         dictionary of arguments passed to Equilibrium.perturb and Equilibrium.solve
         during the projection step.
+
     """
 
     def __init__(
@@ -512,6 +517,7 @@ class ProximalProjection(ObjectiveFunction):
         -----
         After updating, if store=False, self._eq will revert back to the previous
         solution when store was True
+
         """
         # first check if its something we've seen before, if it is just return
         # cached value, no need to perturb + resolve
@@ -593,6 +599,7 @@ class ProximalProjection(ObjectiveFunction):
         -------
         g : ndarray
             gradient vector.
+
         """
         f = jnp.atleast_1d(self.compute(x))
         J = self.jac(x)
@@ -610,6 +617,7 @@ class ProximalProjection(ObjectiveFunction):
         -------
         J : ndarray
             Jacobian matrix.
+
         """
         xg, xf = self._update_equilibrium(x, store=True)
 
@@ -659,6 +667,7 @@ class ProximalProjection(ObjectiveFunction):
         -------
         H : ndarray
             Hessian matrix.
+
         """
         J = self.jac(x)
         return J.T @ J

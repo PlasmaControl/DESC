@@ -56,8 +56,8 @@ class AspectRatio(_Objective):
         target=2,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         grid=None,
         name="aspect ratio",
     ):
@@ -176,8 +176,8 @@ class Elongation(_Objective):
         target=1,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         grid=None,
         name="elongation",
     ):
@@ -253,6 +253,134 @@ class Elongation(_Objective):
             profiles=self._profiles,
         )
         return data["a_major/a_minor"]
+
+
+class FluxGradient(_Objective):
+    """Penalizes |grad(psi)| as a proxy for elongation.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _units = "(Wb/m)"
+    _print_value_fmt = "Flux gradient: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=1,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="flux gradient",
+    ):
+
+        self._grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+        """
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["|grad(psi)|"]
+        self._args = get_params(self._data_keys)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["Psi"] / scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute flux gradient.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+
+        Returns
+        -------
+        |grad(psi)| : float
+            Toroidal flux gradient (normalized by 2pi), Webers per meter.
+
+        """
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        return data["|grad(psi)|"]
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
+        )
 
 
 class Volume(_Objective):
@@ -526,6 +654,12 @@ class PlasmaVesselDistance(_Objective):
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
         return d.min(axis=0)
+
+    def compute_scaled(self, *args, **kwargs):
+        """Compute and apply the target/bounds, weighting, and normalization."""
+        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(
+            self._transforms["grid"].weights
+        )
 
 
 class MeanCurvature(_Objective):

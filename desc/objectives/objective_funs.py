@@ -135,6 +135,8 @@ class ObjectiveFunction(IOAble):
         # CompiledFunction object, which will then leave the raw method in its place,
         # and then jit the raw method with the new self
 
+        self._compile_mode = "auto"  # make sure this gets set
+
         # doing str name type checking to avoid importing weird jax private stuff
         # for proper isinstance check
         if "CompiledFunction" in str(type(self.compute)):
@@ -481,6 +483,7 @@ class _Objective(IOAble, ABC):
 
     _io_attrs_ = [
         "_target",
+        "_bounds",
         "_weight",
         "_name",
         "_args",

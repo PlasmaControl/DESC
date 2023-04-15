@@ -225,6 +225,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     while True:
 
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, f, actual_reduction, step_norm, g_norm
+            )
+
         success, message = check_termination(
             actual_reduction,
             f,
@@ -358,11 +363,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
             g_h = g * scale
             H_h = scale * H * scale[:, None]
-
-            if verbose > 1:
-                print_iteration_nonlinear(
-                    iteration, nfev, f, actual_reduction, step_norm, g_norm
-                )
 
             if callback is not None:
                 stop = callback(np.copy(x), *args)

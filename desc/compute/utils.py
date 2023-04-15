@@ -72,7 +72,7 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
     for name in names:
         if name not in data_index:
             raise ValueError("Unrecognized value '{}'.".format(name))
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
+    allowed_kwargs = {"gamma", "helicity", "M_booz", "N_booz", "M_omni", "N_omni"}
     bad_kwargs = set(kwargs.keys()).difference(allowed_kwargs)
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
@@ -279,6 +279,11 @@ def get_transforms(keys, eq, grid, **kwargs):
     from desc.basis import DoubleFourierSeries
     from desc.transform import Transform
 
+    M_booz = kwargs.pop("M_booz", 2 * eq.M)
+    N_booz = kwargs.pop("N_booz", 2 * eq.N)
+    M_omni = kwargs.pop("M_omni", None)
+    N_omni = kwargs.pop("N_omni", None)
+
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys)
     transforms = {"grid": grid}
@@ -291,8 +296,8 @@ def get_transforms(keys, eq, grid, **kwargs):
         transforms["B"] = Transform(
             grid,
             DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
+                M=M_booz,
+                N=N_booz,
                 NFP=eq.NFP,
                 sym=eq.R_basis.sym,
             ),
@@ -304,12 +309,25 @@ def get_transforms(keys, eq, grid, **kwargs):
         transforms["w"] = Transform(
             grid,
             DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
+                M=M_booz,
+                N=N_booz,
                 NFP=eq.NFP,
                 sym=eq.Z_basis.sym,
             ),
             derivs=derivs["w"],
+            build=True,
+            build_pinv=True,
+        )
+    if "eta" in derivs:
+        transforms["eta"] = Transform(
+            grid,
+            DoubleFourierSeries(
+                M=M_omni,
+                N=N_omni,
+                NFP=eq.NFP,
+                sym="cos(z)",
+            ),
+            derivs=derivs["eta"],
             build=True,
             build_pinv=True,
         )

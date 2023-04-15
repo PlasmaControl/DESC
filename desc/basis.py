@@ -52,6 +52,7 @@ class Basis(IOAble, ABC):
             "cos",
             "cosine",
             "even",
+            "cos(z)",
             False,
             None,
         ], f"Unknown symmetry type {self.sym}"
@@ -63,6 +64,9 @@ class Basis(IOAble, ABC):
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym == "even":  # even powers of rho
             non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
+            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+        elif self.sym == "cos(z)":  # cos(n*z) terms only
+            non_sym_idx = np.where(sign(self.modes[:, 2]) < 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym is None:
             self._sym = False
@@ -540,7 +544,7 @@ class DoubleFourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return poloidal * toroidal
 
-    def change_resolution(self, M, N, NFP=None):
+    def change_resolution(self, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -551,6 +555,8 @@ class DoubleFourierSeries(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         Returns
         -------
@@ -558,9 +564,10 @@ class DoubleFourierSeries(Basis):
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if M != self.M or N != self.N:
+        if M != self.M or N != self.N or sym != self.sym:
             self._M = M
             self._N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
 
@@ -752,7 +759,7 @@ class ZernikePolynomial(Basis):
             poloidal = poloidal[toutidx][:, moutidx]
         return radial * poloidal
 
-    def change_resolution(self, L, M):
+    def change_resolution(self, L, M, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -761,11 +768,18 @@ class ZernikePolynomial(Basis):
             Maximum radial resolution.
         M : int
             Maximum poloidal resolution.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
 
         """
-        if L != self.L or M != self.M:
+        if L != self.L or M != self.M or sym != self.sym:
             self._L = L
             self._M = M
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
@@ -981,7 +995,7 @@ class FourierZernikeBasis(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return radial * poloidal * toroidal
 
-    def change_resolution(self, L, M, N, NFP=None):
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -994,13 +1008,20 @@ class FourierZernikeBasis(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
-        if L != self.L or M != self.M or N != self.N:
+        if L != self.L or M != self.M or N != self.N or sym != self.sym:
             self._L = L
             self._M = M
             self._N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing
             )

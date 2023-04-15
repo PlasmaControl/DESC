@@ -3,6 +3,7 @@
 import numpy as np
 
 from desc.backend import jnp, put, sign
+from desc.interpolate import interp1d
 
 from .data_index import register_compute_fun
 from .utils import cross, dot
@@ -354,6 +355,125 @@ def _f_T(params, transforms, profiles, data, **kwargs):
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )
+    return data
+
+
+@register_compute_fun(
+    name="M*theta_B+N*zeta_B",
+    label="M\\theta_{B}+N\\zeta_{B}",
+    units="rad",
+    units_long="radians",
+    description="Helical coordinate to make the field omnigeneous",
+    dim=1,
+    params=["QI_mn"],
+    transforms={"eta": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["NFP", "rho", "theta", "zeta"],
+)
+def _helical_angle(params, transforms, profiles, data, **kwargs):
+    # theta is used as a placeholder for alpha (field line label)
+    alpha = data["theta"]
+    # zeta is used as a placeholder for eta (angle along field lines)
+    eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+    nodes = jnp.array([data["rho"], alpha, eta]).T
+
+    # apply eta=0 boundary conditions
+    QI_mn_arr = params["QI_mn"].reshape((transforms["eta"].basis.N, -1))
+    nn = (
+        transforms["eta"].basis.modes[:, 2].reshape((transforms["eta"].basis.N + 1, -1))
+    )
+    QI_m0 = jnp.sum(QI_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
+    QI_mn = jnp.concatenate((QI_m0, params["QI_mn"]))
+
+    data["M*theta_B+N*zeta_B"] = (
+        jnp.matmul(transforms["eta"].basis.evaluate(nodes), QI_mn) + 2 * eta + jnp.pi
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|B|_omni",
+    label="|\\mathbf{B}_{omni}|",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of omnigeneous magnetic field",
+    dim=1,
+    params=["QI_l"],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["NFP", "zeta"],
+)
+def _B_omni(params, transforms, profiles, data, **kwargs):
+    # zeta is used as a placeholder for eta (angle along field lines)
+    eta = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+
+    B_input = jnp.sort(params["QI_l"])  # sort to ensure monotonicity
+    eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
+
+    # |B|_omnigeneous is an even function so B(-eta) = B(+eta)
+    data["|B|_omni"] = interp1d(jnp.abs(eta), eta_input, B_input, method="monotonic-0")
+    return data
+
+
+@register_compute_fun(
+    name="|B|(alpha,eta)",
+    label="|\\mathbf{B}|(\\alpha,\\eta)",
+    units="T",
+    units_long="Tesla",
+    description="Magnitude of magnetic field at (alpha,eta) coordinates",
+    dim=1,
+    params=[],
+    transforms={"B": [[0, 0, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=["theta", "M*theta_B+N*zeta_B", "iota", "|B|_mn"],
+    helicity="helicity",
+)
+def _B_omni_coords(params, transforms, profiles, data, **kwargs):
+    M, N = kwargs.get("helicity", (0, 1))
+    iota = data["iota"][0]
+    q = 1 / iota
+    if M == 0 and N == 1:
+        matrix = jnp.array([[N, iota], [-M, 1]]) / (M * iota + N)
+    elif M == 1 and N == 0:
+        matrix = jnp.array([[-N, 1], [M, q]]) / (M + q * N)
+    else:
+        matrix = jnp.array([[2 * N, iota - 1], [-2 * M, 1 - q]]) / (
+            N * (1 - q) - M * (1 - iota)
+        )
+
+    # theta is used as a placeholder for alpha (field line label)
+    alpha = data["theta"]
+
+    # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
+    booz = matrix @ jnp.vstack((alpha, data["M*theta_B+N*zeta_B"]))
+    data["theta_B(alpha,eta)"] = booz[0, :]
+    data["zeta_B(alpha,eta)"] = booz[1, :]
+
+    nodes = jnp.vstack((data["rho"], booz)).T
+    data["|B|(alpha,eta)"] = jnp.matmul(
+        transforms["B"].basis.evaluate(nodes), data["|B|_mn"]
+    )
+    return data
+
+
+@register_compute_fun(
+    name="omnigenity",
+    label="f_{omnigenity}",
+    units="T",
+    units_long="Tesla",
+    description="Omnigenity error",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|B|_omni", "|B|(alpha,eta)"],
+)
+def _omnigenity(params, transforms, profiles, data, **kwargs):
+    data["omnigenity"] = data["|B|(alpha,eta)"] - data["|B|_omni"]
     return data
 
 

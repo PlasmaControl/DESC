@@ -100,7 +100,10 @@ class LinearConstraintProjection(ObjectiveFunction):
         args = np.concatenate([obj.args for obj in self._constraints])
         args = np.concatenate((args, self._objective.args))
         # this is all args used by both constraints and objective
-        self._args = [arg for arg in arg_order if arg in args]
+        self._args = [arg for arg in arg_order if arg in args] + [
+            arg for arg in sorted(set(args)) if arg not in arg_order
+        ]
+
         self._dim_f = self._objective.dim_f
         self._scalar = self._objective.scalar
         self._dimensions = self._objective.dimensions

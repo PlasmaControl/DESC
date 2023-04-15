@@ -238,7 +238,7 @@ def factorize_linear_constraints(constraints, objective_args, dimensions):  # no
 
     """
     args = arg_order + tuple(
-        [arg for arg in objective_args if arg not in arg_order]
+        [arg for arg in sorted(set(objective_args)) if arg not in arg_order]
     )
     # set state vector
     dim_x = 0
@@ -258,7 +258,7 @@ def factorize_linear_constraints(constraints, objective_args, dimensions):  # no
         A_ = {
             arg: obj.derivatives["jac"][arg](
                 *[jnp.zeros(dimensions[arg]) for arg in obj.args]
-            )
+            ) if arg in arg_order else jnp.zeros((obj.dim_f, dimensions[arg]))
             for arg in args
         }
         # using obj.compute instead of obj.target to allow for correct scale/weight

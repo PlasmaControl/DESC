@@ -70,7 +70,9 @@ class ObjectiveFunction(IOAble):
         """
         self._args = list(np.concatenate([obj.args for obj in self.objectives]))
         self._args += list(args)
-        self._args = [arg for arg in arg_order if arg in self._args]
+        self._args = [arg for arg in arg_order if arg in self._args] + [
+            arg for arg in sorted(set(self._args)) if arg not in arg_order
+        ]
         self._set_state_vector()
 
     def _set_state_vector(self):
@@ -84,8 +86,6 @@ class ObjectiveFunction(IOAble):
             assert objective_names.count(obj.name) == 1
             self._dimensions.update(obj.dimensions)
             if obj.__class__.__name__ in ["QuasiIsodynamic"]:
-                assert "QI_l {}".format(obj.name) not in self.args
-                self._args += ["QI_l {}".format(obj.name), "QI_mn {}".format(obj.name)]
                 self._QI_dict[obj.name] = i
 
         self._dim_x = 0

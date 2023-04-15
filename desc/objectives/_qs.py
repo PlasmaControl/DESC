@@ -605,7 +605,7 @@ class QuasiIsodynamic(_Objective):
         assert len(helicity) == 2
         assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
-        self.helicity = helicity
+        self._helicity = helicity
         self.L_QI = L_QI
         self.M_QI = M_QI
         self.N_QI = N_QI

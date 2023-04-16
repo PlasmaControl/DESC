@@ -2911,6 +2911,9 @@ class FixOmni_l(_Objective):
 
         self._dim_f = self._idx.size
 
+        if self.target is None:
+            self.target = eq.omni_l[self._idx]
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, omni_l, **kwargs):
@@ -3016,6 +3019,9 @@ class FixOmni_mn(_Objective):
             self._idx = np.atleast_1d(self._indices)
 
         self._dim_f = self._idx.size
+
+        if self.target is None:
+            self.target = eq.omni_l[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

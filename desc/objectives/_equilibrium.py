@@ -29,17 +29,20 @@ class ForceBalance(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -49,6 +52,7 @@ class ForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Total force: {:10.3e} "
 
@@ -56,6 +60,7 @@ class ForceBalance(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -69,6 +74,7 @@ class ForceBalance(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -189,8 +195,7 @@ class ForceBalance(_Objective):
         fb = data["F_helical"] * data["|e^helical|"]
         fb = fb * data["sqrt(g)"] * self.grid.weights
 
-        f = jnp.concatenate([fr, fb])
-        return self._shift_scale(f)
+        return jnp.concatenate([fr, fb])
 
 
 class RadialForceBalance(_Objective):
@@ -204,17 +209,20 @@ class RadialForceBalance(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+       Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -224,6 +232,7 @@ class RadialForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Radial force: {:10.3e} "
 
@@ -231,6 +240,7 @@ class RadialForceBalance(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -242,6 +252,7 @@ class RadialForceBalance(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -351,9 +362,7 @@ class RadialForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return f * data["sqrt(g)"] * self.grid.weights
 
 
 class HelicalForceBalance(_Objective):
@@ -368,17 +377,20 @@ class HelicalForceBalance(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -388,6 +400,7 @@ class HelicalForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Helical force: {:10.3e}, "
 
@@ -395,6 +408,7 @@ class HelicalForceBalance(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -406,6 +420,7 @@ class HelicalForceBalance(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -515,9 +530,7 @@ class HelicalForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_helical"] * data["|e^helical|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return f * data["sqrt(g)"] * self.grid.weights
 
 
 class Energy(_Objective):
@@ -530,17 +543,20 @@ class Energy(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
         This will default to a QuadratureGrid
@@ -554,6 +570,7 @@ class Energy(_Objective):
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
     _linear = False
+    _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
 
@@ -561,6 +578,7 @@ class Energy(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -574,6 +592,7 @@ class Energy(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -691,7 +710,7 @@ class Energy(_Objective):
             profiles=self._profiles,
             gamma=self._gamma,
         )
-        return self._shift_scale(data["W"])
+        return data["W"]
 
     @property
     def gamma(self):
@@ -713,17 +732,20 @@ class CurrentDensity(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -733,6 +755,7 @@ class CurrentDensity(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(A*m)"
     _print_value_fmt = "Total current density: {:10.3e} "
 
@@ -740,6 +763,7 @@ class CurrentDensity(_Objective):
         self,
         eq=None,
         target=0,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -751,6 +775,7 @@ class CurrentDensity(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -853,5 +878,4 @@ class CurrentDensity(_Objective):
         jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
         jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
 
-        f = jnp.concatenate([jr, jt, jz])
-        return self._shift_scale(f)
+        return jnp.concatenate([jr, jt, jz])

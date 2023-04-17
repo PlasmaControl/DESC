@@ -34,7 +34,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     maxiter=None,
     tr_method="svd",
     callback=None,
-    options={},
+    options=None,
 ):
     """Solve a least squares problem using a (quasi)-Newton trust region method.
 
@@ -106,6 +106,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         ``OptimizeResult`` for a description of other attributes.
 
     """
+    options = {} if options is None else options
     if tr_method not in ["cho", "svd"]:
         raise ValueError(
             "tr_method should be one of 'cho', 'svd', got {}".format(tr_method)

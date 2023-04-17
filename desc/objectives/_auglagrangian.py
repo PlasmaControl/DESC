@@ -46,7 +46,7 @@ class AugLagrangianLS(ObjectiveFunction):
     def compute_constraints(self, x):
         c = jnp.array([])
         for i in range(len(self.constr)):
-            c = jnp.concatenate((c, self.constr[i](x)), axis=None)
+            c = jnp.concatenate((c, self.constr[i].compute(x)), axis=None)
         return c
 
 

@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -21,6 +22,7 @@ from desc.objectives import (
     FixPressure,
     ObjectiveFunction,
     QuasisymmetryTwoTerm,
+    get_fixed_boundary_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -132,6 +134,23 @@ def test_constrain_asserts():
 
 
 @pytest.mark.unit
+def test_factorize_linear_constraints_asserts():
+    """Test error checking for factorize_linear_constraints."""
+    eq = Equilibrium()
+    constraints = get_fixed_boundary_constraints(iota=False)
+    for con in constraints:
+        con.build(eq, verbose=0)
+    constraints[3].bounds = (0, 1)  # bounds on FixPsi
+
+    from desc.objectives.utils import factorize_linear_constraints
+
+    with pytest.raises(ValueError):
+        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+            constraints, arg_order
+        )
+
+
+@pytest.mark.unit
 def test_build_init():
     """Ensure that passing an equilibrium to init builds the objective correctly.
 
@@ -148,22 +167,22 @@ def test_build_init():
         obj.build(eq)
 
     arg = fbR1.args[0]
-    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
     arg = fbR2.args[0]
-    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
+    A = fbR2.derivatives["jac_scaled"][arg](np.zeros(fbR2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
 
     arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
     arg = fbZ2.args[0]
-    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
+    A = fbZ2.derivatives["jac_scaled"][arg](np.zeros(fbZ2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
 
@@ -173,22 +192,22 @@ def test_build_init():
     fbZ2 = FixBoundaryZ(fixed_boundary=True, eq=eq)
 
     arg = fbR1.args[0]
-    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
     arg = fbR2.args[0]
-    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
+    A = fbR2.derivatives["jac_scaled"][arg](np.zeros(fbR2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
 
     arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
     arg = fbZ2.args[0]
-    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
+    A = fbZ2.derivatives["jac_scaled"][arg](np.zeros(fbZ2.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
 

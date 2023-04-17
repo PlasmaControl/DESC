@@ -30,6 +30,8 @@ def interp1d(
         - `'catmull-rom'`: C1 cubic centripetal "tension" splines
         - `'cardinal'`: c1 cubic general tension splines. If used, can also pass keyword
             parameter `c` in float[0,1] to specify tension
+        - `'monotonic'`: C1 cubic splines that attempt to preserve monotonicity in the
+            data, and will not introduce new extrama in the interpolated points
     derivative : int
         derivative order to calculate
     extrap : bool, float, array-like
@@ -89,7 +91,7 @@ def interp1d(
         else:
             fq = jnp.zeros((xq.size, *f.shape[1:]))
 
-    elif method in ["cubic", "cubic2", "cardinal", "catmull-rom"]:
+    elif method in ["cubic", "cubic2", "cardinal", "catmull-rom", "monotonic"]:
         i = jnp.clip(jnp.searchsorted(x, xq, side="right"), 1, len(x) - 1)
         if fx is None:
             fx = _approx_df(x, f, method, axis, **kwargs)
@@ -581,6 +583,7 @@ def _make_periodic(xq, x, period, axis, *arrs):
 
 def _get_t_der(t, derivative, dxi):
     """Get arrays of [1,t,t^2,t^3] for cubic interpolation."""
+    assert int(derivative) == derivative, "derivative must be an integer"
     if derivative == 0 or derivative is None:
         tt = jnp.array([jnp.ones_like(t), t, t**2, t**3]).T
     elif derivative == 1:
@@ -726,6 +729,46 @@ def _approx_df(x, f, method, axis, **kwargs):
             c = 0
         fx = (1 - c) * jnp.concatenate([fx0, df, fx1], axis=axis)
         return fx
+    if method == "monotonic":
+        f = jnp.moveaxis(f, axis, 0)
+        fshp = f.shape
+        if f.ndim == 1:
+            # So that _edge_case doesn't end up assigning to scalars
+            x = x[:, None]
+            f = f[:, None]
+        hk = x[1:] - x[:-1]
+        mk = (f[1:] - f[:-1]) / hk
+
+        smk = jnp.sign(mk)
+        condition = (smk[1:] != smk[:-1]) | (mk[1:] == 0) | (mk[:-1] == 0)
+
+        w1 = 2 * hk[1:] + hk[:-1]
+        w2 = hk[1:] + 2 * hk[:-1]
+
+        whmean = (w1 / mk[:-1] + w2 / mk[1:]) / (w1 + w2)
+
+        dk = jnp.where(condition, 0, 1.0 / whmean)
+
+        # special case endpoints, as suggested in
+        # Cleve Moler, Numerical Computing with MATLAB, Chap 3.6 (pchiptx.m)
+        def _edge_case(h0, h1, m0, m1):
+            # one-sided three-point estimate for the derivative
+            d = ((2 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
+
+            # try to preserve shape
+            mask = jnp.sign(d) != jnp.sign(m0)
+            mask2 = (jnp.sign(m0) != jnp.sign(m1)) & (jnp.abs(d) > 3.0 * jnp.abs(m0))
+            mmm = (~mask) & mask2
+
+            d = jnp.where(mask, 0.0, d)
+            d = jnp.where(mmm, 3.0 * m0, d)
+
+            return d
+
+        d0 = _edge_case(hk[0], hk[1], mk[0], mk[1])[None]
+        d1 = _edge_case(hk[-1], hk[-2], mk[-1], mk[-2])[None]
+        dk = jnp.concatenate([d0, dk, d1])
+        return dk.reshape(fshp)
 
 
 # fmt: off

@@ -161,9 +161,10 @@ class Grid(IOAble):
         # duplicates nodes are scaled down properly regardless of which two columns
         # span the surface.
 
+        # scale areas sum to full area
         # The following operation is not a general solution to return the weight
         # removed from the duplicate nodes back to the unique nodes.
-        # For this reason, duplicates should typically be deleted rather that rescaled.
+        # For this reason, duplicates should typically be deleted rather than rescaled.
         # Note we multiply each column by duplicates^(1/6) to account for the extra
         # division by duplicates^(1/2) in one of the columns above.
         self._spacing *= (
@@ -186,7 +187,9 @@ class Grid(IOAble):
             Node spacing, in (rho,theta,zeta).
 
         """
-        nodes = np.atleast_2d(nodes).reshape((-1, 3))
+        nodes = np.atleast_2d(nodes).reshape((-1, 3)).astype(float)
+        nodes[nodes[:, 1] > 2 * np.pi, 1] %= 2 * np.pi
+        nodes[nodes[:, 2] > 2 * np.pi / self.NFP, 2] %= 2 * np.pi / self.NFP
         spacing = (  # make weights sum to 4pi^2
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )
@@ -342,6 +345,7 @@ class LinearGrid(Grid):
     endpoint : bool
         If True, theta=0 and zeta=0 are duplicated after a full period.
         Should be False for use with FFT. (Default = False).
+        This boolean is ignored if an array is given for theta or zeta.
     rho : ndarray of float, optional
         Radial coordinates (Default = 1.0).
     theta : ndarray of float, optional
@@ -423,6 +427,7 @@ class LinearGrid(Grid):
         endpoint : bool
             If True, theta=0 and zeta=0 are duplicated after a full period.
             Should be False for use with FFT. (Default = False).
+            This boolean is ignored if an array is given for theta or zeta.
         rho : int or ndarray of float, optional
             Radial coordinates (Default = 1.0).
             Alternatively, the number of radial coordinates (if an integer).
@@ -451,7 +456,8 @@ class LinearGrid(Grid):
             # choose dr such that each node has the same weight
             dr = 1 / r.size * np.ones_like(r)
         else:
-            r = np.atleast_1d(rho)
+            # need to sort to compute correct spacing
+            r = np.sort(np.atleast_1d(rho))
             dr = np.zeros_like(r)
             if r.size > 1:
                 # choose dr such that cumulative sums of dr[] are node midpoints
@@ -472,16 +478,19 @@ class LinearGrid(Grid):
             self._M = len(np.atleast_1d(theta))
         if np.isscalar(theta) and (int(theta) == theta) and theta > 0:
             t = np.linspace(0, 2 * np.pi, int(theta), endpoint=endpoint)
-            if self.sym:
+            if self.sym and t.size > 1:
                 t += t[1] / 2
             dt = 2 * np.pi / t.size * np.ones_like(t)
-            if endpoint and t.size > 1:
+            if (endpoint and not self.sym) and t.size > 1:
                 # increase node weight to account for duplicate node
                 dt *= t.size / (t.size - 1)
                 # scale_weights() will reduce endpoint (dt[0] and dt[-1])
                 # duplicate node weight
         else:
-            t = np.atleast_1d(theta)
+            t = np.atleast_1d(theta).astype(float)
+            # need to sort to compute correct spacing
+            t[t > 2 * np.pi] %= 2 * np.pi
+            t = np.sort(t)
             dt = np.zeros_like(t)
             if t.size > 1:
                 # choose dt to be half the cyclic distance of the surrounding two nodes
@@ -492,13 +501,21 @@ class LinearGrid(Grid):
                 dt /= 2
                 if t.size == 2:
                     dt[-1] = dt[0]
-                if endpoint:
+                if t[0] == 0 and t[-1] == SUP:
                     # The cyclic distance algorithm above correctly weights
-                    # the duplicate node spacing at theta = 0 and 2pi.
-                    # However, scale_weights() is not aware of this, so we multiply
-                    # by 2 to counteract the reduction that will be done there.
-                    dt[0] *= 2
-                    dt[-1] *= 2
+                    # the duplicate endpoint node spacing at theta = 0 and 2pi
+                    # to be half the weight of the other nodes.
+                    if not self.sym:
+                        # However, scale_weights() is not aware of this, so we
+                        # counteract the reduction that will be done there.
+                        dt[0] += dt[-1]
+                        dt[-1] = dt[0]
+                    else:
+                        # Symmetry deletion will delete the duplicate node at 2pi.
+                        # Need to move weight from non-duplicate nodes back to the
+                        # node at theta = 0 pi.
+                        dt[0] += dt[-1]
+                        dt *= (t.size - 1) / t.size
             else:
                 dt = np.array([2 * np.pi])
 
@@ -519,7 +536,10 @@ class LinearGrid(Grid):
                 # scale_weights() will reduce endpoint (dz[0] and dz[-1])
                 # duplicate node weight
         else:
-            z = np.atleast_1d(zeta)
+            z = np.atleast_1d(zeta).astype(float)
+            # need to sort to compute correct spacing
+            z[z > 2 * np.pi / self.NFP] %= 2 * np.pi / self.NFP
+            z = np.sort(z)
             dz = np.zeros_like(z)
             if z.size > 1:
                 # choose dz to be half the cyclic distance of the surrounding two nodes
@@ -531,15 +551,19 @@ class LinearGrid(Grid):
                 dz *= self.NFP
                 if z.size == 2:
                     dz[-1] = dz[0]
-                if endpoint:
+                if z[0] == 0 and z[-1] == SUP:
                     # The cyclic distance algorithm above correctly weights
                     # the duplicate node spacing at zeta = 0 and 2pi / NFP.
-                    # However, _scale_weights() is not aware of this, so we multiply
-                    # by 2 to counteract the reduction that will be done there.
-                    dz[0] *= 2
-                    dz[-1] *= 2
+                    # However, scale_weights() is not aware of this, so we
+                    # counteract the reduction that will be done there.
+                    dz[0] += dz[-1]
+                    dz[-1] = dz[0]
             else:
                 dz = np.array([2 * np.pi])
+
+        self._endpoint = (t[0] == 0 and t[-1] == 2 * np.pi) and (
+            z[0] == 0 and z[-1] == 2 * np.pi / self.NFP
+        )
 
         r, t, z = np.meshgrid(r, t, z, indexing="ij")
         r = r.flatten()

@@ -2,26 +2,53 @@
 
 import numpy as np
 
-from desc.backend import cond, fori_loop, jit, jnp, put
+from desc.backend import cond, jit, jnp
 
 
 @jit
-def _cholmod(A):
+def gershgorin_bounds(H):
+    """Upper and lower bounds for eigenvalues of a square matrix.
+
+    Given a square matrix ``H`` compute upper
+    and lower bounds for its eigenvalues (Gregoshgorin Bounds).
+    Defined ref. [1].
+
+    References
+    ----------
+    [1] Conn, A. R., Gould, N. I., & Toint, P. L.
+           Trust region methods. 2000. Siam. pp. 19.
+    """
+    H_diag = jnp.diag(H)
+    H_diag_abs = jnp.abs(H_diag)
+    H_row_sums = jnp.sum(jnp.abs(H), axis=1)
+    lb = jnp.min(H_diag + H_diag_abs - H_row_sums)
+    ub = jnp.max(H_diag - H_diag_abs + H_row_sums)
+
+    return lb, ub
+
+
+@jit
+def _cholmod(A, maxiter=4):
     """Modified Cholesky factorization of indefinite matrix.
 
-    If matrix is positive definite, returns the regular Cholesky factorization,
-    otherwise performs a modified factorization to ensure the factors are positive
-    definite.
+    Uses Gershgorin bounds and bisection search to find the
+    smallest diagonal correction alpha such that A + alpha*I is
+    positive definite, and returns the cholesky factorization
+    of A + alpha*I.
 
-    Algorithm adapted from https://www.cs.umd.edu/users/oleary/tr/tr4807.pdf
+    Attempts to find smallest alpha to the nearest order of magnitude,
+    in maxiter steps (so 2**maxiter values of alpha will be scanned over).
+    Scans over values of -log(abs(lb))< log(alpha) < log(abs(lb))
 
-    Note this is much slower than the built in cholesky factorization, so should
-    only be used when the matrix is known to be indefinite.
+    Cost is approximately maxiter times the cost of a single cholesky
+    factorization.
 
     Parameters
     ----------
     A : ndarray
         Matrix to factorize. Should be hermitian. No checking is done.
+    maxiter : int
+        Maximum number of bisection search steps
 
     Returns
     -------
@@ -29,49 +56,43 @@ def _cholmod(A):
         Lower triangular cholesky factor, such that L@L.T ~ A
 
     """
+    assert int(maxiter) == maxiter
+    maxiter = int(maxiter)
+    k = 2**maxiter  # number of values to try
     A = jnp.asarray(A)
     n = A.shape[0]
-
-    delta = jnp.finfo(A.dtype).eps * jnp.linalg.norm(A, "fro")
-    xi = jnp.max(jnp.abs(A - jnp.diag(jnp.diag(A))))
-    eta = jnp.max(jnp.abs(jnp.diag(A)))
-    beta = jnp.sqrt(jnp.asarray([eta, xi / n, jnp.finfo(A.dtype).eps]).max())
-
-    L = jnp.zeros_like(A)
-    D = jnp.zeros(n)
-    c = jnp.zeros_like(A)
-
-    def sum_slice(D, L, i, j, kmax):
-        s = 0
-        bodyfun = lambda k, s: s + D[k] * L[i, k] * L[j, k]
-        return fori_loop(0, kmax, bodyfun, s)
-
-    def inner_loop(j, cLDi):
-        c, L, D, i = cLDi
-        s = sum_slice(D, L, i, j, j)
-        c = put(c, (i, j), A[i, j] - s)
-
-        def truefun(args):
-            i, c, D = args
-            theta = jnp.max(jnp.abs(c[i, :]))
-            D = put(D, i, jnp.asarray([abs(c[i, i]), (theta / beta) ** 2, delta]).max())
-            return i, c, D
-
-        def falsefun(args):
-            return args
-
-        i, c, D = cond(i == j, truefun, falsefun, (i, c, D))
-        L = put(L, (i, j), c[i, j] / D[j])
-
-        return c, L, D, i
-
-    def outer_loop(i, cLD):
-        c, L, D = cLD
-        c, L, D, i = fori_loop(0, i + 1, inner_loop, (c, L, D, i))
-        return c, L, D
-
-    c, L, D = fori_loop(0, n, outer_loop, (c, L, D))
-    return L * jnp.sqrt(D)
+    eye = jnp.eye(n)
+    # upper and lower bounds on eig(A)
+    lb, ub = gershgorin_bounds(A)
+    # upper bound on log(alpha) such that A + alpha*I > 0, ie we know alpha < ub
+    # lower bound on eig(A) = upper bound on alpha, +1 in log scale to make sure
+    # that it's actually greater than the maximum alpha
+    ub = jnp.log10(jnp.abs(lb)) + 1
+    # we know alpha > 0 because otherwise initial factorization would have succeeded
+    # but we'd like to be a bit better (in log scaling). This is just a heuristic but
+    # seems ok in practice
+    m = jnp.mean(jnp.abs(A))
+    lb = ub - 2 * abs(ub) - abs(jnp.log10(m))
+    # values to try
+    alphas = jnp.logspace(lb, ub, k)
+    kbest = k // 2
+    klow = 0
+    khigh = k
+    # first we try alpha = max, which we know will succeed by gershgorin bounds
+    # but might be too big a correction, so then we try to reduce it while keeping
+    # A + alpha*I positive definite
+    Lbest = jnp.linalg.cholesky(A + alphas[k] * eye)
+    for i in range(maxiter):
+        L = jnp.linalg.cholesky(A + alphas[kbest] * eye)
+        # check if it succeeded
+        isnan = jnp.any(jnp.isnan(L))
+        # adjust bounds for correction
+        klow = isnan * kbest + (1 - isnan) * klow
+        khigh = isnan * khigh + (1 - isnan) * kbest
+        kbest = (klow + khigh) // 2
+        # if it succeeded, mark it as the best so far
+        Lbest = cond(isnan, lambda _: Lbest, lambda _: L, 1)
+    return Lbest
 
 
 @jit
@@ -90,7 +111,7 @@ def chol(A):
     Returns
     -------
     L : ndarray
-        Lower triangular cholesky factor, such that L@L.T = A
+        Lower triangular (approximate) cholesky factor, such that L@L.T ~ A
 
     """
     L = jnp.linalg.cholesky(A)
@@ -167,22 +188,23 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
     return 0.5 * q + l
 
 
-def print_header_nonlinear():
+def print_header_nonlinear(constrained=False):
     """Print a pretty header."""
-    print(
-        "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
-            "Iteration",
-            "Total nfev",
-            "Cost",
-            "Cost reduction",
-            "Step norm",
-            "Optimality",
-        )
+    s = "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
+        "Iteration",
+        "Total nfev",
+        "Cost",
+        "Cost reduction",
+        "Step norm",
+        "Optimality",
     )
+    if constrained:
+        s += "{:^24}".format("Constraint violation")
+    print(s)
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality
+    iteration, nfev, cost, cost_reduction, step_norm, optimality, constr_violation=None
 ):
     """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
@@ -214,12 +236,12 @@ def print_iteration_nonlinear(
         optimality = " " * 15
     else:
         optimality = "{:^15.2e}".format(optimality)
-
-    print(
-        "{}{}{}{}{}{}".format(
-            iteration, nfev, cost, cost_reduction, step_norm, optimality
-        )
+    s = "{}{}{}{}{}{}".format(
+        iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
+    if constr_violation is not None:
+        s += "{:^24.2e}".format(constr_violation)
+    print(s)
 
 
 STATUS_MESSAGES = {
@@ -265,8 +287,9 @@ def check_termination(
     ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
+    ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 
-    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
+    if ctol_satisfied and any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
         message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:

@@ -2,10 +2,11 @@
 
 import numpy as np
 import scipy.optimize
-from scipy.optimize import OptimizeResult
+from scipy.optimize import NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
 
+from .optimizer import register_optimizer
 from .utils import (
     check_termination,
     evaluate_quadratic_form_hess,
@@ -16,19 +17,33 @@ from .utils import (
 )
 
 
-def _optimize_scipy_minimize(
-    fun, grad, hess, x0, method, x_scale, verbose, stoptol, options=None
+@register_optimizer(
+    name=[
+        "scipy-bfgs",
+        "scipy-CG",
+        "scipy-Newton-CG",
+        "scipy-dogleg",
+        "scipy-trust-exact",
+        "scipy-trust-ncg",
+        "scipy-trust-krylov",
+    ],
+    scalar=True,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=False,
+    hessian=[False, False, True, True, True, True, True],
+)
+def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.minimize.
 
     Parameters
     ----------
-    fun : callable
+    objective : ObjectiveFunction
         Function to minimize.
-    grad : callable
-        Gradient of fun.
-    hess : callable
-        Hessian of fun.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
     method : str
@@ -42,8 +57,8 @@ def _optimize_scipy_minimize(
         on the cost function.
     verbose : int
         * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -61,7 +76,15 @@ def _optimize_scipy_minimize(
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+    options.setdefault("maxiter", np.iinfo(np.int32).max)
+    options.setdefault("disp", False)
+    x_scale = 1 if x_scale == "auto" else x_scale
+    if isinstance(x_scale, str):
+        raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
+    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+
     # need to use some "global" variables here
     allx = []
     func_allx = []
@@ -100,6 +123,8 @@ def _optimize_scipy_minimize(
         hess_allf.append(H)
         return H / (np.atleast_2d(x_scale).T * np.atleast_2d(x_scale))
 
+    hess_wrapped = None if method in ["scipy-bfgs", "scipy-CG"] else hess_wrapped
+
     def callback(x1):
         allx.append(x1)
         f1 = f_where_x(x1, func_allx, func_allf)
@@ -117,10 +142,13 @@ def _optimize_scipy_minimize(
             df = f2 - f1
             dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
-            H1 = f_where_x(x1, hess_allx, hess_allf)
+            if len(hess_allx):
+                H1 = f_where_x(x1, hess_allx, hess_allf)
+            else:
+                H1 = np.eye(x1.size) / dx_norm
             if not H1.size:
                 H1 = np.eye(x1.size) / dx_norm
-            predicted_reduction = f2 - evaluate_quadratic_form_hess(dx, f1, g1, H1)
+            predicted_reduction = -evaluate_quadratic_form_hess(dx, 0, g1, H1)
             if predicted_reduction > 0:
                 reduction_ratio = df / predicted_reduction
             elif predicted_reduction == df == 0:
@@ -128,7 +156,7 @@ def _optimize_scipy_minimize(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
+        if verbose > 1:
             print_iteration_nonlinear(
                 len(allx), len(func_allx), f1, df, dx_norm, g_norm
             )
@@ -158,13 +186,14 @@ def _optimize_scipy_minimize(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 1:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
             x0=x0,
             args=(),
-            method=method,
+            method=method.replace("scipy-", ""),
             jac=grad_wrapped,
             hess=hess_wrapped,
             tol=EPS,
@@ -179,7 +208,10 @@ def _optimize_scipy_minimize(
         x = grad_allx[-1]
         f = f_where_x(x, func_allx, func_allf)
         g = f_where_x(x, grad_allx, grad_allf)
-        H = f_where_x(x, hess_allx, hess_allf)
+        if len(hess_allx):
+            H = f_where_x(x, hess_allx, hess_allf)
+        else:
+            H = None
         result = OptimizeResult(
             x=x,
             success=success[0],
@@ -191,7 +223,7 @@ def _optimize_scipy_minimize(
             ngev=len(grad_allx),
             nhev=len(hess_allx),
             nit=len(allx),
-            message=message,
+            message=message[0],
             allx=allx,
         )
     if verbose > 0:
@@ -209,17 +241,25 @@ def _optimize_scipy_minimize(
     return result
 
 
-def _optimize_scipy_least_squares(
-    fun, jac, x0, method, x_scale, verbose, stoptol, options=None
+@register_optimizer(
+    name=["scipy-trf", "scipy-lm", "scipy-dogbox"],
+    scalar=False,
+    equality_constraints=False,
+    inequality_constraints=False,
+    stochastic=False,
+    hessian=False,
+)
+def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for scipy.optimize.least_squares.
 
     Parameters
     ----------
-    fun : callable
+    objective : ObjectiveFunction
         Function to minimize.
-    jac : callable
-        Jacobian of fun.
+    constraint : ObjectiveFunction
+        Constraint to satisfy - not supported by this method
     x0 : ndarray
         Starting point.
     method : str
@@ -234,8 +274,8 @@ def _optimize_scipy_least_squares(
         the inverse norms of the columns of the Jacobian matrix.
     verbose : int
         * 0  : work silently.
-        * 1-2 : display a termination report.
-        * 3 : display progress during iterations
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
     stoptol : dict
         Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
@@ -243,6 +283,8 @@ def _optimize_scipy_least_squares(
         Dictionary of optional keyword arguments to override default solver
         settings. See the code for more details.
 
+    Returns
+    -------
     res : OptimizeResult
        The optimization result represented as a ``OptimizeResult`` object.
        Important attributes are: ``x`` the solution array, ``success`` a
@@ -251,7 +293,10 @@ def _optimize_scipy_least_squares(
        `OptimizeResult` for a description of other attributes.
 
     """
+    assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
+    x_scale = "jac" if x_scale == "auto" else x_scale
+    fun, jac = objective.compute_scaled, objective.jac_scaled
     # need to use some "global" variables here
     fun_allx = []
     fun_allf = []
@@ -303,7 +348,7 @@ def _optimize_scipy_least_squares(
             else:
                 reduction_ratio = 0
 
-        if verbose > 2:
+        if verbose > 1:
             print_iteration_nonlinear(
                 len(jac_allx), len(fun_allx), c1, df, dx_norm, g_norm
             )
@@ -333,19 +378,20 @@ def _optimize_scipy_least_squares(
             raise StopIteration
 
     EPS = 2 * np.finfo(x0.dtype).eps
-    print_header_nonlinear()
+    if verbose > 1:
+        print_header_nonlinear()
     try:
         result = scipy.optimize.least_squares(
             fun_wrapped,
             x0=x0,
             args=(),
             jac=jac_wrapped,
-            method=method,
+            method=method.replace("scipy-", ""),
             x_scale=x_scale,
             ftol=EPS,
             xtol=EPS,
             gtol=EPS,
-            max_nfev=np.inf,
+            max_nfev=np.iinfo(np.int32).max,
             verbose=0,
             **options,
         )
@@ -384,5 +430,259 @@ def _optimize_scipy_least_squares(
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))
+
+    return result
+
+
+@register_optimizer(
+    name=[
+        "scipy-trust-constr",
+        "scipy-SLSQP",
+    ],
+    scalar=True,
+    equality_constraints=True,
+    inequality_constraints=True,
+    stochastic=False,
+    hessian=[True, False],
+)
+def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
+    objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
+):
+    """Wrapper for scipy.optimize.minimize.
+
+    Parameters
+    ----------
+    objective : ObjectiveFunction
+        Function to minimize.
+    constraint : ObjectiveFunction
+        Constraint to satisfy
+    x0 : ndarray
+        Starting point.
+    method : str
+        Name of the method to use. Any of the options in scipy.optimize.minimize.
+    x_scale : array_like
+        Characteristic scale of each variable. Setting x_scale is equivalent to
+        reformulating the problem in scaled variables xs = x / x_scale. An alternative
+        view is that the size of a trust region along jth dimension is proportional to
+        x_scale[j]. Improved convergence may be achieved by setting x_scale such that
+        a step of a given size along any of the scaled variables has a similar effect
+        on the cost function.
+    verbose : int
+        * 0  : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
+    stoptol : dict
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
+    options : dict, optional
+        Dictionary of optional keyword arguments to override default solver
+        settings. See the code for more details.
+
+    Returns
+    -------
+    res : OptimizeResult
+       The optimization result represented as a ``OptimizeResult`` object.
+       Important attributes are: ``x`` the solution array, ``success`` a
+       Boolean flag indicating if the optimizer exited successfully and
+       ``message`` which describes the cause of the termination. See
+       `OptimizeResult` for a description of other attributes.
+
+    """
+    options = {} if options is None else options
+    options.setdefault("maxiter", np.iinfo(np.int32).max)
+    options.setdefault("disp", False)
+    x_scale = 1 if x_scale == "auto" else x_scale
+    if isinstance(x_scale, str):
+        raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
+    fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
+
+    if constraint is not None:
+        if constraint.dim_f > len(x0):
+            raise ValueError(
+                "scipy constrained optimizers cannot handle systems with more "
+                + "constraints than free variables. Suggest reducing the grid "
+                + "resolution of constraints"
+            )
+        constraint_wrapped = NonlinearConstraint(
+            constraint.compute_unscaled,
+            constraint.bounds[0],
+            constraint.bounds[1],
+            constraint.jac_unscaled,
+        )
+    else:
+        constraint_wrapped = None
+    # need to use some "global" variables here
+    allx = []
+    func_allx = []
+    func_allf = []
+    grad_allx = []
+    grad_allf = []
+    hess_allx = []
+    hess_allf = []
+    message = [""]
+    success = [None]
+
+    def fun_wrapped(xs):
+        # record all the x and fs we see
+        x = xs / x_scale
+        func_allx.append(x)
+        f = fun(x)
+        func_allf.append(f)
+        return f
+
+    def grad_wrapped(xs):
+        # record all the x and grad we see
+        x = xs / x_scale
+        grad_allx.append(x)
+        g = grad(x)
+        grad_allf.append(g)
+        # need to use callback here since otherwise callback is called even
+        # after unsuccessful steps which we don't want.
+        callback(x)
+        return g / x_scale
+
+    def hess_wrapped(xs):
+        # record all the x and hess we see
+        x = xs / x_scale
+        hess_allx.append(x)
+        H = hess(x)
+        hess_allf.append(H)
+        return H / (np.atleast_2d(x_scale).T * np.atleast_2d(x_scale))
+
+    hess_wrapped = None if method in ["scipy-SLSQP"] else hess_wrapped
+
+    def callback(x1):
+        allx.append(x1)
+        f1 = f_where_x(x1, func_allx, func_allf)
+        g1 = f_where_x(x1, grad_allx, grad_allf)
+        g_norm = np.linalg.norm(g1, ord=np.inf)
+        x_norm = np.linalg.norm(x1)
+
+        if len(allx) < 2:
+            df = np.inf
+            dx_norm = np.inf
+            reduction_ratio = 0
+        else:
+            x2 = allx[-2]
+            f2 = f_where_x(x2, func_allx, func_allf)
+            df = f2 - f1
+            dx = x1 - x2
+            dx_norm = jnp.linalg.norm(dx)
+            if len(hess_allx):
+                H1 = f_where_x(x1, hess_allx, hess_allf)
+            else:
+                H1 = np.eye(x1.size) / dx_norm
+            if not H1.size:
+                H1 = np.eye(x1.size) / dx_norm
+            predicted_reduction = -evaluate_quadratic_form_hess(dx, 0, g1, H1)
+            if predicted_reduction > 0:
+                reduction_ratio = df / predicted_reduction
+            elif predicted_reduction == df == 0:
+                reduction_ratio = 1
+            else:
+                reduction_ratio = 0
+
+        constr_violation = (
+            0 if constraint is None else np.max(np.abs(constraint.compute_scaled(x1)))
+        )
+
+        if verbose > 1:
+            print_iteration_nonlinear(
+                len(allx),
+                len(func_allx),
+                f1,
+                df,
+                dx_norm,
+                g_norm,
+                constr_violation,
+            )
+        success[0], message[0] = check_termination(
+            df,
+            f1,
+            dx_norm,
+            x_norm,
+            g_norm,
+            reduction_ratio,
+            stoptol["ftol"],
+            stoptol["xtol"],
+            stoptol["gtol"],
+            len(allx),
+            stoptol["maxiter"],
+            len(func_allx),
+            stoptol["max_nfev"],
+            len(grad_allx),
+            stoptol["max_ngev"],
+            len(hess_allx),
+            stoptol["max_nhev"],
+            dx_total=np.linalg.norm(x1 - x0),
+            max_dx=options.get("max_dx", np.inf),
+            ctol=stoptol["ctol"],
+            constr_violation=constr_violation,
+        )
+
+        if success[0] is not None:
+            raise StopIteration
+
+    EPS = 2 * np.finfo(x0.dtype).eps
+    if verbose > 1:
+        print_header_nonlinear(constrained=True)
+    try:
+        result = scipy.optimize.minimize(
+            fun_wrapped,
+            x0=x0,
+            args=(),
+            method=method.replace("scipy-", ""),
+            jac=grad_wrapped,
+            hess=hess_wrapped,
+            constraints=constraint_wrapped,
+            tol=EPS,
+            options=options,
+        )
+        result["allx"] = allx
+        result["nfev"] = len(func_allx)
+        result["ngev"] = len(grad_allx)
+        result["nhev"] = len(hess_allx)
+        result["nit"] = len(allx)
+    except StopIteration:
+        x = grad_allx[-1]
+        f = f_where_x(x, func_allx, func_allf)
+        g = f_where_x(x, grad_allx, grad_allf)
+        if len(hess_allx):
+            H = f_where_x(x, hess_allx, hess_allf)
+        else:
+            H = None
+        result = OptimizeResult(
+            x=x,
+            success=success[0],
+            fun=f,
+            grad=g,
+            hess=H,
+            optimality=np.linalg.norm(g, ord=np.inf),
+            constr_violation=0
+            if constraint is None
+            else np.max(np.abs(constraint.compute_scaled(x))),
+            nfev=len(func_allx),
+            ngev=len(grad_allx),
+            nhev=len(hess_allx),
+            nit=len(allx),
+            message=message[0],
+            allx=allx,
+        )
+    if verbose > 0:
+        if result["success"]:
+            print(result["message"])
+        else:
+            print("Warning: " + result["message"])
+        print("         Current function value: {:.3e}".format(result["fun"]))
+        print(
+            "         Max constraint violation: {:.3e}".format(
+                result["constr_violation"]
+            )
+        )
+        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        print("         Iterations: {:d}".format(result["nit"]))
+        print("         Function evaluations: {:d}".format(result["nfev"]))
+        print("         Gradient evaluations: {:d}".format(result["ngev"]))
+        print("         Hessian evaluations: {:d}".format(result["nhev"]))
 
     return result

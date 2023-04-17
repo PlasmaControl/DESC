@@ -20,10 +20,8 @@ def conv_test(x, L, gL):
 
 def fmin_lag_ls_stel(
     fun,
+    constraint,
     x0,
-    grad,
-    eq_constr,
-    ineq_constr,
     args=(),
     x_scale=1,
     ftol=1e-6,
@@ -45,42 +43,18 @@ def fmin_lag_ls_stel(
     x = x0.copy()
     f = fun(x, *args)
     nfev += 1
-    g = grad(x, *args)
-    ngev += 1
 
-    eq = eq_constr(x) if eq_constr is not None else jnp.array([])
-    ineq = ineq_constr(x) if ineq_constr is not None else jnp.array([])
-    eq_dim = len(eq.flatten())
-    ineq_dim = len(ineq.flatten())
-    x = np.append(x, 1.0 * np.ones(ineq_dim))
-
-    if maxiter is None:
-        maxiter = N * 100
-
-    mu = options.pop("mu", 10 * jnp.ones(eq_dim + ineq_dim))
-    lmbda = options.pop("lmbda", 10 * jnp.ones(eq_dim + ineq_dim))
-    bounds = options.pop("bounds", jnp.zeros(eq_dim + ineq_dim))
+    mu = options.pop("mu", 10 * jnp.ones(constraint.dim_f()))
+    lmbda = options.pop("lmbda", 10 * jnp.ones(constraint.dim_f()))
+    x = np.append(x, 1.0 * np.ones(constraint._ineq_dim))
 
     def recover(x):
-        return x[0 : len(x) - ineq_dim]
-
-    def wrapped_constraint(x):
-        c = np.array([])
-        slack = x[len(recover(x)) :] ** 2
-        x_recov = recover(x)
-        eq = eq_constr(x_recov) if eq_constr is not None else jnp.array([])
-        ineq = ineq_constr(x_recov) if ineq_constr is not None else jnp.array([])
-
-        c = jnp.append(c, eq_constr(x_recov))
-        slack = jnp.append(jnp.zeros(len(eq.flatten())), slack)
-        c = jnp.append(c, ineq)
-        c = c - bounds + slack
-        return c
+        return x[0 : len(x) - constraint._ineq_dim]
 
     def wrapped_obj(x):
         return fun(recover(x))
 
-    constr = np.array([wrapped_constraint])
+    constr = np.array([constraint])
     L = AugLagrangianLS(wrapped_obj, constr)
     gradL = Derivative(L.compute, 0, "fwd")
 

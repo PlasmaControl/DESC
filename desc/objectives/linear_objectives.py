@@ -2902,7 +2902,7 @@ class FixOmni_l(_Objective):
 
         """
         if self.target is None:
-            self.target = eq.omni_l
+            self._target = eq.omni_l
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -3011,7 +3011,7 @@ class FixOmni_mn(_Objective):
 
         """
         if self.target is None:
-            self.target = eq.omni_mn
+            self._target = eq.omni_mn
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix

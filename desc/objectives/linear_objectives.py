@@ -2901,6 +2901,9 @@ class FixOmni_l(_Objective):
             Level of output.
 
         """
+        if self.target is None:
+            self.target = eq.omni_l
+
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
@@ -2910,9 +2913,6 @@ class FixOmni_l(_Objective):
             self._idx = np.atleast_1d(self._indices)
 
         self._dim_f = self._idx.size
-
-        if self.target is None:
-            self.target = eq.omni_l[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -3010,6 +3010,9 @@ class FixOmni_mn(_Objective):
             Level of output.
 
         """
+        if self.target is None:
+            self.target = eq.omni_mn
+
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
             self._idx = np.array([], dtype=int)
@@ -3019,9 +3022,6 @@ class FixOmni_mn(_Objective):
             self._idx = np.atleast_1d(self._indices)
 
         self._dim_f = self._idx.size
-
-        if self.target is None:
-            self.target = eq.omni_l[self._idx]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

@@ -452,14 +452,18 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (0, 1))
     iota = data["iota"][0]
     q = 1 / iota
-    if M == 0 and N == 1:
-        matrix = jnp.array([[N, iota], [-M, 1]]) / (M * iota + N)
-    elif M == 1 and N == 0:
-        matrix = jnp.array([[-N, 1], [M, q]]) / (M + q * N)
-    else:
-        matrix = jnp.array([[2 * N, iota - 1], [-2 * M, 1 - q]]) / (
-            N * (1 - q) - M * (1 - iota)
+    if M == 0:
+        matrix = (
+            jnp.array([[N / (M + N), iota], [-M / (M + N), 1]])
+            * (M + N)
+            / (M * iota + N)
         )
+    elif N == 0:
+        matrix = (
+            jnp.array([[-N / (M + N), 1], [M / (M + N), q]]) * (M + N) / (M + q * N)
+        )
+    else:
+        raise ValueError("Omnigenity with helical contours is not yet implemented.")
 
     alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
 

@@ -696,6 +696,7 @@ class Omnigenity(_Objective):
             params=params,
             transforms=self._transforms,
             profiles=self._profiles,
+            helicity=self.helicity,
         )
         weights = (self.well_weight + 1) / 2 + (self.well_weight - 1) / 2 * jnp.cos(
             data["eta"]

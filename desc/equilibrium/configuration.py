@@ -427,11 +427,12 @@ class _Configuration(IOAble, ABC):
             self.L_lmn = kwargs.pop("L_lmn")
 
         # initialize omnigenity parameters
-        self._M_omni = kwargs.pop("M_omni", 1)
-        self._N_omni = kwargs.pop("N_omni", 1)
-        self._omni_l = kwargs.pop("omni_l", np.linspace(1, 2, 3))
-        self._omni_mn = kwargs.pop(
-            "omni_mn", np.zeros((2 * self.M_omni + 1) * self.N_omni)
+        self._M_omni = int(kwargs.pop("M_omni", 1))
+        self._N_omni = int(kwargs.pop("N_omni", 1))
+        self._omni_l = np.array(kwargs.pop("omni_l", np.linspace(1, 2, 3)), dtype=float)
+        self._omni_mn = np.array(
+            kwargs.pop("omni_mn", np.zeros((2 * self.M_omni + 1) * self.N_omni)),
+            dtype=float,
         )
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
@@ -883,7 +884,6 @@ class _Configuration(IOAble, ABC):
 
     @omni_mn.setter
     def omni_mn(self, omni_mn):
-        assert omni_mn.size == (2 * self.M_omni + 1) * self.N_omni
         self._omni_mn[:] = omni_mn
 
     @property

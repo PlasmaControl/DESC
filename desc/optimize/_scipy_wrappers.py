@@ -623,6 +623,10 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
 
         lb, ub = 0, 0
 
+    def constraint_violation(xs):
+        f = constraint.compute_scaled_error(xs * scale)
+        return jnp.max(jnp.abs(f))
+
     constraint_wrapped = NonlinearConstraint(
         cfun_wrapped,
         lb,
@@ -728,7 +732,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             else:
                 reduction_ratio = 0
 
-        constr_violation = np.max(np.abs(jnp.clip(cfun_wrapped(x1 / scale), lb, ub)))
+        constr_violation = constraint_violation(x1 / scale)
         if verbose > 1:
             print_iteration_nonlinear(
                 len(allx) - 1,
@@ -772,7 +776,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         f1 = fun_wrapped(x0 / scale)
         g1 = grad_wrapped(x0 / scale) / scale
         g_norm = np.linalg.norm(g1, ord=np.inf)
-        constr_violation = np.max(np.abs(jnp.clip(cfun_wrapped(x0 / scale), lb, ub)))
+        constr_violation = constraint_violation(x0 / scale)
         print_iteration_nonlinear(
             len(allx) - 1, len(func_allx), f1, np.inf, np.inf, g_norm, constr_violation
         )
@@ -797,9 +801,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         result["ncfev"] = len(cfun_allx)
         result["ncjev"] = len(cjac_allx)
         result["nit"] = len(allx) - 1
-        result["constr_violation"] = np.max(
-            np.abs(jnp.clip(cfun_wrapped(result["x"] / scale), lb, ub))
-        )
+        result["constr_violation"] = constraint_violation(result["x"] / scale)
     except StopIteration:
         x = allx[-1]
         f = f_where_x(x, func_allx, func_allf)
@@ -815,7 +817,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             grad=g,
             hess=H,
             optimality=np.linalg.norm(g, ord=np.inf),
-            constr_violation=np.max(np.abs(jnp.clip(cfun_wrapped(x / scale), lb, ub))),
+            constr_violation=constraint_violation(x / scale),
             nfev=len(func_allx),
             ngev=len(grad_allx),
             nhev=len(hess_allx),

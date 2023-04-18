@@ -378,5 +378,5 @@ def f_where_x(x, xs, fs, dim=0):
     if dim == 1:
         f = np.atleast_1d(f)
     if dim == 2:
-        f = np.atleast_2d(f.T).T
+        f = np.atleast_2d(f).reshape((-1, x.size))
     return f

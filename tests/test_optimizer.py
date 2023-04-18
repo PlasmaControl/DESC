@@ -135,7 +135,7 @@ class TestFmin:
             hess="bfgs",
             verbose=1,
             method="dogleg",
-            x_scale=1,
+            x_scale="hess",
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,

@@ -28,7 +28,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     hess="bfgs",
     args=(),
     method="dogleg",
-    x_scale=1,
+    x_scale="hess",
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
@@ -162,10 +162,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     return_tr = options.pop("return_tr", True)
     max_dx = options.pop("max_dx", np.inf)
 
-    auto_scale = str(x_scale) == "auto"
-    x_scale = 1 if auto_scale and bfgs else ("hess" if auto_scale else x_scale)
-    hess_scale = str(x_scale) == "hess"
-    assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
+    hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:

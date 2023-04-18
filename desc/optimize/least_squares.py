@@ -26,7 +26,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     x0,
     jac,
     args=(),
-    x_scale=1,
+    x_scale="jac",
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,

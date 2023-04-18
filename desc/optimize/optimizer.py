@@ -212,7 +212,8 @@ class Optimizer(IOAble):
             print("Number of objectives: {}".format(objective.dim_f))
             if nonlinear_constraint is not None:
                 num_equality = np.count_nonzero(
-                    nonlinear_constraint.bounds[0] == nonlinear_constraint.bounds[1]
+                    nonlinear_constraint.bounds_scaled[0]
+                    == nonlinear_constraint.bounds_scaled[1]
                 )
                 print("Number of equality constraints: {}".format(num_equality))
                 print(

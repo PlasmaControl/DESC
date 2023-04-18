@@ -573,7 +573,9 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         scale = x_scale
 
     if constraint is not None:
-        num_equality = np.count_nonzero(constraint.bounds[0] == constraint.bounds[1])
+        num_equality = np.count_nonzero(
+            constraint.bounds_scaled[0] == constraint.bounds_scaled[1]
+        )
         if num_equality > len(x0):
             raise ValueError(
                 "scipy constrained optimizers cannot handle systems with more "
@@ -610,7 +612,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
                 cjac_allf.append(J)
             return J * scale
 
-        lb, ub = constraint.bounds
+        lb, ub = constraint.bounds_scaled
     else:
 
         def cfun_wrapped(xs):

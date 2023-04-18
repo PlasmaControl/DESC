@@ -315,14 +315,14 @@ class LinearConstraintProjection(ObjectiveFunction):
         return df[:, self._unfixed_idx] @ self._Z
 
     @property
-    def target(self):
+    def target_scaled(self):
         """ndarray: target vector."""
-        return self._objective.target
+        return self._objective.target_scaled
 
     @property
-    def bounds(self):
+    def bounds_scaled(self):
         """tuple: lower and upper bounds for residual vector."""
-        return self._objective.bounds
+        return self._objective.bounds_scaled
 
     @property
     def weights(self):
@@ -769,14 +769,14 @@ class ProximalProjection(ObjectiveFunction):
         return J.T @ J
 
     @property
-    def target(self):
+    def target_scaled(self):
         """ndarray: target vector."""
-        return self._objective.target
+        return self._objective.target_scaled
 
     @property
-    def bounds(self):
+    def bounds_scaled(self):
         """tuple: lower and upper bounds for residual vector."""
-        return self._objective.bounds
+        return self._objective.bounds_scaled
 
     @property
     def weights(self):

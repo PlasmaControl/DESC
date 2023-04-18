@@ -567,7 +567,7 @@ class ObjectiveFunction(IOAble):
         return self._dim_f
 
     @property
-    def target(self):
+    def target_scaled(self):
         """ndarray: target vector."""
         target = []
         for obj in self.objectives:
@@ -576,14 +576,13 @@ class ObjectiveFunction(IOAble):
             else:
                 # need to return something, so use midpoint of bounds as approx target
                 target_i = jnp.ones(obj.dim_f) * (obj.bounds[0] + obj.bounds[1]) / 2
-            if not obj._normalize_target:
-                # we want the target in unscaled, unnnormalized units
-                target_i *= obj.normalization
+            if obj._normalize_target:
+                target_i /= obj.normalization
             target += [target_i]
         return jnp.concatenate(target)
 
     @property
-    def bounds(self):
+    def bounds_scaled(self):
         """tuple: lower and upper bounds for residual vector."""
         lb, ub = [], []
         for obj in self.objectives:
@@ -593,10 +592,9 @@ class ObjectiveFunction(IOAble):
             else:
                 lb_i = jnp.ones(obj.dim_f) * obj.target
                 ub_i = jnp.ones(obj.dim_f) * obj.target
-            if not obj._normalize_target:
-                # we want the bounds in unscaled, unnnormalized units
-                lb_i *= obj.normalization
-                ub_i *= obj.normalization
+            if obj._normalize_target:
+                lb_i /= obj.normalization
+                ub_i /= obj.normalization
             lb += [lb_i]
             ub += [ub_i]
         return (jnp.concatenate(lb), jnp.concatenate(ub))

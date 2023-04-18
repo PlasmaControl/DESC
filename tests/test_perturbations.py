@@ -97,6 +97,7 @@ def test_perturbation_orders(SOLOVEV):
     assert fS < f3
 
 
+@pytest.mark.unit
 def test_perturb_with_float_without_error():
     """Test that perturb works without error if only a single float is passed."""
     # PR #

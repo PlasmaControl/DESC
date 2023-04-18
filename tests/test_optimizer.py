@@ -424,6 +424,7 @@ def test_scipy_fail_message():
         assert "Maximum number of iterations has been exceeded" in result["message"]
 
 
+@pytest.mark.unit
 def test_not_implemented_error():
     """Test NotImplementedError."""
     with pytest.raises(NotImplementedError):
@@ -473,6 +474,8 @@ def test_wrappers():
     assert ob.built
 
 
+@pytest.mark.unit
+@pytest.mark.slow
 def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eq = desc.examples.get("SOLOVEV")
@@ -494,4 +497,11 @@ def test_all_optimizers():
             obj = eobj
         else:
             obj = fobj
-        eq.solve(objective=obj, constraints=constraints, optimizer=opt, maxiter=5)
+        eq.solve(
+            objective=obj,
+            constraints=constraints,
+            optimizer=opt,
+            verbose=3,
+            copy=True,
+            maxiter=5,
+        )

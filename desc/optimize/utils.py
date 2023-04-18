@@ -326,7 +326,7 @@ def check_termination(
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(scale_inv < 1e-14, 1, scale_inv)
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
@@ -336,7 +336,7 @@ def compute_jac_scale(A, prev_scale_inv=None):
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(scale_inv < 1e-14, 1, scale_inv)
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)

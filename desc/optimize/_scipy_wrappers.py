@@ -112,7 +112,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         options.setdefault("initial_trust_radius", 1e-2 * np.linalg.norm(x0 / scale))
         options.setdefault("max_trust_radius", np.inf)
     # need to use some "global" variables here
-    allx = []
+    allx = [x0]
     func_allx = []
     func_allf = []
     grad_allx = []
@@ -163,10 +163,19 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 
     hess_wrapped = None if method in ["scipy-bfgs", "scipy-CG"] else hess_wrapped
 
-    def callback(x1):
-        allx.append(x1)
+    def callback(xs):
+        x1 = xs * scale
+        # if x not updated, means last step wasn't accepted, keep going
+        eps = np.finfo(x1.dtype).eps
+        if np.all(np.isclose(x1, allx[-1], rtol=eps, atol=eps)):
+            return
         f1 = f_where_x(x1, func_allx, func_allf, dim=0)
+        if not f1.size:
+            f1 = fun_wrapped(xs)
         g1 = f_where_x(x1, grad_allx, grad_allf, dim=1)
+        if not g1.size:
+            g1 = grad_wrapped(xs) / scale
+        allx.append(x1)
         g_norm = np.linalg.norm(g1, ord=np.inf)
         x_norm = np.linalg.norm(x1)
 
@@ -196,8 +205,9 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
 
         if verbose > 1:
             print_iteration_nonlinear(
-                len(allx), len(func_allx), f1, df, dx_norm, g_norm
+                len(allx) - 1, len(func_allx), f1, df, dx_norm, g_norm
             )
+
         success[0], message[0] = check_termination(
             df,
             f1,
@@ -208,7 +218,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             stoptol["ftol"],
             stoptol["xtol"],
             stoptol["gtol"],
-            len(allx),
+            len(allx) - 1,
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
@@ -226,6 +236,13 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     EPS = 2 * np.finfo(x0.dtype).eps
     if verbose > 1:
         print_header_nonlinear()
+        f1 = fun_wrapped(x0 / scale)
+        g1 = grad_wrapped(x0 / scale) / scale
+        g_norm = np.linalg.norm(g1, ord=np.inf)
+        print_iteration_nonlinear(
+            len(allx) - 1, len(func_allx), f1, np.inf, np.inf, g_norm
+        )
+
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
@@ -236,14 +253,15 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             hess=hess_wrapped,
             tol=EPS,
             options=options,
+            callback=callback,
         )
         result["allx"] = allx
         result["nfev"] = len(func_allx)
         result["ngev"] = len(grad_allx)
         result["nhev"] = len(hess_allx)
-        result["nit"] = len(allx)
+        result["nit"] = len(allx) - 1
     except StopIteration:
-        x = grad_allx[-1]
+        x = allx[-1]
         f = f_where_x(x, func_allx, func_allf, dim=0)
         g = f_where_x(x, grad_allx, grad_allf, dim=1)
         if len(hess_allx):
@@ -260,7 +278,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             nfev=len(func_allx),
             ngev=len(grad_allx),
             nhev=len(hess_allx),
-            nit=len(allx),
+            nit=len(allx) - 1,
             message=message[0],
             allx=allx,
         )
@@ -611,7 +629,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
     )
 
     # need to use some "global" variables here
-    allx = []
+    allx = [x0]
     func_allx = []
     func_allf = []
     grad_allx = []
@@ -666,10 +684,19 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
 
     hess_wrapped = None if method in ["scipy-SLSQP"] else hess_wrapped
 
-    def callback(x1):
+    def callback(xs, *args):  # need to take args bc trust-constr passes extra stuff
+        x1 = xs * scale
+        # if x not updated, means last step wasn't accepted, keep going
+        eps = np.finfo(x1.dtype).eps
+        if np.all(np.isclose(x1, allx[-1], rtol=eps, atol=eps)):
+            return
+        f1 = f_where_x(x1, func_allx, func_allf, dim=0)
+        if not f1.size:
+            f1 = fun_wrapped(xs)
+        g1 = f_where_x(x1, grad_allx, grad_allf, dim=1)
+        if not g1.size:
+            g1 = grad_wrapped(xs) / scale
         allx.append(x1)
-        f1 = f_where_x(x1, func_allx, func_allf)
-        g1 = f_where_x(x1, grad_allx, grad_allf)
         g_norm = np.linalg.norm(g1, ord=np.inf)
         x_norm = np.linalg.norm(x1)
 
@@ -680,6 +707,8 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         else:
             x2 = allx[-2]
             f2 = f_where_x(x2, func_allx, func_allf)
+            if not f2.size:
+                f2 = fun_wrapped(x2 / scale)
             df = f2 - f1
             dx = x1 - x2
             dx_norm = jnp.linalg.norm(dx)
@@ -700,7 +729,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         constr_violation = np.max(np.abs(jnp.clip(cfun_wrapped(x1 / scale), lb, ub)))
         if verbose > 1:
             print_iteration_nonlinear(
-                len(allx),
+                len(allx) - 1,
                 len(func_allx),
                 f1,
                 df,
@@ -718,7 +747,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             stoptol["ftol"],
             stoptol["xtol"],
             stoptol["gtol"],
-            len(allx),
+            len(allx) - 1,
             stoptol["maxiter"],
             len(func_allx),
             stoptol["max_nfev"],
@@ -738,6 +767,14 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
     EPS = 2 * np.finfo(x0.dtype).eps
     if verbose > 1:
         print_header_nonlinear(constrained=True)
+        f1 = fun_wrapped(x0 / scale)
+        g1 = grad_wrapped(x0 / scale) / scale
+        g_norm = np.linalg.norm(g1, ord=np.inf)
+        constr_violation = np.max(np.abs(jnp.clip(cfun_wrapped(x0 / scale), lb, ub)))
+        print_iteration_nonlinear(
+            len(allx) - 1, len(func_allx), f1, np.inf, np.inf, g_norm, constr_violation
+        )
+
     try:
         result = scipy.optimize.minimize(
             fun_wrapped,
@@ -748,18 +785,21 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             hess=hess_wrapped,
             constraints=(constraint_wrapped if constraint else None),
             tol=EPS,
+            callback=callback,
             options=options,
         )
         result["allx"] = allx
         result["nfev"] = len(func_allx)
         result["ngev"] = len(grad_allx)
         result["nhev"] = len(hess_allx)
-        result["nit"] = len(allx)
+        result["ncfev"] = len(cfun_allx)
+        result["ncjev"] = len(cjac_allx)
+        result["nit"] = len(allx) - 1
         result["constr_violation"] = np.max(
             np.abs(jnp.clip(cfun_wrapped(result["x"] / scale), lb, ub))
         )
     except StopIteration:
-        x = grad_allx[-1]
+        x = allx[-1]
         f = f_where_x(x, func_allx, func_allf)
         g = f_where_x(x, grad_allx, grad_allf)
         if len(hess_allx):
@@ -777,7 +817,9 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             nfev=len(func_allx),
             ngev=len(grad_allx),
             nhev=len(hess_allx),
-            nit=len(allx),
+            ncfev=len(cfun_allx),
+            ncjev=len(cjac_allx),
+            nit=len(allx) - 1,
             message=message[0],
             allx=allx,
         )
@@ -794,8 +836,10 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         )
         print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
         print("         Iterations: {:d}".format(result["nit"]))
-        print("         Function evaluations: {:d}".format(result["nfev"]))
-        print("         Gradient evaluations: {:d}".format(result["ngev"]))
-        print("         Hessian evaluations: {:d}".format(result["nhev"]))
+        print("         Function   evaluations: {:d}".format(result["nfev"]))
+        print("         Gradient   evaluations: {:d}".format(result["ngev"]))
+        print("         Hessian    evaluations: {:d}".format(result["nhev"]))
+        print("         Constraint evaluations: {:d}".format(result["ncfev"]))
+        print("         Jacobian   evaluations: {:d}".format(result["ncjev"]))
 
     return result

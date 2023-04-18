@@ -194,7 +194,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         return f
 
     def compute_scaled(self, x_reduced):
-        """Compute the objective function and apply weighting / bounds.
+        """Compute the objective function and apply weighting / normalization.
 
         Parameters
         ----------
@@ -209,6 +209,24 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         x = self.recover(x_reduced)
         f = self._objective.compute_scaled(x)
+        return f
+
+    def compute_scaled_error(self, x_reduced):
+        """Compute the objective function and apply weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute_scaled_error(x)
         return f
 
     def compute_scalar(self, x_reduced):
@@ -603,7 +621,7 @@ class ProximalProjection(ObjectiveFunction):
         return xopt, xeq
 
     def compute_scaled(self, x):
-        """Compute the objective function.
+        """Compute the objective function and apply weights/normalization.
 
         Parameters
         ----------
@@ -619,8 +637,25 @@ class ProximalProjection(ObjectiveFunction):
         xopt, _ = self._update_equilibrium(x, store=False)
         return self._objective.compute_scaled(xopt)
 
+    def compute_scaled_error(self, x):
+        """Compute the error between target and objective and apply weights etc.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled_error(xopt)
+
     def compute_unscaled(self, x):
-        """Compute the objective function.
+        """Compute the raw value of the objective function.
 
         Parameters
         ----------
@@ -649,7 +684,7 @@ class ProximalProjection(ObjectiveFunction):
         g : ndarray
             gradient vector.
         """
-        f = jnp.atleast_1d(self.compute(x))
+        f = jnp.atleast_1d(self.compute_scaled_error(x))
         J = self.jac_scaled(x)
         return f.T @ J
 

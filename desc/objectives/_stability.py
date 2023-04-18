@@ -168,14 +168,14 @@ class MercierStability(_Objective):
             self._transforms["grid"], data["D_Mercier"], surface_label="rho"
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -353,14 +353,14 @@ class MagneticWell(_Objective):
             self._transforms["grid"], data["magnetic well"], surface_label="rho"
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

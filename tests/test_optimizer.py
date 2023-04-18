@@ -304,7 +304,7 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac = lambda x: objective._jac(x) + 1e2 * (
+    objective.jac_scaled = lambda x: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
     )
 

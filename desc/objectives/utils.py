@@ -265,7 +265,9 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
             for arg in args
         }
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -obj.compute_scaled(*[jnp.zeros(obj.dimensions[arg]) for arg in obj.args])
+        b_ = -obj.compute_scaled_error(
+            *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
+        )
         A.append(A_)
         b.append(b_)
 
@@ -322,7 +324,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        res = con.compute_scaled(**xp_dict)
+        res = con.compute_scaled_error(**xp_dict)
         x = np.concatenate([xp_dict[arg] for arg in con.args])
         # stuff like density is O(1e19) so need some adjustable tolerance here.
         atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)

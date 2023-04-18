@@ -275,7 +275,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
-            f = objective.compute_scaled(x)
+            f = objective.compute_scaled_error(x)
             RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
@@ -616,8 +616,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # 1st order
     if order > 0:
 
-        f = objective_f.compute_scaled(xf)
-        g = objective_g.compute_scaled(xg)
+        f = objective_f.compute_scaled_error(xf)
+        g = objective_g.compute_scaled_error(xg)
 
         # 1st partial derivatives of f objective wrt x
         if verbose > 0:

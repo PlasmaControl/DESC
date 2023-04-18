@@ -157,6 +157,9 @@ class ObjectiveFunction(IOAble):
         if "CompiledFunction" in str(type(self.compute_scaled)):
             del self.compute_scaled
         self.compute_scaled = jit(self.compute_scaled)
+        if "CompiledFunction" in str(type(self.compute_scaled_error)):
+            del self.compute_scaled_error
+        self.compute_scaled_error = jit(self.compute_scaled_error)
         if "CompiledFunction" in str(type(self.compute_unscaled)):
             del self.compute_unscaled
         self.compute_unscaled = jit(self.compute_unscaled)
@@ -223,7 +226,7 @@ class ObjectiveFunction(IOAble):
             timer.disp("Objective build")
 
     def compute_unscaled(self, x):
-        """Compute the unscaled form of the objective function.
+        """Compute the raw value of the objective function.
 
         Parameters
         ----------
@@ -246,7 +249,7 @@ class ObjectiveFunction(IOAble):
         return f
 
     def compute_scaled(self, x):
-        """Compute the objective function and apply weighting and bounds.
+        """Compute the objective function and apply weighting and normalization.
 
         Parameters
         ----------
@@ -268,8 +271,31 @@ class ObjectiveFunction(IOAble):
         )
         return f
 
+    def compute_scaled_error(self, x):
+        """Compute and apply the target/bounds, weighting, and normalization.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        kwargs = self.unpack_state(x)
+        f = jnp.concatenate(
+            [
+                obj.compute_scaled_error(*self._kwargs_to_args(kwargs, obj.args))
+                for obj in self.objectives
+            ]
+        )
+        return f
+
     def compute_scalar(self, x):
-        """Compute the scalar form of the objective function.
+        """Compute the sum of squares error.
 
         Parameters
         ----------
@@ -282,7 +308,7 @@ class ObjectiveFunction(IOAble):
             Objective function scalar value.
 
         """
-        f = jnp.sum(self.compute_scaled(x) ** 2) / 2
+        f = jnp.sum(self.compute_scaled_error(x) ** 2) / 2
         return f
 
     def print_value(self, x):
@@ -722,6 +748,9 @@ class _Objective(IOAble, ABC):
         if "CompiledFunction" in str(type(self.compute_scaled)):
             del self.compute_scaled
         self.compute_scaled = jit(self.compute_scaled)
+        if "CompiledFunction" in str(type(self.compute_scaled_error)):
+            del self.compute_scaled_error
+        self.compute_scaled_error = jit(self.compute_scaled_error)
         if "CompiledFunction" in str(type(self.compute_unscaled)):
             del self.compute_unscaled
         self.compute_unscaled = jit(self.compute_unscaled)
@@ -782,10 +811,15 @@ class _Objective(IOAble, ABC):
         """Compute the objective function."""
 
     def compute_unscaled(self, *args, **kwargs):
-        """Compute the unscaled version of the objective."""
+        """Compute the raw value of the objective."""
         return jnp.atleast_1d(self.compute(*args, **kwargs))
 
     def compute_scaled(self, *args, **kwargs):
+        """Compute and apply weighting and normalization."""
+        f = self.compute(*args, **kwargs)
+        return self._scale(f)
+
+    def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         f = self.compute(*args, **kwargs)
         return self._scale(self._shift(f))
@@ -822,9 +856,9 @@ class _Objective(IOAble, ABC):
     def compute_scalar(self, *args, **kwargs):
         """Compute the scalar form of the objective."""
         if self.scalar:
-            f = self.compute_scaled(*args, **kwargs)
+            f = self.compute_scaled_error(*args, **kwargs)
         else:
-            f = jnp.sum(self.compute_scaled(*args, **kwargs) ** 2) / 2
+            f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
 
     def print_value(self, *args, **kwargs):

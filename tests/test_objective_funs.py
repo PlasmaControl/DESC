@@ -76,7 +76,7 @@ class TestObjectiveFunction:
                 target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
             V = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            V_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            V_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             V_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 20 * np.pi**2)
             np.testing.assert_allclose(V_scaled, 10)
@@ -92,7 +92,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = AspectRatio(target=5, weight=1, eq=eq)
             AR = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            AR_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            AR_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(AR, 10)
             np.testing.assert_allclose(AR_scaled, 5)
 
@@ -106,7 +106,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Elongation(target=0, weight=2, eq=eq)
             f = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            f_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            f_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
@@ -119,7 +119,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Energy(target=0, weight=mu_0, eq=eq, normalize=False)
             W = obj.compute_unscaled(*obj.xs(eq))
-            W_scaled = obj.compute_scaled(*obj.xs(eq))
+            W_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(W, 10 / mu_0)
             np.testing.assert_allclose(W_scaled, 10)
 
@@ -133,7 +133,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = RotationalTransform(target=1, weight=2, eq=eq)
             iota = obj.compute_unscaled(*obj.xs(eq))
-            iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            iota_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
             np.testing.assert_allclose(iota_scaled, -2 / np.sqrt(3))
 
@@ -147,7 +147,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute_unscaled(*obj.xs(eq))
-            I_scaled = obj.compute_scaled(*obj.xs(eq))
+            I_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(I, 0)
             np.testing.assert_allclose(I_scaled, -2 / np.sqrt(3))
 
@@ -331,30 +331,30 @@ def test_rejit():
     eq = Equilibrium()
     obj.build(eq)
     assert obj.compute_unscaled(4) == 8
-    assert obj.compute_scaled(4) == 8
+    assert obj.compute_scaled_error(4) == 8
     obj.target = 1
     obj.weight = 2
     assert obj.compute(4) == 10  # compute method is not JIT compiled
-    assert obj.compute_scaled(4) == 8  # only compute_scaled is JIT compiled
+    assert obj.compute_scaled_error(4) == 8  # only compute_scaled is JIT compiled
     obj.jit()
     assert obj.compute(4) == 10
-    assert obj.compute_scaled(4) == 18
+    assert obj.compute_scaled_error(4) == 18
 
     objFun = ObjectiveFunction(obj)
     objFun.build(eq)
     x = objFun.x(eq)
 
-    f = objFun.compute_scaled(x)
+    f = objFun.compute_scaled_error(x)
     J = objFun.jac_scaled(x)
     np.testing.assert_allclose(f, [-5598, 402, 396])
     np.testing.assert_allclose(J, np.diag([-1800, 0, -18]))
     objFun.objectives[0].target = 3
     objFun.objectives[0].weight = 4
     objFun.objectives[0].y = 2
-    np.testing.assert_allclose(objFun.compute_scaled(x), f)
+    np.testing.assert_allclose(objFun.compute_scaled_error(x), f)
     np.testing.assert_allclose(objFun.jac_scaled(x), J)
     objFun.jit()
-    np.testing.assert_allclose(objFun.compute_scaled(x), [-7164, 836, 828])
+    np.testing.assert_allclose(objFun.compute_scaled_error(x), [-7164, 836, 828])
     np.testing.assert_allclose(objFun.jac_scaled(x), J * 4 / 3)
 
 

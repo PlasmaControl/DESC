@@ -378,11 +378,11 @@ def _eta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="M*theta_B+N*zeta_B",
-    label="M\\theta_{B}+N\\zeta_{B}",
+    name="zeta_B QI",
+    label="\\tilde{\\zeta}_{B}",
     units="rad",
     units_long="radians",
-    description="Helical coordinate to make the field omnigeneous",
+    description="Boozer toroidal angle in the Quasi-Isodynamic reference frame",
     dim=1,
     params=["omni_mn"],
     transforms={"eta": [[0, 0, 0]]},
@@ -402,7 +402,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     omni_m0 = jnp.sum(omni_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
     omni_mn = jnp.concatenate((omni_m0, params["omni_mn"]))
 
-    data["M*theta_B+N*zeta_B"] = (
+    data["zeta_B QI"] = (
         jnp.matmul(transforms["eta"].basis.evaluate(nodes), omni_mn)
         + 2 * data["eta"]
         + jnp.pi
@@ -445,30 +445,18 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["theta", "M*theta_B+N*zeta_B", "iota", "|B|_mn"],
+    data=["theta", "zeta_B QI", "iota", "|B|_mn"],
     helicity="helicity",
 )
 def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (0, 1))
-    iota = data["iota"][0]
-    q = 1 / iota
-    if M == 0:
-        matrix = (
-            jnp.array([[N / (M + N), iota], [-M / (M + N), 1]])
-            * (M + N)
-            / (M * iota + N)
-        )
-    elif N == 0:
-        matrix = (
-            jnp.array([[-N / (M + N), 1], [M / (M + N), q]]) * (M + N) / (M + q * N)
-        )
-    else:
-        raise ValueError("Omnigenity with helical contours is not yet implemented.")
-
+    # iota here is iota + additional term from the helicity rotation away from QI
+    iota = (M + N * data["iota"][0]) / (N - M * data["iota"][0])
+    matrix = jnp.array([[N, N * iota - M], [M, M * iota + N]]) / jnp.sqrt(M**2 + N**2)
     alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
 
     # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
-    booz = matrix @ jnp.vstack((alpha, data["M*theta_B+N*zeta_B"]))
+    booz = matrix @ jnp.vstack((alpha, data["zeta_B QI"]))
     data["theta_B(alpha,eta)"] = booz[0, :]
     data["zeta_B(alpha,eta)"] = booz[1, :]
 

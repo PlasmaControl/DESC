@@ -623,7 +623,10 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         lb, ub = 0, 0
 
     def constraint_violation(xs):
-        f = constraint.compute_scaled_error(xs * scale)
+        if constraint is not None:
+            f = constraint.compute_scaled_error(xs * scale)
+        else:
+            f = 0.0
         return jnp.max(jnp.abs(f))
 
     constraint_wrapped = NonlinearConstraint(

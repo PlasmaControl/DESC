@@ -159,6 +159,13 @@ class Optimizer(IOAble):
             objective, nonlinear_constraint = combine_args(
                 objective, nonlinear_constraint
             )
+        if len(linear_constraints) and not isinstance(x_scale, str):
+            # need to project x_scale down to correct size
+            Z = objective._Z
+            x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
+            # need to use dot here bc x_scale might not be a matrix
+            x_scale = np.abs(np.diag(Z.T @ np.diag(x_scale) @ Z))
+
         if not objective.compiled:
             if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
                 mode = "scalar"

@@ -233,7 +233,6 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         if success[0] is not None:
             raise StopIteration
 
-    EPS = 2 * np.finfo(x0.dtype).eps
     if verbose > 1:
         print_header_nonlinear()
         f1 = fun_wrapped(x0 / scale)
@@ -251,7 +250,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
             method=method.replace("scipy-", ""),
             jac=grad_wrapped,
             hess=hess_wrapped,
-            tol=EPS,
+            tol=stoptol["gtol"],
             options=options,
             callback=callback,
         )
@@ -770,7 +769,6 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         if success[0] is not None:
             raise StopIteration
 
-    EPS = 2 * np.finfo(x0.dtype).eps
     if verbose > 1:
         print_header_nonlinear(constrained=True)
         f1 = fun_wrapped(x0 / scale)
@@ -790,7 +788,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             jac=grad_wrapped,
             hess=hess_wrapped,
             constraints=(constraint_wrapped if constraint else None),
-            tol=EPS,
+            tol=stoptol["gtol"],
             callback=callback,
             options=options,
         )

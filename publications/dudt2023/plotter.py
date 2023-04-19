@@ -23,7 +23,7 @@ labels = True
 helicity = (0, 1)
 iota = 0.25
 omni_l = np.array([1, 1.4, 1.8, 2])
-omni_mn = np.array([np.pi / 8, -np.pi / 8, np.pi / 4])
+omni_mn = np.array([0, 0, 0, np.pi / 8, -np.pi / 8, np.pi / 4])  # const, sin, cos
 
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 z = np.linspace(0, np.pi / 2, num=omni_l.size)
@@ -76,7 +76,7 @@ ax1.plot(zeta[75, :], B[75, :], color=color3, lw=6, label=r"$\alpha=3\pi/2$")
 ax1.set_xlim([0, 2 * np.pi])
 ax1.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
 ax1.set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
-ax1.set_xlabel(r"$\zeta_B$")
+ax1.set_xlabel(r"$\tilde{\zeta}_B$")
 ax1.set_ylabel(r"$|\mathbf{B}|$")
 ax1.legend(loc="upper center")
 # plot c
@@ -124,10 +124,10 @@ ax2.set_xlabel(r"$\zeta_B$")
 ax2.set_ylabel(r"$\theta_B$")
 fig.tight_layout()
 plt.show()
-plt.savefig("model.png")
-plt.savefig("model.eps")
+# plt.savefig("model.png")
+# plt.savefig("model.eps")
 
-omni_mn = np.array([-np.pi / 6, -np.pi / 7, -np.pi / 8])
+omni_mn = np.array([0, 0, 0, np.pi / 6, np.pi / 7, np.pi / 8])
 
 # general field
 iota = 1 / (1 + np.sqrt(5))
@@ -167,12 +167,12 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("general.png")
+# plt.savefig("general.png")
 # plt.savefig("general.eps")
 
 # omnigenity poloidal (QI)
 helicity = (0, 1)
-iota = 2 / (1 + np.sqrt(5))
+iota = 1 / (1 + np.sqrt(5))
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
 data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
@@ -211,12 +211,12 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("omnigenity_M0_N1.png")
+# plt.savefig("omnigenity_M0_N1.png")
 # plt.savefig("omnigenity_M0_N1.eps")
 
 # omnigenity helical
 helicity = (1, 1)
-iota = -2 / (1 + np.sqrt(5))
+iota = -1 / (1 + np.sqrt(5))
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
 data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
@@ -267,12 +267,12 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("omnigenity_M1_N1.png")
+# plt.savefig("omnigenity_M1_N1.png")
 # plt.savefig("omnigenity_M1_N1.eps")
 
 # omnigenity toroidal
 helicity = (1, 0)
-iota = (1 + np.sqrt(5)) / 2
+iota = 1 + np.sqrt(5)
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
 data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
@@ -311,14 +311,14 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("omnigenity_M1_N0.png")
+# plt.savefig("omnigenity_M1_N0.png")
 # plt.savefig("omnigenity_M1_N0.eps")
 
-omni_mn = np.array([0, omni_mn[1], 0])
+omni_mn = np.array([0, 0, 0, 0, omni_mn[1], 0])
 
 # quasi-symmetry poloidal (QP)
 helicity = (0, 1)
-iota = 2 / (1 + np.sqrt(5))
+iota = 1 / (1 + np.sqrt(5))
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
 data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
@@ -357,12 +357,12 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("quasisymmetry_M0_N1.png")
+# plt.savefig("quasisymmetry_M0_N1.png")
 # plt.savefig("quasisymmetry_M0_N1.eps")
 
 # quasi-symmetry helical (QH)
 helicity = (1, 1)
-iota = -2 / (1 + np.sqrt(5))
+iota = -1 / (1 + np.sqrt(5))
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
 data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
@@ -413,12 +413,12 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("quasisymmetry_M1_N1.png")
+# plt.savefig("quasisymmetry_M1_N1.png")
 # plt.savefig("quasisymmetry_M1_N1.eps")
 
 # quasi-symmetry toroidal (QA)
 helicity = (1, 0)
-iota = (1 + np.sqrt(5)) / 2
+iota = 1 + np.sqrt(5)
 eq = Equilibrium(iota=np.array([iota]), omni_l=omni_l, omni_mn=omni_mn)
 grid = LinearGrid(theta=101, zeta=100, endpoint=True)
 data = eq.compute(["|B|_omni", "|B|(alpha,eta)"], grid=grid, helicity=helicity)
@@ -457,7 +457,7 @@ else:
     ax.set_yticklabels([])
 fig.tight_layout()
 plt.show()
-plt.savefig("quasisymmetry_M1_N0.png")
+# plt.savefig("quasisymmetry_M1_N0.png")
 # plt.savefig("quasisymmetry_M1_N0.eps")
 
 print("Done!")

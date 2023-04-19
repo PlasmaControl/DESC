@@ -122,6 +122,7 @@ class _Configuration(IOAble, ABC):
         "_L_omni",
         "_M_omni",
         "_N_omni",
+        "_omni_basis",
         "_omni_l",
         "_omni_lmn",
     ]

@@ -119,10 +119,11 @@ class _Configuration(IOAble, ABC):
         "_atomic_number",
         "_spectral_indexing",
         "_bdry_mode",
+        "_L_omni",
         "_M_omni",
         "_N_omni",
         "_omni_l",
-        "_omni_mn",
+        "_omni_lmn",
     ]
 
     def __init__(  # noqa: C901 - FIXME: break this up into simpler pieces
@@ -427,12 +428,20 @@ class _Configuration(IOAble, ABC):
             self.L_lmn = kwargs.pop("L_lmn")
 
         # initialize omnigenity parameters
+        self._L_omni = int(kwargs.pop("L_omni", 0))
         self._M_omni = int(kwargs.pop("M_omni", 1))
         self._N_omni = int(kwargs.pop("N_omni", 1))
+        self._omni_basis = FourierZernikeBasis(
+            L=self.L_omni,
+            M=self.M_omni,
+            N=self.N_omni,
+            NFP=self.NFP,
+            sym="cos(z)",
+            spectral_indexing=self.spectral_indexing,
+        )
         self._omni_l = np.array(kwargs.pop("omni_l", np.linspace(1, 2, 3)), dtype=float)
-        self._omni_mn = np.array(
-            kwargs.pop("omni_mn", np.zeros((2 * self.M_omni + 1) * self.N_omni)),
-            dtype=float,
+        self._omni_lmn = np.array(
+            kwargs.pop("omni_lmn", np.zeros(self.omni_basis.num_modes)), dtype=float
         )
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
@@ -859,14 +868,24 @@ class _Configuration(IOAble, ABC):
         return self.axis.Z_n
 
     @property
+    def L_omni(self):
+        """int: Radial resolution of omni_lmn."""
+        return self._L_omni
+
+    @property
     def M_omni(self):
-        """int: Poloidal resolution of omni_mn."""
+        """int: Poloidal resolution of omni_lmn."""
         return self._M_omni
 
     @property
     def N_omni(self):
-        """int: Toroidal resolution of omni_mn."""
+        """int: Toroidal resolution of omni_lmn."""
         return self._N_omni
+
+    @property
+    def omni_basis(self):
+        """FourierZernikeBasis: Spectral basis for omni_lmn."""
+        return self._omni_basis
 
     @property
     def omni_l(self):
@@ -878,13 +897,13 @@ class _Configuration(IOAble, ABC):
         self._omni_l[:] = omni_l
 
     @property
-    def omni_mn(self):
+    def omni_lmn(self):
         """ndarray: Omnigenity magnetic well shift parameters."""
-        return self._omni_mn
+        return self._omni_lmn
 
-    @omni_mn.setter
-    def omni_mn(self, omni_mn):
-        self._omni_mn[:] = omni_mn
+    @omni_lmn.setter
+    def omni_lmn(self, omni_lmn):
+        self._omni_lmn[:] = omni_lmn
 
     @property
     def axis(self):

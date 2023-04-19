@@ -384,7 +384,7 @@ def _eta(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Boozer toroidal angle in the Quasi-Isodynamic reference frame",
     dim=1,
-    params=["omni_mn"],
+    params=["omni_lmn"],
     transforms={"eta": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
@@ -395,15 +395,8 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
 
     # apply eta=0 boundary conditions
-    omni_mn_arr = params["omni_mn"].reshape((transforms["eta"].basis.N, -1))
-    nn = (
-        transforms["eta"].basis.modes[:, 2].reshape((transforms["eta"].basis.N + 1, -1))
-    )
-    omni_m0 = jnp.sum(omni_mn_arr * -(nn[1:, :] % 2 - 1) * (nn[1:, :] % 4 - 1), axis=0)
-    omni_mn = jnp.concatenate((omni_m0, params["omni_mn"]))
-
     data["zeta_B QI"] = (
-        jnp.matmul(transforms["eta"].basis.evaluate(nodes), omni_mn)
+        jnp.matmul(transforms["eta"].basis.evaluate(nodes), params["omni_lmn"])
         + 2 * data["eta"]
         + jnp.pi
     )
@@ -421,10 +414,11 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["eta"],
+    data=["rho", "eta"],
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
     B_input = jnp.sort(params["omni_l"])  # sort to ensure monotonicity
+    B_input = (B_input - 1) * jnp.sqrt(data["rho"][0]) + 1  # assumed rho scaling
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta)

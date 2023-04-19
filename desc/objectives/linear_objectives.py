@@ -757,8 +757,7 @@ class FixAxisR(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.axis.R_basis.modes
-            # and eq.axis.R_n,
+            # rearrange modes to match order of eq.axis.R_basis.modes and eq.axis.R_n,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.axis.R_basis.modes[idx, :])
 
@@ -907,8 +906,7 @@ class FixAxisZ(_Objective):
                 modes.view(dtype),
                 return_indices=True,
             )
-            # rearrange modes to match order of eq.axis.Z_basis.modes
-            # and eq.axis.Z_n,
+            # rearrange modes to match order of eq.axis.Z_basis.modes and eq.axis.Z_n,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.axis.Z_basis.modes[idx, :])
 
@@ -1338,8 +1336,7 @@ class FixSumModesR(_Objective):
                 return_indices=True,
             )
             self._idx = idx
-            # rearrange modes and weights to match order of eq.R_basis.modes
-            # and eq.R_lmn,
+            # rearrange modes & weights to match order of eq.R_basis.modes and eq.R_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.R_basis.modes[idx, :])
             if self._sum_weights is not None:
@@ -1491,8 +1488,7 @@ class FixSumModesZ(_Objective):
                 return_indices=True,
             )
             self._idx = idx
-            # rearrange modes and weights to match order of eq.Z_basis.modes
-            # and eq.Z_lmn,
+            # rearrange modes & weights to match order of eq.Z_basis.modes and eq.Z_lmn,
             # necessary so that the A matrix rows match up with the target b
             modes = np.atleast_2d(eq.Z_basis.modes[idx, :])
             if self._sum_weights is not None:
@@ -2939,8 +2935,8 @@ class FixOmni_l(_Objective):
         return "omni_l"
 
 
-class FixOmni_mn(_Objective):
-    """Fixes omni_mn.
+class FixOmni_lmn(_Objective):
+    """Fixes omni_lmn.
 
     Parameters
     ----------
@@ -2972,7 +2968,7 @@ class FixOmni_mn(_Objective):
     _linear = True
     _fixed = True
     _units = "(rad)"
-    _print_value_fmt = "Fixed omni_mn error: {:10.3e} "
+    _print_value_fmt = "Fixed omni_lmn error: {:10.3e} "
 
     def __init__(
         self,
@@ -2980,10 +2976,10 @@ class FixOmni_mn(_Objective):
         target=None,
         bounds=None,
         weight=1,
-        normalize=True,
-        normalize_target=True,
+        normalize=False,
+        normalize_target=False,
         indices=True,
-        name="fixed omni_mn",
+        name="fixed omni_lmn",
     ):
 
         self._indices = indices
@@ -3011,7 +3007,7 @@ class FixOmni_mn(_Objective):
 
         """
         if self.target is None:
-            self._target = eq.omni_mn
+            self._target = eq.omni_lmn
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -3025,14 +3021,13 @@ class FixOmni_mn(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, omni_mn, **kwargs):
-        """Compute fixed omni_mn error.
+    def compute(self, omni_lmn, **kwargs):
+        """Compute fixed omni_lmn error.
 
         Parameters
         ----------
-        omni_mn : ndarray
-            Magnetic well shifting parameters.
-            Fourier coefficients of h(alpha,eta).
+        omni_lmn : ndarray
+            Spectral coefficients of tilde(zeta)_B(rho, alpha, eta).
 
         Returns
         -------
@@ -3040,9 +3035,119 @@ class FixOmni_mn(_Objective):
             Total QI magnetic well shift error.
 
         """
-        return omni_mn[self._idx]
+        return omni_lmn[self._idx]
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "omni_mn"
+        return "omni_lmn"
+
+
+class StraightBmaxContour(_Objective):
+    """Ensures the B_max contour is straight in Boozer coordinates.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : tuple, float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) = len(weight) = len(modes). If None, uses profile coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(target) = len(weight) = len(modes)
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+        Note: has no effect for this objective.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+        Note: has no effect for this objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(rad)"
+    _print_value_fmt = "Straight B_max error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=0,
+        bounds=None,
+        weight=1,
+        normalize=False,
+        normalize_target=False,
+        name="straight B_max contour",
+    ):
+
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        basis = eq.omni_basis
+        self._dim_f = int(basis.num_modes / (basis.N + 1))
+
+        self._A = np.zeros((self._dim_f, basis.num_modes))
+        n0_modes = basis.modes[np.nonzero(basis.modes[:, 2] == 0)[0]]
+        for i, (l, m, n) in enumerate(n0_modes):
+            idx_0 = np.nonzero((basis.modes == [l, m, n]).all(axis=1))[0]
+            idx_n = np.nonzero(
+                np.logical_and(
+                    (basis.modes[:, :2] == [l, m]).all(axis=1),
+                    np.logical_and((basis.modes[:, 2] % 2 == 0), basis.modes[:, 2] > 0),
+                )
+            )[0]
+            nn = basis.modes[idx_n, 2]
+            self._A[i, idx_0] = 1
+            self._A[i, idx_n] = (nn % 2 - 1) * (nn % 4 - 1)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, omni_lmn, **kwargs):
+        """Compute fixed omni_lmn error.
+
+        Parameters
+        ----------
+        omni_lmn : ndarray
+            Spectral coefficients of tilde(zeta)_B(rho, alpha, eta).
+
+        Returns
+        -------
+        f : ndarray
+            Total straight B_max contour error.
+
+        """
+        return jnp.dot(self._A, omni_lmn)
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "omni_lmn"

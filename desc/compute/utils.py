@@ -25,7 +25,7 @@ arg_order = (
     "Ti_l",
     "Zeff_l",
     "omni_l",
-    "omni_mn",
+    "omni_lmn",
     "Rb_lmn",
     "Zb_lmn",
 )
@@ -321,12 +321,7 @@ def get_transforms(keys, eq, grid, **kwargs):
     if "eta" in derivs:
         transforms["eta"] = Transform(
             grid,
-            DoubleFourierSeries(
-                M=eq.M_omni,
-                N=eq.N_omni,
-                NFP=eq.NFP,
-                sym="cos(z)",
-            ),
+            eq.omni_basis,
             derivs=derivs["eta"],
             build=True,
             build_pinv=True,

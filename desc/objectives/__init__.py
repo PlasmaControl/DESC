@@ -49,7 +49,7 @@ from .linear_objectives import (
     FixModeR,
     FixModeZ,
     FixOmni_l,
-    FixOmni_mn,
+    FixOmni_lmn,
     FixPressure,
     FixPsi,
     FixR,
@@ -57,6 +57,7 @@ from .linear_objectives import (
     FixSumModesZ,
     FixThetaSFL,
     FixZ,
+    StraightBmaxContour,
 )
 from .objective_funs import ObjectiveFunction
 from .utils import (

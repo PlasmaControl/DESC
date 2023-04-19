@@ -552,10 +552,6 @@ class Omnigenity(_Objective):
         Collocation grid containing the nodes to evaluate at.
     helicity : tuple, optional
         Type of omnigenity (M, N). Default = quasi-isodynamic (0, 1).
-    M_omni : int
-        Poloidal resolution of omni_mn parameter. Default = 1.
-    N_omni : int
-        Toroidal resolution of omni_mn parameter. Default = 1.
     M_booz : int, optional
         Poloidal resolution of Boozer transformation. Default = 2 * eq.M.
     N_booz : int, optional
@@ -565,6 +561,7 @@ class Omnigenity(_Objective):
         of the magnetic well (B_max). Default = 1, which weights all points equally.
     name : str
         Name of the objective function.
+
     """
 
     _scalar = False
@@ -582,8 +579,6 @@ class Omnigenity(_Objective):
         normalize_target=True,
         grid=None,
         helicity=(0, 1),
-        M_omni=1,
-        N_omni=1,
         M_booz=None,
         N_booz=None,
         well_weight=1,
@@ -594,8 +589,6 @@ class Omnigenity(_Objective):
         assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
         self.helicity = helicity
-        self.M_omni = M_omni
-        self.N_omni = N_omni
         self.M_booz = M_booz
         self.N_booz = N_booz
         self.well_weight = well_weight
@@ -649,8 +642,6 @@ class Omnigenity(_Objective):
             grid=grid,
             M_booz=self.M_booz,
             N_booz=self.N_booz,
-            M_omni=self.M_omni,
-            N_omni=self.N_omni,
         )
 
         timer.stop("Precomputing transforms")
@@ -680,9 +671,9 @@ class Omnigenity(_Objective):
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
         omni_l : ndarray
-            Magnetic well shaping parameters. Values of B(eta) on a linear grid.
-        omni_mn : ndarray
-            Magnetic well shifting parameters. Fourier coefficients of h(alpha,eta).
+            Values of B(eta) on a linearly spaced grid eta = [0, pi/2].
+        omni_lmn : ndarray
+            Spectral coefficients of tilde(zeta)_B(rho, alpha, eta).
 
         Returns
         -------

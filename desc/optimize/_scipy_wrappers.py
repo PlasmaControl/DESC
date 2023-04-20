@@ -708,31 +708,26 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         g_norm = np.linalg.norm(g1, ord=np.inf)
         x_norm = np.linalg.norm(x1)
 
-        if len(allx) < 2:
-            df = np.inf
-            dx_norm = np.inf
-            reduction_ratio = 0
+        x2 = allx[-2]
+        f2 = f_where_x(x2, func_allx, func_allf)
+        if not f2.size:
+            f2 = fun_wrapped(x2 / scale)
+        df = f2 - f1
+        dx = x1 - x2
+        dx_norm = jnp.linalg.norm(dx)
+        if len(hess_allx):
+            H1 = f_where_x(x1, hess_allx, hess_allf)
         else:
-            x2 = allx[-2]
-            f2 = f_where_x(x2, func_allx, func_allf)
-            if not f2.size:
-                f2 = fun_wrapped(x2 / scale)
-            df = f2 - f1
-            dx = x1 - x2
-            dx_norm = jnp.linalg.norm(dx)
-            if len(hess_allx):
-                H1 = f_where_x(x1, hess_allx, hess_allf)
-            else:
-                H1 = np.eye(x1.size) / dx_norm
-            if not H1.size:
-                H1 = np.eye(x1.size) / dx_norm
-            predicted_reduction = -evaluate_quadratic_form_hess(dx, 0, g1, H1)
-            if predicted_reduction > 0:
-                reduction_ratio = df / predicted_reduction
-            elif predicted_reduction == df == 0:
-                reduction_ratio = 1
-            else:
-                reduction_ratio = 0
+            H1 = np.eye(x1.size) / dx_norm
+        if not H1.size:
+            H1 = np.eye(x1.size) / dx_norm
+        predicted_reduction = -evaluate_quadratic_form_hess(dx, 0, g1, H1)
+        if predicted_reduction > 0:
+            reduction_ratio = df / predicted_reduction
+        elif predicted_reduction == df == 0:
+            reduction_ratio = 1
+        else:
+            reduction_ratio = 0
 
         constr_violation = constraint_violation(x1 / scale)
         if verbose > 1:
@@ -795,14 +790,6 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             callback=callback,
             options=options,
         )
-        result["allx"] = allx
-        result["nfev"] = len(func_allx)
-        result["ngev"] = len(grad_allx)
-        result["nhev"] = len(hess_allx)
-        result["ncfev"] = len(cfun_allx)
-        result["ncjev"] = len(cjac_allx)
-        result["nit"] = len(allx) - 1
-        result["constr_violation"] = constraint_violation(result["x"] / scale)
     except StopIteration:
         x = allx[-1]
         f = f_where_x(x, func_allx, func_allf)
@@ -818,16 +805,18 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
             grad=g,
             hess=H,
             optimality=np.linalg.norm(g, ord=np.inf),
-            constr_violation=constraint_violation(x / scale),
-            nfev=len(func_allx),
-            ngev=len(grad_allx),
-            nhev=len(hess_allx),
-            ncfev=len(cfun_allx),
-            ncjev=len(cjac_allx),
-            nit=len(allx) - 1,
             message=message[0],
-            allx=allx,
         )
+
+    result["allx"] = allx
+    result["nfev"] = len(func_allx)
+    result["ngev"] = len(grad_allx)
+    result["nhev"] = len(hess_allx)
+    result["ncfev"] = len(cfun_allx)
+    result["ncjev"] = len(cjac_allx)
+    result["nit"] = len(allx) - 1
+    result["constr_violation"] = constraint_violation(result["x"] / scale)
+
     if verbose > 0:
         if result["success"]:
             print(result["message"])

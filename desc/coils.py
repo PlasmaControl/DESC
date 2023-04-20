@@ -255,7 +255,9 @@ class CoilSet(Coil, MutableSequence):
 
     _io_attrs_ = Coil._io_attrs_ + ["_coils"]
 
-    def __init__(self, *coils, name=""):
+    def __init__(
+        self, *coils, name=""
+    ):  # FIXME: if a list of of Coils is passed, this fails...
         assert all([isinstance(coil, (Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)
@@ -464,6 +466,48 @@ class CoilSet(Coil, MutableSequence):
             coilset.append(coil)
 
         return cls(*coilset)
+
+    @classmethod
+    def from_makegrid_coilfile(cls, coil_file, grid=None):
+        """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
+
+        Parameters
+        ----------
+        coil_file : str or path-like
+            path to coil file in txt format
+        """
+        coils = []  # list of dict of coords ['X','Y','Z']
+        cfnames = []
+        coilinds = []
+
+        # read in the coils file
+        with open(coil_file) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.find("Modular") != -1:
+                    coilinds.append(i)
+                if line.find("mirror") != -1:
+                    coilinds.append(i)
+        for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
+            cfnames.append(f"temp_coil{i}.txt")
+            with open(f"temp_coil{i}.txt", "w+") as f:
+                f.writelines(lines[start + 1 : end])
+
+        for i, fname in enumerate(cfnames):
+            coords = np.genfromtxt(fname)
+            if i % 20 == 0:
+                print("reading coil " + f"{i}")
+
+            tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
+            tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
+            tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
+
+            coils.append(XYZCoil(coords[:, -1][0], tempx, tempy, tempz, grid=grid))
+            # FIXME: # sign of current may need to be negative, need to check
+            # makegrid convention, but tests show
+            # the resulting field agrees better with DESC eq if negative curr
+
+            return CoilSet(*coils)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

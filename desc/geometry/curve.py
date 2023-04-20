@@ -1232,15 +1232,24 @@ class XYZCurve(Curve):
     def Z(self, new):
         self._Z = jnp.asarray(new)
 
-    # TODO: what grid to have when we only have XYZ points?
+    # FIXME: Make this be the given points by default,
+    # but once spline interpolation is added
+    # let this be the interpolation points of the spline
     @property
     def grid(self):
         """Default grid for computation."""
         return self._grid
 
-    @grid.setter  # FIXME: add this method
+    @grid.setter
     def grid(self, new):
-        return None
+        if isinstance(new, Grid):
+            self._grid = new
+        elif isinstance(new, (np.ndarray, jnp.ndarray)):
+            self._grid = Grid(new, sort=False)
+        else:
+            raise TypeError(
+                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+            )
 
     def compute_coordinates(self, X=None, Y=None, Z=None, dt=0, basis="xyz"):
         """Compute values using specified coefficients.
@@ -1354,6 +1363,19 @@ class XYZCurve(Curve):
         length : float
             length of the curve.
         """
-        raise NotImplementedError("length not implemented for XYZCurve ")
+        if X is None:
+            X = self._X
+        if Y is None:
+            Y = self._Y
+        if Z is None:
+            Z = self._Z
+
+        length = jnp.sum(
+            jnp.sqrt(
+                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
+            )
+        )
+
+        return length
 
     # TODO: methods for converting between representations

@@ -96,7 +96,6 @@ class TestFmin:
             ftol=0,
             xtol=0,
             gtol=1e-12,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -116,7 +115,6 @@ class TestFmin:
             ftol=0,
             xtol=0,
             gtol=1e-12,
-            options={"ga_accept_threshold": 1},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -139,7 +137,6 @@ class TestFmin:
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -162,7 +159,6 @@ class TestFmin:
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
 

@@ -155,8 +155,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     max_nhev = options.pop("max_nhev", max_nfev)
     gnorm_ord = options.pop("gnorm_ord", np.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    ga_fd_step = options.pop("ga_fd_step", 0.1)
-    ga_accept_threshold = options.pop("ga_accept_threshold", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
     max_dx = options.pop("max_dx", np.inf)
@@ -257,30 +255,12 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
             try:
-                step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius)
+                step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius, alpha)
 
             except np.linalg.linalg.LinAlgError:
                 success = False
                 message = STATUS_MESSAGES["err"]
                 break
-
-            # geodesic acceleration
-            if ga_accept_threshold > 0:
-                g0 = g
-                g1 = grad(x + ga_fd_step * step_h * scale, *args)
-                ngev += 1
-                dg = (g1 - g0) / ga_fd_step**2
-                ga_step_h = (
-                    -scale_inv * jnp.linalg.solve(H, dg) + 1 / ga_fd_step * step_h
-                )
-                ga_ratio = np.linalg.norm(
-                    scale * ga_step_h, ord=xnorm_ord
-                ) / np.linalg.norm(scale * step_h, ord=xnorm_ord)
-                if ga_ratio < ga_accept_threshold:
-                    step_h += ga_step_h
-            else:
-                ga_ratio = -1
-                ga_step_h = np.zeros_like(step_h)
 
             # calculate the predicted value at the proposed point
             predicted_reduction = f - evaluate_quadratic_form_hess(step_h, f, g_h, H_h)

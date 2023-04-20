@@ -138,8 +138,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     xnorm_ord = options.pop("xnorm_ord", 2)
     max_dx = options.pop("max_dx", np.inf)
 
-    ga_fd_step = options.pop("ga_fd_step", 1e-3)
-    ga_tr_ratio = options.pop("ga_tr_ratio", 0)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
 
@@ -261,24 +259,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 )
 
             step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
-
-            # geodesic acceleration
-            if ga_tr_ratio > 0:
-                f0 = f
-                f1 = fun(x + ga_fd_step * step_h * scale, *args)
-                nfev += 1
-                df = (f1 - f0) / ga_fd_step
-                RHS = 2 / ga_fd_step * (df - J.dot(step_h * scale))
-                if tr_method == "svd":
-                    ga_step_h, _, _ = trust_region_step_exact_svd(
-                        RHS, U, s, Vt.T, ga_tr_ratio * step_h_norm, alpha
-                    )
-                elif tr_method == "cho":
-                    RHS = jnp.dot(J_h.T, RHS)
-                    ga_step_h, _, _ = trust_region_step_exact_cho(
-                        RHS, B_h, ga_tr_ratio * step_h_norm, alpha
-                    )
-                step_h += ga_step_h
 
             # calculate the predicted value at the proposed point
             predicted_reduction = -evaluate_quadratic_form_jac(J_h, g_h, step_h)

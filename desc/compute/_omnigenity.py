@@ -394,7 +394,6 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
     nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
 
-    # apply eta=0 boundary conditions
     data["zeta_B QI"] = (
         jnp.matmul(transforms["eta"].basis.evaluate(nodes), params["omni_lmn"])
         + 2 * data["eta"]
@@ -418,7 +417,6 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
     B_input = jnp.sort(params["omni_l"])  # sort to ensure monotonicity
-    B_input = (B_input - 1) * jnp.sqrt(data["rho"][0]) + 1  # assumed rho scaling
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta)

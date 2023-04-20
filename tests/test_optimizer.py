@@ -455,6 +455,17 @@ def test_wrappers():
     ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
     assert ob.built
 
+    np.testing.assert_allclose(
+        ob.compute_scaled(ob.x(eq)), obj.compute_scaled(*obj.xs(eq))
+    )
+    np.testing.assert_allclose(
+        ob.compute_unscaled(ob.x(eq)), obj.compute_unscaled(*obj.xs(eq))
+    )
+    np.testing.assert_allclose(ob.target_scaled, obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.bounds_scaled[0], obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.bounds_scaled[1], obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.weights, obj.weight)
+
     con = (
         FixBoundaryR(),
         FixBoundaryZ(),
@@ -476,6 +487,21 @@ def test_wrappers():
         )
     ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
     assert ob.built
+
+    np.testing.assert_allclose(
+        ob.compute_scaled(ob.x(eq)), con[0].compute_scaled(*con[0].xs(eq))
+    )
+    np.testing.assert_allclose(
+        ob.compute_unscaled(ob.x(eq)), con[0].compute_unscaled(*con[0].xs(eq))
+    )
+    np.testing.assert_allclose(ob.target_scaled, con[0].target / con[0].normalization)
+    np.testing.assert_allclose(
+        ob.bounds_scaled[0], con[0].target / con[0].normalization
+    )
+    np.testing.assert_allclose(
+        ob.bounds_scaled[1], con[0].target / con[0].normalization
+    )
+    np.testing.assert_allclose(ob.weights, con[0].weight)
 
 
 @pytest.mark.unit
@@ -572,3 +598,20 @@ def test_scipy_constrained_solve():
     assert np.all(Hbounds[0] < H2)
     assert np.all(H2 < Hbounds[1])
     assert eq2.is_nested()
+
+
+@pytest.mark.unit
+def test_solve_with_x_scale():
+    """Make sure we can manually specify x_scale when solving/optimizing."""
+    # basically just tests that it runs without error
+    eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
+    scale = jnp.concatenate(
+        [
+            (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+            jnp.ones(eq.p_l.size + eq.c_l.size + eq.Rb_lmn.size + eq.Zb_lmn.size + 1),
+        ]
+    )
+    eq.solve(x_scale=scale)
+    assert eq.is_nested()

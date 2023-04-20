@@ -580,3 +580,69 @@ def test_rebuild():
     obj = ObjectiveFunction(f_obj)
     obj.build(eq)
     eq.solve(maxiter=2, objective=obj)
+
+
+@pytest.mark.unit
+def test_jvp_scaled():
+    """Test that jvps are scaled correctly."""
+    eq = Equilibrium()
+    weight = 3
+    target = 5
+    objective = ObjectiveFunction(Volume(target=target, normalize=True, weight=weight))
+    objective.build(eq)
+    x = objective.x(eq)
+    dx = x / 100
+    jvp1u = objective.jvp_unscaled((dx,), x)
+    jvp2u = objective.jvp_unscaled((dx, dx), x)
+    jvp3u = objective.jvp_unscaled((dx, dx, dx), x)
+    jvp1s = objective.jvp_scaled((dx,), x)
+    jvp2s = objective.jvp_scaled((dx, dx), x)
+    jvp3s = objective.jvp_scaled((dx, dx, dx), x)
+
+    np.testing.assert_allclose(
+        jvp1u / objective._objectives[0].normalization * weight, jvp1s
+    )
+    np.testing.assert_allclose(
+        jvp2u / objective._objectives[0].normalization * weight, jvp2s
+    )
+    np.testing.assert_allclose(
+        jvp3u / objective._objectives[0].normalization * weight, jvp3s
+    )
+
+    with pytest.raises(NotImplementedError):
+        _ = objective.jvp_scaled((dx, dx, dx, dx), x)
+
+    with pytest.raises(NotImplementedError):
+        _ = objective.jvp_unscaled((dx, dx, dx, dx), x)
+
+
+@pytest.mark.unit
+def test_objective_target_bounds():
+    """Test that the target_scaled and bounds_scaled etc return the right things."""
+    eq = Equilibrium()
+
+    vol = Volume(target=3, normalize=True)
+    asp = AspectRatio(bounds=(2, 3), normalize=False)
+    fbl = ForceBalance(normalize=True, bounds=(-1, 2), weight=5)
+
+    objective = ObjectiveFunction((vol, asp, fbl))
+    objective.build(eq)
+
+    target = objective.target_scaled
+    bounds = objective.bounds_scaled
+    weight = objective.weights
+
+    assert bounds[0][0] == 3 / vol.normalization
+    assert bounds[1][0] == 3 / vol.normalization
+    assert bounds[0][1] == 2
+    assert bounds[1][1] == 3
+    assert np.all(bounds[0][2:] == -1 / fbl.normalization)
+    assert np.all(bounds[1][2:] == 2 / fbl.normalization)
+
+    assert target[0] == 3 / vol.normalization
+    assert target[1] == 2.5
+    assert np.all(target[2:] == 0.5 / fbl.normalization)
+
+    assert weight[0] == 1
+    assert weight[1] == 1
+    assert np.all(weight[2:] == 5)

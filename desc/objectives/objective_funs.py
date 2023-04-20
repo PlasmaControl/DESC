@@ -662,6 +662,7 @@ class _Objective(IOAble, ABC):
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
+        assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         self._target = target
         self._bounds = bounds
         self._weight = weight

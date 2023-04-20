@@ -59,13 +59,15 @@ class MercierStability(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(0, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="Mercier Stability",
     ):
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -249,13 +251,15 @@ class MagneticWell(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(0, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="Magnetic Well",
     ):
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             eq=eq,

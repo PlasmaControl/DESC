@@ -4,11 +4,10 @@ import numpy as np
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
 
-from desc.backend import jnp
-
 from .tr_subproblems import (
     solve_trust_region_2d_subspace,
     solve_trust_region_dogleg,
+    trust_region_step_exact_cho,
     update_tr_radius,
 )
 from .utils import (
@@ -27,7 +26,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     grad,
     hess="bfgs",
     args=(),
-    method="dogleg",
+    method="exact",
     x_scale=1,
     ftol=1e-6,
     xtol=1e-6,
@@ -52,8 +51,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         method will be used to approximate the Hessian.
     args : tuple
         additional arguments passed to fun, grad, and hess
-    method : ``'dogleg'`` or ``'subspace'``
-        method to use for trust region subproblem
+    method : ``'exact'``, ``'dogleg'`` or ``'subspace'``
+        method to use for trust region subproblem. 'exact' uses a series of cholesky
+        factorizations (usually 2-3) to find the optimal step. `dogleg` approximates the
+        optimal step using Powell's dogleg method. 'subspace' solves a reduced
+        subproblem over the space spanned by the gradient and newton direction.
     x_scale : array_like or ``'hess'``, optional
         Characteristic scale of each variable. Setting ``x_scale`` is equivalent
         to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -143,6 +145,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         subproblem = solve_trust_region_dogleg
     elif method == "subspace":
         subproblem = solve_trust_region_2d_subspace
+    elif method == "exact":
+        subproblem = trust_region_step_exact_cho
     else:
         raise ValueError(
             colored("method should be one of 'dogleg' or 'subspace'", "red")
@@ -219,7 +223,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     if return_tr:
         alltr = [trust_radius]
 
-    alpha = np.nan  # "Levenberg-Marquardt" parameter
+    alpha = 0  # "Levenberg-Marquardt" parameter
 
     while True:
 

@@ -244,7 +244,7 @@ def trust_region_step_exact_cho(
 
     Solves problems of the form
         (B + alpha*I)*p = -g,  ||p|| < trust_radius
-    for symmetric positive definite B
+    for symmetric B. A modified Cholesky factorization is used to deal with indefinite B
 
     Parameters
     ----------
@@ -276,8 +276,8 @@ def trust_region_step_exact_cho(
 
     """
     # try full newton step
-    R, lower = cho_factor(B)
-    p = cho_solve((R, lower), -g)
+    R = chol(B)
+    p = cho_solve((R, True), -g)
     if np.linalg.norm(p) <= trust_radius:
         return p, False, 0.0
 
@@ -295,8 +295,8 @@ def trust_region_step_exact_cho(
             alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
 
         Bi = B + alpha * jnp.eye(B.shape[0])
-        R, lower = cho_factor(Bi)
-        p = cho_solve((R, lower), -g)
+        R = chol(Bi)
+        p = cho_solve((R, True), -g)
         p_norm = np.linalg.norm(p)
         phi = p_norm - trust_radius
         if phi < 0:
@@ -304,7 +304,7 @@ def trust_region_step_exact_cho(
         if phi > 0:
             alpha_lower = alpha
 
-        q = solve_triangular(R.T, p, lower=(not lower))
+        q = solve_triangular(R.T, p, lower=False)
         q_norm = np.linalg.norm(q)
 
         alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
@@ -312,8 +312,8 @@ def trust_region_step_exact_cho(
             break
 
     Bi = B + alpha * jnp.eye(B.shape[0])
-    R, lower = cho_factor(Bi)
-    p = cho_solve((R, lower), -g)
+    R = chol(Bi)
+    p = cho_solve((R, True), -g)
 
     # Make the norm of p equal to trust_radius; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region

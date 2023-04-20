@@ -118,6 +118,25 @@ class TestFmin:
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
+    @pytest.mark.unit
+    def test_convex_full_hess_exact(self):
+        """Test minimizing rosenbrock function using exact method with full hess."""
+        x0 = np.ones(2)
+
+        out = fmintr(
+            scalar_fun,
+            x0,
+            scalar_grad,
+            scalar_hess,
+            verbose=1,
+            method="exact",
+            x_scale="hess",
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+
     @pytest.mark.slow
     @pytest.mark.unit
     def test_rosenbrock_bfgs_dogleg(self):
@@ -155,6 +174,28 @@ class TestFmin:
             hess=BFGS(),
             verbose=1,
             method="subspace",
+            x_scale=1,
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
+        )
+        np.testing.assert_allclose(out["x"], true_x)
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    def test_rosenbrock_bfgs_exact(self):
+        """Test minimizing rosenbrock function using exact method with BFGS hess."""
+        rando = default_rng(seed=4)
+
+        x0 = rando.random(7)
+        true_x = np.ones(7)
+        out = fmintr(
+            rosen,
+            x0,
+            rosen_der,
+            hess=BFGS(),
+            verbose=1,
+            method="exact",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,

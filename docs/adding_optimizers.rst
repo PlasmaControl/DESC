@@ -125,9 +125,7 @@ procedure.
         if verbose > 2:
             options.set_default("disp", 5)
         x_scale = 1 if x_scale == "auto" else x_scale
-        if isinstance(x_scale, str):
-            raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
-
+        assert x_scale == 1, "ipopt scaling hasn't been implemented"
 
         # the function and derivative information is contained in the `objective` object
         fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
@@ -151,19 +149,20 @@ procedure.
                 def confun(y):
                     x = y[:len(x0)]
                     lmbda = y[len(x0):]
-                    return jnp.dot(lmbda, constraint.compute_unscaled(x))
+                    return jnp.dot(lmbda, constraint.compute_scaled(x))
                 conhess = Derivative(confun, mode="hess")
                 conhess_wrapped = lambda x, lmbda: conhess(jnp.concatenate([x, lmbda]))
             # we make use of the scipy.optimize.NonlinearConstraint object here to
             # simplify the interface. cyipopt expects things in the same format as
             # scipy.optimize.minimize
             constraint_wrapped = NonlinearConstraint(
-                constraint.compute_unscaled,
-                constraint.bounds[0],
-                constraint.bounds[1],
-                constraint.jac_unscaled,
+                constraint.compute_scaled,
+                constraint.bounds_scaled[0],
+                constraint.bounds_scaled[1],
+                constraint.jac_scaled,
                 conhess_wrapped,
             )
+            # ipopt expects old style scipy constraints
             constraint_wrapped = new_constraint_to_old(constraint_wrapped, x0)
 
         else:
@@ -175,30 +174,17 @@ procedure.
         # gradient is called only with accepted xs so we store those.
         grad_allx = []
 
-        # next we define some wrapper functions to handle the scaling of the variables
-        # and storing a record of what values we see
-        def fun_wrapped(xs):
-            x = xs / x_scale
-            f = fun(x)
-            return f
-
-        def grad_wrapped(xs):
-            x = xs / x_scale
+        def grad_wrapped(x):
             grad_allx.append(x)
             g = grad(x)
-            return g / x_scale
-
-        def hess_wrapped(xs):
-            x = xs / x_scale
-            H = hess(x)
-            return H / (jnp.atleast_2d(x_scale).T * jnp.atleast_2d(x_scale))
+            return g
 
         # do we want to use the full hessian or only approximate?
-        hess_wrapped = None if method in ["ipopt-bfgs"] else hess_wrapped
+        hess_wrapped = None if method in ["ipopt-bfgs"] else hess
 
         # Now that everything is set up, we call the actual optimizer function
         result = cyipopt.minimize_ipopt(
-            fun_wrapped,
+            fun,
             x0=x0,
             args=(),
             jac=grad_wrapped,

@@ -213,3 +213,35 @@ def test_dommaschk_vertical_field():
     np.testing.assert_allclose(B_dom[:, 0], 0)
     np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten())
     np.testing.assert_array_equal(B_dom[:, 2], ones)
+
+
+@pytest.mark.unit
+def test_dommaschkfit_field():
+    """Test the Dommaschk potential fit for a 1/R toroidal scaled to 2 T."""
+    phi = np.linspace(0, 2 * np.pi, 3)
+    R = np.linspace(0.1, 1.5, 3)
+    Z = np.linspace(-0.5, 0.5, 3)
+    R, phi, Z = np.meshgrid(R, phi, Z)
+    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    max_l = 1
+    max_m = 1
+    B0 = 2  # scale strength for to 1/R field to fit
+
+    def B0_over_R(coord):
+        B_R = np.zeros_like(coord[:, 0])
+        B_phi = B0 / coord[:, 0]
+        B_Z = np.zeros_like(coord[:, 0])
+        return np.vstack((B_R, B_phi, B_Z)).T
+
+    B = DommaschkPotentialField.fit_magnetic_field(B0_over_R, coords, max_m, max_l)
+
+    B_dom = B.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=3e-15)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 2], np.zeros_like(R.flatten()), atol=1e-15)
+
+    # only nonzero coefficient of the field should be the B0
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
+    for coef in ["a_arr", "b_arr", "c_arr", "d_arr"]:
+        np.testing.assert_allclose(B._params[coef], 0, atol=1e-15)

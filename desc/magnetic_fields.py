@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 import numpy as np
+import scipy.linalg
 from netCDF4 import Dataset
 
 from desc.backend import jit, jnp, odeint
@@ -769,11 +770,12 @@ class DommaschkPotentialField(ScalarPotentialField):
         c_m_l coefficients of V_m_l terms, which multiply the cos(m*phi)*N_m_l-1 term
     d_arr : 1D array-like of float
         d_m_l coefficients of V_m_l terms, which multiply the sin(m*phi)*N_m_l-1 terms
-
+    B0: float
+        scale strength of the magnetic field's 1/R portion
 
     """
 
-    def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr):
+    def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1.0):
         params = {}
         params["ms"] = ms
         params["ls"] = ls
@@ -781,8 +783,85 @@ class DommaschkPotentialField(ScalarPotentialField):
         params["b_arr"] = b_arr
         params["c_arr"] = c_arr
         params["d_arr"] = d_arr
+        params["B0"] = B0
 
         super().__init__(dommaschk_potential, params)
+
+    @classmethod
+    def fit_magnetic_field(cls, field, coords, max_m, max_l):
+        """Fit a vacuum magnetic field with a Dommaschk Potential field.
+
+        Parameters
+        ----------
+            field (MagneticField or callable): magnetic field to fit
+            coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
+            max_m (int): maximum m to use for Dommaschk Potentials
+            max_l (int): maximum l to use for Dommaschk Potentials
+        """
+        if not isinstance(field, MagneticField):
+            B = field(coords)
+        else:
+            B = field.compute_magnetic_field(coords)
+
+        num_nodes = coords.shape[0]  # number of coordinate nodes
+        # we will have the rhs be 3*num_nodes in length (bc of vector B)
+
+        rhs = jnp.vstack((B[:, 0], B[:, 1], B[:, 2])).T.flatten(order="F")
+        # b is made, now do A
+
+        num_modes = 1
+        for l in range(max_l + 1):
+            for m in range(max_m + 1):
+                num_modes += 4
+        # FIXME: do this properly with combinations
+
+        A = jnp.zeros((3 * num_nodes, num_modes))
+
+        # c will be [B0, a_00, a_10, a_01, a_11... etc]
+
+        # B0 first, the scale magnitude of the 1/R field
+        Bf_temp = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
+        B_temp = Bf_temp.compute_magnetic_field(coords)
+        for i in range(B_temp.shape[1]):
+            A = A.at[i * num_nodes : (i + 1) * num_nodes, 0:1].add(
+                B_temp[:, i].reshape(num_nodes, 1)
+            )
+
+        # mode numbers
+        ms = []
+        ls = []
+
+        # order of coeffs are a_ml and
+        coef_ind = 1
+        for l in range(max_l + 1):
+            for m in range(max_m + 1):
+                ms.append(m)
+                ls.append(l)
+                for which_coef in range(4):
+                    a = 1 if which_coef == 0 else 0
+                    b = 1 if which_coef == 1 else 0
+                    c = 1 if which_coef == 2 else 0
+                    d = 1 if which_coef == 3 else 0
+
+                    Bf_temp = DommaschkPotentialField(m, l, a, b, c, d, 0)
+                    B_temp = Bf_temp.compute_magnetic_field(coords)
+                    for i in range(B_temp.shape[1]):
+                        A = A.at[
+                            i * num_nodes : (i + 1) * num_nodes, coef_ind : coef_ind + 1
+                        ].add(B_temp[:, i].reshape(num_nodes, 1))
+                    coef_ind += 1
+        # now solve Ac=b for the coefficients c
+
+        Ainv = scipy.linalg.pinv(A, rcond=None)
+        c = jnp.matmul(Ainv, rhs)
+        print(c.size)
+
+        B0 = c[0]
+        a_arr = c[1::4]
+        b_arr = c[2::4]
+        c_arr = c[3::4]
+        d_arr = c[4::4]
+        return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
 
 
 def field_line_integrate(
@@ -851,7 +930,7 @@ def gamma(n):
 
 def alpha(m, n):
     """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
-    return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2 ** (2 * n + m))
+    return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2.0 ** (2 * n + m))
 
 
 def alphastar(m, n):
@@ -861,7 +940,7 @@ def alphastar(m, n):
 
 def beta(m, n):
     """Beta of eq 28."""
-    return gamma(m - n) / (gamma(n + 1) * 2 ** (2 * n - m + 1))
+    return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
 
 
 def betastar(m, n):
@@ -964,7 +1043,7 @@ def V_m_l(R, phi, Z, m, l, a, b, c, d):
     ) * N_m_n(R, Z, m, l - 1)
 
 
-def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr):
+def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     """Eq 1 of Dommaschk paper.
 
         this is the total dommaschk potential for
@@ -996,7 +1075,11 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr):
         at the given R,phi,Z points
         (same size as the size of the given R,phi, or Z arrays).
     """
-    value = phi  # phi term
+    # TODO: think of if this is best way to generalize
+    # B0 is what scales the 1/R part of the magnetic field,
+    # and is the magnetic field strength at R=1
+
+    value = B0 * phi  # phi term
 
     # make sure all are 1D arrays
     ms = jnp.atleast_1d(ms)

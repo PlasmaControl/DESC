@@ -1,8 +1,9 @@
 """Function for minimizing a scalar function of multiple variables."""
 
-import numpy as np
 from scipy.optimize import BFGS, OptimizeResult
 from termcolor import colored
+
+from desc.backend import jnp
 
 from .tr_subproblems import (
     solve_trust_region_2d_subspace,
@@ -157,11 +158,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     max_nfev = options.pop("max_nfev", maxiter)
     max_ngev = options.pop("max_ngev", max_nfev)
     max_nhev = options.pop("max_nhev", max_nfev)
-    gnorm_ord = options.pop("gnorm_ord", np.inf)
+    gnorm_ord = options.pop("gnorm_ord", jnp.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
-    max_dx = options.pop("max_dx", np.inf)
+    max_dx = options.pop("max_dx", jnp.inf)
 
     auto_scale = str(x_scale) == "auto"
     x_scale = 1 if auto_scale and bfgs else ("hess" if auto_scale else x_scale)
@@ -170,24 +171,24 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:
-        x_scale = np.broadcast_to(x_scale, x.shape)
+        x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
     g_h = g * scale
     H_h = scale * H * scale[:, None]
 
-    g_norm = np.linalg.norm(g, ord=gnorm_ord)
-    x_norm = np.linalg.norm(x, ord=xnorm_ord)
+    g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
+    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
     # initial trust region radius is based on the geometric mean of 2 possible rules:
     # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # second is the norm of the scaled x, as used in scipy
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
     init_tr = {
-        "scipy": np.linalg.norm(x * scale_inv),
+        "scipy": jnp.linalg.norm(x * scale_inv),
         "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
-        "mix": np.sqrt(
-            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * np.linalg.norm(x * scale_inv)
+        "mix": jnp.sqrt(
+            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(x * scale_inv)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
@@ -196,7 +197,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     trust_radius *= tr_ratio
 
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
-    min_trust_radius = options.pop("min_trust_radius", np.finfo(x0.dtype).eps)
+    min_trust_radius = options.pop("min_trust_radius", jnp.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
@@ -211,8 +212,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     success = None
     message = None
-    step_norm = np.inf
-    actual_reduction = np.inf
+    step_norm = jnp.inf
+    actual_reduction = jnp.inf
     ratio = 1  # ratio between actual reduction and predicted reduction
 
     if verbose > 1:
@@ -246,7 +247,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             nhev,
             max_nhev,
             min_trust_radius=min_trust_radius,
-            dx_total=np.linalg.norm(x - x0),
+            dx_total=jnp.linalg.norm(x - x0),
             max_dx=max_dx,
         )
         if success is not None:
@@ -258,21 +259,15 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
-            try:
-                step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius, alpha)
-
-            except np.linalg.linalg.LinAlgError:
-                success = False
-                message = STATUS_MESSAGES["err"]
-                break
+            step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius, alpha)
 
             # calculate the predicted value at the proposed point
             predicted_reduction = f - evaluate_quadratic_form_hess(step_h, f, g_h, H_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
-            step_norm = np.linalg.norm(step, ord=xnorm_ord)
-            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+            step_norm = jnp.linalg.norm(step, ord=xnorm_ord)
+            step_h_norm = jnp.linalg.norm(step_h, ord=xnorm_ord)
             x_new = x + step
             f_new = fun(x_new, *args)
             nfev += 1
@@ -314,7 +309,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
                 nhev,
                 max_nhev,
                 min_trust_radius=min_trust_radius,
-                dx_total=np.linalg.norm(x - x0),
+                dx_total=jnp.linalg.norm(x - x0),
                 max_dx=max_dx,
             )
             if success is not None:
@@ -328,8 +323,8 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             g_old = g
             g = grad(x, *args)
             ngev += 1
-            g_norm = np.linalg.norm(g, ord=gnorm_ord)
-            x_norm = np.linalg.norm(x, ord=xnorm_ord)
+            g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
+            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
             if bfgs:
                 hess.update(x - x_old, g - g_old)
                 H = hess.get_matrix()
@@ -349,7 +344,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
                 )
 
             if callback is not None:
-                stop = callback(np.copy(x), *args)
+                stop = callback(jnp.copy(x), *args)
                 if stop:
                     success = False
                     message = STATUS_MESSAGES["callback"]
@@ -382,7 +377,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["fun"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        print(
+            "         Total delta_x: {:.3e}".format(jnp.linalg.norm(x0 - result["x"]))
+        )
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Gradient evaluations: {:d}".format(result["ngev"]))

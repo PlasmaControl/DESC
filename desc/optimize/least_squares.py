@@ -1,6 +1,5 @@
 """Function for solving nonlinear least squares problems."""
 
-import numpy as np
 from scipy.optimize import OptimizeResult
 from termcolor import colored
 
@@ -134,9 +133,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         maxiter = n * 100
     max_nfev = options.pop("max_nfev", maxiter)
     max_njev = options.pop("max_njev", max_nfev)
-    gnorm_ord = options.pop("gnorm_ord", np.inf)
+    gnorm_ord = options.pop("gnorm_ord", jnp.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
-    max_dx = options.pop("max_dx", np.inf)
+    max_dx = options.pop("max_dx", jnp.inf)
 
     return_all = options.pop("return_all", True)
     return_tr = options.pop("return_tr", True)
@@ -145,7 +144,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     if jac_scale:
         scale, scale_inv = compute_jac_scale(J)
     else:
-        x_scale = np.broadcast_to(x_scale, x.shape)
+        x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
     g_h = g * scale
@@ -157,10 +156,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
     init_tr = {
-        "scipy": np.linalg.norm(x * scale_inv),
-        "conngould": np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2),
-        "mix": np.sqrt(
-            np.sum(g_h**2) / np.sum((J_h @ g_h) ** 2) * np.linalg.norm(x * scale_inv)
+        "scipy": jnp.linalg.norm(x * scale_inv),
+        "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
+        "mix": jnp.sqrt(
+            jnp.sum(g_h**2)
+            / jnp.sum((J_h @ g_h) ** 2)
+            * jnp.linalg.norm(x * scale_inv)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
@@ -169,7 +170,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     trust_radius *= tr_ratio
 
     max_trust_radius = options.pop("max_trust_radius", trust_radius * 1000.0)
-    min_trust_radius = options.pop("min_trust_radius", np.finfo(x0.dtype).eps)
+    min_trust_radius = options.pop("min_trust_radius", jnp.finfo(x0.dtype).eps)
     tr_increase_threshold = options.pop("tr_increase_threshold", 0.75)
     tr_decrease_threshold = options.pop("tr_decrease_threshold", 0.25)
     tr_increase_ratio = options.pop("tr_increase_ratio", 2)
@@ -182,11 +183,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             colored("Unknown options: {}".format([key for key in options]), "red")
         )
 
-    x_norm = np.linalg.norm(x, ord=xnorm_ord)
+    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
     success = None
     message = None
-    step_norm = np.inf
-    actual_reduction = np.inf
+    step_norm = jnp.inf
+    actual_reduction = jnp.inf
     reduction_ratio = 0
 
     if verbose > 1:
@@ -201,7 +202,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     while True:
 
-        g_norm = np.linalg.norm(g, ord=gnorm_ord)
+        g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
         if g_norm < gtol:
             success = True
             message = STATUS_MESSAGES["gtol"]
@@ -236,11 +237,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             nfev=nfev,
             max_nfev=max_nfev,
             ngev=0,
-            max_ngev=np.inf,
+            max_ngev=jnp.inf,
             nhev=njev,
             max_nhev=max_njev,
             min_trust_radius=min_trust_radius,
-            dx_total=np.linalg.norm(x - x0),
+            dx_total=jnp.linalg.norm(x - x0),
             max_dx=max_dx,
         )
 
@@ -258,20 +259,20 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                     g_h, B_h, trust_radius, alpha
                 )
 
-            step_h_norm = np.linalg.norm(step_h, ord=xnorm_ord)
+            step_h_norm = jnp.linalg.norm(step_h, ord=xnorm_ord)
 
             # calculate the predicted value at the proposed point
             predicted_reduction = -evaluate_quadratic_form_jac(J_h, g_h, step_h)
 
             # calculate actual reduction and step norm
             step = scale * step_h
-            step_norm = np.linalg.norm(step, ord=xnorm_ord)
+            step_norm = jnp.linalg.norm(step, ord=xnorm_ord)
 
             x_new = x + step
             f_new = fun(x_new, *args)
             nfev += 1
 
-            cost_new = 0.5 * np.dot(f_new, f_new)
+            cost_new = 0.5 * jnp.dot(f_new, f_new)
             actual_reduction = cost - cost_new
 
             # update the trust radius according to the actual/predicted ratio
@@ -308,11 +309,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 nfev,
                 max_nfev,
                 0,
-                np.inf,
+                jnp.inf,
                 njev,
                 max_njev,
                 min_trust_radius=min_trust_radius,
-                dx_total=np.linalg.norm(x - x0),
+                dx_total=jnp.linalg.norm(x - x0),
                 max_dx=max_dx,
             )
             if success is not None:
@@ -328,13 +329,13 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             J = jac(x, *args)
             njev += 1
             g = jnp.dot(J.T, f)
-            x_norm = np.linalg.norm(x, ord=xnorm_ord)
+            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
 
             if callback is not None:
-                stop = callback(np.copy(x), *args)
+                stop = callback(jnp.copy(x), *args)
                 if stop:
                     success = False
                     message = STATUS_MESSAGES["callback"]
@@ -365,7 +366,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         else:
             print("Warning: " + result["message"])
         print("         Current function value: {:.3e}".format(result["cost"]))
-        print("         Total delta_x: {:.3e}".format(np.linalg.norm(x0 - result["x"])))
+        print(
+            "         Total delta_x: {:.3e}".format(jnp.linalg.norm(x0 - result["x"]))
+        )
         print("         Iterations: {:d}".format(result["nit"]))
         print("         Function evaluations: {:d}".format(result["nfev"]))
         print("         Jacobian evaluations: {:d}".format(result["njev"]))

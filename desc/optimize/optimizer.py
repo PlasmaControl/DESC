@@ -163,8 +163,10 @@ class Optimizer(IOAble):
             # need to project x_scale down to correct size
             Z = objective._Z
             x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
-            # need to use dot here bc x_scale might not be a matrix
-            x_scale = np.abs(np.diag(Z.T @ np.diag(x_scale) @ Z))
+            x_scale = np.abs(
+                np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z)
+            )
+            x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
 
         if not objective.compiled:
             if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
@@ -385,7 +387,7 @@ def _get_default_tols(
         options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
-    stoptol.setdefault("ctol", options.pop("gtol", 1e-4))
+    stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
     stoptol["max_nfev"] = options.pop("max_nfev", np.inf)

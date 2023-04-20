@@ -603,7 +603,7 @@ class ObjectiveFunction(IOAble):
     def weights(self):
         """ndarray: weight vector."""
         return jnp.concatenate(
-            [jnp.ones(obj.dim_f) * obj.weights for obj in self.objectives]
+            [jnp.ones(obj.dim_f) * obj.weight for obj in self.objectives]
         )
 
 

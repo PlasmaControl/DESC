@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 from numpy.random import default_rng
-from scipy.optimize import BFGS, rosen, rosen_der
+from scipy.optimize import BFGS, least_squares, rosen, rosen_der
 
 import desc.examples
 from desc.backend import jit, jnp
@@ -532,3 +532,73 @@ def test_all_optimizers():
         else:
             obj = fobj
         eq.solve(objective=obj, constraints=constraints, optimizer=opt, maxiter=5)
+
+
+def test_bounded_optimization():
+    """Test that our bounded optimizers are as good as scipy."""
+    p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+    x = np.linspace(-1, 1, 100)
+    y = vector_fun(x, p)
+
+    def fun(p):
+        return vector_fun(x, p) - y
+
+    rando = default_rng(seed=5)
+    p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+
+    jac = Derivative(fun, 0, "fwd")
+
+    def sfun(x):
+        f = fun(x)
+        return 1 / 2 * f.dot(f)
+
+    def grad(x):
+        f = fun(x)
+        J = jac(x)
+        return f.dot(J)
+
+    def hess(x):
+        J = jac(x)
+        return J.T @ J
+
+    bounds = (2, np.inf)
+    p0 = np.clip(p0, *bounds)
+
+    out1 = lsqtr(
+        fun,
+        p0,
+        jac,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=3,
+        x_scale=1,
+        tr_method="svd",
+    )
+    out2 = fmintr(
+        sfun,
+        p0,
+        grad,
+        hess,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=3,
+        x_scale=1,
+    )
+    out3 = least_squares(
+        fun,
+        p0,
+        jac,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=2,
+        x_scale=1,
+    )
+
+    np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-06, atol=1e-06)
+    np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-06, atol=1e-06)

@@ -5,6 +5,13 @@ from termcolor import colored
 
 from desc.backend import jnp
 
+from .bound_utils import (
+    cl_scaling_vector,
+    find_active_constraints,
+    in_bounds,
+    make_strictly_feasible,
+    select_step,
+)
 from .tr_subproblems import (
     solve_trust_region_2d_subspace,
     solve_trust_region_dogleg,
@@ -15,7 +22,6 @@ from .utils import (
     STATUS_MESSAGES,
     check_termination,
     compute_hess_scale,
-    evaluate_quadratic_form_hess,
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
@@ -26,6 +32,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     x0,
     grad,
     hess="bfgs",
+    bounds=(-jnp.inf, jnp.inf),
     args=(),
     method="exact",
     x_scale=1,
@@ -50,6 +57,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     hess : callable or ``'bfgs'``, optional:
         function to compute Hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
         method will be used to approximate the Hessian.
+    bounds : tuple of array-like
+        Lower and upper bounds on independent variables. Defaults to no bounds.
+        Each array must match the size of x0 or be a scalar, in the latter case a
+        bound will be the same for all variables. Use np.inf with an appropriate sign
+        to disable bounds on all or some variables.
     args : tuple
         additional arguments passed to fun, grad, and hess
     method : ``'exact'``, ``'dogleg'`` or ``'subspace'``
@@ -116,6 +128,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     N = x0.size
     x = x0.copy()
+    lb, ub = jnp.broadcast_to(bounds[0], x.size), jnp.broadcast_to(bounds[1], x.size)
+    bounded = jnp.any(lb != -jnp.inf) | jnp.any(ub != jnp.inf)
+    assert in_bounds(x, lb, ub), "x0 is infeasible"
+    x = make_strictly_feasible(x, lb, ub)
+
     f = fun(x, *args)
     nfev += 1
     g = grad(x, *args)
@@ -174,21 +191,26 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
-    g_h = g * scale
-    H_h = scale * H * scale[:, None]
+    v, dv = cl_scaling_vector(x, g, lb, ub)
+    v = jnp.where(dv != 0, v * scale_inv, v)
+    d = v**0.5 * scale
+    diag_h = g * dv * scale
 
-    g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
-    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
+    g_h = g * d
+    H_h = d * H * d[:, None]
+
     # initial trust region radius is based on the geometric mean of 2 possible rules:
     # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
     # second is the norm of the scaled x, as used in scipy
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
     init_tr = {
-        "scipy": jnp.linalg.norm(x * scale_inv),
+        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
         "conngould": (g_h @ g_h) / abs(g_h @ H_h @ g_h),
         "mix": jnp.sqrt(
-            (g_h @ g_h) / abs(g_h @ H_h @ g_h) * jnp.linalg.norm(x * scale_inv)
+            (g_h @ g_h)
+            / abs(g_h @ H_h @ g_h)
+            * jnp.linalg.norm(x * scale_inv / v**0.5)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
@@ -210,11 +232,12 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             colored("Unknown options: {}".format([key for key in options]), "red")
         )
 
+    x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
     success = None
     message = None
     step_norm = jnp.inf
     actual_reduction = jnp.inf
-    ratio = 1  # ratio between actual reduction and predicted reduction
+    reduction_ratio = 1
 
     if verbose > 1:
         print_header_nonlinear()
@@ -228,52 +251,62 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     while True:
 
-        success, message = check_termination(
-            actual_reduction,
-            f,
-            step_norm,
-            x_norm,
-            g_norm,
-            ratio,
-            ftol,
-            xtol,
-            gtol,
-            iteration,
-            maxiter,
-            nfev,
-            max_nfev,
-            ngev,
-            max_ngev,
-            nhev,
-            max_nhev,
-            min_trust_radius=min_trust_radius,
-            dx_total=jnp.linalg.norm(x - x0),
-            max_dx=max_dx,
-        )
+        g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
+        if g_norm < gtol:
+            success = True
+            message = STATUS_MESSAGES["gtol"]
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, f, actual_reduction, step_norm, g_norm
+            )
         if success is not None:
             break
 
+        if bounded:
+            H_a = H_h + jnp.diag(diag_h)
+        else:
+            H_a = H_h
+
         actual_reduction = -1
+
+        # theta controls step back step ratio from the bounds.
+        theta = max(0.995, 1 - g_norm)
+
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
             # This gives us the proposed step relative to the current position
             # and it tells us whether the proposed step
             # has reached the trust region boundary or not.
-            step_h, hits_boundary, alpha = subproblem(g_h, H_h, trust_radius, alpha)
+            step_h, hits_boundary, alpha = subproblem(g_h, H_a, trust_radius, alpha)
 
-            # calculate the predicted value at the proposed point
-            predicted_reduction = f - evaluate_quadratic_form_hess(step_h, f, g_h, H_h)
+            step = d * step_h  # Trust-region solution in the original space.
+
+            step, step_h, predicted_reduction = select_step(
+                x,
+                H_h,
+                diag_h,
+                g_h,
+                step,
+                step_h,
+                d,
+                trust_radius,
+                lb,
+                ub,
+                theta,
+                mode="hess",
+            )
 
             # calculate actual reduction and step norm
-            step = scale * step_h
-            step_norm = jnp.linalg.norm(step, ord=xnorm_ord)
             step_h_norm = jnp.linalg.norm(step_h, ord=xnorm_ord)
-            x_new = x + step
+            step_norm = jnp.linalg.norm(step, ord=xnorm_ord)
+
+            x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
             f_new = fun(x_new, *args)
             nfev += 1
             actual_reduction = f - f_new
 
             # update the trust radius according to the actual/predicted ratio
+            tr_old = trust_radius
             trust_radius, reduction_ratio = update_tr_radius(
                 trust_radius,
                 actual_reduction,
@@ -289,6 +322,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             )
             if return_tr:
                 alltr.append(trust_radius)
+            alpha *= tr_old / trust_radius
 
             success, message = check_termination(
                 actual_reduction,
@@ -323,7 +357,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             g_old = g
             g = grad(x, *args)
             ngev += 1
-            g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
             x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
             if bfgs:
                 hess.update(x - x_old, g - g_old)
@@ -335,13 +368,13 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             if hess_scale:
                 scale, scale_inv = compute_hess_scale(H)
 
-            g_h = g * scale
-            H_h = scale * H * scale[:, None]
+            v, dv = cl_scaling_vector(x, g, lb, ub)
+            v = jnp.where(dv != 0, v * scale_inv, v)
+            d = v**0.5 * scale
+            diag_h = g * dv * scale
 
-            if verbose > 1:
-                print_iteration_nonlinear(
-                    iteration, nfev, f, actual_reduction, step_norm, g_norm
-                )
+            g_h = g * d
+            H_h = d * H * d[:, None]
 
             if callback is not None:
                 stop = callback(jnp.copy(x), *args)
@@ -358,6 +391,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
         iteration += 1
 
+    active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,
         success=success,
@@ -370,6 +404,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         nhev=nhev,
         nit=iteration,
         message=message,
+        active_mask=active_mask,
     )
     if verbose > 0:
         if result["success"]:

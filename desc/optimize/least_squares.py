@@ -5,6 +5,13 @@ from termcolor import colored
 
 from desc.backend import jnp
 
+from .bound_utils import (
+    cl_scaling_vector,
+    find_active_constraints,
+    in_bounds,
+    make_strictly_feasible,
+    select_step,
+)
 from .tr_subproblems import (
     trust_region_step_exact_cho,
     trust_region_step_exact_svd,
@@ -14,7 +21,6 @@ from .utils import (
     STATUS_MESSAGES,
     check_termination,
     compute_jac_scale,
-    evaluate_quadratic_form_jac,
     print_header_nonlinear,
     print_iteration_nonlinear,
 )
@@ -25,6 +31,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     x0,
     jac,
     args=(),
+    bounds=(-jnp.inf, jnp.inf),
     x_scale=1,
     ftol=1e-6,
     xtol=1e-6,
@@ -45,6 +52,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         initial guess
     jac : callable:
         function to compute Jacobian matrix of fun
+    bounds : tuple of array-like
+        Lower and upper bounds on independent variables. Defaults to no bounds.
+        Each array must match the size of x0 or be a scalar, in the latter case a
+        bound will be the same for all variables. Use np.inf with an appropriate sign
+        to disable bounds on all or some variables.
     args : tuple
         additional arguments passed to fun, grad, and jac
     x_scale : array_like or ``'jac'``, optional
@@ -122,6 +134,11 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     n = x0.size
     x = x0.copy()
+    lb, ub = jnp.broadcast_to(bounds[0], x.size), jnp.broadcast_to(bounds[1], x.size)
+    bounded = jnp.any(lb != -jnp.inf) | jnp.any(ub != jnp.inf)
+    assert in_bounds(x, lb, ub), "x0 is infeasible"
+    x = make_strictly_feasible(x, lb, ub)
+
     f = fun(x, *args)
     nfev += 1
     cost = 0.5 * jnp.dot(f, f)
@@ -147,8 +164,13 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         x_scale = jnp.broadcast_to(x_scale, x.shape)
         scale, scale_inv = x_scale, 1 / x_scale
 
-    g_h = g * scale
-    J_h = J * scale
+    v, dv = cl_scaling_vector(x, g, lb, ub)
+    v = jnp.where(dv != 0, v * scale_inv, v)
+    d = v**0.5 * scale
+    diag_h = g * dv * scale
+
+    g_h = g * d
+    J_h = J * d
 
     # initial trust region radius is based on the geometric mean of 2 possible rules:
     # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
@@ -156,12 +178,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     # in practice for our problems the C&G one is too small, while scipy is too big,
     # but the geometric mean seems to work well
     init_tr = {
-        "scipy": jnp.linalg.norm(x * scale_inv),
+        "scipy": jnp.linalg.norm(x * scale_inv / v**0.5),
         "conngould": jnp.sum(g_h**2) / jnp.sum((J_h @ g_h) ** 2),
         "mix": jnp.sqrt(
             jnp.sum(g_h**2)
             / jnp.sum((J_h @ g_h) ** 2)
-            * jnp.linalg.norm(x * scale_inv)
+            * jnp.linalg.norm(x * scale_inv / v**0.5)
         ),
     }
     trust_radius = options.pop("initial_trust_radius", "scipy")
@@ -202,7 +224,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     while True:
 
-        g_norm = jnp.linalg.norm(g, ord=gnorm_ord)
+        g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
         if g_norm < gtol:
             success = True
             message = STATUS_MESSAGES["gtol"]
@@ -213,37 +235,23 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         if success is not None:
             break
 
-        g_h = g * scale
-        J_h = J * scale
+        # we don't want to factorize the extra stuff if we don't need to
+        if bounded:
+            J_a = jnp.vstack([J_h, jnp.diag(diag_h**0.5)])
+            f_a = jnp.concatenate([f, jnp.zeros(diag_h.size)])
+        else:
+            J_a = J_h
+            f_a = f
+
         if tr_method == "svd":
-            U, s, Vt = jnp.linalg.svd(J_h, full_matrices=False)
+            U, s, Vt = jnp.linalg.svd(J_a, full_matrices=False)
         elif tr_method == "cho":
-            B_h = jnp.dot(J_h.T, J_h)
+            B_h = jnp.dot(J_a.T, J_a)
 
         actual_reduction = -1
 
-        success, message = check_termination(
-            actual_reduction,
-            cost,
-            step_norm,
-            x_norm,
-            g_norm,
-            reduction_ratio=reduction_ratio,
-            ftol=ftol,
-            xtol=xtol,
-            gtol=gtol,
-            iteration=iteration,
-            maxiter=maxiter,
-            nfev=nfev,
-            max_nfev=max_nfev,
-            ngev=0,
-            max_ngev=jnp.inf,
-            nhev=njev,
-            max_nhev=max_njev,
-            min_trust_radius=min_trust_radius,
-            dx_total=jnp.linalg.norm(x - x0),
-            max_dx=max_dx,
-        )
+        # theta controls step back step ratio from the bounds.
+        theta = max(0.995, 1 - g_norm)
 
         while actual_reduction <= 0 and nfev <= max_nfev:
             # Solve the sub-problem.
@@ -252,23 +260,33 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             # has reached the trust region boundary or not.
             if tr_method == "svd":
                 step_h, hits_boundary, alpha = trust_region_step_exact_svd(
-                    f, U, s, Vt.T, trust_radius, alpha
+                    f_a, U, s, Vt.T, trust_radius, alpha
                 )
             elif tr_method == "cho":
                 step_h, hits_boundary, alpha = trust_region_step_exact_cho(
                     g_h, B_h, trust_radius, alpha
                 )
+            step = d * step_h  # Trust-region solution in the original space.
+
+            step, step_h, predicted_reduction = select_step(
+                x,
+                J_h,
+                diag_h,
+                g_h,
+                step,
+                step_h,
+                d,
+                trust_radius,
+                lb,
+                ub,
+                theta,
+                mode="jac",
+            )
 
             step_h_norm = jnp.linalg.norm(step_h, ord=xnorm_ord)
-
-            # calculate the predicted value at the proposed point
-            predicted_reduction = -evaluate_quadratic_form_jac(J_h, g_h, step_h)
-
-            # calculate actual reduction and step norm
-            step = scale * step_h
             step_norm = jnp.linalg.norm(step, ord=xnorm_ord)
 
-            x_new = x + step
+            x_new = make_strictly_feasible(x + step, lb, ub, rstep=0)
             f_new = fun(x_new, *args)
             nfev += 1
 
@@ -334,6 +352,14 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
 
+            v, dv = cl_scaling_vector(x, g, lb, ub)
+            v = jnp.where(dv != 0, v * scale_inv, v)
+            d = v**0.5 * scale
+            diag_h = g * dv * scale
+
+            g_h = g * d
+            J_h = J * d
+
             if callback is not None:
                 stop = callback(jnp.copy(x), *args)
                 if stop:
@@ -347,6 +373,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
         iteration += 1
 
+    active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,
         success=success,
@@ -359,6 +386,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         njev=njev,
         nit=iteration,
         message=message,
+        active_mask=active_mask,
     )
     if verbose > 0:
         if result["success"]:

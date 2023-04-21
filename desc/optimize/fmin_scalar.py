@@ -377,14 +377,12 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             if g_norm < gtol:
                 success = True
                 message = STATUS_MESSAGES["gtol"]
-                break
 
             if callback is not None:
                 stop = callback(jnp.copy(x), *args)
                 if stop:
                     success = False
                     message = STATUS_MESSAGES["callback"]
-                    break
 
             if return_all:
                 allx.append(x)

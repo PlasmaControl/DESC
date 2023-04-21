@@ -109,7 +109,7 @@ class TestFmin:
             x0,
             scalar_grad,
             scalar_hess,
-            verbose=1,
+            verbose=3,
             method="subspace",
             x_scale="hess",
             ftol=0,
@@ -128,7 +128,7 @@ class TestFmin:
             x0,
             scalar_grad,
             scalar_hess,
-            verbose=1,
+            verbose=3,
             method="exact",
             x_scale="hess",
             ftol=0,
@@ -150,7 +150,7 @@ class TestFmin:
             x0,
             rosen_der,
             hess="bfgs",
-            verbose=1,
+            verbose=3,
             method="dogleg",
             x_scale=1,
             ftol=1e-8,
@@ -172,7 +172,7 @@ class TestFmin:
             x0,
             rosen_der,
             hess=BFGS(),
-            verbose=1,
+            verbose=3,
             method="subspace",
             x_scale=1,
             ftol=1e-8,
@@ -194,7 +194,7 @@ class TestFmin:
             x0,
             rosen_der,
             hess=BFGS(),
-            verbose=1,
+            verbose=3,
             method="exact",
             x_scale=1,
             ftol=1e-8,
@@ -250,7 +250,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
-            verbose=0,
+            verbose=3,
             x_scale=1,
             tr_method="cho",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -261,7 +261,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
-            verbose=0,
+            verbose=3,
             x_scale=1,
             tr_method="svd",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -410,14 +410,14 @@ def test_maxiter_1_and_0_solve():
     eq = desc.examples.get("SOLOVEV")
     for opt in ["lsq-exact", "dogleg-bfgs"]:
         eq, result = eq.solve(
-            maxiter=1, constraints=constraints, objective=obj, optimizer=opt
+            maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
-        assert result["nfev"] <= 2
+        assert result["nit"] == 1
     for opt in ["lsq-exact", "dogleg-bfgs"]:
         eq, result = eq.solve(
-            maxiter=0, constraints=constraints, objective=obj, optimizer=opt
+            maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
-        assert result["nfev"] <= 1
+        assert result["nit"] == 0
 
 
 @pytest.mark.unit
@@ -438,6 +438,7 @@ def test_scipy_fail_message():
     for opt in ["scipy-trf"]:
         eq, result = eq.solve(
             maxiter=3,
+            verbose=3,
             constraints=constraints,
             objective=obj,
             optimizer=opt,
@@ -451,6 +452,7 @@ def test_scipy_fail_message():
     for opt in ["scipy-trust-exact"]:
         eq, result = eq.solve(
             maxiter=3,
+            verbose=3,
             constraints=constraints,
             objective=obj,
             optimizer=opt,
@@ -531,7 +533,9 @@ def test_all_optimizers():
             obj = eobj
         else:
             obj = fobj
-        eq.solve(objective=obj, constraints=constraints, optimizer=opt, maxiter=5)
+        eq.solve(
+            objective=obj, constraints=constraints, optimizer=opt, maxiter=5, verbose=3
+        )
 
 
 def test_bounded_optimization():

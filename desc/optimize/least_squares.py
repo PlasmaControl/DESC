@@ -298,7 +298,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
                 step_h_norm,
                 hits_boundary,
                 max_trust_radius,
-                min_trust_radius,
                 tr_increase_threshold,
                 tr_increase_ratio,
                 tr_decrease_threshold,

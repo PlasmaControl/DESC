@@ -330,7 +330,6 @@ def update_tr_radius(
     step_norm,
     bound_hit,
     max_tr=np.inf,
-    min_tr=0,
     increase_threshold=0.75,
     increase_ratio=2,
     decrease_threshold=0.25,
@@ -352,8 +351,6 @@ def update_tr_radius(
         whether the current step hits the trust region bound
     max_tr : float
         maximum allowed trust region radius
-    min_tr : float
-        minimum allowed trust region radius
     increase_threshold, increase_ratio : float
         if ratio > inrease_threshold, trust radius is increased by a factor
         of increase_ratio
@@ -380,7 +377,7 @@ def update_tr_radius(
     elif reduction_ratio > increase_threshold:
         trust_radius = max(step_norm * increase_ratio, trust_radius)
 
-    trust_radius = np.clip(trust_radius, min_tr, max_tr)
+    trust_radius = np.clip(trust_radius, 0, max_tr)
 
     return trust_radius, reduction_ratio
 

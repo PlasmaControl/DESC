@@ -148,8 +148,8 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     if maxiter is None:
         maxiter = n * 100
-    max_nfev = options.pop("max_nfev", maxiter)
-    max_njev = options.pop("max_njev", max_nfev)
+    max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
+    max_njev = options.pop("max_njev", maxiter + 1)
     gnorm_ord = options.pop("gnorm_ord", jnp.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     max_dx = options.pop("max_dx", jnp.inf)
@@ -171,6 +171,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     J_h = J * d
+    g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
 
     # initial trust region radius is based on the geometric mean of 2 possible rules:
     # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
@@ -214,26 +215,21 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(
+            iteration, nfev, cost, actual_reduction, step_norm, g_norm
+        )
 
     if return_all:
         allx = [x]
     if return_tr:
         alltr = [trust_radius]
+    if g_norm < gtol:
+        success = True
+        message = STATUS_MESSAGES["gtol"]
 
     alpha = 0  # "Levenberg-Marquardt" parameter
 
-    while True:
-
-        g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
-        if g_norm < gtol:
-            success = True
-            message = STATUS_MESSAGES["gtol"]
-        if verbose > 1:
-            print_iteration_nonlinear(
-                iteration, nfev, cost, actual_reduction, step_norm, g_norm
-            )
-        if success is not None:
-            break
+    while iteration < maxiter and success is None:
 
         # we don't want to factorize the extra stuff if we don't need to
         if bounded:
@@ -347,7 +343,6 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             J = jac(x, *args)
             njev += 1
             g = jnp.dot(J.T, f)
-            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
 
             if jac_scale:
                 scale, scale_inv = compute_jac_scale(J, scale_inv)
@@ -359,6 +354,12 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
 
             g_h = g * d
             J_h = J * d
+            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
+            g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
+            if g_norm < gtol:
+                success = True
+                message = STATUS_MESSAGES["gtol"]
+                break
 
             if callback is not None:
                 stop = callback(jnp.copy(x), *args)
@@ -372,7 +373,17 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
             actual_reduction = 0
 
         iteration += 1
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, cost, actual_reduction, step_norm, g_norm
+            )
 
+    if g_norm < gtol:
+        success = True
+        message = STATUS_MESSAGES["gtol"]
+    if (iteration == maxiter) and success is None:
+        success = False
+        message = STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,

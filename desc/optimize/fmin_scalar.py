@@ -172,9 +172,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     if maxiter is None:
         maxiter = N * 100
-    max_nfev = options.pop("max_nfev", maxiter)
-    max_ngev = options.pop("max_ngev", max_nfev)
-    max_nhev = options.pop("max_nhev", max_nfev)
+    max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
+    max_ngev = options.pop("max_ngev", maxiter + 1)
+    max_nhev = options.pop("max_nhev", maxiter + 1)
     gnorm_ord = options.pop("gnorm_ord", jnp.inf)
     xnorm_ord = options.pop("xnorm_ord", 2)
     return_all = options.pop("return_all", True)
@@ -198,6 +198,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     g_h = g * d
     H_h = d * H * d[:, None]
+    g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
 
     # initial trust region radius is based on the geometric mean of 2 possible rules:
     # first is the norm of the cauchy point, as recommended in ch17 of Conn & Gould
@@ -241,6 +242,9 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     if verbose > 1:
         print_header_nonlinear()
+        print_iteration_nonlinear(
+            iteration, nfev, f, actual_reduction, step_norm, g_norm
+        )
 
     if return_all:
         allx = [x]
@@ -249,18 +253,11 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
 
     alpha = 0  # "Levenberg-Marquardt" parameter
 
-    while True:
+    if g_norm < gtol:
+        success = True
+        message = STATUS_MESSAGES["gtol"]
 
-        g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
-        if g_norm < gtol:
-            success = True
-            message = STATUS_MESSAGES["gtol"]
-        if verbose > 1:
-            print_iteration_nonlinear(
-                iteration, nfev, f, actual_reduction, step_norm, g_norm
-            )
-        if success is not None:
-            break
+    while iteration < maxiter and success is None:
 
         if bounded:
             H_a = H_h + jnp.diag(diag_h)
@@ -357,7 +354,6 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             g_old = g
             g = grad(x, *args)
             ngev += 1
-            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
             if bfgs:
                 hess.update(x - x_old, g - g_old)
                 H = hess.get_matrix()
@@ -376,6 +372,13 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             g_h = g * d
             H_h = d * H * d[:, None]
 
+            x_norm = jnp.linalg.norm(x, ord=xnorm_ord)
+            g_norm = jnp.linalg.norm(g * v, ord=gnorm_ord)
+            if g_norm < gtol:
+                success = True
+                message = STATUS_MESSAGES["gtol"]
+                break
+
             if callback is not None:
                 stop = callback(jnp.copy(x), *args)
                 if stop:
@@ -390,7 +393,17 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
             actual_reduction = 0
 
         iteration += 1
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration, nfev, f, actual_reduction, step_norm, g_norm
+            )
 
+    if g_norm < gtol:
+        success = True
+        message = STATUS_MESSAGES["gtol"]
+    if (iteration == maxiter) and success is None:
+        success = False
+        message = STATUS_MESSAGES["maxiter"]
     active_mask = find_active_constraints(x, lb, ub, rtol=xtol)
     result = OptimizeResult(
         x=x,

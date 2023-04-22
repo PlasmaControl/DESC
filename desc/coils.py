@@ -6,7 +6,7 @@ from collections.abc import MutableSequence
 import numpy as np
 
 from desc.backend import jnp
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
 from desc.geometry.utils import rpz2xyz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.magnetic_fields import MagneticField, biot_savart
@@ -166,6 +166,9 @@ class FourierXYZCoil(Coil, FourierXYZCurve):
         super().__init__(current, X_n, Y_n, Z_n, modes, grid, name)
 
 
+# TODO: add a from_XYZ?
+
+
 class FourierPlanarCoil(Coil, FourierPlanarCurve):
     """Coil that lines in a plane.
 
@@ -207,6 +210,38 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
         super().__init__(current, center, normal, r_n, modes, grid, name)
 
 
+class XYZCoil(Coil, XYZCurve):
+    """Coil parameterized by points in X,Y,Z.
+
+    Parameters
+    ----------
+    current : float
+        current through coil, in Amperes
+    X, Y, Z: array-like
+        points for X, Y, Z descriving a closed curve
+    name : str
+        name for this coil
+
+    """
+
+    _io_attrs_ = Coil._io_attrs_
+
+    def __init__(
+        self,
+        current,
+        X,
+        Y,
+        Z,
+        grid=None,
+        name="",
+    ):
+        super().__init__(current, X, Y, Z, grid, name)
+        self.X = X
+        self.Y = Y
+        self.Z = Z
+        self.coords = np.vstack((X, Y, Z)).T
+
+
 class CoilSet(Coil, MutableSequence):
     """Set of coils of different geometry.
 
@@ -220,7 +255,9 @@ class CoilSet(Coil, MutableSequence):
 
     _io_attrs_ = Coil._io_attrs_ + ["_coils"]
 
-    def __init__(self, *coils, name=""):
+    def __init__(
+        self, *coils, name=""
+    ):  # FIXME: if a list of of Coils is passed, this fails...
         assert all([isinstance(coil, (Coil)) for coil in coils])
         self._coils = list(coils)
         self._name = str(name)
@@ -429,6 +466,48 @@ class CoilSet(Coil, MutableSequence):
             coilset.append(coil)
 
         return cls(*coilset)
+
+    @classmethod
+    def from_makegrid_coilfile(cls, coil_file, grid=None):
+        """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
+
+        Parameters
+        ----------
+        coil_file : str or path-like
+            path to coil file in txt format
+        """
+        coils = []  # list of dict of coords ['X','Y','Z']
+        cfnames = []
+        coilinds = []
+
+        # read in the coils file
+        with open(coil_file) as f:
+            lines = f.readlines()
+            for i, line in enumerate(lines):
+                if line.find("Modular") != -1:
+                    coilinds.append(i)
+                if line.find("mirror") != -1:
+                    coilinds.append(i)
+        for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
+            cfnames.append(f"temp_coil{i}.txt")
+            with open(f"temp_coil{i}.txt", "w+") as f:
+                f.writelines(lines[start + 1 : end])
+
+        for i, fname in enumerate(cfnames):
+            coords = np.genfromtxt(fname)
+            if i % 20 == 0:
+                print("reading coil " + f"{i}")
+
+            tempx = np.append(coords[:, 0], np.array([coords[0, 0]]))
+            tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
+            tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
+
+            coils.append(XYZCoil(coords[:, -1][0], tempx, tempy, tempz, grid=grid))
+            # FIXME: # sign of current may need to be negative, need to check
+            # makegrid convention, but tests show
+            # the resulting field agrees better with DESC eq if negative curr
+
+            return CoilSet(*coils)
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

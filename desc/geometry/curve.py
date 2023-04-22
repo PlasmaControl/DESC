@@ -1001,7 +1001,7 @@ class FourierPlanarCurve(Curve):
         transform = self._get_transforms(grid)
         r = transform.transform(r_n, dz=0)
         t = transform.grid.nodes[:, -1]
-        Z = np.zeros_like(r)
+        Z = jnp.zeros_like(r)
 
         if dt == 0:
             X = r * jnp.cos(t)
@@ -1173,3 +1173,209 @@ class FourierPlanarCurve(Curve):
         T = jnp.linalg.norm(T, axis=1)
         theta = transform.grid.nodes[:, 2]
         return jnp.trapz(T, theta)
+
+
+class XYZCurve(Curve):
+    """Curve parameterized by points in X,Y,Z.
+
+    Parameters
+    ----------
+    X, Y, Z: array-like
+        points for X, Y, Z descriving a closed curve
+    name : str
+        name for this curve
+
+    """
+
+    _io_attrs_ = Curve._io_attrs_ + ["_X", "_Y", "_Z", "_basis", "_transform"]
+
+    def __init__(
+        self,
+        X,
+        Y,
+        Z,
+        grid=None,
+        name="",
+    ):
+        super().__init__(name)
+        X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
+
+        self._X = X
+        self._Y = Y
+        self._Z = Z
+        self._grid = None
+
+    @property
+    def X(self):
+        """Coordinates for X."""
+        return self._X
+
+    @X.setter
+    def X(self, new):
+        self._X = jnp.asarray(new)
+
+    @property
+    def Y(self):
+        """Coordinates for Y."""
+        return self._Y
+
+    @Y.setter
+    def Y(self, new):
+        self._Y = jnp.asarray(new)
+
+    @property
+    def Z(self):
+        """Coordinates for Z."""
+        return self._Z
+
+    @Z.setter
+    def Z(self, new):
+        self._Z = jnp.asarray(new)
+
+    # FIXME: Make this be the given points by default,
+    # but once spline interpolation is added
+    # let this be the interpolation points of the spline
+    @property
+    def grid(self):
+        """Default grid for computation."""
+        return self._grid
+
+    @grid.setter
+    def grid(self, new):
+        if isinstance(new, Grid):
+            self._grid = new
+        elif isinstance(new, (np.ndarray, jnp.ndarray)):
+            self._grid = Grid(new, sort=False)
+        else:
+            raise TypeError(
+                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
+            )
+
+    def compute_coordinates(self, X=None, Y=None, Z=None, dt=0, basis="xyz"):
+        """Compute values using specified coefficients.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        values : ndarray, shape(k,3)
+            X, Y, Z or R, phi, Z coordinates of the curve
+        """
+        if X is None:
+            X = self._X
+        if Y is None:
+            Y = self._Y
+        if Z is None:
+            Z = self._Z
+
+        coords = jnp.stack([X, Y, Z], axis=1)
+        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
+        if basis.lower() == "rpz":
+            if dt > 0:
+                raise NotImplementedError("Derivatives not implemented for XYZCurve ")
+            else:
+                coords = xyz2rpz(coords)
+        return self.coords
+
+    def compute_frenet_frame(
+        self, X_n=None, Y_n=None, Z_n=None, grid=None, basis="xyz"
+    ):
+        """Compute Frenet frame vectors using specified coefficients.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        T, N, B : ndarrays, shape(k,3)
+            tangent, normal, and binormal vectors of the curve at specified grid
+            locations
+
+        """
+        raise NotImplementedError("Frenet Frame not implemented for XYZCurve ")
+
+    def compute_curvature(self, X_n=None, Y_n=None, Z_n=None, grid=None):
+        """Compute curvature using specified coefficients.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        kappa : ndarray, shape(k,)
+            curvature of the curve at specified grid locations in phi
+        """
+        raise NotImplementedError("Curvature not implemented for XYZCurve ")
+
+    def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
+        """Compute torsion using specified coefficientsnp.empty((0, 3)).
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+        dt: int
+            derivative order to compute
+        basis : {"rpz", "xyz"}
+            coordinate system for returned points
+
+        Returns
+        -------
+        tau : ndarray, shape(k,)
+            torsion of the curve at specified grid locations in phi
+        """
+        raise NotImplementedError("Torsion not implemented for XYZCurve ")
+
+    def compute_length(self, X=None, Y=None, Z=None):
+        """Compute the length of the curve specified by given cartesian points.
+
+        Parameters
+        ----------
+        X, Y, Z: array-like
+            coordinates for X, Y, Z. If not given, defaults to values given
+            by X, Y, Z attributes
+
+        Returns
+        -------
+        length : float
+            length of the curve.
+        """
+        if X is None:
+            X = self._X
+        if Y is None:
+            Y = self._Y
+        if Z is None:
+            Z = self._Z
+
+        length = jnp.sum(
+            jnp.sqrt(
+                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
+            )
+        )
+
+        return length
+
+    # TODO: methods for converting between representations

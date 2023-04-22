@@ -79,6 +79,30 @@ class TestVMECIO:
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
 
     @pytest.mark.unit
+    def test_ptolemy_identity_rev_sin_sym(self):
+        """Tests reverse implementation of Ptolemy's identity for sin series."""
+        a1 = -1
+
+        m_1 = np.array([-1, 1])
+        n_1 = np.array([1, -1])
+        x = np.array([[a1, a1]])
+
+        # a1*sin(t)*cos(z) + a1*cos(t)*sin(z)    # noqa: E800
+        #   = a1*sin(t+z)
+
+        m_0_correct = np.array([0, 1, 1])
+        n_0_correct = np.array([0, -1, 1])
+        s_correct = np.array([[0, a1, 0]])
+        c_correct = np.array([[0, 0, 0]])
+
+        m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
+
+        np.testing.assert_allclose(m_0, m_0_correct, atol=1e-8)
+        np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
+        np.testing.assert_allclose(s, s_correct, atol=1e-8)
+        np.testing.assert_allclose(c, c_correct, atol=1e-8)
+
+    @pytest.mark.unit
     def test_ptolemy_identities_inverse(self):
         """Tests that forward and reverse Ptolemy's identities are inverses."""
         basis = DoubleFourierSeries(4, 3, sym=False)

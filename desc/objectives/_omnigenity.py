@@ -210,7 +210,6 @@ class QuasisymmetryBoozer(_Objective):
                     self.helicity[0], self.helicity[1]
                 )
                 + "{:10.3e} "
-                + units
             )
         warnings.warn("Re-build objective after changing the helicity!")
 
@@ -722,7 +721,6 @@ class Omnigenity(_Objective):
                     self.helicity[0], self.helicity[1]
                 )
                 + "{:10.3e} "
-                + units
             )
         warnings.warn("Re-build objective after changing the helicity!")
 

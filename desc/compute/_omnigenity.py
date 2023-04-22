@@ -437,7 +437,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["theta", "zeta_B QI", "iota", "|B|_mn"],
+    data=["NFP", "theta", "zeta_B QI", "iota", "|B|_mn"],
     helicity="helicity",
 )
 def _B_omni_coords(params, transforms, profiles, data, **kwargs):
@@ -450,7 +450,7 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
     booz = matrix @ jnp.vstack((alpha, data["zeta_B QI"]))
     data["theta_B(alpha,eta)"] = booz[0, :]
-    data["zeta_B(alpha,eta)"] = booz[1, :]
+    data["zeta_B(alpha,eta)"] = booz[1, :] / data["NFP"]
 
     nodes = jnp.vstack((data["rho"], booz)).T
     data["|B|(alpha,eta)"] = jnp.matmul(

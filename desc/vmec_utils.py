@@ -94,10 +94,19 @@ def ptolemy_identity_rev(m_1, n_1, x):
 def _mnsc_to_modes_x(xm, xn, s, c):
     """Convert from arrays of m, n, smn, cmn to [cos/sin, m, n] and x coeffs."""
     cmodes = np.vstack([np.ones_like(xm), xm, xn]).T
-    smodes = np.vstack([-np.ones_like(xm), xm, xn]).T[1:]  # index out m=n=0
+
+    first_mode_is_00 = (
+        int(xm[0]) == 0 and int(xn[0]) == 0
+    )  # this is False for a sin only series
+    if first_mode_is_00:
+        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T[1:]  # index out m=n=0
+        s = s.T[1:].T
+    else:  # no need to index out m=n=0 bc is not in the basis
+        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
+
     vmec_modes = np.vstack([cmodes, smodes])
     idx = np.lexsort(vmec_modes.T[np.array([0, 2, 1])])
-    x = np.concatenate([c.T, s.T[1:]]).T
+    x = np.concatenate([c.T, s.T]).T
     vmec_modes = vmec_modes[idx]
     x = (x.T[idx]).T
     return vmec_modes, x

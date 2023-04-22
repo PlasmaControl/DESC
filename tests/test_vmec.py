@@ -50,6 +50,33 @@ class TestVMECIO:
         np.testing.assert_allclose(x, x_correct, atol=1e-8)
 
     @pytest.mark.unit
+    def test_ptolemy_identity_fwd_sin_series(self):
+        """Tests forward implementation of Ptolemy's identity for sin only."""
+        a1 = -1
+
+        m_0 = np.array([1, 1])
+        n_0 = np.array([-1, 1])
+        s = np.array([[a1, 0]])
+        c = np.array([[0, 0]])
+
+        m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        print(m_1)
+        print(n_1)
+        print(x)
+
+        #  a1*sin(t+z)  # noqa: E800
+        # = a1*sin(t)*cos(z) + a1*cos(t)*sin(z) # noqa: E800
+
+        m_1_correct = np.array([-1, 1, -1, 1])
+        n_1_correct = np.array([-1, -1, 1, 1])
+        x_correct = np.array([[0, a1, a1, 0]])
+
+        np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
+        np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
+        np.testing.assert_allclose(x, x_correct, atol=1e-8)
+
+    @pytest.mark.unit
     def test_ptolemy_identity_rev(self):
         """Tests reverse implementation of Ptolemy's identity."""
         a0 = 3

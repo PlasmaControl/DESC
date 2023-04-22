@@ -538,6 +538,7 @@ def test_all_optimizers():
         )
 
 
+@pytest.mark.unit
 def test_bounded_optimization():
     """Test that our bounded optimizers are as good as scipy."""
     p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])

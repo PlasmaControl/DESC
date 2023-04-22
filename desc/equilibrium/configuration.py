@@ -429,6 +429,11 @@ class _Configuration(IOAble, ABC):
             self.L_lmn = kwargs.pop("L_lmn")
 
         # initialize omnigenity parameters
+        data = self.compute(
+            ["min_tz |B|", "max_tz |B|"],
+            LinearGrid(M=self.M_grid, N=self.N_grid, NFP=self.NFP, sym=self.sym),
+        )
+        self._L_well = int(kwargs.pop("L_well", 2))
         self._L_omni = int(kwargs.pop("L_omni", 0))
         self._M_omni = int(kwargs.pop("M_omni", 1))
         self._N_omni = int(kwargs.pop("N_omni", 1))
@@ -436,11 +441,19 @@ class _Configuration(IOAble, ABC):
             L=self.L_omni,
             M=self.M_omni,
             N=self.N_omni,
-            NFP=self.NFP,
+            NFP=1,
             sym="cos(z)",
             spectral_indexing=self.spectral_indexing,
         )
-        self._omni_l = np.array(kwargs.pop("omni_l", np.linspace(1, 2, 3)), dtype=float)
+        self._omni_l = np.array(
+            kwargs.pop(
+                "omni_l",
+                np.linspace(
+                    np.min(data["min_tz |B|"]), np.max(data["max_tz |B|"]), self.L_well
+                ),
+            ),
+            dtype=float,
+        )
         self._omni_lmn = np.array(
             kwargs.pop("omni_lmn", np.zeros(self.omni_basis.num_modes)), dtype=float
         )
@@ -867,6 +880,11 @@ class _Configuration(IOAble, ABC):
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
         return self.axis.Z_n
+
+    @property
+    def L_well(self):
+        """int: Number of spline points in the magnetic well parameters omni_l."""
+        return self._L_well
 
     @property
     def L_omni(self):

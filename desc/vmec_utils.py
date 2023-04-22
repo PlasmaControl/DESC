@@ -95,12 +95,15 @@ def _mnsc_to_modes_x(xm, xn, s, c):
     """Convert from arrays of m, n, smn, cmn to [cos/sin, m, n] and x coeffs."""
     cmodes = np.vstack([np.ones_like(xm), xm, xn]).T
 
-    first_mode_is_00 = (
-        int(xm[0]) == 0 and int(xn[0]) == 0
-    )  # this is False for a sin only series
-    if first_mode_is_00:
-        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T[1:]  # index out m=n=0
-        s = s.T[1:].T
+    mode_idx_00 = np.where(np.logical_and(xm == 0, xn == 0))
+    if mode_idx_00[0].size:  # there is a 00 mode, get rid of it for the sin
+        xm_no_0 = np.delete(xm, mode_idx_00[0][0])
+        xn_no_0 = np.delete(xn, mode_idx_00[0][0])
+
+        smodes = np.vstack(
+            [-np.ones_like(xm_no_0), xm_no_0, xn_no_0]
+        ).T  # index out m=n=0
+        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0]).T)
     else:  # no need to index out m=n=0 bc is not in the basis
         smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
 

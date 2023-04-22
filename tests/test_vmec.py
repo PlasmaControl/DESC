@@ -29,10 +29,10 @@ class TestVMECIO:
         a2 = 1
         a3 = 2
 
-        m_0 = np.array([0, 0, 1, 1, 1])
-        n_0 = np.array([0, 1, -1, 0, 1])
-        s = np.array([0, a0, a1, a3, 0])
-        c = np.array([a0, 0, a2, 0, a3])
+        m_0 = np.array([0, 1, 1, 1, 0])
+        n_0 = np.array([1, -1, 0, 1, 0])
+        s = np.array([a0, a1, a3, 0, 0])
+        c = np.array([0, a2, 0, a3, a0])
 
         # a0*sin(-z) + a1*sin(t+z) + a3*sin(t)                          # noqa: E800
         #    = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)

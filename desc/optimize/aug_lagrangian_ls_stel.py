@@ -22,6 +22,7 @@ def fmin_lag_ls_stel(
     fun,
     constraint,
     x0,
+    bounds,
     args=(),
     x_scale=1,
     ftol=1e-6,
@@ -48,14 +49,14 @@ def fmin_lag_ls_stel(
     lmbda = options.pop("lmbda", 10 * jnp.ones(constraint.dim_f()))
     x = np.append(x, 1.0 * np.ones(constraint._ineq_dim))
 
-    def recover(x):
-        return x[0 : len(x) - constraint._ineq_dim]
+    #    def recover(x):
+    #        return x[0 : len(x) - constraint._ineq_dim]
 
-    def wrapped_obj(x):
-        return fun(recover(x))
+    #    def wrapped_obj(x):
+    #        return fun(recover(x))
 
     constr = np.array([constraint])
-    L = AugLagrangianLS(wrapped_obj, constr)
+    L = AugLagrangianLS(fun, constr)
     gradL = Derivative(L.compute, 0, "fwd")
 
     gtolk = 1 / (10 * np.linalg.norm(mu))
@@ -73,13 +74,14 @@ def fmin_lag_ls_stel(
                 lmbda,
                 mu,
             ),
+            bounds=bounds,
             gtol=gtolk,
             maxiter=10,
             verbose=2,
         )
 
         x = xk["x"]
-        f = fun(recover(x))
+        f = fun(x)
         cv = L.compute_constraints(x)
         c = np.max(cv)
 

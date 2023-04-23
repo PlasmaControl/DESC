@@ -8,6 +8,7 @@ from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
 from .stochastic import sgd
+from .utils import inequality_to_bounds
 
 
 @register_optimizer(
@@ -69,15 +70,31 @@ def _optimize_desc_aug_lagrangian_least_squares(
     x_scale = 1 if x_scale == "auto" else x_scale
     if isinstance(x_scale, str):
         raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
-
+    bounds = (-jnp.inf, jnp.inf)
     if constraint is not None:
-        constraint_wrapped = DESCNonlinearConstraint(
+        (
+            z0,
+            fun_wrapped,
+            grad_wrapped,
+            hess_wrapped,
+            constraint_wrapped,
+            zbounds,
+            z2xs,
+        ) = inequality_to_bounds(
+            x0,
+            objective.compute_scaled,
+            objective.grad,
+            objective.hess,
             constraint,
+            bounds,
         )
-        if constraint_wrapped._equality_constraint:
-            objective.combine_args(constraint_wrapped._equality_constraint)
-        if constraint_wrapped._inequality_constraint:
-            objective.combine_args(constrained_wrapped._inequality_constraint)
+    #        constraint_wrapped = DESCNonlinearConstraint(
+    #            constraint,
+    #        )
+    #        if constraint_wrapped._equality_constraint:
+    #            objective.combine_args(constraint_wrapped._equality_constraint)
+    #        if constraint_wrapped._inequality_constraint:
+    #            objective.combine_args(constrained_wrapped._inequality_constraint)
     else:
         constraint_wrapped = None
     # need to use some "global" variables here
@@ -92,9 +109,10 @@ def _optimize_desc_aug_lagrangian_least_squares(
     success = [None]
 
     result = fmin_lag_ls_stel(
-        objective.compute_scaled,
+        fun_wrapped,
         constraint_wrapped,
-        x0=x0,
+        x0=z0,
+        bounds=zbounds,
         args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],

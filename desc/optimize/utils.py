@@ -2,7 +2,125 @@
 
 import numpy as np
 
-from desc.backend import cond, jit, jnp
+from desc.backend import cond, jit, jnp, put
+
+
+def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
+    """Convert inequality constraints to bounds using slack variables.
+
+    We do this by introducing slack variables s
+
+    ie, lb < con(x) < ub --> con(x) - s == 0, lb < s < ub
+
+    A new state vector z is defined as [x, s] and the problem
+    is transformed into one that has only equality constraints
+    and simple bounds on the variables z
+
+    Parameters
+    ----------
+    x0 : ndarray
+        Starting point for primal variables
+    fun, grad, hess : callable
+        Functions for computing the objective and derivatives
+    constraint : scipy.optimize.NonlinearConstraint
+        constraint object of both equality and inequality constraints
+    bounds : tuple
+        lower and upper bounds for primal variables x
+
+    Returns
+    -------
+    z0 : ndarray
+        Starting point for primal + slack variables
+    fun, grad, hess : callable
+        functions for computing objective and derivatives wrt z
+    constraint : scipy.optimize.NonlinearConstraint
+        constraint containing just equality constraints
+    bounds : tuple
+        lower and upper bounds on combined variable z
+    z2xs : callable
+        function for splitting combined variable z into primal
+        and slack variables x and s
+
+    """
+
+    c0 = constraint.fun(x0)
+    ncon = c0.size
+    constraint.lb = jnp.broadcast_to(constraint.lb, ncon)
+    constraint.ub = jnp.broadcast_to(constraint.ub, ncon)
+    bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
+
+    lbs, ubs = constraint.lb, constraint.ub
+    lbx, ubx = bounds
+
+    ineq_mask = lbs == ubs
+    eq_mask = lbs != ubs
+    eq_target = lbs[~ineq_mask]
+    nslack = jnp.sum(ineq_mask)
+    zbounds = (
+        jnp.concatenate([lbx, lbs[ineq_mask]]),
+        jnp.concatenate([ubx, ubs[ineq_mask]]),
+    )
+    s0 = c0[ineq_mask]
+    s0 = jnp.clip(s0, lbs[ineq_mask], ubs[ineq_mask])
+    z0 = jnp.concatenate([x0, s0])
+    target = jnp.zeros(c0.size)
+    target = put(target, eq_mask, eq_target)
+
+    def z2xs(z):
+        return z[:nslack], z[nslack:]
+
+    def fun_wrapped(z):
+        x, s = z2xs(z)
+        return fun(x)
+
+    def grad_wrapped(z):
+        x, s = z2xs(z)
+        g = grad(x)
+        return jnp.concatenate([g, jnp.zeros(nslack)])
+
+    if callable(hess):
+
+        def hess_wrapped(z):
+            x, s = z2xs(z)
+            H = hess(x)
+            return jnp.pad(H, (0, nslack))
+
+    else:  # using BFGS
+        hess_wrapped = hess
+
+    def confun_wrapped(z):
+        x, s = z2xs(z)
+        c = constraint.fun(x)
+        sbig = jnp.zeros(ncon)
+        sbig = put(sbig, ineq_mask, s)
+        return c - sbig - target
+
+    def conjac_wrapped(z):
+        x, s = z2xs(z)
+        J = constraint.jac(x)
+        I = jnp.eye(nslack)
+        Js = jnp.zeros((ncon, nslack))
+        Js = put(Js, Index[ineq_mask, :], -I)
+        return jnp.hstack([J, Js])
+
+    if callable(constraint.hess):
+
+        def conhess_wrapped(z, y):
+            x, s = z2xs(z)
+            H = constraint.hess(x, y)
+            return jnp.pad(H, (0, nslack))
+
+    else:  # using BFGS
+        conhess_wrapped = constraint.hess
+
+    newcon = copy.copy(constraint)
+    newcon.fun = confun_wrapped
+    newcon.jac = conjac_wrapped
+    newcon.hess = conhess_wrapped
+    newcon.lb = target
+    newcon.ub = target
+
+    return z0, fun_wrapped, grad_wrapped, hess_wrapped, newcon, zbounds, z2xs
 
 
 @jit

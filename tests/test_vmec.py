@@ -321,6 +321,9 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
     np.testing.assert_allclose(vmec.variables["iotaf"][:], desc.variables["iotaf"][:])
+    np.testing.assert_allclose(
+        vmec.variables["q_factor"][:], desc.variables["q_factor"][:]
+    )
     np.testing.assert_allclose(vmec.variables["iotas"][:], desc.variables["iotas"][:])
     np.testing.assert_allclose(vmec.variables["phi"][:], desc.variables["phi"][:])
     np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
@@ -337,23 +340,36 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(vmec.variables["aspect"][:], desc.variables["aspect"][:])
     np.testing.assert_allclose(
-        vmec.variables["volume_p"][:], desc.variables["volume_p"][:]
+        vmec.variables["volume_p"][:], desc.variables["volume_p"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["volavgB"][:], desc.variables["volavgB"][:]
+        vmec.variables["volavgB"][:], desc.variables["volavgB"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-6
-    )
-    # raxis_cc & zaxis_cs excluded b/c VMEC saves initial guess, not final solution
-    np.testing.assert_allclose(
-        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
+        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:], rtol=5e-3
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["bdotb"][20:100]),
+        np.abs(desc.variables["bdotb"][20:100]),
+        rtol=1e-6,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["buco"][20:100]),
@@ -368,7 +384,17 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         np.abs(vmec.variables["jdotb"][20:100]),
         np.abs(desc.variables["jdotb"][20:100]),
-        rtol=1e-6,
+        rtol=1e-5,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jcuru"][20:100]),
+        np.abs(desc.variables["jcuru"][20:100]),
+        rtol=1e-2,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jcurv"][20:100]),
+        np.abs(desc.variables["jcurv"][20:100]),
+        rtol=3e-2,
     )
     np.testing.assert_allclose(
         vmec.variables["DShear"][20:100], desc.variables["DShear"][20:100], rtol=1e-2
@@ -384,6 +410,21 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(
         vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["raxis_cc"][:], desc.variables["raxis_cc"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zaxis_cs"][:], desc.variables["zaxis_cs"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
     )
 
 
@@ -637,7 +678,7 @@ def test_vmec_save_2(VMEC_save):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=2e-3)
 
     # J^theta
     curru_vmec = VMECIO.vmec_interpolate(

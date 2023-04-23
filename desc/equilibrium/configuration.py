@@ -11,7 +11,15 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
-from desc.compute.utils import compress, get_params, get_profiles, get_transforms
+from desc.compute import data_index
+from desc.compute.utils import (
+    compress,
+    expand,
+    get_data_deps,
+    get_params,
+    get_profiles,
+    get_transforms,
+)
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -848,7 +856,9 @@ class _Configuration(IOAble, ABC):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        self._axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP)
+        self._axis = FourierRZCurve(
+            R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym
+        )
         return self._axis
 
     @property
@@ -1072,8 +1082,8 @@ class _Configuration(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        # TODO: default to returning just desired qty? options to return_all?
-        # TODO: use get_params method? need to break up compute functions first
+        if isinstance(names, str):
+            names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
@@ -1083,7 +1093,57 @@ class _Configuration(IOAble, ABC):
             profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
             transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
 
+        # To avoid the issue of using the wrong grid for surface and volume averages,
+        # we first figure out what needed qtys are flux functions or volume integrals
+        # and compute those first on a full grid
+        deps = list(set(get_data_deps(names) + names))
+        dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
+        dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
+
+        if len(dep0d):
+            grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            data0d = compute_fun(
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, eq=self, grid=grid0d, **kwargs),
+                profiles=get_profiles(dep0d, eq=self, grid=grid0d),
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        if len(dep1d):
+            grid1d = LinearGrid(
+                rho=grid.nodes[grid.unique_rho_idx, 0],
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
+                sym=self.sym,
+            )
+            data1d = compute_fun(
+                dep1d,
+                params=params,
+                transforms=get_transforms(dep1d, eq=self, grid=grid1d, **kwargs),
+                profiles=get_profiles(dep1d, eq=self, grid=grid1d),
+                data=None,
+                **kwargs,
+            )
+            # need to make this data broadcastable with the data on the original grid
+            data1d = {
+                key: expand(grid, compress(grid1d, val))
+                for key, val in data1d.items()
+                if key in dep1d
+            }
+            data.update(data1d)
+
+        # TODO: we can probably reduce the number of deps computed here if some are only
+        # needed as inputs for 0d and 1d qtys, unless the user asks for them
+        # specifically?
         data = compute_fun(
             names,
             params=params,

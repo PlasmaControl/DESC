@@ -44,7 +44,7 @@ def _B0(params, transforms, profiles, data, **kwargs):
     params=[],
     transforms={},
     profiles=[],
-    coordinates="",
+    coordinates="rtz",
     data=["0"],
 )
 def _B_sup_rho(params, transforms, profiles, data, **kwargs):
@@ -2320,9 +2320,7 @@ def _B_vol(params, transforms, profiles, data, **kwargs):
 )
 def _B_rms(params, transforms, profiles, data, **kwargs):
     data["<|B|>_rms"] = jnp.sqrt(
-        jnp.sum(
-            data["|B|"] ** 2 * jnp.abs(data["sqrt(g)"]) * transforms["grid"].weights
-        )
+        jnp.sum(data["|B|"] ** 2 * data["sqrt(g)"] * transforms["grid"].weights)
         / data["V"]
     )
     return data
@@ -2345,7 +2343,7 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
     data["<|B|>"] = surface_averages(
         transforms["grid"],
         data["|B|"],
-        jnp.abs(data["sqrt(g)"]),
+        data["sqrt(g)"],
         denominator=data["V_r(r)"],
     )
     return data
@@ -2368,7 +2366,7 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
     data["<B^2>"] = surface_averages(
         transforms["grid"],
         data["|B|^2"],
-        jnp.abs(data["sqrt(g)"]),
+        data["sqrt(g)"],
         denominator=data["V_r(r)"],
     )
     return data
@@ -2391,7 +2389,7 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     data["<1/|B|>"] = surface_averages(
         transforms["grid"],
         1 / data["|B|"],
-        jnp.abs(data["sqrt(g)"]),
+        data["sqrt(g)"],
         denominator=data["V_r(r)"],
     )
     return data
@@ -2423,8 +2421,8 @@ def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
     data["<B^2>_r"] = (
         surface_integrals(
             transforms["grid"],
-            data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"]) * data["|B|^2"]
-            + jnp.abs(data["sqrt(g)"]) * 2 * dot(data["B"], data["B_r"]),
+            data["sqrt(g)_r"] * data["|B|^2"]
+            + data["sqrt(g)"] * 2 * dot(data["B"], data["B_r"]),
         )
         - data["V_rr(r)"] * data["<B^2>"]
     ) / data["V_r(r)"]
@@ -2572,6 +2570,29 @@ def _gradB2(params, transforms, profiles, data, **kwargs):
 def _gradB2mag(params, transforms, profiles, data, **kwargs):
     data["|grad(|B|^2)|/2mu0"] = jnp.linalg.norm(data["grad(|B|^2)"], axis=-1) / (
         2 * mu_0
+    )
+    return data
+
+
+@register_compute_fun(
+    name="<|grad(|B|^2)|/2mu0>_vol",
+    label="\\langle |\\nabla B^{2}/(2\\mu_0)| \\rangle_{vol}",
+    units="N \\cdot m^{-3}",
+    units_long="Newtons per cubic meter",
+    description="Volume average of magnitude of magnetic pressure gradient",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|grad(|B|^2)|/2mu0", "sqrt(g)", "V"],
+)
+def _gradB2mag_vol(params, transforms, profiles, data, **kwargs):
+    data["<|grad(|B|^2)|/2mu0>_vol"] = (
+        jnp.sum(
+            data["|grad(|B|^2)|/2mu0"] * data["sqrt(g)"] * transforms["grid"].weights
+        )
+        / data["V"]
     )
     return data
 
@@ -2750,6 +2771,27 @@ def _B_dot_grad_B_zeta(params, transforms, profiles, data, **kwargs):
 )
 def _B_dot_grad_B_mag(params, transforms, profiles, data, **kwargs):
     data["|(B*grad)B|"] = jnp.linalg.norm(data["(B*grad)B"], axis=-1)
+    return data
+
+
+@register_compute_fun(
+    name="<|(B*grad)B|>_vol",
+    label="\\langle |(\\mathbf{B} \\cdot \\nabla) \\mathbf{B}| \\rangle_{vol}",
+    units="T^{2} \\cdot m^{-1}",
+    units_long="Tesla squared / meters",
+    description="Volume average magnetic tension magnitude",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|(B*grad)B|", "sqrt(g)", "V"],
+)
+def _B_dot_grad_B_mag_vol(params, transforms, profiles, data, **kwargs):
+    data["<|(B*grad)B|>_vol"] = (
+        jnp.sum(data["|(B*grad)B|"] * data["sqrt(g)"] * transforms["grid"].weights)
+        / data["V"]
+    )
     return data
 
 

@@ -2,15 +2,18 @@
 
 import os
 import pickle
+import warnings
 
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
+from desc.objectives import get_equilibrium_objective
 
 from .utils import area_difference, compute_coords
 
@@ -169,8 +172,7 @@ def test_resolution():
     eq1.L = 2
     eq1.M = 3
     eq1.N = 4
-    with pytest.warns(UserWarning):
-        eq1.NFP = 5
+    eq1.NFP = 5
     assert eq1.R_basis.L == 2
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
@@ -231,3 +233,14 @@ def test_equilibriafamily_constructor():
 
     with pytest.raises(TypeError):
         _ = EquilibriaFamily(4, 5, 6)
+
+
+@pytest.mark.unit
+def test_change_NFP():
+    """Test that changing the eq NFP correctly changes everything."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        eq = desc.examples.get("HELIOTRON")
+        eq.change_resolution(NFP=4)
+        obj = get_equilibrium_objective()
+        obj.build(eq)

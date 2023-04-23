@@ -133,9 +133,13 @@ Name,Label,Units,Description,Module
 ``e^helical``,:math:`B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta`,Tesla / square meter,Helical basis vector,``desc.compute._equil``
 ``|e^helical|``,:math:`|B^{\theta} \nabla \zeta - B^{\zeta} \nabla \theta|`,Tesla / square meter,Magnitude of helical basis vector,``desc.compute._equil``
 ``W_B``,:math:`W_B`,Joules,Plasma magnetic energy,``desc.compute._equil``
+``W_Bpol``,":math:`W_{B,pol}`",Joules,Plasma magnetic energy in poloidal field,``desc.compute._equil``
+``W_Btor``,":math:`W_{B,tor}`",Joules,Plasma magnetic energy in toroidal field,``desc.compute._equil``
 ``W_p``,:math:`W_p`,Joules,Plasma thermodynamic energy,``desc.compute._equil``
 ``W``,:math:`W`,Joules,Plasma total energy,``desc.compute._equil``
 ``<beta>_vol``,:math:`\langle \beta \rangle_{vol}`,None,Normalized plasma pressure,``desc.compute._equil``
+``<beta_pol>_vol``,:math:`\langle \beta_{pol} \rangle_{vol}`,None,Normalized poloidal plasma pressure,``desc.compute._equil``
+``<beta_tor>_vol``,:math:`\langle \beta_{tor} \rangle_{vol}`,None,Normalized toroidal plasma pressure,``desc.compute._equil``
 ``B0``,:math:`\partial_{\rho} \psi / \sqrt{g}`,Tesla / meter,,``desc.compute._field``
 ``B^rho``,:math:`B^{\rho}`,Tesla / meter,Contravariant radial component of magnetic field,``desc.compute._field``
 ``B^theta``,:math:`B^{\theta}`,Tesla / meter,Contravariant poloidal component of magnetic field,``desc.compute._field``
@@ -233,6 +237,7 @@ Name,Label,Units,Description,Module
 ``grad(|B|^2)_zeta``,:math:`(\nabla B^{2})_{\zeta}`,Tesla squared,Covariant toroidal component of magnetic pressure gradient,``desc.compute._field``
 ``grad(|B|^2)``,:math:`\nabla B^{2}`,Tesla squared / meters,Magnetic pressure gradient,``desc.compute._field``
 ``|grad(|B|^2)|/2mu0``,:math:`|\nabla B^{2}/(2\mu_0)|`,Newton / cubic meter,Magnitude of magnetic pressure gradient,``desc.compute._field``
+``<|grad(|B|^2)|/2mu0>_vol``,:math:`\langle |\nabla B^{2}/(2\mu_0)| \rangle_{vol}`,Newtons per cubic meter,Volume average of magnitude of magnetic pressure gradient,``desc.compute._field``
 ``(curl(B)xB)_rho``,:math:`((\nabla \times \mathbf{B}) \times \mathbf{B})_{\rho}`,Tesla squared,Covariant radial component of Lorentz force,``desc.compute._field``
 ``(curl(B)xB)_theta``,:math:`((\nabla \times \mathbf{B}) \times \mathbf{B})_{\theta}`,Tesla squared,Covariant poloidal component of Lorentz force,``desc.compute._field``
 ``(curl(B)xB)_zeta``,:math:`((\nabla \times \mathbf{B}) \times \mathbf{B})_{\zeta}`,Tesla squared,Covariant toroidal component of Lorentz force,``desc.compute._field``
@@ -242,6 +247,7 @@ Name,Label,Units,Description,Module
 ``((B*grad)B)_theta``,:math:`((\mathbf{B} \cdot \nabla) \mathbf{B})_{\theta}`,Tesla squared,Covariant poloidal component of magnetic tension,``desc.compute._field``
 ``((B*grad)B)_zeta``,:math:`((\mathbf{B} \cdot \nabla) \mathbf{B})_{\zeta}`,Tesla squared,Covariant toroidal component of magnetic tension,``desc.compute._field``
 ``|(B*grad)B|``,:math:`|(\mathbf{B} \cdot \nabla) \mathbf{B}|`,Tesla squared / meters,Magnitude of magnetic tension,``desc.compute._field``
+``<|(B*grad)B|>_vol``,:math:`\langle |(\mathbf{B} \cdot \nabla) \mathbf{B}| \rangle_{vol}`,Tesla squared / meters,Magnetic tension magnitude,``desc.compute._field``
 ``B*grad(|B|)``,:math:`\mathbf{B} \cdot \nabla B`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_t``,:math:`\partial_{\theta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_z``,:math:`\partial_{\zeta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
@@ -327,6 +333,7 @@ Name,Label,Units,Description,Module
 ``iota``,:math:`\iota`,None,Rotational transform (normalized by 2pi),``desc.compute._profiles``
 ``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform (normalized by 2pi), first radial derivative",``desc.compute._profiles``
 ``iota_rr``,:math:`\partial_{\rho\rho} \iota`,None,"Rotational transform (normalized by 2pi), second radial derivative",``desc.compute._profiles``
+``q``,:math:`q = 1/\iota`,None,"Safety factor 'q', inverse of rotational transform.",``desc.compute._profiles``
 ``I``,:math:`I`,Tesla * meters,Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current),``desc.compute._profiles``
 ``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current), derivative wrt radial coordinate",``desc.compute._profiles``
 ``I_rr``,:math:`\partial_{\rho\rho} I`,Tesla * meters,"Boozer toroidal current enclosed by flux surfaces, second derivative wrt radial coordinate",``desc.compute._profiles``

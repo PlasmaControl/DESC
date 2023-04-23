@@ -19,10 +19,19 @@ from ._geometry import (
     Volume,
 )
 from ._iota_utils import IotaAt, MeanIota
-from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
+from ._qs import (
+    Isodynamicity,
+    QuasisymmetryBoozer,
+    QuasisymmetryTripleProduct,
+    QuasisymmetryTwoTerm,
+)
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
+    FixAxisR,
+    FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
@@ -31,8 +40,18 @@ from .linear_objectives import (
     FixIonTemperature,
     FixIota,
     FixLambdaGauge,
+    FixModeR,
+    FixModeZ,
     FixPressure,
     FixPsi,
+    FixSumModesR,
+    FixSumModesZ,
+    FixThetaSFL,
 )
 from .objective_funs import ObjectiveFunction
-from .utils import get_equilibrium_objective, get_fixed_boundary_constraints
+from .utils import (
+    get_equilibrium_objective,
+    get_fixed_axis_constraints,
+    get_fixed_boundary_constraints,
+    get_NAE_constraints,
+)

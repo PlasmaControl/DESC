@@ -5,6 +5,7 @@ import pytest
 from scipy.io import netcdf_file
 from scipy.signal import convolve2d
 
+import desc.examples
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
@@ -80,7 +81,6 @@ def test_surface_areas():
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
-# TODO: remove or combine with above
 @pytest.mark.unit
 def test_surface_areas_2():
     """Alternate test that the flux surface areas match known analytic formulas."""
@@ -871,6 +871,67 @@ def test_magnetic_field_derivatives(DummyStellarator):
     )
 
 
+@pytest.mark.unit
+def test_metric_derivatives(DummyStellarator):
+    """Compare analytic formula for metric derivatives with finite differences."""
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+
+    metric_components = ["g^rr", "g^rt", "g^rz", "g^tt", "g^tz", "g^zz"]
+
+    # rho derivatives
+    grid = LinearGrid(rho=np.linspace(0.5, 0.7, 100))
+    drho = np.diff(grid.nodes[:, 0]).mean()
+    data = eq.compute(
+        metric_components + [foo + "_r" for foo in metric_components], grid=grid
+    )
+    for thing in metric_components:
+        # some of these are so close to zero FD doesn't really work...
+        scale = np.linalg.norm(data[thing]) / data[thing].size
+        if scale < 1e-16:
+            continue
+        dthing_fd = np.convolve(data[thing], FD_COEF_1_4, "same") / drho
+        dthing_ex = data[thing + "_r"]
+        np.testing.assert_allclose(
+            dthing_fd[3:-3], dthing_ex[3:-3], err_msg=thing, rtol=1e-3, atol=1e-3
+        )
+
+    # theta derivatives
+    grid = LinearGrid(theta=np.linspace(0, np.pi / 4, 100))
+    dtheta = np.diff(grid.nodes[:, 1]).mean()
+    data = eq.compute(
+        metric_components + [foo + "_t" for foo in metric_components], grid=grid
+    )
+    for thing in metric_components:
+        # some of these are so close to zero FD doesn't really work...
+        scale = np.linalg.norm(data[thing]) / data[thing].size
+        if scale < 1e-16:
+            continue
+        dthing_fd = np.convolve(data[thing], FD_COEF_1_4, "same") / dtheta
+        dthing_ex = data[thing + "_t"]
+        np.testing.assert_allclose(
+            dthing_fd[3:-3], dthing_ex[3:-3], err_msg=thing, rtol=1e-3, atol=1e-3
+        )
+
+    # zeta derivatives
+    grid = LinearGrid(zeta=np.linspace(0, np.pi / 4, 100), NFP=3)
+    dzeta = np.diff(grid.nodes[:, 2]).mean()
+    data = eq.compute(
+        metric_components + [foo + "_z" for foo in metric_components], grid=grid
+    )
+    for thing in metric_components:
+        # some of these are so close to zero FD doesn't really work...
+        scale = np.linalg.norm(data[thing]) / data[thing].size
+        if scale < 1e-16:
+            continue
+        dthing_fd = np.convolve(data[thing], FD_COEF_1_4, "same") / dzeta
+        dthing_ex = data[thing + "_z"]
+        np.testing.assert_allclose(
+            dthing_fd[3:-3], dthing_ex[3:-3], err_msg=thing, rtol=1e-3, atol=1e-3
+        )
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 def test_magnetic_pressure_gradient(DummyStellarator):
@@ -1057,3 +1118,19 @@ def test_compute_everything():
     for key in data_index.keys():
         data = eq.compute(key, grid=grid)
         assert key in data
+
+
+@pytest.mark.unit
+def test_compute_averages():
+    """Test that computing averages uses the correct grid."""
+    eq = desc.examples.get("HELIOTRON")
+    Vr = eq.get_profile("V_r(r)")
+    rho = np.linspace(0.01, 1, 20)
+    grid = LinearGrid(rho=rho, NFP=eq.NFP)
+    out = eq.compute("V_r(r)", grid=grid)
+    np.testing.assert_allclose(Vr(rho), out["V_r(r)"], rtol=1e-4)
+
+    eq = Equilibrium(1, 1, 1)
+    grid = LinearGrid(rho=[0.3], theta=[np.pi / 3], zeta=[0])
+    out = eq.compute("A", grid=grid)
+    np.testing.assert_allclose(out["A"], np.pi)

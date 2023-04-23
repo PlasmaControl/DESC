@@ -66,7 +66,7 @@ class MercierStability(_Objective):
         grid=None,
         name="Mercier Stability",
     ):
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -90,16 +90,18 @@ class MercierStability(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=np.linspace(1 / 5, 1, 5),
             )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
         self._args = get_params(self._data_keys)
 
@@ -108,8 +110,8 @@ class MercierStability(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -162,11 +164,17 @@ class MercierStability(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(self.grid, data["D_Mercier"], surface_label="rho")
+        return compress(
+            self._transforms["grid"], data["D_Mercier"], surface_label="rho"
+        )
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
         return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
@@ -249,10 +257,8 @@ class MagneticWell(_Objective):
         name="Magnetic Well",
         equality=True,
     ):
-
-        self.grid = grid
+        self._grid = grid
         self.equality = equality
-
         super().__init__(
             eq=eq,
             target=target,
@@ -275,16 +281,18 @@ class MagneticWell(_Objective):
         verbose : int, optional
             Level of output.
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 M=eq.M_grid,
                 N=eq.N_grid,
                 NFP=eq.NFP,
                 sym=eq.sym,
                 rho=np.linspace(1 / 5, 1, 5),
             )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]
         self._args = get_params(self._data_keys)
 
@@ -293,8 +301,8 @@ class MagneticWell(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -343,11 +351,17 @@ class MagneticWell(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(self.grid, data["magnetic well"], surface_label="rho")
+        return compress(
+            self._transforms["grid"], data["magnetic well"], surface_label="rho"
+        )
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
         return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

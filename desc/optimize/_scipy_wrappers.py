@@ -149,7 +149,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
                 H1 = np.eye(x1.size) / dx_norm
             if not H1.size:
                 H1 = np.eye(x1.size) / dx_norm
-            predicted_reduction = -evaluate_quadratic_form_hess(dx, 0, g1, H1)
+            predicted_reduction = -evaluate_quadratic_form_hess(H1, g1, dx)
             if predicted_reduction > 0:
                 reduction_ratio = df / predicted_reduction
             elif predicted_reduction == df == 0:

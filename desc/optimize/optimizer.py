@@ -391,10 +391,13 @@ def _get_default_tols(
     stoptol.setdefault("ctol", options.pop("gtol", 1e-4))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
-    stoptol["max_nfev"] = options.pop("max_nfev", np.inf)
-    stoptol["max_ngev"] = options.pop("max_ngev", np.inf)
-    stoptol["max_njev"] = options.pop("max_njev", np.inf)
-    stoptol["max_nhev"] = options.pop("max_nhev", np.inf)
+    # if we define an "iteration" as a sucessful step, it can take a few function
+    # evaluations per iteration
+    stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
+    # pretty much all the methods only evaluate derivatives once per iteration
+    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
+    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
+    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
 
     return stoptol
 

@@ -237,34 +237,34 @@ def chol(A):
     return L
 
 
-def evaluate_quadratic_form_hess(x, f, g, H, scale=None):
+def evaluate_quadratic_form_hess(H, g, x, diag=None):
     """Compute values of a quadratic function arising in trust region subproblem.
 
-    The function is 0.5 * x.T * H * x + g.T * x + f.
+    The function is 0.5 * x.T * (H + diag) * x + g.T * x.
 
     Parameters
     ----------
-    x : ndarray, shape(n,)
-        position where to evaluate quadratic form
-    f : float
-        constant term
-    g : ndarray, shape(n,)
-        Gradient, defines the linear term.
     H : ndarray
         Hessian matrix
-    scale : ndarray, shape(n,)
-        scaling to apply. Scales hess -> scale*hess*scale, g-> scale*g
+    g : ndarray, shape(n,)
+        Gradient, defines the linear term.
+    x : ndarray, shape(n,)
+        position where to evaluate quadratic form
+    diag : ndarray, shape (n,), optional
+        Addition diagonal part, affects the quadratic term.
+        If None, assumed to be 0.
 
     Returns
     -------
     values : float
         Value of the function.
     """
-    scale = scale if scale is not None else 1
-    q = (x * scale) @ H @ (x * scale)
-    l = jnp.dot(scale * g, x)
+    q = x @ H @ x
+    if diag is not None:
+        q += jnp.sum(diag * x**2, axis=-1)
+    l = jnp.dot(g, x)
 
-    return f + l + 1 / 2 * q
+    return l + 1 / 2 * q
 
 
 def evaluate_quadratic_form_jac(J, g, s, diag=None):
@@ -299,7 +299,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
         Js = J.dot(s.T)
         q = jnp.sum(Js**2, axis=0)
         if diag is not None:
-            q += jnp.sum(diag * s**2, axis=1)
+            q += jnp.sum(diag * s**2, axis=-1)
 
     l = jnp.dot(s, g)
 

@@ -12,6 +12,7 @@ from desc.utils import flatten_list
 
 __all__ = [
     "PowerSeries",
+    "ChebyshevPolynomial",
     "FourierSeries",
     "DoubleFourierSeries",
     "ZernikePolynomial",
@@ -297,6 +298,110 @@ class PowerSeries(Basis):
             radial = radial[routidx][:, loutidx]
 
         return radial
+
+    def change_resolution(self, L):
+        """Change resolution of the basis to the given resolution.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        """
+        if L != self.L:
+            self._L = L
+            self._modes = self._get_modes(self.L)
+            self._set_up()
+
+
+class ChebyshevPolynomial(Basis):
+    """Shifted Chebyshev polynomial of the first kind.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+
+    """
+
+    def __init__(self, L):
+
+        self._L = L
+        self._M = 0
+        self._N = 0
+        self._NFP = 1
+        self._sym = False
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L)
+
+        super().__init__()
+
+    def _get_modes(self, L=0):
+        """Get mode numbers for shifted Chebyshev polynomials of the first kind.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        l = np.arange(L + 1).reshape((-1, 1))
+        z = np.zeros((L + 1, 2))
+        return np.hstack([l, z])
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used)
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            basis functions evaluated at nodes
+
+        """
+        if modes is None:
+            modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        # shift: x = 2 * rho - 1
+        x = 2 * np.atleast_2d(nodes[:, 0]).T - 1
+
+        # T_0 = 1
+        y = np.ones_like(x)
+
+        # T_1 = rho
+        if self.L > 0:
+            y = np.hstack((y, x))
+
+        # recurrance relation: T_{n+1} = 2 * x * T_{n} - T_{n-1}
+        if self.L > 1:
+            for n in range(self.L - 1):
+                y = np.hstack(
+                    (y, 2 * x * np.atleast_2d(y[:, -1]).T - np.atleast_2d(y[:, -2]).T)
+                )
+
+        return y
 
     def change_resolution(self, L):
         """Change resolution of the basis to the given resolution.
@@ -1173,7 +1278,7 @@ def zernike_radial_coeffs(l, m, exact=True):
     return c
 
 
-def zernike_radial_poly(rho, l, m, dr=0):
+def zernike_radial_poly(r, l, m, dr=0):
     """Radial part of zernike polynomials.
 
     Evaluates basis functions using numpy to
@@ -1184,7 +1289,7 @@ def zernike_radial_poly(rho, l, m, dr=0):
 
     Parameters
     ----------
-    rho : ndarray, shape(N,)
+    r : ndarray, shape(N,)
         radial coordinates to evaluate basis
     l : ndarray of int, shape(K,)
         radial mode number(s)
@@ -1204,7 +1309,7 @@ def zernike_radial_poly(rho, l, m, dr=0):
     coeffs = polyder_vec(coeffs, dr)
     # this should give accuracy of ~1e-10 in the eval'd polynomials
     prec = int(0.4 * lmax + 8.4)
-    return polyval_vec(coeffs, rho, prec=prec).T
+    return polyval_vec(coeffs, r, prec=prec).T
 
 
 def zernike_radial(r, l, m, dr=0):

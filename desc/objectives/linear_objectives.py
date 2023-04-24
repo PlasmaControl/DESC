@@ -2826,8 +2826,8 @@ class FixLambda(_Objective):
         return "L_lmn"
 
 
-class FixOmni_l(_Objective):
-    """Fixes omni_l.
+class FixWell(_Objective):
+    """Fixes well_l.
 
     Parameters
     ----------
@@ -2859,7 +2859,7 @@ class FixOmni_l(_Objective):
     _linear = True
     _fixed = True
     _units = "(T)"
-    _print_value_fmt = "Fixed omni_l error: {:10.3e} "
+    _print_value_fmt = "Fixed well_l error: {:10.3e} "
 
     def __init__(
         self,
@@ -2870,7 +2870,7 @@ class FixOmni_l(_Objective):
         normalize=True,
         normalize_target=True,
         indices=True,
-        name="fixed omni_l",
+        name="fixed well_l",
     ):
 
         self._indices = indices
@@ -2898,7 +2898,7 @@ class FixOmni_l(_Objective):
 
         """
         if self.target is None:
-            self._target = eq.omni_l
+            self._target = eq.well_l
 
         # find indices to fix
         if self._indices is False or self._indices is None:  # no indices to fix
@@ -2912,14 +2912,13 @@ class FixOmni_l(_Objective):
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, omni_l, **kwargs):
-        """Compute fixed omni_l error.
+    def compute(self, well_l, **kwargs):
+        """Compute fixed well_l error.
 
         Parameters
         ----------
-        omni_l : ndarray
+        well_l : ndarray
             Magnetic well shaping parameters.
-            Roots of the derivative of the even polynomial B(zeta_bar), shifted by pi/2.
 
         Returns
         -------
@@ -2927,15 +2926,15 @@ class FixOmni_l(_Objective):
             Total QI magnetic well shape error.
 
         """
-        return omni_l[self._idx]
+        return well_l[self._idx]
 
     @property
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
-        return "omni_l"
+        return "well_l"
 
 
-class FixOmni_lmn(_Objective):
+class FixOmni(_Objective):
     """Fixes omni_lmn.
 
     Parameters

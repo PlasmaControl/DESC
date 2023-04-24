@@ -648,7 +648,7 @@ class Omnigenity(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = jnp.mean(eq.omni_l)
+            self._normalization = jnp.mean(eq.well_l[:eq.M_well])  # average |B| on axis
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -669,8 +669,8 @@ class Omnigenity(_Objective):
             Spectral coefficients of I(rho) -- toroidal current profile.
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
-        omni_l : ndarray
-            Values of B(eta) on a linearly spaced grid eta = [0, pi/2].
+        well_l : ndarray
+            Spectral coefficients of B(eta).
         omni_lmn : ndarray
             Spectral coefficients of tilde(zeta)_B(rho, alpha, eta).
 

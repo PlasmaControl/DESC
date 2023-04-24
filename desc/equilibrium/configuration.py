@@ -9,7 +9,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import PowerSeries, FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
@@ -119,11 +119,14 @@ class _Configuration(IOAble, ABC):
         "_atomic_number",
         "_spectral_indexing",
         "_bdry_mode",
+        "_L_well",
+        "_M_well",
         "_L_omni",
         "_M_omni",
         "_N_omni",
+        "_well_basis",
         "_omni_basis",
-        "_omni_l",
+        "_well_l",
         "_omni_lmn",
     ]
 
@@ -433,10 +436,12 @@ class _Configuration(IOAble, ABC):
             ["min_tz |B|", "max_tz |B|"],
             LinearGrid(M=self.M_grid, N=self.N_grid, NFP=self.NFP, sym=self.sym),
         )
-        self._L_well = int(kwargs.pop("L_well", 2))
+        self._L_well = int(kwargs.pop("L_well", 0))
+        self._M_well = int(kwargs.pop("M_well", 2))
         self._L_omni = int(kwargs.pop("L_omni", 0))
         self._M_omni = int(kwargs.pop("M_omni", 1))
         self._N_omni = int(kwargs.pop("N_omni", 1))
+        self._well_basis = PowerSeries(L=self.L_well, sym=False)
         self._omni_basis = FourierZernikeBasis(
             L=self.L_omni,
             M=self.M_omni,
@@ -445,11 +450,18 @@ class _Configuration(IOAble, ABC):
             sym="cos(z)",
             spectral_indexing=self.spectral_indexing,
         )
-        self._omni_l = np.array(
+        self._well_l = np.array(
             kwargs.pop(
-                "omni_l",
-                np.linspace(
-                    np.min(data["min_tz |B|"]), np.max(data["max_tz |B|"]), self.L_well
+                "well_l",
+                np.concatenate(
+                    (
+                        np.linspace(
+                            np.min(data["min_tz |B|"]),
+                            np.max(data["max_tz |B|"]),
+                            self.M_well,
+                        ),
+                        np.zeros((self.L_well * self.M_well,)),
+                    )
                 ),
             ),
             dtype=float,
@@ -883,8 +895,13 @@ class _Configuration(IOAble, ABC):
 
     @property
     def L_well(self):
-        """int: Number of spline points in the magnetic well parameters omni_l."""
+        """int: Radial resolution of the magnetic well parameters well_l."""
         return self._L_well
+
+    @property
+    def M_well(self):
+        """int: Number of spline points in the magnetic well parameters well_l."""
+        return self._M_well
 
     @property
     def L_omni(self):
@@ -902,18 +919,23 @@ class _Configuration(IOAble, ABC):
         return self._N_omni
 
     @property
+    def well_basis(self):
+        """PowerSeries: Spectral basis for well_l."""
+        return self._well_basis
+
+    @property
     def omni_basis(self):
         """FourierZernikeBasis: Spectral basis for omni_lmn."""
         return self._omni_basis
 
     @property
-    def omni_l(self):
+    def well_l(self):
         """ndarray: Omnigenity magnetic well shape parameters."""
-        return self._omni_l
+        return self._well_l
 
-    @omni_l.setter
-    def omni_l(self, omni_l):
-        self._omni_l[:] = omni_l
+    @well_l.setter
+    def well_l(self, well_l):
+        self._well_l[:] = well_l
 
     @property
     def omni_lmn(self):

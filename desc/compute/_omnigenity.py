@@ -385,7 +385,7 @@ def _eta(params, transforms, profiles, data, **kwargs):
     description="Boozer toroidal angle in the Quasi-Isodynamic reference frame",
     dim=1,
     params=["omni_lmn"],
-    transforms={"eta": [[0, 0, 0]]},
+    transforms={"omni": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
     data=["rho", "theta", "eta"],
@@ -395,7 +395,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
 
     data["zeta_B QI"] = (
-        jnp.matmul(transforms["eta"].basis.evaluate(nodes), params["omni_lmn"])
+        jnp.matmul(transforms["omni"].basis.evaluate(nodes), params["omni_lmn"])
         + 2 * data["eta"]
         + jnp.pi
     )
@@ -409,14 +409,18 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     units_long="Tesla",
     description="Magnitude of omnigeneous magnetic field",
     dim=1,
-    params=["omni_l"],
-    transforms={},
+    params=["well_l"],
+    transforms={"well": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "eta"],
+    data=["eta"],
 )
 def _B_omni(params, transforms, profiles, data, **kwargs):
-    B_input = jnp.sort(params["omni_l"])  # sort to ensure monotonicity
+    # reshaped to size (L_well, M_well)
+    well_arr = params["well_l"].reshape((transforms["well"].basis.L + 1, -1))
+    # assuming single flux surface, so only take first row (single node)
+    B_input = (transforms["well"].matrices["direct1"][0][0][0] @ well_arr)[0, :]
+    B_input = jnp.sort(B_input)  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
     # |B|_omnigeneous is an even function so B(-eta) = B(+eta)

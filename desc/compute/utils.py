@@ -24,7 +24,7 @@ arg_order = (
     "ne_l",
     "Ti_l",
     "Zeff_l",
-    "omni_l",
+    "well_l",
     "omni_lmn",
     "Rb_lmn",
     "Zb_lmn",
@@ -287,7 +287,7 @@ def get_transforms(keys, eq, grid, **kwargs):
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys)
     transforms = {"grid": grid}
-    for c in ["R", "L", "Z"]:
+    for c in ["R", "Z", "L", "well", "omni"]:
         if c in derivs:
             transforms[c] = Transform(
                 grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
@@ -315,14 +315,6 @@ def get_transforms(keys, eq, grid, **kwargs):
                 sym=eq.Z_basis.sym,
             ),
             derivs=derivs["w"],
-            build=True,
-            build_pinv=True,
-        )
-    if "eta" in derivs:
-        transforms["eta"] = Transform(
-            grid,
-            eq.omni_basis,
-            derivs=derivs["eta"],
             build=True,
             build_pinv=True,
         )

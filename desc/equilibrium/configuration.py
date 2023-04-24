@@ -9,7 +9,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import PowerSeries, FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import ChebyshevPolynomial, FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
@@ -441,7 +441,7 @@ class _Configuration(IOAble, ABC):
         self._L_omni = int(kwargs.pop("L_omni", 0))
         self._M_omni = int(kwargs.pop("M_omni", 1))
         self._N_omni = int(kwargs.pop("N_omni", 1))
-        self._well_basis = PowerSeries(L=self.L_well, sym=False)
+        self._well_basis = ChebyshevPolynomial(L=self.L_well)
         self._omni_basis = FourierZernikeBasis(
             L=self.L_omni,
             M=self.M_omni,
@@ -920,7 +920,7 @@ class _Configuration(IOAble, ABC):
 
     @property
     def well_basis(self):
-        """PowerSeries: Spectral basis for well_l."""
+        """ChebyshevPolynomial: Spectral basis for well_l."""
         return self._well_basis
 
     @property

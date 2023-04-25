@@ -388,5 +388,22 @@ def align_jacobian(Fx, objective_f, objective_g):
 
 
 def jax_softmin(arr, alpha):
-    """JAX softmin implementation with alpha=1."""
+    """JAX softmin implementation.
+
+    Parameters
+    ----------
+    arr: ndarray, the array which we would like to apply the softmin function to.
+    alpha: float, the parameter smoothly transitioning the function to a hardmin.
+        as alpha increases, the value returned will come closer and closer to
+        min(arr).
+
+    Returns
+    -------
+    softmin: float, the soft-minimum of the array.
+    """
+    # FIXME: this is unstable numerically for large values of alpha, due to
+    # the exp(-alpha*arr) possibly underflowing to 0, resulting in division by 0
+    # and nan as a result
+    # either add a check for this based on alpha and d, or
+    # change the softmin scheme
     return jnp.sum(arr * jnp.exp(-alpha * arr)) / jnp.sum(jnp.exp(-alpha * arr))

@@ -20,15 +20,15 @@ information, and ``ipopt-bfgs`` which only uses approximate Hessians. The necess
 are:
 
 
-- ``name`` (``str``) : name you want to give the optimization method. This is what you will
+- ``name`` (``str``) : Name you want to give the optimization method. This is what you will
   pass to ``desc.optimize.Optimizer`` to select the given method.
 - ``description`` (``str``) : A short description of the method, with relevant links
-- ``scalar`` (``bool``): whether the method expects a scalar objective or a vector (for least squares).
-- ``equality_constraints`` (``bool``) : whether the method can handle equality constraints.
-- ``inequality_constraints`` (``bool``) : whether the method can handle inequality constraints.
-- ``stochastic`` (``bool``) : whether the optimizer can be used for stochastic/noisy objectives.
-- ``hessian`` (``bool``) : whether the optimzer uses hessian information.
-- ``GPU`` (``bool``) : whether the optimizer can run on GPUs
+- ``scalar`` (``bool``): Whether the method expects a scalar objective or a vector (for least squares).
+- ``equality_constraints`` (``bool``) : Whether the method can handle equality constraints.
+- ``inequality_constraints`` (``bool``) : Whether the method can handle inequality constraints.
+- ``stochastic`` (``bool``) : Whether the optimizer can be used for stochastic/noisy objectives.
+- ``hessian`` (``bool``) : Whether the optimzer uses hessian information.
+- ``GPU`` (``bool``) : Whether the optimizer can run on GPUs
 
 
 The wrapper function itself should take the following arguments:
@@ -43,7 +43,7 @@ The wrapper function itself should take the following arguments:
 - ``verbose`` (``int``) : level of output to console - 0  : work silently,
   1 : display a termination report, 2 : display progress during iterations
 - ``stoptol`` (``dict``) : Dictionary of stopping tolerances, with keys ``{"xtol", "ftol",
-  "gtol", "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}``
+  "gtol", "ctol", "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}``
 - ``options`` (``dict``) : Optional dictionary of additional keyword arguments to override
   default solver settings.
 

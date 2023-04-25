@@ -388,9 +388,9 @@ def _eta(params, transforms, profiles, data, **kwargs):
     transforms={"omni": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "theta", "eta"],
+    data=["NFP", "rho", "theta", "eta"],
 )
-def _helical_angle(params, transforms, profiles, data, **kwargs):
+def _zeta_B_QI(params, transforms, profiles, data, **kwargs):
     alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
     nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
 
@@ -398,7 +398,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
         jnp.matmul(transforms["omni"].basis.evaluate(nodes), params["omni_lmn"])
         + 2 * data["eta"]
         + jnp.pi
-    )
+    ) / data["NFP"]
     return data
 
 
@@ -415,7 +415,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["eta"],
 )
-def _B_omni(params, transforms, profiles, data, **kwargs):
+def _B_well(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_well, M_well)
     well_arr = params["well_l"].reshape((transforms["well"].basis.L + 1, -1))
     # assuming single flux surface, so only take first row (single node)
@@ -441,7 +441,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["NFP", "theta", "zeta_B QI", "iota", "|B|_mn"],
+    data=["theta", "zeta_B QI", "iota", "|B|_mn"],
     helicity="helicity",
 )
 def _B_omni_coords(params, transforms, profiles, data, **kwargs):
@@ -454,7 +454,7 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
     booz = matrix @ jnp.vstack((alpha, data["zeta_B QI"]))
     data["theta_B(alpha,eta)"] = booz[0, :]
-    data["zeta_B(alpha,eta)"] = booz[1, :] / data["NFP"]
+    data["zeta_B(alpha,eta)"] = booz[1, :]
 
     nodes = jnp.vstack((data["rho"], booz)).T
     data["|B|(alpha,eta)"] = jnp.matmul(

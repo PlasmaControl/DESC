@@ -43,11 +43,12 @@ def fmin_lag_ls_stel(
     N = x0.size
     x = x0.copy()
     f = fun(x, *args)
+    c = constraint.fun(x)
     nfev += 1
 
-    mu = options.pop("mu", 10 * jnp.ones(constraint.dim_f()))
-    lmbda = options.pop("lmbda", 10 * jnp.ones(constraint.dim_f()))
-    x = np.append(x, 1.0 * np.ones(constraint._ineq_dim))
+    mu = options.pop("mu", 10 * jnp.ones(len(c)))
+    lmbda = options.pop("lmbda", 10 * jnp.ones(len(c)))
+    #    x = np.append(x, 1.0 * np.ones(constraint._ineq_dim))
 
     #    def recover(x):
     #        return x[0 : len(x) - constraint._ineq_dim]
@@ -62,7 +63,7 @@ def fmin_lag_ls_stel(
     gtolk = 1 / (10 * np.linalg.norm(mu))
     ctolk = 1 / (np.linalg.norm(mu) ** (0.1))
     xold = x
-    f = fun(recover(x))
+    #    f = fun(recover(x))
     fold = f
 
     while iteration < maxiter:
@@ -115,7 +116,8 @@ def fmin_lag_ls_stel(
         fold = f
 
     g = gradL(x, lmbda, mu)
-    f = fun(recover(x))
+    # f = fun(recover(x))
+    f = fun(x)
     success = True
     message = "successful"
     result = OptimizeResult(
@@ -130,5 +132,5 @@ def fmin_lag_ls_stel(
         nit=iteration,
         message=message,
     )
-    result["allx"] = [recover(x)]
+    # result["allx"] = [recover(x)]
     return result

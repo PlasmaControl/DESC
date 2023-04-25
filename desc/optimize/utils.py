@@ -1,5 +1,7 @@
 """Utility functions used in optimization problems."""
 
+import copy
+
 import numpy as np
 
 from desc.backend import cond, jit, jnp, put
@@ -43,19 +45,20 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
 
     """
 
-    c0 = constraint.fun(x0)
+    c0 = constraint.compute_scaled(x0)
     ncon = c0.size
-    constraint.lb = jnp.broadcast_to(constraint.lb, ncon)
-    constraint.ub = jnp.broadcast_to(constraint.ub, ncon)
+    # constraint.bounds[0] = jnp.broadcast_to(constraint.bounds[0], ncon)
+    # constraint.bounds[1] = jnp.broadcast_to(constraint.bounds[1], ncon)
     bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
 
-    lbs, ubs = constraint.lb, constraint.ub
+    lbs, ubs = constraint.bounds[0], constraint.bounds[1]
     lbx, ubx = bounds
 
-    ineq_mask = lbs == ubs
-    eq_mask = lbs != ubs
+    ineq_mask = lbs != ubs
+    eq_mask = lbs == ubs
     eq_target = lbs[~ineq_mask]
     nslack = jnp.sum(ineq_mask)
+    print("nslack is " + str(nslack))
     zbounds = (
         jnp.concatenate([lbx, lbs[ineq_mask]]),
         jnp.concatenate([ubx, ubs[ineq_mask]]),
@@ -67,7 +70,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
     target = put(target, eq_mask, eq_target)
 
     def z2xs(z):
-        return z[:nslack], z[nslack:]
+        return z[: len(z) - nslack], z[len(z) - nslack :]
 
     def fun_wrapped(z):
         x, s = z2xs(z)
@@ -90,7 +93,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
 
     def confun_wrapped(z):
         x, s = z2xs(z)
-        c = constraint.fun(x)
+        c = constraint.compute_scaled(x)
         sbig = jnp.zeros(ncon)
         sbig = put(sbig, ineq_mask, s)
         return c - sbig - target

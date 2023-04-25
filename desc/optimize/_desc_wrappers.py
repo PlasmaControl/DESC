@@ -123,6 +123,9 @@ def _optimize_desc_aug_lagrangian_least_squares(
         callback=None,
         options=options,
     )
+    x, s = z2xs(result["x"])
+    result["x"] = x
+    result["allx"] = [x]
     return result
 
 

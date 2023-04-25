@@ -948,11 +948,14 @@ def betastar(m, n):
     return (2 * n - m) * beta(m, n)
 
 
+# TODO: generalize the below 2 terms according to
+# eqns 31,32 so they are valid for all indices of m,k>=0?
 def CD_m_k(R, m, k):
     """Eq 25 of Dommaschk paper."""
     if m == k == 0:  # the initial term, defined in eqn 8
         return jnp.ones_like(R)
-
+    else:
+        assert m > k, "Sum only valid for m > k!"
     sum1 = 0
     for j in range(k + 1):
         sum1 += alpha(m, j) * betastar(m, k - j) * R ** (2 * j)
@@ -966,6 +969,8 @@ def CN_m_k(R, m, k):
     """Eq 26 of Dommaschk paper."""
     if m == k == 0:  # the initial term, defined in eqn 9
         return jnp.log(R)
+    else:
+        assert m > k, "Sum only valid for m > k!"
 
     sum1 = 0
     for j in range(k + 1):
@@ -993,7 +998,7 @@ def D_m_n(R, Z, m, n):
 
 def N_m_n(R, Z, m, n):
     """N_m_n term in eqn 9 of Dommaschk paper."""
-    # the sum comes from fact that D_mn = I_mn and the def of I_mn in eq 2 of the paper
+    # the sum comes from fact that N_mn = I_mn and the def of I_mn in eq 2 of the paper
 
     max_ind = (
         n // 2
@@ -1002,7 +1007,7 @@ def N_m_n(R, Z, m, n):
     #  which 2k<=n, and 2(max_ind+1) would be > n and so not included in the sum
     result = 0
     for k in range(max_ind + 1):
-        result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
+        result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CN_m_k(R, m, k)
     return result
 
 
@@ -1067,18 +1072,16 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
         c_m_l coefficients of V_m_l terms, which multiplies cos(m*phi)*N_m_l-1
     d_arr : 1D array-like of float
         d_m_l coefficients of V_m_l terms, which multiplies sin(m*phi)*N_m_l-1
+    B0: float, toroidal magnetic field strength scale, this is the strength of the
+        1/R part of the magnetic field and is the Bphi at R=1.
 
     Returns
     -------
     value : array-like
         Value of the total dommaschk potential evaluated
         at the given R,phi,Z points
-        (same size as the size of the given R,phi, or Z arrays).
+        (same size as the size of the given R,phi, Z arrays).
     """
-    # TODO: think of if this is best way to generalize
-    # B0 is what scales the 1/R part of the magnetic field,
-    # and is the magnetic field strength at R=1
-
     value = B0 * phi  # phi term
 
     # make sure all are 1D arrays

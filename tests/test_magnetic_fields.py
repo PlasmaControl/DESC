@@ -216,7 +216,7 @@ def test_dommaschk_vertical_field():
 
 
 @pytest.mark.unit
-def test_dommaschkfit_field():
+def test_dommaschk_fit_toridal_field():
     """Test the Dommaschk potential fit for a 1/R toroidal scaled to 2 T."""
     phi = np.linspace(0, 2 * np.pi, 3)
     R = np.linspace(0.1, 1.5, 3)
@@ -245,3 +245,38 @@ def test_dommaschkfit_field():
     np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
     for coef in ["a_arr", "b_arr", "c_arr", "d_arr"]:
         np.testing.assert_allclose(B._params[coef], 0, atol=1e-15)
+
+
+@pytest.mark.unit
+def test_dommaschk_fit_vertical_and_toroidal_field():
+    """Test the Dommaschk potential fit for a toroidal and a vertical field."""
+    phi = np.linspace(0, 2 * np.pi, 3)
+    R = np.linspace(0.1, 1.5, 3)
+    Z = np.linspace(-0.5, 0.5, 3)
+    R, phi, Z = np.meshgrid(R, phi, Z)
+    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+
+    max_l = 1
+    max_m = 1
+    B0 = 2  # scale strength for to 1/R field to fit
+    B0_Z = 1  # scale strength for to uniform vertical field to fit
+    field = ToroidalMagneticField(B0=B0, R0=1) + VerticalMagneticField(B0=B0_Z)
+
+    B = DommaschkPotentialField.fit_magnetic_field(field, coords, max_m, max_l)
+
+    B_dom = B.compute_magnetic_field(coords)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=3e-15)
+    np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-15)
+
+    np.testing.assert_allclose(B._params["B0"], B0)
+
+    # only nonzero coefficient of the field should be the B0 and a_ml = a_01
+    np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
+    for coef, m, l in zip(B._params["a_arr"], B._params["ms"], B._params["ls"]):
+        if m == 0 and l == 1:
+            np.testing.assert_allclose(coef, B0_Z)
+        else:
+            np.testing.assert_allclose(coef, 0, atol=1e-15)
+    for name in ["b_arr", "c_arr", "d_arr"]:
+        np.testing.assert_allclose(B._params[name], 0, atol=1e-15)

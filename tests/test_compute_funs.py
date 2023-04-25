@@ -81,7 +81,6 @@ def test_surface_areas():
     np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
 
 
-# TODO: remove or combine with above
 @pytest.mark.unit
 def test_surface_areas_2():
     """Alternate test that the flux surface areas match known analytic formulas."""
@@ -870,6 +869,67 @@ def test_magnetic_field_derivatives(DummyStellarator):
         rtol=rtol,
         atol=atol * np.nanmean(np.abs(data["B_rz"])),
     )
+
+
+@pytest.mark.unit
+def test_metric_derivatives(DummyStellarator):
+    """Compare analytic formula for metric derivatives with finite differences."""
+    eq = Equilibrium.load(
+        load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
+    )
+
+    metric_components = ["g^rr", "g^rt", "g^rz", "g^tt", "g^tz", "g^zz"]
+
+    # rho derivatives
+    grid = LinearGrid(rho=np.linspace(0.5, 0.7, 100))
+    drho = np.diff(grid.nodes[:, 0]).mean()
+    data = eq.compute(
+        metric_components + [foo + "_r" for foo in metric_components], grid=grid
+    )
+    for thing in metric_components:
+        # some of these are so close to zero FD doesn't really work...
+        scale = np.linalg.norm(data[thing]) / data[thing].size
+        if scale < 1e-16:
+            continue
+        dthing_fd = np.convolve(data[thing], FD_COEF_1_4, "same") / drho
+        dthing_ex = data[thing + "_r"]
+        np.testing.assert_allclose(
+            dthing_fd[3:-3], dthing_ex[3:-3], err_msg=thing, rtol=1e-3, atol=1e-3
+        )
+
+    # theta derivatives
+    grid = LinearGrid(theta=np.linspace(0, np.pi / 4, 100))
+    dtheta = np.diff(grid.nodes[:, 1]).mean()
+    data = eq.compute(
+        metric_components + [foo + "_t" for foo in metric_components], grid=grid
+    )
+    for thing in metric_components:
+        # some of these are so close to zero FD doesn't really work...
+        scale = np.linalg.norm(data[thing]) / data[thing].size
+        if scale < 1e-16:
+            continue
+        dthing_fd = np.convolve(data[thing], FD_COEF_1_4, "same") / dtheta
+        dthing_ex = data[thing + "_t"]
+        np.testing.assert_allclose(
+            dthing_fd[3:-3], dthing_ex[3:-3], err_msg=thing, rtol=1e-3, atol=1e-3
+        )
+
+    # zeta derivatives
+    grid = LinearGrid(zeta=np.linspace(0, np.pi / 4, 100), NFP=3)
+    dzeta = np.diff(grid.nodes[:, 2]).mean()
+    data = eq.compute(
+        metric_components + [foo + "_z" for foo in metric_components], grid=grid
+    )
+    for thing in metric_components:
+        # some of these are so close to zero FD doesn't really work...
+        scale = np.linalg.norm(data[thing]) / data[thing].size
+        if scale < 1e-16:
+            continue
+        dthing_fd = np.convolve(data[thing], FD_COEF_1_4, "same") / dzeta
+        dthing_ex = data[thing + "_z"]
+        np.testing.assert_allclose(
+            dthing_fd[3:-3], dthing_ex[3:-3], err_msg=thing, rtol=1e-3, atol=1e-3
+        )
 
 
 @pytest.mark.slow

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 from numpy.random import default_rng
-from scipy.optimize import BFGS, rosen, rosen_der
+from scipy.optimize import BFGS, least_squares, rosen, rosen_der
 
 import desc.examples
 from desc.backend import jit, jnp
@@ -100,7 +100,6 @@ class TestFmin:
             ftol=0,
             xtol=0,
             gtol=1e-12,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -114,13 +113,31 @@ class TestFmin:
             x0,
             scalar_grad,
             scalar_hess,
-            verbose=1,
+            verbose=3,
             method="subspace",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
-            options={"ga_accept_threshold": 1},
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_convex_full_hess_exact(self):
+        """Test minimizing rosenbrock function using exact method with full hess."""
+        x0 = np.ones(2)
+
+        out = fmintr(
+            scalar_fun,
+            x0,
+            scalar_grad,
+            scalar_hess,
+            verbose=3,
+            method="exact",
+            x_scale="hess",
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -137,13 +154,12 @@ class TestFmin:
             x0,
             rosen_der,
             hess="bfgs",
-            verbose=1,
+            verbose=3,
             method="dogleg",
             x_scale="hess",
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -160,13 +176,34 @@ class TestFmin:
             x0,
             rosen_der,
             hess=BFGS(),
-            verbose=1,
+            verbose=3,
             method="subspace",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
-            options={"ga_accept_threshold": 0},
+        )
+        np.testing.assert_allclose(out["x"], true_x)
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    def test_rosenbrock_bfgs_exact(self):
+        """Test minimizing rosenbrock function using exact method with BFGS hess."""
+        rando = default_rng(seed=4)
+
+        x0 = rando.random(7)
+        true_x = np.ones(7)
+        out = fmintr(
+            rosen,
+            x0,
+            rosen_der,
+            hess=BFGS(),
+            verbose=3,
+            method="exact",
+            x_scale=1,
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -217,7 +254,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
-            verbose=0,
+            verbose=3,
             x_scale=1,
             tr_method="cho",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -228,7 +265,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
-            verbose=0,
+            verbose=3,
             x_scale=1,
             tr_method="svd",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -377,14 +414,14 @@ def test_maxiter_1_and_0_solve():
     eq = desc.examples.get("SOLOVEV")
     for opt in ["lsq-exact", "dogleg-bfgs"]:
         eq, result = eq.solve(
-            maxiter=1, constraints=constraints, objective=obj, optimizer=opt
+            maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
-        assert result["nfev"] <= 2
+        assert result["nit"] == 1
     for opt in ["lsq-exact", "dogleg-bfgs"]:
         eq, result = eq.solve(
-            maxiter=0, constraints=constraints, objective=obj, optimizer=opt
+            maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
-        assert result["nfev"] <= 1
+        assert result["nit"] == 0
 
 
 @pytest.mark.unit
@@ -405,6 +442,7 @@ def test_scipy_fail_message():
     for opt in ["scipy-trf"]:
         eq, result = eq.solve(
             maxiter=3,
+            verbose=3,
             constraints=constraints,
             objective=obj,
             optimizer=opt,
@@ -418,6 +456,7 @@ def test_scipy_fail_message():
     for opt in ["scipy-trust-exact"]:
         eq, result = eq.solve(
             maxiter=3,
+            verbose=3,
             constraints=constraints,
             objective=obj,
             optimizer=opt,
@@ -615,3 +654,74 @@ def test_solve_with_x_scale():
     )
     eq.solve(x_scale=scale)
     assert eq.is_nested()
+
+
+@pytest.mark.unit
+def test_bounded_optimization():
+    """Test that our bounded optimizers are as good as scipy."""
+    p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+    x = np.linspace(-1, 1, 100)
+    y = vector_fun(x, p)
+
+    def fun(p):
+        return vector_fun(x, p) - y
+
+    rando = default_rng(seed=5)
+    p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+
+    jac = Derivative(fun, 0, "fwd")
+
+    def sfun(x):
+        f = fun(x)
+        return 1 / 2 * f.dot(f)
+
+    def grad(x):
+        f = fun(x)
+        J = jac(x)
+        return f.dot(J)
+
+    def hess(x):
+        J = jac(x)
+        return J.T @ J
+
+    bounds = (2, np.inf)
+    p0 = np.clip(p0, *bounds)
+
+    out1 = lsqtr(
+        fun,
+        p0,
+        jac,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=3,
+        x_scale=1,
+        tr_method="svd",
+    )
+    out2 = fmintr(
+        sfun,
+        p0,
+        grad,
+        hess,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=3,
+        x_scale=1,
+    )
+    out3 = least_squares(
+        fun,
+        p0,
+        jac,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=2,
+        x_scale=1,
+    )
+
+    np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-06, atol=1e-06)
+    np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-06, atol=1e-06)

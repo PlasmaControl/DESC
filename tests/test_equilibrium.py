@@ -99,6 +99,28 @@ def test_compute_flux_coords(DSHAPE_current):
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.unit
+def test_map_coordinates():
+    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
+    eq = desc.examples.get("DSHAPE")
+
+    inbasis = ["alpha", "phi", "rho"]
+    outbasis = ["rho", "theta_sfl", "zeta"]
+
+    rho = np.linspace(0.01, 0.99, 200)
+    theta = np.linspace(0, np.pi, 200, endpoint=False)
+    zeta = np.linspace(0, np.pi, 200, endpoint=False)
+
+    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    out_data = eq.compute(outbasis, grid=grid)
+    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+
+    out = eq.map_coordinates(in_coords, inbasis, outbasis)
+    np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve

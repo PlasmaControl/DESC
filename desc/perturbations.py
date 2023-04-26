@@ -6,11 +6,19 @@ from termcolor import colored
 
 from desc.backend import jnp, put, use_jax
 from desc.compute import arg_order, profile_names
-from desc.objectives import get_fixed_boundary_constraints
-from desc.objectives.utils import align_jacobian, factorize_linear_constraints
+from desc.objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
+    get_fixed_boundary_constraints,
+)
+from desc.objectives.utils import (
+    align_jacobian,
+    factorize_linear_constraints,
+    maybe_add_self_consistency,
+)
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer
+from desc.utils import Timer, get_instance
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -147,9 +155,13 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    for constraint in constraints:
-        if not constraint.built:
-            constraint.build(eq, verbose=verbose)
+    constraints = maybe_add_self_consistency(constraints)
+    con_args = []
+    for con in constraints:
+        con_args += con.args
+        if not con.built:
+            con.build(eq, verbose=verbose)
+    objective.set_args(*con_args)
 
     if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
@@ -165,7 +177,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if verbose > 0:
         print("Factorizing linear constraints")
     timer.start("linear constraint factorize")
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.args
     )
     timer.stop("linear constraint factorize")
@@ -185,15 +197,23 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # tangent vectors
     tangents = jnp.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
+        con = get_instance(constraints, BoundaryRSelfConsistency)
+        A = con.derivatives["jac"]["R_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
-        tangents += (
-            jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv["R_lmn"] @ dc
-        )
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
-        dc = deltas["Zb_lmn"]
-        tangents += (
-            jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv["Z_lmn"] @ dc
+        con = get_instance(constraints, BoundaryZSelfConsistency)
+        A = con.derivatives["jac"]["Z_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Zb_lmn"]
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
     if len([arg for arg in other_args if arg in deltas.keys()]):
@@ -355,7 +375,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         setattr(eq_new, key, getattr(eq_new, key) + value)
     for constraint in constraints:
         constraint.update_target(eq_new)
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.args
     )
 
@@ -540,14 +560,20 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     constraints = get_fixed_boundary_constraints(
         iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
     )
-    for constraint in constraints:
-        if not constraint.built:
-            constraint.build(eq, verbose=verbose)
+    constraints = maybe_add_self_consistency(constraints)
+    con_args = []
+    for con in constraints:
+        con_args += con.args
+        if not con.built:
+            con.build(eq, verbose=verbose)
+    con_args += objective_f.args + objective_g.args
+    objective_f.set_args(*con_args)
+    objective_g.set_args(*con_args)
+
     (
         xp,
-        A,
-        Ainv,
-        b,
+        _,
+        _,
         Z,
         unfixed_idx,
         project,
@@ -584,14 +610,22 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         x_idx = jnp.sort(x_idx)
         dxdc = jnp.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
-        dxdRb = (
-            jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv["R_lmn"]
+        con = get_instance(constraints, BoundaryRSelfConsistency)
+        A = con.derivatives["jac"]["R_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = jnp.linalg.pinv(A)
+        dxdRb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
-        dxdZb = (
-            jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv["Z_lmn"]
+        con = get_instance(constraints, BoundaryZSelfConsistency)
+        A = con.derivatives["jac"]["Z_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
+        A = (con.normalization * (A.T / con.weight)).T
+        Ainv = jnp.linalg.pinv(A)
+        dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdZb))
 
     # 1st order
@@ -763,7 +797,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         idx0 += len(value)
     for constraint in constraints:
         constraint.update_target(eq_new)
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective_f.args
     )
 

@@ -31,7 +31,13 @@ from desc.io import IOAble
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.utils import copy_coeffs
 
-from .coords import compute_flux_coords, compute_theta_coords, is_nested, to_sfl
+from .coords import (
+    compute_flux_coords,
+    compute_theta_coords,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_profile
 
@@ -1153,6 +1159,41 @@ class _Configuration(IOAble, ABC):
             **kwargs,
         )
         return data
+
+    def map_coordinates(
+        self, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6
+    ):
+        """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+
+        First solves for the computational coordinates that correspond to inbasis, then
+        evaluates outbasis at those locations.
+
+        NOTE: this function cannot currently be JIT compiled or differentiated with AD.
+
+        Parameters
+        ----------
+        coords : ndarray, shape(k,3)
+            2D array of input coordinates. Each row is a different
+            coordinate.
+        inbasis, outbasis : tuple of str
+            Labels for input and output coordinates, eg ("R", "phi", "Z") or
+            ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
+            Labels should be the same as the compute function data key.
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            Maximum number of Newton iterations
+        rhomin : float
+            Minimum allowable value of rho (to avoid singularity at rho=0)
+
+        Returns
+        -------
+        coords : ndarray, shape(k,3)
+            Coordinates in outbasis. If Newton method doesn't converge for
+            a given coordinate nan will be returned for those values
+
+        """
+        return map_coordinates(self, coords, inbasis, outbasis, tol, maxiter, rhomin)
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find geometric theta for given straight field line theta.

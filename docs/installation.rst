@@ -32,10 +32,13 @@ Or from GitHub (for development builds)
     pip install -r devtools/dev-requirements.txt
 
     # OPTION 2: install with conda
-    # standard build
+    # only need to do ONE of these conda env create commands, not both
+    ## standard build
     conda env create --file requirements_conda.yml
-    # developer build (if you want to run tests)
+    ## developer build (if you want to run tests)
     conda env create --file devtools/dev-requirements_conda.yml
+
+
     conda activate desc-env
     python setup.py install
 
@@ -61,16 +64,19 @@ Or from GitHub (for development builds):
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-    module load anaconda  # load your python module
+    module load anaconda  # load your python module, this command may depending on cluster
 
 Using conda to install packages (note, this will only install DESC + JAX with CPU capabilities, NOT GPU):
+**
 
 .. code-block:: sh
 
-    # standard build
+    # only need to do ONE of these conda env create commands, not both
+    ## standard build
     conda env create --file requirements_conda.yml
-    # developer build (if you want to run tests)
+    ## developer build (if you want to run tests)
     conda env create --file devtools/dev-requirements_conda.yml
+
     conda activate desc-env
     python setup.py install
 

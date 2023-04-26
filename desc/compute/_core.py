@@ -1144,10 +1144,10 @@ def _Z_rtz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["zeta", "omega"],
+    data=["zeta"],
 )
 def _phi(params, transforms, profiles, data, **kwargs):
-    data["phi"] = data["zeta"] + data["omega"]
+    data["phi"] = data["zeta"]
     return data
 
 
@@ -1162,10 +1162,10 @@ def _phi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "omega_r"],
+    data=["0"],
 )
 def _phi_r(params, transforms, profiles, data, **kwargs):
-    data["phi_r"] = data["omega_r"]
+    data["phi_r"] = data["0"]
     return data
 
 
@@ -1180,10 +1180,10 @@ def _phi_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_t"],
+    data=["0"],
 )
 def _phi_t(params, transforms, profiles, data, **kwargs):
-    data["phi_t"] = data["omega_t"]
+    data["phi_t"] = data["0"]
     return data
 
 
@@ -1198,10 +1198,10 @@ def _phi_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_z"],
+    data=["0"],
 )
 def _phi_z(params, transforms, profiles, data, **kwargs):
-    data["phi_z"] = 1 + data["omega_z"]
+    data["phi_z"] = jnp.ones_like(data["0"])
     return data
 
 
@@ -1216,10 +1216,10 @@ def _phi_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_rr"],
+    data=["0"],
 )
 def _phi_rr(params, transforms, profiles, data, **kwargs):
-    data["phi_rr"] = data["omega_rr"]
+    data["phi_rr"] = data["0"]
     return data
 
 
@@ -1235,10 +1235,10 @@ def _phi_rr(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_rt"],
+    data=["0"],
 )
 def _phi_rt(params, transforms, profiles, data, **kwargs):
-    data["phi_rt"] = data["omega_rt"]
+    data["phi_rt"] = data["0"]
     return data
 
 
@@ -1254,10 +1254,10 @@ def _phi_rt(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_rz"],
+    data=["0"],
 )
 def _phi_rz(params, transforms, profiles, data, **kwargs):
-    data["phi_rz"] = data["omega_rz"]
+    data["phi_rz"] = data["0"]
     return data
 
 
@@ -1273,10 +1273,10 @@ def _phi_rz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_tt"],
+    data=["0"],
 )
 def _phi_tt(params, transforms, profiles, data, **kwargs):
-    data["phi_tt"] = data["omega_tt"]
+    data["phi_tt"] = data["0"]
     return data
 
 
@@ -1292,10 +1292,10 @@ def _phi_tt(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_tz"],
+    data=["0"],
 )
 def _phi_tz(params, transforms, profiles, data, **kwargs):
-    data["phi_tz"] = data["omega_tz"]
+    data["phi_tz"] = data["0"]
     return data
 
 
@@ -1311,10 +1311,10 @@ def _phi_tz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["omega_zz"],
+    data=["0"],
 )
 def _phi_zz(params, transforms, profiles, data, **kwargs):
-    data["phi_zz"] = data["omega_zz"]
+    data["phi_zz"] = data["0"]
     return data
 
 

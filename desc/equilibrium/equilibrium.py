@@ -311,7 +311,7 @@ class Equilibrium(_Configuration, IOAble):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi"
+        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi", **kwargs
     ):
         """Initialize an Equilibrium from a near-axis solution.
 
@@ -354,7 +354,7 @@ class Equilibrium(_Configuration, IOAble):
             if ntheta is None:
                 ntheta = 2 * M + 1
 
-            inputs = {}
+            inputs = kwargs
             inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L

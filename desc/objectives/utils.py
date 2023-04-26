@@ -156,6 +156,7 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):  #
     constraints = (
         FixAxisR(),
         FixAxisZ(),
+        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:

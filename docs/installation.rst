@@ -6,7 +6,7 @@ Follow these instructions to install DESC and its dependencies.
 Note that the default installation instructions here (except for the IBM Power architecture instructions) do not install JAX with GPU support.
 To install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`_.
-**NOTE: DESC requires python>=3.8, if you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used**
+**NOTE: DESC requires python>=3.8, and if you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used**
 
 On Your Local Machine
 *********************

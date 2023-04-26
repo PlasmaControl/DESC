@@ -138,9 +138,9 @@ Then, we install DESC:
     git clone https://github.com/PlasmaControl/DESC.git
     # then use sed on requirements.txt to remove the jax line, as we already have installed it above
     cd DESC
-    sed '/jax/d' ./requirements.txt > ./requirements_no_jax.txt
+    sed -i '/jax/d' ./requirements.txt
     # then install as usual
-    pip install -r requirements_no_jax.txt
+    pip install -r ./requirements.txt
     # developer build (if you want to be able to run tests)
     pip install -r devtools/dev-requirements.txt
     python setup.py install

@@ -1,5 +1,6 @@
 """Classes for magnetic fields."""
 
+import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -798,26 +799,42 @@ class DommaschkPotentialField(ScalarPotentialField):
             max_m (int): maximum m to use for Dommaschk Potentials
             max_l (int): maximum l to use for Dommaschk Potentials
         """
+        # We seek c in  Ac = b
+        # A will be the BR, Bphi and BZ from each individual
+        # dommaschk potential basis function evaluated at each node
+        # c is the dommaschk potential coefficients
+        # c will be [B0, a_00, a_10, a_01, a_11... etc]
+        # b is the magnetic field at each node which we are fitting
+
         if not isinstance(field, MagneticField):
             B = field(coords)
         else:
             B = field.compute_magnetic_field(coords)
 
         num_nodes = coords.shape[0]  # number of coordinate nodes
+
         # we will have the rhs be 3*num_nodes in length (bc of vector B)
 
-        rhs = jnp.vstack((B[:, 0], B[:, 1], B[:, 2])).T.flatten(order="F")
-        # b is made, now do A
+        #########
+        # make b
+        #########
 
-        num_modes = 1
-        for l in range(max_l + 1):
-            for m in range(max_m + 1):
-                num_modes += 4
-        # FIXME: do this properly with combinations
+        rhs = jnp.vstack((B[:, 0], B[:, 1], B[:, 2])).T.flatten(order="F")
+
+        #####################
+        # b is made, now do A
+        #####################
+        num_modes = 1 + (max_l + 1) * (max_m + 1) * 4
+        # TODO: technically we can drop some modes
+        # since if max_l=0, there are only ever nonzero terms
+        # for a and b
+        # and if max_m=0, there are only ever nonzero terms
+        # for a and c
+        # but since we are only fitting in a least squares sense,
+        # and max_l and max_m should probably be both nonzero anyways,
+        # this is not an issue right now
 
         A = jnp.zeros((3 * num_nodes, num_modes))
-
-        # c will be [B0, a_00, a_10, a_01, a_11... etc]
 
         # B0 first, the scale magnitude of the 1/R field
         Bf_temp = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
@@ -850,12 +867,18 @@ class DommaschkPotentialField(ScalarPotentialField):
                             i * num_nodes : (i + 1) * num_nodes, coef_ind : coef_ind + 1
                         ].add(B_temp[:, i].reshape(num_nodes, 1))
                     coef_ind += 1
+
         # now solve Ac=b for the coefficients c
 
         Ainv = scipy.linalg.pinv(A, rcond=None)
         c = jnp.matmul(Ainv, rhs)
-        print(c.size)
 
+        res = jnp.matmul(A, c) - rhs
+        print(f"Mean Residual of fit: {jnp.mean(res):1.4e} T")
+        print(f"Max Residual of fit: {jnp.max(res):1.4e} T")
+        print(f"Min Residual of fit: {jnp.min(res):1.4e} T")
+
+        # recover the params from the c coefficient vector
         B0 = c[0]
         a_arr = c[1::4]
         b_arr = c[2::4]
@@ -955,7 +978,8 @@ def CD_m_k(R, m, k):
     if m == k == 0:  # the initial term, defined in eqn 8
         return jnp.ones_like(R)
     else:
-        assert m > k, "Sum only valid for m > k!"
+        if m > k:
+            warnings.warn("Sum only valid for m > k!")
     sum1 = 0
     for j in range(k + 1):
         sum1 += alpha(m, j) * betastar(m, k - j) * R ** (2 * j)
@@ -970,7 +994,8 @@ def CN_m_k(R, m, k):
     if m == k == 0:  # the initial term, defined in eqn 9
         return jnp.log(R)
     else:
-        assert m > k, "Sum only valid for m > k!"
+        if m > k:
+            warnings.warn("Sum only valid for m > k!")
 
     sum1 = 0
     for j in range(k + 1):

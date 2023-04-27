@@ -3,107 +3,123 @@ Installation
 ============
 
 Follow these instructions to install DESC and its dependencies.
-Note that the default installation instructions here (except for the IBM Power architecture instructions) do not install JAX with GPU support.
-To install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
+Note that most of the installation options here do not install JAX with GPU support.
+We do include installation instructions to install JAX with GPU support on some computing clusters that we have tested.
+In general, to install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
+
 For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`_.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
-**NOTE: DESC requires python>=3.8, and if you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used**
+
+**NOTE: DESC requires python>=3.8.**
+**If you have python2 also locally installed, replace all `pip` commands with `pip3` and all `python` commands with `python3` to ensure the correct python version is used.**
 
 On Your Local Machine
 *********************
 
-Install from PyPI:
+**Install from PyPI**
 
 .. code-block:: console
 
     pip install desc-opt
 
-Or from GitHub (for development builds)
+**Or from GitHub (for development builds)**
+
+First download the repository from GitHub.
 
 .. code-block:: sh
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
 
-    # OPTION 1: install with pip after first creating a conda environment
-    conda create --name desc-env
-    # standard build
+Now pick one of the installation options below.
+In either case, you may choose to install the minimal set of requirements, or the developer requirements (which include the former).
+The developer requirements are needed to run tests.
+
+Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+
+.. code-block:: sh
+
+    conda create --name desc-env 'python>=3.8'
+    conda activate desc-env
+    ## OPTION A: standard build
     pip install -r requirements.txt
-    # developer build (if you want to run tests)
+    ## OPTION B: developer build
     pip install -r devtools/dev-requirements.txt
 
-    # OPTION 2: install with conda
-    # only need to do ONE of these conda env create commands, not both
-    ## standard build
+    # to add DESC to your Python path
+    pip install --no-deps --editable .
+
+Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+
+.. code-block:: sh
+
+    # only need to do one of these conda env create commands, not both
+    ## OPTION A: standard build
     conda env create --file requirements_conda.yml
-    ## developer build (if you want to run tests)
+    ## OPTION B: developer build
     conda env create --file devtools/dev-requirements_conda.yml
 
-
+    # to add DESC to your Python path
     conda activate desc-env
-
-    # Finally, add DESC folder to your PYTHONPATH in your ~/.bashrc file (or equivalent shell configuration file)
-    # typically this can be done by adding `export PYTHONPATH="$PYTHONPATH:/path/to/DESC"` to the end of the file
-    # where `/path/to/DESC` is the path to the DESC folder on your local machine
-    # You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
+    pip install --no-deps --editable .
 
 On Most Linux Computing Clusters
 ********************************
 
-These examples use conda environments and either installing with conda or with pip.
-On computing clusters you must ensure to `module load anaconda` in order to use conda (or in some clusters, you must specify the version of anaconda module you want)
+These examples use conda environments.
+On computing clusters you must ensure to `module load anaconda` in order to use conda (or in some clusters, you must specify the version of anaconda module you want).
 
 With CPU support only
 ---------------------
 
-Install from PyPI:
+**Install from PyPI**
 
 .. code-block:: console
 
     pip install desc-opt
 
-Or from GitHub (for development builds):
+**Or from GitHub (for development builds)**
+
+First download the repository from GitHub.
 
 .. code-block:: sh
 
     git clone https://github.com/PlasmaControl/DESC.git
     cd DESC
+    # load your python module
+    module load anaconda  # this command may vary depending on cluster
 
-    module load anaconda  # load your python module, this command may vary depending on cluster
+Now pick one of the installation options below.
+In either case, you may choose to install the minimal set of requirements, or the developer requirements (which include the former).
+The developer requirements are needed to run tests.
 
-Using conda to install packages (note, this will only install DESC + JAX with CPU capabilities, NOT GPU):
-**
+Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
 .. code-block:: sh
 
-    # only need to do ONE of these conda env create commands, not both
-    ## standard build
+    conda create --name desc-env 'python>=3.8'
+    conda activate desc-env
+    ## OPTION A: standard build
+    pip install -r requirements.txt
+    ## OPTION B: developer build
+    pip install -r devtools/dev-requirements.txt
+
+    # to add DESC to your Python path
+    pip install --no-deps --editable .
+
+Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
+
+.. code-block:: sh
+
+    # only need to do one of these conda env create commands, not both
+    ## OPTION A: standard build
     conda env create --file requirements_conda.yml
-    ## developer build (if you want to run tests)
+    ## OPTION B: developer build
     conda env create --file devtools/dev-requirements_conda.yml
 
+    # to add DESC to your Python path
     conda activate desc-env
-
-    # Finally, add DESC folder to your PYTHONPATH in your ~/.bashrc file (or equivalent shell configuration file)
-    # typically this can be done by adding `export PYTHONPATH="$PYTHONPATH:/path/to/DESC"` to the end of the file
-    # where `/path/to/DESC` is the path to the DESC folder on your machine
-    # You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
-
-Using pip install (note, this will only install DESC + JAX with CPU capabilities, NOT GPU):
-
-.. code-block:: sh
-
-    conda create --name desc-env
-    # standard build
-    pip install -r requirements.txt
-    # developer build (if you want to run tests)
-    pip install -r devtools/dev-requirements.txt
-    conda activate desc-env
-
-    # Finally, add DESC folder to your PYTHONPATH in your ~/.bashrc file (or equivalent shell configuration file)
-    # typically this can be done by adding `export PYTHONPATH="$PYTHONPATH:/path/to/DESC"` to the end of the file
-    # where `/path/to/DESC` is the path to the DESC folder on your machine
-    # You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
+    pip install --no-deps --editable .
 
 With CPU+GPU support
 --------------------
@@ -131,17 +147,17 @@ Then, we install DESC:
 .. code-block:: sh
 
     git clone https://github.com/PlasmaControl/DESC.git
-    # then go into requirements.txt and remove the jax lines, as we already have installed them above
+    cd DESC
+    # remove the jax lines from requirements.txt, as we already have installed them above
     sed -i '/jax/d' ./requirements.txt
     # then install as usual
+    ## OPTION A: standard build
     pip install -r requirements.txt
-    # developer build (if you want to be able to run tests)
+    ## OPTION B: developer build (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-    # Finally, add DESC folder to your PYTHONPATH in your ~/.bashrc file (or equivalent shell configuration file)
-    # typically this can be done by adding `export PYTHONPATH="$PYTHONPATH:/path/to/DESC"` to the end of the file
-    # where `/path/to/DESC` is the path to the DESC folder on your machine
-    # You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
+    # to add DESC to your Python path
+    pip install --no-deps --editable .
 
 Stellar Cluster (Princeton)
 +++++++++++++++++++++++
@@ -154,25 +170,24 @@ First, install JAX with GPU support (commands taken from `this tutorial <https:/
 
     module load anaconda3/2022.5
     CONDA_OVERRIDE_CUDA="11.2" conda create --name desc-env jax "jaxlib==0.4.1=cuda112*" -c conda-forge
+    conda activate desc-env
 
 Then, we install DESC:
 
 .. code-block:: sh
 
-    conda activate desc-env
     git clone https://github.com/PlasmaControl/DESC.git
-    # then use sed on requirements.txt to remove the jax line, as we already have installed it above
     cd DESC
+    # remove the jax lines from requirements.txt, as we already have installed them above
     sed -i '/jax/d' ./requirements.txt
     # then install as usual
-    pip install -r ./requirements.txt
-    # developer build (if you want to be able to run tests)
+    ## OPTION A: standard build
+    pip install -r requirements.txt
+    ## OPTION B: developer build (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-    # Finally, add DESC folder to your PYTHONPATH in your ~/.bashrc file (or equivalent shell configuration file)
-    # typically this can be done by adding `export PYTHONPATH="$PYTHONPATH:/path/to/DESC"` to the end of the file
-    # where `/path/to/DESC` is the path to the DESC folder on your machine
-    # You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
+    # to add DESC to your Python path
+    pip install --no-deps --editable .
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -202,7 +217,6 @@ Build and install JAX with GPU support:
     cd ..
     git clone https://github.com/google/jax.git
     cd jax
-
     # last commit of JAX that we got to work with Traverse
     git checkout 6c08702489b33f6c51d5cf0ccadc45e997ab406e
 
@@ -210,17 +224,15 @@ Build and install JAX with GPU support:
     pip install dist/*.whl
     pip install .
 
-    # Finally, add DESC folder to your PYTHONPATH in your ~/.bashrc file (or equivalent shell configuration file)
-    # typically this can be done by adding `export PYTHONPATH="$PYTHONPATH:/path/to/DESC"` to the end of the file
-    # where `/path/to/DESC` is the path to the DESC folder on your machine
-    # You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
-
-Optionally, if you want to be able to use pytest and other development tools:
+Add DESC to your Python path:
 
 .. code-block:: sh
 
-    cd ../DESC
+    cd DESC
+    # optionally, if you want to be able to use pytest and other development tools:
     pip install -r devtools/dev-requirements.txt
+    # to add DESC to your Python path
+    pip install --no-deps --editable .
 
 
 Checking your Installation
@@ -249,11 +261,11 @@ Troubleshooting
 We list here some common problems encountered during installation and their possible solutions.
 If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`_ and we will try our best to help!
 
- - **Problem**: I've installed DESC, but when I check my installation I get an error `ModuleNotFoundError: No module named 'desc'`
-   - **Solution**: This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
-     - Make sure you've added the DESC directory to your PYTHONPATH, by adding the line `export PYTHONPATH="$PYTHONPATH:path/to/DESC"` to your .bashrc (or other shell configuration) file.
+ - **Problem**: I've installed DESC, but when I check my installation I get an error `ModuleNotFoundError: No module named 'desc'`.
+ - **Solution**: This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
+     - Try adding the DESC directory to your PYTHONPATH manually by adding the line `export PYTHONPATH="$PYTHONPATH:path/to/DESC"` (where `/path/to/DESC` is the path to the DESC folder on your machine) to the end of your ~/.bashrc (or other shell configuration) file.
        You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
      - Try ensuring you've activated the conda environment that DESC is in ( `conda activate desc-env` ), then retry using DESC.
- - **Problem**: I've installed DESC, but when I check my installation I get an error `ModuleNotFoundError: No module named 'termcolor'` (or another module which is not `desc```)
-   - Solution: you likely are not running python from the environment in which you've installed DESC.
-     Try ensuring you've activated the conda environment that DESC is in( `conda activate desc-env` ), then retry using DESC
+ - **Problem**: I've installed DESC, but when I check my installation I get an error `ModuleNotFoundError: No module named 'termcolor'` (or another module which is not `desc```).
+ - **Solution**: you likely are not running python from the environment in which you've installed DESC.
+     - Try ensuring you've activated the conda environment that DESC is in( `conda activate desc-env` ), then retry using DESC.

@@ -1,7 +1,9 @@
 """Regression tests for plotting functions, by comparing to saved baseline images."""
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pytest
+from scipy.interpolate import interp1d
 
 from desc.basis import (
     DoubleFourierSeries,
@@ -12,7 +14,7 @@ from desc.basis import (
 from desc.coils import CoilSet, FourierXYZCoil
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.plotting import (
     _find_idx,
     plot_1d,
@@ -283,7 +285,7 @@ def test_fsa_G(DSHAPE_current):
 def test_fsa_F_normalized(DSHAPE_current):
     """Test plotting flux surface average normalized force error on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True)
+    fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol")
     ax.set_ylim([1e-5, 1e-2])
     return fig
 
@@ -762,4 +764,48 @@ def test_plot_coils():
     for string in ["X", "Y", "Z"]:
         assert string in data.keys()
         assert len(data[string]) == len(coil_list)
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
+def test_plot_b_mag():
+    """Test plot of |B| on longer field lines for gyrokinetic simulations."""
+    psi = 0.5
+    npol = 2
+    nzgrid = 128
+    alpha = 0
+    # compute and fit iota profile
+    eq = get("W7-X")
+    data = eq.compute("iota")
+    fi = interp1d(data["rho"], data["iota"])
+
+    # get flux tube coordinate system
+    rho = np.sqrt(psi)
+    iota = fi(rho)
+    zeta = np.linspace(
+        -np.pi * npol / np.abs(iota), np.pi * npol / np.abs(iota), 2 * nzgrid + 1
+    )
+    thetas = alpha * np.ones_like(zeta) + iota * zeta
+
+    rhoa = rho * np.ones_like(zeta)
+    c = np.vstack([rhoa, thetas, zeta]).T
+    coords = eq.compute_theta_coords(c)
+    grid = Grid(coords)
+
+    # compute |B| normalized in the usual flux tube way
+    psib = np.abs(eq.compute("psi")["psi"][-1])
+    Lref = eq.compute("a")["a"]
+    Bref = 2 * psib / Lref**2
+    bmag = eq.compute("|B|", grid=grid)["|B|"] / Bref
+    fig, ax = plt.subplots()
+    ax.plot(bmag)
+    return fig
+
+
+@pytest.mark.unit
+@pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_2d)
+def test_plot_surfaces_HELIOTRON():
+    """Test plot surfaces of equilibrium for correctness of vartheta lines."""
+    fig, ax = plot_surfaces(get("HELIOTRON"))
     return fig

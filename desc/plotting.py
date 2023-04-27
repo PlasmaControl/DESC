@@ -600,17 +600,9 @@ def plot_2d(
     divider = make_axes_locatable(ax)
 
     if norm_F:
-        assert name == "|F|", "Can only normalize |F|."
-        if (
-            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-        ):  # normalize vacuum force by B pressure gradient
-            norm_name = "|grad(|B|^2)|/2mu0"
-            norm_data, _ = _compute(eq, norm_name, grid)
-        else:  # normalize force balance with pressure by gradient of pressure
-            norm_name = "<|grad(p)|>_vol"
-            # we can use the regular grid here because eq.compute will automatically
-            # use the correct quad grid for volume avg
-            norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+        # normalize force by B pressure gradient
+        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     # reshape data to 2D
@@ -1020,17 +1012,9 @@ def plot_fsa(
     values = compress(grid, values)
 
     if norm_F:
-        assert name == "|F|", "Can only normalize |F|."
-        if (
-            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-        ):  # normalize vacuum force by B pressure gradient
-            norm_name = "|grad(|B|^2)|/2mu0"
-            norm_data, _ = _compute(eq, norm_name, grid)
-        else:  # normalize force balance with pressure by gradient of pressure
-            norm_name = "<|grad(p)|>_vol"
-            # we can use the regular grid here because eq.compute will automatically
-            # use the correct quad grid for volume avg
-            norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+        # normalize force by B pressure gradient
+        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot
@@ -1166,17 +1150,9 @@ def plot_section(
 
     data, label = _compute(eq, name, grid, kwargs.pop("component", None))
     if norm_F:
-        assert name == "|F|", "Can only normalize |F|."
-        if (
-            np.max(abs(eq.p_l)) <= np.finfo(eq.p_l.dtype).eps
-        ):  # normalize vacuum force by B pressure gradient
-            norm_name = "|grad(|B|^2)|/2mu0"
-            norm_data, _ = _compute(eq, norm_name, grid)
-        else:  # normalize force balance with pressure by gradient of pressure
-            norm_name = "<|grad(p)|>_vol"
-            # we can use the regular grid here because eq.compute will automatically
-            # use the correct quad grid for volume avg
-            norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+        # normalize force by B pressure gradient
+        norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
+        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
         data = data / np.nanmean(np.abs(norm_data))  # normalize
 
     figw = 5 * cols
@@ -1410,7 +1386,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     }
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
-        # anlge in PEST-like flux coordinates
+        # angle in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
         v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
     rows = np.floor(np.sqrt(nzeta)).astype(int)

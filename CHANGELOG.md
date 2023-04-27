@@ -1,6 +1,43 @@
 Changelog
 =========
 
+v0.8.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.1...v0.8.2)
+
+
+New Features
+- New compute functions for derivatives of contravariant metric tensor elements, eg, for Laplace's equation.
+- New objective `Isodynamic` for penalizing *local* radial drifts, not just the bounce average as in QI
+- `solve_continuation_automatic` now uses adaptive step sizing for perturbations in the event of a solution becoming unnested.
+
+Minor changes
+- Now uses `jnp` for perturbations rather than `np` which should be significantly faster, especially on GPU
+- The `fixed_boundary` flag has been removed from `FixBoundaryR` and `FixBoundaryZ` constraints. It is now detected automatically based on the objective and optimizer.
+- Plotting normalized force error now always uses the gradient of magnetic pressure to normalize, even at finite beta. The old behavior can be recovered by passing `norm_name="<|grad(p)|>_vol"` to the relevant plotting function.
+
+Bug Fixes
+- Fixed minor bug with symmetric grids that caused end points to be double counted
+- Fixed bug causing `NFP` of curves to not be updated correctly when the equilibrium changed
+- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid 
+
+
+v0.8.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.0...v0.8.1)
+
+Minor Changes
+* Include near-axis verification checks in NAE-constrained equilibrium example notebook
+
+Bug Fixes
+* Fix read-the-docs build error
+* Add missing classes to API docs
+* fix error in fix axis util function 
+* Add missing attributes to new classes added in `v0.8.0`
+
+
 v0.8.0
 ------
 

@@ -343,7 +343,7 @@ class Equilibrium(_Configuration, IOAble):
                 ntheta = 2 * M + 1
 
             inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.spsi * na_eq.Bbar
+            inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
             inputs["NFP"] = na_eq.nfp
             inputs["L"] = L
             inputs["M"] = M
@@ -367,7 +367,7 @@ class Equilibrium(_Configuration, IOAble):
         rho, _ = special.js_roots(L, 2, 2)
         # TODO: could make this an OCS grid to improve fitting, need to figure out
         # how concentric grids work with QSC
-        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.nphi, NFP=na_eq.nfp)
+        grid = LinearGrid(rho=rho, theta=ntheta, zeta=na_eq.phi, NFP=na_eq.nfp)
         basis_R = FourierZernikeBasis(
             L=L,
             M=M,
@@ -432,7 +432,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -550,7 +550,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -734,11 +734,7 @@ class Equilibrium(_Configuration, IOAble):
                 copy=True,
                 **perturb_options,
             )
-            from desc.continuation import solve_continuation_automatic
-
-            eqf = solve_continuation_automatic(eq_new, **solve_options)
-            eq_new = eqf[-1]
-            # eq_new.solve(objective=constraint, **solve_options)
+            eq_new.solve(objective=constraint, **solve_options)
 
             # update trust region radius
             cost_new = objective.compute_scalar(objective.x(eq_new))
@@ -863,12 +859,6 @@ class Equilibrium(_Configuration, IOAble):
                 iota=self.iota is not None,
                 kinetic=self.electron_temperature is not None,
             )
-
-        if not objective.built:
-            objective.build(self, verbose=verbose)
-        for constraint in constraints:
-            if not constraint.built:
-                constraint.build(self, verbose=verbose)
 
         eq = perturb(
             self,

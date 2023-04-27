@@ -7,6 +7,7 @@ from termcolor import colored
 
 from desc.io import IOAble
 from desc.objectives import FixCurrent, FixIota, ObjectiveFunction
+from desc.objectives.utils import maybe_add_self_consistency
 from desc.utils import Timer
 
 from ._constraint_wrappers import LinearConstraintProjection, ProximalProjection
@@ -75,7 +76,7 @@ class Optimizer(IOAble):
         x_scale="auto",
         verbose=1,
         maxiter=None,
-        options={},
+        options=None,
     ):
         """Optimize an objective function.
 
@@ -132,19 +133,28 @@ class Optimizer(IOAble):
         """
         # TODO: document options
         timer = Timer()
+        options = {} if options is None else options
         wrapper, method = _parse_method(self.method)
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
             objective, nonlinear_constraint, self.method, options
         )
+
+        if not isinstance(objective, ProximalProjection):
+            # need to include self consistency constraints
+            linear_constraints = maybe_add_self_consistency(linear_constraints)
         if len(linear_constraints):
             objective = LinearConstraintProjection(objective, linear_constraints)
         if not objective.built:
             objective.build(eq, verbose=verbose)
         if not objective.compiled:
             mode = "scalar" if optimizers[method]["scalar"] else "lsq"
-            objective.compile(mode, verbose)
+            try:
+                objective.compile(mode, verbose)
+            except ValueError:
+                objective.build(eq, verbose=verbose)
+                objective.compile(mode, verbose=verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
@@ -333,10 +343,13 @@ def _get_default_tols(
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
-    stoptol["max_nfev"] = options.pop("max_nfev", np.inf)
-    stoptol["max_ngev"] = options.pop("max_ngev", np.inf)
-    stoptol["max_njev"] = options.pop("max_njev", np.inf)
-    stoptol["max_nhev"] = options.pop("max_nhev", np.inf)
+    # if we define an "iteration" as a sucessful step, it can take a few function
+    # evaluations per iteration
+    stoptol["max_nfev"] = options.pop("max_nfev", 5 * stoptol["maxiter"] + 1)
+    # pretty much all the methods only evaluate derivatives once per iteration
+    stoptol["max_ngev"] = options.pop("max_ngev", stoptol["maxiter"] + 1)
+    stoptol["max_njev"] = options.pop("max_njev", stoptol["maxiter"] + 1)
+    stoptol["max_nhev"] = options.pop("max_nhev", stoptol["maxiter"] + 1)
 
     return stoptol
 

@@ -208,7 +208,7 @@ Add DESC to your Python path:
 
 .. code-block:: sh
 
-    cd DESC
+    cd ../DESC
     pip install --no-deps --editable .
 
 

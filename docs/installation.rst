@@ -32,8 +32,6 @@ First download the repository from GitHub.
     cd DESC
 
 Now pick one of the installation options below.
-In either case, you may choose to install the minimal set of requirements, or the developer requirements (which include the former).
-The developer requirements are needed to run tests.
 
 Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
@@ -41,22 +39,18 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
     conda create --name desc-env 'python>=3.8'
     conda activate desc-env
-    ## OPTION A: standard build
-    pip install -r requirements.txt
-    ## OPTION B: developer build
+    pip install --editable .
+    # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
-
-    # to add DESC to your Python path
-    pip install --no-deps --editable .
 
 Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
 .. code-block:: sh
 
     # only need to do one of these conda env create commands, not both
-    ## OPTION A: standard build
+    # option A: without developer requirements
     conda env create --file requirements_conda.yml
-    ## OPTION B: developer build
+    # option B: with developer requirements (if you want to run tests)
     conda env create --file devtools/dev-requirements_conda.yml
 
     # to add DESC to your Python path
@@ -90,8 +84,6 @@ First download the repository from GitHub.
     module load anaconda  # this command may vary depending on cluster
 
 Now pick one of the installation options below.
-In either case, you may choose to install the minimal set of requirements, or the developer requirements (which include the former).
-The developer requirements are needed to run tests.
 
 Option 1: Using pip to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
@@ -99,22 +91,18 @@ Option 1: Using pip to install packages (this will only install DESC + JAX with 
 
     conda create --name desc-env 'python>=3.8'
     conda activate desc-env
-    ## OPTION A: standard build
-    pip install -r requirements.txt
-    ## OPTION B: developer build
+    pip install --editable .
+    # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
-
-    # to add DESC to your Python path
-    pip install --no-deps --editable .
 
 Option 2: Using conda to install packages (this will only install DESC + JAX with CPU capabilities, NOT GPU)
 
 .. code-block:: sh
 
     # only need to do one of these conda env create commands, not both
-    ## OPTION A: standard build
+    # option A: without developer requirements
     conda env create --file requirements_conda.yml
-    ## OPTION B: developer build
+    # option B: with developer requirements (if you want to run tests)
     conda env create --file devtools/dev-requirements_conda.yml
 
     # to add DESC to your Python path
@@ -151,13 +139,9 @@ Then, we install DESC:
     # remove the jax lines from requirements.txt, as we already have installed them above
     sed -i '/jax/d' ./requirements.txt
     # then install as usual
-    ## OPTION A: standard build
-    pip install -r requirements.txt
-    ## OPTION B: developer build (if you want to run tests)
+    pip install --editable .
+    # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
-
-    # to add DESC to your Python path
-    pip install --no-deps --editable .
 
 Stellar Cluster (Princeton)
 +++++++++++++++++++++++
@@ -181,13 +165,9 @@ Then, we install DESC:
     # remove the jax lines from requirements.txt, as we already have installed them above
     sed -i '/jax/d' ./requirements.txt
     # then install as usual
-    ## OPTION A: standard build
-    pip install -r requirements.txt
-    ## OPTION B: developer build (if you want to run tests)
+    pip install --editable .
+    # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
-
-    # to add DESC to your Python path
-    pip install --no-deps --editable .
 
 On Clusters with IBM Power Architecture
 ***************************************
@@ -229,9 +209,6 @@ Add DESC to your Python path:
 .. code-block:: sh
 
     cd DESC
-    # optionally, if you want to be able to use pytest and other development tools:
-    pip install -r devtools/dev-requirements.txt
-    # to add DESC to your Python path
     pip install --no-deps --editable .
 
 

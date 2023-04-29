@@ -1,6 +1,5 @@
 """Classes for magnetic fields."""
 
-import warnings
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -953,57 +952,83 @@ def gamma(n):
 
 def alpha(m, n):
     """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
+    # modified for eqns 31 and 32
+    if n < 0:
+        return 0
     return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2.0 ** (2 * n + m))
 
 
 def alphastar(m, n):
     """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
+    # modified for eqns 31 and 32
+    if n < 0:
+        return 0
     return (2 * n + m) * alpha(m, n)
 
 
 def beta(m, n):
-    """Beta of eq 28."""
+    """Beta of eq 28, modified for eqns 31 and 32."""
+    if n < 0 or n >= m:
+        return 0
     return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
 
 
 def betastar(m, n):
-    """Betastar of eq 28."""
+    """Betastar of eq 28, modified for eqns 31 and 32."""
+    if n < 0 or n >= m:
+        return 0
     return (2 * n - m) * beta(m, n)
 
 
-# TODO: generalize the below 2 terms according to
-# eqns 31,32 so they are valid for all indices of m,k>=0?
+def gamma_n(m, n):
+    """gamma_n of eq 33."""
+    if n <= 0:
+        return 0
+    return (
+        alpha(m, n) / 2 * jnp.sum(jnp.array([1 / i + 1 / (m + i) for i in range(1, n)]))
+    )
+
+
+def gamma_nstar(m, n):
+    """gamma_n star of eq 33."""
+    if n <= 0:
+        return 0
+    return (2 * n + m) * gamma_n(m, n)
+
+
 def CD_m_k(R, m, k):
-    """Eq 25 of Dommaschk paper."""
-    if m == k == 0:  # the initial term, defined in eqn 8
-        return jnp.ones_like(R)
-    else:
-        if m > k:
-            warnings.warn("Sum only valid for m > k!")
+    """Eq 31 of Dommaschk paper."""
     sum1 = 0
     for j in range(k + 1):
-        sum1 += alpha(m, j) * betastar(m, k - j) * R ** (2 * j)
-    sum2 = 0
-    for j in range(k + 1):
-        sum2 += alphastar(m, k - j) * beta(m, j) * R ** (2 * j)
-    return -(R ** (m)) * sum1 + R ** (-m) * sum2
+        sum1 += (
+            -(
+                alpha(m, j)
+                * (
+                    alphastar(m, k - m - j) * jnp.log(R)
+                    + gamma_nstar(m, k - m - j)
+                    - alpha(m, k - m - j)
+                )
+                - gamma_n(m, j) * alphastar(m, k - m - j)
+                + alpha(m, j) * betastar(m, k - j)
+            )
+            * R ** (2 * j + m)
+        ) + beta(m, j) * alphastar(m, k - j) * R ** (2 * j - m)
+    return sum1
 
 
 def CN_m_k(R, m, k):
-    """Eq 26 of Dommaschk paper."""
-    if m == k == 0:  # the initial term, defined in eqn 9
-        return jnp.log(R)
-    else:
-        if m > k:
-            warnings.warn("Sum only valid for m > k!")
-
+    """Eq 32 of Dommaschk paper."""
     sum1 = 0
     for j in range(k + 1):
-        sum1 += alpha(m, j) * beta(m, k - j) * R ** (2 * j)
-    sum2 = 0
-    for j in range(k + 1):
-        sum2 += alpha(m, k - j) * beta(m, j) * R ** (2 * j)
-    return R ** (m) * sum1 - R ** (-m) * sum2
+        sum1 += (
+            (
+                alpha(m, j) * (alpha(m, k - m - j) * jnp.log(R) + gamma_n(m, k - m - j))
+                - gamma_n(m, j) * alpha(m, k - m - j)
+                + alpha(m, j) * beta(m, k - j)
+            )
+            * R ** (2 * j + m)
+        ) - beta(m, j) * alpha(m, k - j) * R ** (2 * j - m)
+    return sum1
 
 
 def D_m_n(R, Z, m, n):
@@ -1120,6 +1145,9 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     assert (
         ms.size == ls.size == a_arr.size == b_arr.size == c_arr.size == d_arr.size
     ), "Passed in arrays must all be of the same size!"
+    assert not np.any(
+        np.logical_or(ms < 0, ls < 0)
+    ), "m and l modenumbers must be >= 0!"
 
     for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
         value += V_m_l(R, phi, Z, m, l, a, b, c, d)

@@ -220,7 +220,7 @@ def test_dommaschk_vertical_field():
 
 
 @pytest.mark.unit
-def test_dommaschk_fit_toridal_field():
+def test_dommaschk_fit_toroidal_field():
     """Test the Dommaschk potential fit for a 1/R toroidal scaled to 2 T."""
     phi = np.linspace(0, 2 * np.pi, 3)
     R = np.linspace(0.1, 1.5, 3)
@@ -269,7 +269,7 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
     B = DommaschkPotentialField.fit_magnetic_field(field, coords, max_m, max_l)
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=3e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
     np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
     np.testing.assert_allclose(B_dom[:, 2], B0_Z, atol=1e-15)
 

@@ -873,9 +873,9 @@ class DommaschkPotentialField(ScalarPotentialField):
         c = jnp.matmul(Ainv, rhs)
 
         res = jnp.matmul(A, c) - rhs
-        print(f"Mean Residual of fit: {jnp.mean(res):1.4e} T")
-        print(f"Max Residual of fit: {jnp.max(res):1.4e} T")
-        print(f"Min Residual of fit: {jnp.min(res):1.4e} T")
+        print(f"Mean Residual of fit: {jnp.mean(jnp.abs(res)):1.4e} T")
+        print(f"Max Residual of fit: {jnp.max(jnp.abs(res)):1.4e} T")
+        print(f"Min Residual of fit: {jnp.min(jnp.abs(res)):1.4e} T")
 
         # recover the params from the c coefficient vector
         B0 = c[0]

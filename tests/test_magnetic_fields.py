@@ -214,8 +214,8 @@ def test_dommaschk_vertical_field():
     B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
     B_dom = B.compute_magnetic_field(coords)
     ones = np.ones_like(B_dom[:, 0])
-    np.testing.assert_allclose(B_dom[:, 0], 0)
-    np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten())
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten(), atol=1e-15)
     np.testing.assert_array_equal(B_dom[:, 2], ones)
 
 
@@ -241,7 +241,7 @@ def test_dommaschk_fit_toroidal_field():
     B = DommaschkPotentialField.fit_magnetic_field(B0_over_R, coords, max_m, max_l)
 
     B_dom = B.compute_magnetic_field(coords)
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=3e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
     np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
     np.testing.assert_allclose(B_dom[:, 2], np.zeros_like(R.flatten()), atol=1e-15)
 

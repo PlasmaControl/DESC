@@ -388,9 +388,9 @@ def _eta(params, transforms, profiles, data, **kwargs):
     transforms={"omni": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["rho", "theta", "eta"],
+    data=["NFP", "rho", "theta", "eta"],
 )
-def _helical_angle(params, transforms, profiles, data, **kwargs):
+def _zeta_B_QI(params, transforms, profiles, data, **kwargs):
     alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
     nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
 
@@ -398,7 +398,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
         jnp.matmul(transforms["omni"].basis.evaluate(nodes), params["omni_lmn"])
         + 2 * data["eta"]
         + jnp.pi
-    )
+    ) / data["NFP"]
     return data
 
 
@@ -415,7 +415,7 @@ def _helical_angle(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["eta"],
 )
-def _B_omni(params, transforms, profiles, data, **kwargs):
+def _B_well(params, transforms, profiles, data, **kwargs):
     # reshaped to size (L_well, M_well)
     well_arr = params["well_l"].reshape((transforms["well"].basis.L + 1, -1))
     # assuming single flux surface, so only take first row (single node)
@@ -423,7 +423,7 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
     B_input = jnp.sort(B_input)  # sort to ensure monotonicity
     eta_input = jnp.linspace(0, jnp.pi / 2, num=B_input.size)
 
-    # |B|_omnigeneous is an even function so B(-eta) = B(+eta)
+    # |B|_omnigeneous is an even function so B(-eta) = B(+eta) = B(|eta|)
     data["|B|_omni"] = interp1d(
         jnp.abs(data["eta"]), eta_input, B_input, method="monotonic-0"
     )
@@ -446,15 +446,27 @@ def _B_omni(params, transforms, profiles, data, **kwargs):
 )
 def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (0, 1))
+    NFP = data["NFP"]
     # iota here is iota + additional term from the helicity rotation away from QI
     iota = (M + N * data["iota"][0]) / (N - M * data["iota"][0])
-    matrix = jnp.array([[N, N * iota - M], [M, M * iota + N]]) / jnp.sqrt(M**2 + N**2)
+    matrix = jnp.array(
+        [
+            [
+                NFP * N * (N - iota * M) / (M + N * NFP),
+                NFP * (iota * N - M) / (M + N * NFP),
+            ],
+            [
+                M * (M + N * NFP) * (N - iota * M) / (NFP * (M**2 + N**2)),
+                (M + N * NFP) * (iota * M + N) / (NFP * (M**2 + N**2)),
+            ],
+        ]
+    )
     alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
 
     # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
     booz = matrix @ jnp.vstack((alpha, data["zeta_B QI"]))
     data["theta_B(alpha,eta)"] = booz[0, :]
-    data["zeta_B(alpha,eta)"] = booz[1, :] / data["NFP"]
+    data["zeta_B(alpha,eta)"] = booz[1, :]
 
     nodes = jnp.vstack((data["rho"], booz)).T
     data["|B|(alpha,eta)"] = jnp.matmul(

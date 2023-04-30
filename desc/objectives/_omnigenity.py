@@ -723,7 +723,6 @@ class Omnigenity(_Objective):
                 )
                 + "{:10.3e} "
             )
-        warnings.warn("Re-build objective after changing the helicity!")
 
 
 class Isodynamicity(_Objective):

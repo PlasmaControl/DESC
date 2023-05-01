@@ -202,6 +202,7 @@ class QuasisymmetryBoozer(_Objective):
         )
         if hasattr(self, "_helicity") and self._helicity != helicity:
             self._built = False
+            warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
             units = "(T)"
@@ -211,7 +212,6 @@ class QuasisymmetryBoozer(_Objective):
                 )
                 + "{:10.3e} "
             )
-        warnings.warn("Re-build objective after changing the helicity!")
 
 
 class QuasisymmetryTwoTerm(_Objective):

@@ -116,6 +116,7 @@ We will show the installation instructions that work for the clusters we've test
 If your cluster is not shown, try the installation for the cluster most resembling your own, or see if your cluster has
 specific JAX GPU installation instructions, as that is the main installation difference between clusters.
 (note, most of these clusters below are `x86_64` architectures, see the `JAX installation docs <https://github.com/google/jax#installation>`_ for more info if you have a different architecture ).
+Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.
 
 Della Cluster (Princeton)
 +++++++++++++++++++++++

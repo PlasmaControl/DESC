@@ -112,14 +112,14 @@ class VMECIO:
         # profiles
         r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:]))
         pres = file.variables["presf"][:]
-        inputs["pressure"] = SplineProfile(r, pres, name="pressure")
+        inputs["pressure"] = SplineProfile(pres, r, name="pressure")
         if profile == "iota":
             iota = file.variables["iotaf"][:]
-            inputs["iota"] = SplineProfile(r, iota, name="iota")
+            inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
             curr = 2 * np.pi / mu_0 * file.variables["buco"][:]
-            inputs["current"] = SplineProfile(r, curr, name="current")
+            inputs["current"] = SplineProfile(curr, r, name="current")
             inputs["iota"] = None
 
         file.close()

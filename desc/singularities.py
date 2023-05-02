@@ -69,48 +69,70 @@ def _chi(rho):
 
 
 @jit
-def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, M):
+def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
     dt = abs(theta - theta0)
     dz = abs(zeta - zeta0)
     dt = jnp.minimum(dt, 2 * np.pi - dt)
     dz = jnp.minimum(dz, 2 * np.pi - dz)
-    return 2 / M * jnp.sqrt((dt / dtheta) ** 2 + (dz / dzeta) ** 2)
+    return 2 / s * jnp.sqrt((dt / dtheta) ** 2 + (dz / dzeta) ** 2)
 
 
-def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, M, kernel):
+def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
 
     src_theta = src_grid.nodes[:, 1]
     src_zeta = src_grid.nodes[:, 2]
     src_dtheta = src_grid.spacing[:, 1]
-    src_dzeta = src_grid.spacing[:, 2]
-    eval_theta = eval_grid.nodes[:, 1]
-    eval_zeta = eval_grid.nodes[:, 2]
-    rho = _rho(
-        src_theta,
-        src_zeta,
-        eval_theta[:, None],
-        eval_zeta[:, None],
-        src_dtheta,
-        src_dzeta,
-        M,
-    )
-    eta = _chi(rho)
-    w = src_grid.weights * src_data["|e_theta x e_zeta|"]
-    f = kernel(eval_data, src_data)
-    if f.ndim == 2:
-        f = f[:, :, None]
-    A = (1 - eta[:, :, None]) * f
-    return jnp.sum(A * w[None, :, None], axis=1)
-
-
-def _singular_part_loop_eval(eval_data, eval_grid, src_data, src_grid, M, kernel, q, R):
-    src_dtheta = src_grid.spacing[:, 1]
-    src_dzeta = src_grid.spacing[:, 2]
+    src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
-    eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
+    w = src_grid.weights * src_data["|e_theta x e_zeta|"] / src_grid.NFP
+    keys = kernel.keys
 
-    neval = eval_grid.num_nodes
+    def body2(j, f_data):
+        f, src_data = f_data
+        src_data["zeta"] = (src_zeta + j * 2 * np.pi / src_grid.NFP) % (2 * np.pi)
+
+        # nest this def to avoid having to pass the modified src_data around the loop
+        # easier to just close over it and let JAX figure it out
+        def body1(i, fj):
+            k = kernel(
+                {key: val[i] for key, val in eval_data.items() if key in keys},
+                src_data,
+            )
+            rho = _rho(
+                src_theta,
+                src_data["zeta"],
+                eval_theta[i],
+                eval_zeta[i],
+                src_dtheta,
+                src_dzeta,
+                s,
+            )
+            if k.ndim == 2:  # so that broadcasting works correctly for biot savart
+                k = k[:, :, None]
+            eta = _chi(rho)
+            A = (1 - eta)[None, :, None] * k
+            f_temp = jnp.sum(A * w[None, :, None], axis=1)
+            return fj.at[i].set(f_temp.squeeze())
+
+        fj = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
+        fj = fori_loop(0, eval_grid.num_nodes, body1, fj)
+        f += fj
+        return f, src_data
+
+    f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
+    f, _ = fori_loop(0, src_grid.NFP, body2, (f, src_data))
+
+    return f
+
+
+def _singular_part(
+    eval_data, eval_grid, src_data, src_grid, s, q, kernel, interp_matrix
+):
+    src_dtheta = src_grid.spacing[:, 1]
+    src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
+    eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
+    eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
 
     r, w, dr, dw = _get_quadrature_nodes(q)
 
@@ -118,76 +140,57 @@ def _singular_part_loop_eval(eval_data, eval_grid, src_data, src_grid, M, kernel
     h_z = jnp.mean(src_dzeta)
 
     eta = _chi(r)
-    v = eta * M**2 * h_t * h_z / 4 * abs(r) * dr * dw
+    v = eta * s**2 * h_t * h_z / 4 * abs(r) * dr * dw
 
-    keys = [
-        "R",
-        "R_t",
-        "R_z",
-        "Z",
-        "Z_t",
-        "Z_z",
-        "e^rho",
-        "|e_theta x e_zeta|",
-        "zeta",
-        "theta",
-    ]
-    keys_interp = ["R", "R_t", "R_z", "Z", "Z_t", "Z_z"]
-    fsrc = jnp.array([src_data[key] for key in keys_interp]).T
+    keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
+    fsrc = [src_data[key] for key in keys]
 
     def body(i, f):
-        theta_q = eval_theta[i] + M / 2 * h_t * r * jnp.sin(w)
-        zeta_q = eval_zeta[i] + M / 2 * h_z * r * jnp.cos(w)
+        theta_q = eval_theta[i] + s / 2 * h_t * r * jnp.sin(w)
+        zeta_q = eval_zeta[i] + s / 2 * h_z * r * jnp.cos(w)
 
-        fq = R[i] @ fsrc
-
-        src_data_polar = {key: val for key, val in zip(keys_interp, fq.T)}
+        src_data_polar = {key: interp_matrix[i] @ val for key, val in zip(keys, fsrc)}
         src_data_polar["zeta"] = zeta_q
         src_data_polar["theta"] = theta_q
-        x_t = jnp.array(
-            [
-                src_data_polar["R_t"],
-                jnp.zeros_like(src_data_polar["R"]),
-                src_data_polar["Z_t"],
-            ]
-        ).T
-        x_z = jnp.array(
-            [src_data_polar["R_z"], src_data_polar["R"], src_data_polar["Z_z"]]
-        ).T
-
-        src_data_polar["e^rho"] = jnp.cross(x_t, x_z, axis=-1)
-        src_data_polar["|e_theta x e_zeta|"] = jnp.linalg.norm(
-            (src_data_polar["e^rho"]), axis=-1
-        )
 
         k = kernel(
             {key: val[i] for key, val in eval_data.items() if key in keys},
             src_data_polar,
         )
-        if k.ndim == 2:
+        if k.ndim == 2:  # so that broadcasting works correctly for biot savart
             k = k[:, :, None]
         fi = jnp.sum(
             k * (v * src_data_polar["|e_theta x e_zeta|"])[None, :, None], axis=1
         )
         return f.at[i].set(fi.squeeze())
 
-    f = fori_loop(0, neval, body, jnp.zeros((neval, kernel.ndim)))
+    f = fori_loop(
+        0, eval_grid.num_nodes, body, jnp.zeros((eval_grid.num_nodes, kernel.ndim))
+    )
     return f
 
 
-def singular_integral(eval_data, eval_grid, src_data, src_grid, M, kernel, q, R):
+def singular_integral(
+    eval_data, eval_grid, src_data, src_grid, s, q, kernel, interp_matrix
+):
     """Evaluate a singular integral on a surface."""
+    # sanitize inputs, we need everything as jax arrays so they can be indexed
+    # properly in the loops
+    src_data = {key: jnp.asarray(val) for key, val in src_data.items()}
+    eval_data = {key: jnp.asarray(val) for key, val in eval_data.items()}
+
     if isinstance(kernel, str):
         kernel = kernels[kernel]
-    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, M, kernel)
-    out2 = _singular_part_loop_eval(
-        eval_data, eval_grid, src_data, src_grid, M, kernel, q, R
+
+    out2 = _singular_part(
+        eval_data, eval_grid, src_data, src_grid, s, q, kernel, interp_matrix
     )
+    out1 = _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel)
     return out1 + out2
 
 
-def kernel_nr_over_r3(eval_data, src_data):
-    """n*r/|r|^2."""
+def _kernel_nr_over_r3(eval_data, src_data):
+    # n * r / |r|^3
     src_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
     )
@@ -201,12 +204,12 @@ def kernel_nr_over_r3(eval_data, src_data):
     return jnp.where(r < np.finfo(r.dtype).eps, 0, jnp.sum(n * dx, axis=-1) / r**3)
 
 
-kernel_nr_over_r3.ndim = 1
-kernel_nr_over_r3.keys = ["R", "zeta", "Z", "e^rho"]
+_kernel_nr_over_r3.ndim = 1
+_kernel_nr_over_r3.keys = ["R", "zeta", "Z", "e^rho"]
 
 
-def kernel_1_over_r(eval_data, src_data):
-    """1/|r|."""
+def _kernel_1_over_r(eval_data, src_data):
+    # 1/ |r|
     src_x = jnp.atleast_2d(
         rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
     )
@@ -218,8 +221,31 @@ def kernel_1_over_r(eval_data, src_data):
     return jnp.where(r < np.finfo(r.dtype).eps, 0, 1 / r)
 
 
-kernel_1_over_r.ndim = 1
-kernel_1_over_r.keys = ["R", "zeta", "Z"]
+_kernel_1_over_r.ndim = 1
+_kernel_1_over_r.keys = ["R", "zeta", "Z"]
 
 
-kernels = {"1_over_r": kernel_1_over_r, "nr_over_r3": kernel_nr_over_r3}
+def _kernel_biot_savart(eval_data, src_data):
+    # K x r / |r|^3
+    src_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+    )
+    dx = eval_x[:, None] - src_x[None]
+    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
+    num = jnp.cross(K, dx, axis=-1)
+    r = jnp.linalg.norm(dx, axis=-1)[:, :, None]
+    return 1e-7 * jnp.where(r < np.finfo(r.dtype).eps, 0, num / (r * r * r))
+
+
+_kernel_biot_savart.ndim = 3
+_kernel_biot_savart.keys = ["R", "zeta", "Z", "K_vc"]
+
+
+kernels = {
+    "1_over_r": _kernel_1_over_r,
+    "nr_over_r3": _kernel_nr_over_r3,
+    "biot_savart": _kernel_biot_savart,
+}

@@ -121,7 +121,7 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
         return f, src_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-    f, _ = fori_loop(0, src_grid.NFP, body2, (f, src_data))
+    f, _ = fori_loop(0, int(src_grid.NFP), body2, (f, src_data))
 
     return f
 

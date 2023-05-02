@@ -432,7 +432,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -550,7 +550,7 @@ class Equilibrium(_Configuration, IOAble):
         gtol=None,
         maxiter=50,
         x_scale="auto",
-        options={},
+        options=None,
         verbose=1,
         copy=False,
     ):
@@ -859,12 +859,6 @@ class Equilibrium(_Configuration, IOAble):
                 iota=self.iota is not None,
                 kinetic=self.electron_temperature is not None,
             )
-
-        if not objective.built:
-            objective.build(self, verbose=verbose)
-        for constraint in constraints:
-            if not constraint.built:
-                constraint.build(self, verbose=verbose)
 
         eq = perturb(
             self,

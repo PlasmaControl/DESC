@@ -2,7 +2,7 @@
 import numpy as np
 import scipy
 
-from desc.backend import fori_loop, jit, jnp
+from desc.backend import fori_loop, jit, jnp, put
 from desc.basis import DoubleFourierSeries
 from desc.geometry.utils import rpz2xyz, rpz2xyz_vec
 
@@ -26,8 +26,8 @@ def _get_quadrature_nodes(q):
     return r, w, dr, dw
 
 
-def _get_fourier_R(eval_grid, src_grid, q, M):
-
+def get_fourier_interp_matrix(eval_grid, src_grid, s, q):
+    """Fourier interpolation matrix required for high order singular integration."""
     r, w, dr, dw = _get_quadrature_nodes(q)
 
     src_dtheta = src_grid.spacing[:, 1]
@@ -38,22 +38,29 @@ def _get_fourier_R(eval_grid, src_grid, q, M):
     h_t = jnp.mean(src_dtheta)
     h_z = jnp.mean(src_dzeta)
 
-    theta_q = eval_theta[:, None] + M / 2 * h_t * r * jnp.sin(w)
-    zeta_q = eval_zeta[:, None] + M / 2 * h_z * r * jnp.cos(w)
+    theta_q = eval_theta[:, None] + s / 2 * h_t * r * jnp.sin(w)
+    zeta_q = eval_zeta[:, None] + s / 2 * h_z * r * jnp.cos(w)
+
     basis = DoubleFourierSeries(M=src_grid.M, N=src_grid.N, NFP=src_grid.NFP)
     A = basis.evaluate(src_grid.nodes)
-    B = basis.evaluate(
-        jnp.array(
+    Ainv = jnp.linalg.pinv(A, rcond=None)
+
+    B = jnp.zeros((*theta_q.shape, basis.num_modes))
+
+    def body(i, B):
+        x = jnp.array(
             [
-                jnp.zeros_like(theta_q).flatten(),
-                theta_q.flatten(),
-                zeta_q.flatten(),
+                jnp.zeros_like(theta_q[i]),
+                theta_q[i],
+                zeta_q[i],
             ]
-        ).T,
-        unique=True,
-    )
-    B = B.reshape((*theta_q.shape, basis.num_modes))
-    return B @ jnp.linalg.pinv(A, rcond=None)
+        ).T
+        Bi = basis.evaluate(jnp.atleast_2d(x))
+        B = put(B, i, Bi)
+        return B
+
+    B = fori_loop(0, B.shape[0], body, B)
+    return B @ Ainv
 
 
 @jit

@@ -369,36 +369,36 @@ def _f_T(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["NFP", "zeta"],
+    data=["theta"],
 )
 def _eta(params, transforms, profiles, data, **kwargs):
-    # zeta is used as a placeholder for eta (angle along field lines)
-    data["eta"] = (data["zeta"] * data["NFP"] - jnp.pi) / 2
+    # theta is used as a placeholder for eta (angle along field lines)
+    data["eta"] = (data["theta"] - jnp.pi) / 2
     return data
 
 
 @register_compute_fun(
-    name="zeta_B QI",
-    label="\\tilde{\\zeta}_{B}",
+    name="h",
+    label="h = \\theta + (N / M) \\zeta",
     units="rad",
     units_long="radians",
-    description="Boozer toroidal angle in the Quasi-Isodynamic reference frame",
+    description="Omnigenity symmetry angle",
     dim=1,
     params=["omni_lmn"],
     transforms={"omni": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["NFP", "rho", "theta", "eta"],
+    data=["rho", "zeta", "eta"],
 )
-def _zeta_B_QI(params, transforms, profiles, data, **kwargs):
-    alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
-    nodes = jnp.array([data["rho"], alpha, data["eta"]]).T
+def _omni_angle(params, transforms, profiles, data, **kwargs):
+    alpha = data["zeta"]  # zeta is used as a placeholder for alpha (field line label)
+    nodes = jnp.array([data["rho"], data["eta"], alpha]).T
 
-    data["zeta_B QI"] = (
-        jnp.matmul(transforms["omni"].basis.evaluate(nodes), params["omni_lmn"])
+    data["h"] = (
+        transforms["omni"].basis.evaluate(nodes) @ params["omni_lmn"]
         + 2 * data["eta"]
         + jnp.pi
-    ) / data["NFP"]
+    )
     return data
 
 
@@ -431,45 +431,35 @@ def _B_well(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="|B|(alpha,eta)",
-    label="|\\mathbf{B}|(\\alpha,\\eta)",
+    name="|B|(eta,alpha)",
+    label="|\\mathbf{B}|(\\eta,\\alpha)",
     units="T",
     units_long="Tesla",
-    description="Magnitude of magnetic field at (alpha,eta) coordinates",
+    description="Magnitude of magnetic field at (eta,alpha) coordinates",
     dim=1,
     params=[],
     transforms={"B": [[0, 0, 0]]},
     profiles=[],
     coordinates="rtz",
-    data=["NFP", "theta", "zeta_B QI", "iota", "|B|_mn"],
+    data=["zeta", "h", "iota", "|B|_mn"],
     helicity="helicity",
 )
 def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (0, 1))
-    NFP = data["NFP"]
-    # iota here is iota + additional term from the helicity rotation away from QI
-    iota = (M + N * data["iota"][0]) / (N - M * data["iota"][0])
-    matrix = jnp.array(
-        [
-            [
-                NFP * N * (N - iota * M) / (M + N * NFP),
-                NFP * (iota * N - M) / (M + N * NFP),
-            ],
-            [
-                M * (M + N * NFP) * (N - iota * M) / (NFP * (M**2 + N**2)),
-                (M + N * NFP) * (iota * M + N) / (NFP * (M**2 + N**2)),
-            ],
-        ]
-    )
-    alpha = data["theta"]  # theta is used as a placeholder for alpha (field line label)
+    iota = data["iota"][0]  # FIXME: assumes a single flux surface
+    if M == 0:
+        matrix = jnp.array([[N - M * iota, iota / N], [0, 1 / N]])
+    else:
+        matrix = jnp.array([[N, M * iota / (N - M * iota)], [1, M / (N - M * iota)]])
+    alpha = data["zeta"]  # zeta is used as a placeholder for alpha (field line label)
 
-    # solve for (theta_B,zeta_B) cooresponding to (alpha,eta)
-    booz = matrix @ jnp.vstack((alpha, data["zeta_B QI"]))
-    data["theta_B(alpha,eta)"] = booz[0, :]
-    data["zeta_B(alpha,eta)"] = booz[1, :]
+    # solve for (theta_B,zeta_B) cooresponding to (eta,alpha)
+    booz = matrix @ jnp.vstack((alpha, data["h"]))
+    data["theta_B(eta,alpha)"] = booz[0, :]
+    data["zeta_B(eta,alpha)"] = booz[1, :]
 
     nodes = jnp.vstack((data["rho"], booz)).T
-    data["|B|(alpha,eta)"] = jnp.matmul(
+    data["|B|(eta,alpha)"] = jnp.matmul(
         transforms["B"].basis.evaluate(nodes), data["|B|_mn"]
     )
     return data
@@ -486,10 +476,10 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["|B|_omni", "|B|(alpha,eta)"],
+    data=["|B|_omni", "|B|(eta,alpha)"],
 )
 def _omnigenity(params, transforms, profiles, data, **kwargs):
-    data["omnigenity"] = data["|B|(alpha,eta)"] - data["|B|_omni"]
+    data["omnigenity"] = data["|B|(eta,alpha)"] - data["|B|_omni"]
     return data
 
 

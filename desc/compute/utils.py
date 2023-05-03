@@ -6,8 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import fori_loop, jnp, put
-from jax import vmap
+from desc.backend import fori_loop, jnp, put, vmap
 from desc.grid import ConcentricGrid
 
 from .data_index import data_index
@@ -704,18 +703,10 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
 
     # integral of a vector valued function is a vector of integrals
     vector_of_integrands = jnp.atleast_2d(ds * q.T)
-    vector_of_integrals = jnp.squeeze(
-        vmap(integrate_component, in_axes=0, out_axes=1)(vector_of_integrands)
+    vector_of_integrals = jnp.atleast_1d(
+        jnp.squeeze(vmap(integrate_component, out_axes=1)(vector_of_integrands))
     )
     return expand(grid, vector_of_integrals, surface_label)
-
-
-# alternative with fori_loop (will remove before merge to master)
-# def put_component(i, v):
-#     return put(v, i, integrate_component(vector_of_integrands[i]))
-# vector_of_integrals = jnp.squeeze(
-#     fori_loop(0, q.ndim, put_component, jnp.empty((q.ndim, unique_idx.size)))
-# ).T
 
 
 def surface_averages(
@@ -740,7 +731,7 @@ def surface_averages(
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
         Volume enclosed by the surfaces, derivative wrt radial coordinate.
-        This can be supplied to avoid redundant computations.
+        This can optionally be supplied to avoid redundant computations.
 
     Returns
     -------
@@ -759,7 +750,9 @@ def surface_averages(
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
 
-    averages = surface_integrals(grid, sqrt_g * q, surface_label) / denominator
+    averages = (
+        surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
+    ).T
     return averages
 
 

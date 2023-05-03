@@ -246,11 +246,11 @@ Troubleshooting
 We list here some common problems encountered during installation and their possible solutions.
 If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`_ and we will try our best to help!
 
- - **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
+ - **Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'desc'``.
  - **Solution**: This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
-     - Try adding the DESC directory to your PYTHONPATH manually by adding the line :code:`export PYTHONPATH="$PYTHONPATH:path/to/DESC"` (where :code:`/path/to/DESC` is the path to the DESC folder on your machine) to the end of your ~/.bashrc (or other shell configuration) file.
-       You will also need to run :code:`source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
-     - Try ensuring you've activated the conda environment that DESC is in ( :code:`conda activate desc-env` ), then retry using DESC.
- - **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'termcolor'` (or another module which is not :code:`desc```).
+     - Try adding the DESC directory to your PYTHONPATH manually by adding the line ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` (where ``/path/to/DESC`` is the path to the DESC folder on your machine) to the end of your ``~/.bashrc`` (or other shell configuration) file.
+       You will also need to run ``source ~/.bashrc`` after making the change to ensure that your path updates properly for your current terminal session.
+     - Try ensuring you've activated the conda environment that DESC is in ( ``conda activate desc-env`` ), then retry using DESC.
+ - **Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
  - **Solution**: you likely are not running python from the environment in which you've installed DESC.
-     - Try ensuring you've activated the conda environment that DESC is in( :code:`conda activate desc-env` ), then retry using DESC.
+     - Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.

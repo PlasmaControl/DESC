@@ -9,7 +9,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import ChebyshevPolynomial, FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import ChebyshevDoubleFourierBasis, ChebyshevPolynomial, FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
@@ -442,13 +442,12 @@ class _Configuration(IOAble, ABC):
         self._M_omni = int(kwargs.pop("M_omni", 1))
         self._N_omni = int(kwargs.pop("N_omni", 1))
         self._well_basis = ChebyshevPolynomial(L=self.L_well)
-        self._omni_basis = FourierZernikeBasis(
+        self._omni_basis = ChebyshevDoubleFourierBasis(
             L=self.L_omni,
             M=self.M_omni,
             N=self.N_omni,
-            NFP=1,
-            sym="cos(z)",
-            spectral_indexing=self.spectral_indexing,
+            NFP=self.NFP,
+            sym="cos(t)",
         )
         self._well_l = np.array(
             kwargs.pop(

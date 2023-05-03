@@ -3115,18 +3115,18 @@ class StraightBmaxContour(_Objective):
         self._dim_f = int(basis.num_modes / (basis.N + 1))
 
         self._A = np.zeros((self._dim_f, basis.num_modes))
-        n0_modes = basis.modes[np.nonzero(basis.modes[:, 2] == 0)[0]]
-        for i, (l, m, n) in enumerate(n0_modes):
+        m0_modes = basis.modes[np.nonzero(basis.modes[:, 1] == 0)[0]]
+        for i, (l, m, n) in enumerate(m0_modes):
             idx_0 = np.nonzero((basis.modes == [l, m, n]).all(axis=1))[0]
-            idx_n = np.nonzero(
+            idx_m = np.nonzero(
                 np.logical_and(
-                    (basis.modes[:, :2] == [l, m]).all(axis=1),
-                    np.logical_and((basis.modes[:, 2] % 2 == 0), basis.modes[:, 2] > 0),
+                    (basis.modes[:, (0, 2)] == [l, n]).all(axis=1),
+                    np.logical_and((basis.modes[:, 1] % 2 == 0), basis.modes[:, 1] > 0),
                 )
             )[0]
-            nn = basis.modes[idx_n, 2]
+            mm = basis.modes[idx_m, 2]
             self._A[i, idx_0] = 1
-            self._A[i, idx_n] = (nn % 2 - 1) * (nn % 4 - 1)
+            self._A[i, idx_m] = (mm % 2 - 1) * (mm % 4 - 1)
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

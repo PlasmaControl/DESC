@@ -7,6 +7,7 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import fori_loop, jnp, put
+from jax import vmap
 from desc.grid import ConcentricGrid
 
 from .data_index import data_index
@@ -689,28 +690,32 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
     # them as different surfaces. We solve this issue by modulating
     # 'nodes', so that the duplicate surface has nodes with the same
     # surface label and is treated as one, like in the previous paragraph.
-    weights = jnp.atleast_2d(ds * q.T)
 
-    def integrate_component(i, v):
-        # integral of a vector valued function is a vector of integrals
-        return put(v, i, _integrals(nodes_modulo, bins, weights[i], has_endpoint_dupe))
-
-    vector_of_integrals = jnp.squeeze(
-        fori_loop(0, q.ndim, integrate_component, jnp.empty((q.ndim, unique_idx.size)))
-    ).T
-    return expand(grid, vector_of_integrals, surface_label)
-
-
-def _integrals(nodes_modulo, bins, weights, has_endpoint_dupe):
-    integrals = jnp.histogram(nodes_modulo, bins=bins, weights=weights)[0]
-    if has_endpoint_dupe:
+    def integrate_component(integrands):
+        integrals = jnp.histogram(nodes_modulo, bins=bins, weights=integrands)[0]
         # By modulating nodes, we 'moved' all the area from
         # surface_label=max_surface_val to the surface_label=0 surface.
         # With the correct value of the integral on this surface stored
         # in integrals[0], we copy it to the duplicate surface at integrals[-1].
-        assert integrals[-1] == 0
-        integrals = put(integrals, -1, integrals[0])
-    return integrals
+        if has_endpoint_dupe:
+            # assert integrals[-1] == 0
+            integrals = put(integrals, -1, integrals[0])
+        return integrals
+
+    # integral of a vector valued function is a vector of integrals
+    vector_of_integrands = jnp.atleast_2d(ds * q.T)
+    vector_of_integrals = jnp.squeeze(
+        vmap(integrate_component, in_axes=0, out_axes=1)(vector_of_integrands)
+    )
+    return expand(grid, vector_of_integrals, surface_label)
+
+
+# alternative with fori_loop (will remove before merge to master)
+# def put_component(i, v):
+#     return put(v, i, integrate_component(vector_of_integrands[i]))
+# vector_of_integrals = jnp.squeeze(
+#     fori_loop(0, q.ndim, put_component, jnp.empty((q.ndim, unique_idx.size)))
+# ).T
 
 
 def surface_averages(

@@ -116,11 +116,12 @@ We will show the installation instructions that work for the clusters we've test
 If your cluster is not shown, try the installation for the cluster most resembling your own, or see if your cluster has
 specific JAX GPU installation instructions, as that is the main installation difference between clusters.
 (note, most of these clusters below are `x86_64` architectures, see the `JAX installation docs <https://github.com/google/jax#installation>`_ for more info if you have a different architecture ).
-Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.
+
+**Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
 
 Della Cluster (Princeton)
 +++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Della cluster at Princeton as of 10-13-2022.
+These instructions were tested and confirmed to work on the Della cluster at Princeton as of 5-3-2023.
 
 First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`_ ):
 
@@ -144,7 +145,7 @@ Then, we install DESC:
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-**Note: To run DESC on GPU on Della, it was found to be necessary to load the following modules before running DESC on a node which you've requested a GPU:**
+**Note: To run DESC on GPU on Della, it was found to be necessary to load the following modules before running DESC on a node on which you've requested a GPU:**
 
 .. code-block:: sh
 
@@ -153,7 +154,7 @@ Then, we install DESC:
 Stellar Cluster (Princeton)
 +++++++++++++++++++++++
 Using pip install and including GPU capabilities.
-These instructions were tested and confirmed to work on the Stellar cluster at Princeton as of 1-12-2023.
+These instructions were tested and confirmed to work on the Stellar cluster at Princeton as of 5-2-2023.
 
 First, install JAX with GPU support (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`_ ):
 
@@ -245,11 +246,11 @@ Troubleshooting
 We list here some common problems encountered during installation and their possible solutions.
 If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`_ and we will try our best to help!
 
- - **Problem**: I've installed DESC, but when I check my installation I get an error `ModuleNotFoundError: No module named 'desc'`.
+ - **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
  - **Solution**: This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
-     - Try adding the DESC directory to your PYTHONPATH manually by adding the line `export PYTHONPATH="$PYTHONPATH:path/to/DESC"` (where `/path/to/DESC` is the path to the DESC folder on your machine) to the end of your ~/.bashrc (or other shell configuration) file.
-       You will also need to run `source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
-     - Try ensuring you've activated the conda environment that DESC is in ( `conda activate desc-env` ), then retry using DESC.
- - **Problem**: I've installed DESC, but when I check my installation I get an error `ModuleNotFoundError: No module named 'termcolor'` (or another module which is not `desc```).
+     - Try adding the DESC directory to your PYTHONPATH manually by adding the line :code:`export PYTHONPATH="$PYTHONPATH:path/to/DESC"` (where :code:`/path/to/DESC` is the path to the DESC folder on your machine) to the end of your ~/.bashrc (or other shell configuration) file.
+       You will also need to run :code:`source ~/.bashrc` after making the change to ensure that your path updates properly for your current terminal session.
+     - Try ensuring you've activated the conda environment that DESC is in ( :code:`conda activate desc-env` ), then retry using DESC.
+ - **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'termcolor'` (or another module which is not :code:`desc```).
  - **Solution**: you likely are not running python from the environment in which you've installed DESC.
-     - Try ensuring you've activated the conda environment that DESC is in( `conda activate desc-env` ), then retry using DESC.
+     - Try ensuring you've activated the conda environment that DESC is in( :code:`conda activate desc-env` ), then retry using DESC.

@@ -2,7 +2,7 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
 from .utils import (
@@ -30,10 +30,10 @@ from .utils import (
     data=["psi_r", "sqrt(g)"] + ["psi_rr", "sqrt(g)_r"],
 )
 def _B0(params, transforms, profiles, data, **kwargs):
+    data["B0"] = data["psi_r"] / data["sqrt(g)"]
     if transforms["grid"].axis.size:
-        data["B0"] = data["psi_rr"] / data["sqrt(g)_r"]
-    else:
-        data["B0"] = data["psi_r"] / data["sqrt(g)"]
+        limit = (data["psi_rr"] / data["sqrt(g)_r"])[transforms["grid"].axis]
+        data["B0"] = put(data["B0"], transforms["grid"].axis, limit)
     return data
 
 

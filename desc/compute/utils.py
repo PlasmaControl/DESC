@@ -563,7 +563,7 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
         Specifies the axis to cumulate. Default is -1 (last axis).
     initial : scalar, optional
         If given, insert this value at the beginning of the returned result.
-        Typically this value should be 0. Default is None, which means no
+        Typically, this value should be 0. Default is None, which means no
         value at ``x[0]`` is returned and `res` has one element less than `y`
         along the axis of integration.
 
@@ -649,14 +649,14 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
                 "yellow",
             )
         )
-
     q = jnp.atleast_1d(q)
     nodes, unique_idx, _, ds, max_surface_val, has_endpoint_dupe = _get_grid_surface(
         grid, surface_label
     )
-
     if max_surface:
-        # assumes surface label is zeta, does a line integral
+        # Todo: generalize and make line integral function
+        assert q.ndim == 1 and surface_label == "zeta"
+        # does a line integral
         max_rho = grid.nodes[grid.unique_rho_idx[-1], 0]
         idx = np.nonzero(grid.nodes[:, 0] == max_rho)[0]
         q = q[idx]
@@ -669,7 +669,6 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
     # Each is assigned a weight of their contribution to the integral.
     # The elements of each bin are summed, performing the integration.
     bins = jnp.append(nodes[unique_idx], max_surface_val)
-
     # to group duplicate nodes together
     nodes_modulo = nodes % max_surface_val if has_endpoint_dupe else nodes
     # Longer explanation:
@@ -690,8 +689,20 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
     # them as different surfaces. We solve this issue by modulating
     # 'nodes', so that the duplicate surface has nodes with the same
     # surface label and is treated as one, like in the previous paragraph.
+    weights = jnp.atleast_2d(ds * q.T)
 
-    integrals = jnp.histogram(nodes_modulo, bins=bins, weights=ds * q)[0]
+    def integrate_component(i, v):
+        # integral of a vector valued function is a vector of integrals
+        return put(v, i, _integrals(nodes_modulo, bins, weights[i], has_endpoint_dupe))
+
+    vector_of_integrals = jnp.squeeze(
+        fori_loop(0, q.ndim, integrate_component, jnp.empty((q.ndim, unique_idx.size)))
+    ).T
+    return expand(grid, vector_of_integrals, surface_label)
+
+
+def _integrals(nodes_modulo, bins, weights, has_endpoint_dupe):
+    integrals = jnp.histogram(nodes_modulo, bins=bins, weights=weights)[0]
     if has_endpoint_dupe:
         # By modulating nodes, we 'moved' all the area from
         # surface_label=max_surface_val to the surface_label=0 surface.
@@ -699,7 +710,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
         # in integrals[0], we copy it to the duplicate surface at integrals[-1].
         assert integrals[-1] == 0
         integrals = put(integrals, -1, integrals[0])
-    return expand(grid, integrals, surface_label)
+    return integrals
 
 
 def surface_averages(

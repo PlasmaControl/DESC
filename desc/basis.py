@@ -1352,49 +1352,6 @@ def polyval_vec(p, x, prec=None):
     return y[outidx][:, xidx].astype(float)
 
 
-def chebyshev(r, l, dr=0):
-    """Shifted Chebyshev polynomial.
-
-    Parameters
-    ----------
-    rho : ndarray, shape(N,)
-        radial coordinates to evaluate basis
-    l : ndarray of int, shape(K,)
-        radial mode number(s)
-    dr : int
-        order of derivative (Default = 0)
-
-    Returns
-    -------
-    y : ndarray, shape(N,K)
-        basis function(s) evaluated at specified points
-
-    """
-    if dr != 0:
-        raise NotImplementedError(
-            "Derivatives of Chebyshev polynomials not implemented."
-        )
-
-    L = int(max(l))
-    x = 2 * r - 1  # shift: x = 2 * rho - 1
-
-    T0 = np.ones_like(x)  # T_0 = 1
-    T1 = x  # T_1 = x
-
-    y = np.zeros((r.size, l.size))
-    y[:, l == 0] = T0
-    y[:, l == 1] = T1
-
-    # recurrance relation: T_{n} = 2 * x * T_{n-1} - T_{n-2}
-    for j in range(2, L + 1):
-        T2 = 2 * x * T1 - T0
-        y[:, l == j] = T2
-        T0 = T1
-        T1 = T2
-
-    return y
-
-
 def zernike_radial_coeffs(l, m, exact=True):
     """Polynomial coefficients for radial part of zernike basis.
 
@@ -1594,6 +1551,30 @@ def powers(rho, l, dr=0):
     coeffs = power_coeffs(l)
     coeffs = polyder_vec(np.fliplr(coeffs), dr)
     return polyval_vec(coeffs, rho).T
+
+
+@jit
+def chebyshev(r, l, dr=0):
+    """Shifted Chebyshev polynomial.
+
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    x = 2 * r - 1  # shift
+    x, l, dr = map(jnp.asarray, (x, l, dr))
+    return jnp.cos(l * jnp.arccos(x))
 
 
 @jit

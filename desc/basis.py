@@ -16,6 +16,7 @@ __all__ = [
     "FourierSeries",
     "DoubleFourierSeries",
     "ZernikePolynomial",
+    "ChebyshevDoubleFourierBasis",
     "FourierZernikeBasis",
 ]
 
@@ -53,7 +54,7 @@ class Basis(IOAble, ABC):
             "cos",
             "cosine",
             "even",
-            "cos(z)",
+            "cos(t)",
             False,
             None,
         ], f"Unknown symmetry type {self.sym}"
@@ -66,8 +67,8 @@ class Basis(IOAble, ABC):
         elif self.sym == "even":  # even powers of rho
             non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
-        elif self.sym == "cos(z)":  # cos(n*z) terms only
-            non_sym_idx = np.where(sign(self.modes[:, 2]) < 0)
+        elif self.sym == "cos(t)":  # cos(m*t) terms only
+            non_sym_idx = np.where(sign(self.modes[:, 1]) < 0)
             self._modes = np.delete(self.modes, non_sym_idx, axis=0)
         elif self.sym is None:
             self._sym = False
@@ -283,6 +284,7 @@ class PowerSeries(Basis):
 
         r, t, z = nodes.T
         l, m, n = modes.T
+
         if unique:
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -384,24 +386,11 @@ class ChebyshevPolynomial(Basis):
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
-        # shift: x = 2 * rho - 1
-        x = 2 * np.atleast_2d(nodes[:, 0]).T - 1
+        r, t, z = nodes.T
+        l, m, n = modes.T
 
-        # T_0 = 1
-        y = np.ones_like(x)
-
-        # T_1 = rho
-        if self.L > 0:
-            y = np.hstack((y, x))
-
-        # recurrance relation: T_{n+1} = 2 * x * T_{n} - T_{n-1}
-        if self.L > 1:
-            for n in range(self.L - 1):
-                y = np.hstack(
-                    (y, 2 * x * np.atleast_2d(y[:, -1]).T - np.atleast_2d(y[:, -2]).T)
-                )
-
-        return y
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        return radial
 
     def change_resolution(self, L):
         """Change resolution of the basis to the given resolution.
@@ -498,7 +487,8 @@ class FourierSeries(Basis):
             return np.array([]).reshape((len(nodes), 0))
 
         r, t, z = nodes.T
-        n = modes[:, 2]
+        l, m, n = modes.T
+
         if unique:
             _, zidx, zoutidx = np.unique(
                 z, return_index=True, return_inverse=True, axis=0
@@ -512,6 +502,7 @@ class FourierSeries(Basis):
         toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
         if unique:
             toroidal = toroidal[zoutidx][:, noutidx]
+
         return toroidal
 
     def change_resolution(self, N, NFP=None):
@@ -622,8 +613,8 @@ class DoubleFourierSeries(Basis):
             return np.array([]).reshape((len(nodes), 0))
 
         r, t, z = nodes.T
-        m = modes[:, 1]
-        n = modes[:, 2]
+        l, m, n = modes.T
+
         if unique:
             _, tidx, toutidx = np.unique(
                 t, return_index=True, return_inverse=True, axis=0
@@ -647,6 +638,7 @@ class DoubleFourierSeries(Basis):
         if unique:
             poloidal = poloidal[toutidx][:, moutidx]
             toroidal = toroidal[zoutidx][:, noutidx]
+
         return poloidal * toroidal
 
     def change_resolution(self, M, N, NFP=None, sym=None):
@@ -831,6 +823,7 @@ class ZernikePolynomial(Basis):
         r, t, z = nodes.T
         lm = modes[:, :2]
         m = modes[:, 1]
+
         if unique:
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -862,6 +855,7 @@ class ZernikePolynomial(Basis):
         if unique:
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
+
         return radial * poloidal
 
     def change_resolution(self, L, M, sym=None):
@@ -888,6 +882,140 @@ class ZernikePolynomial(Basis):
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
             )
+            self._set_up()
+
+
+class ChebyshevDoubleFourierBasis(Basis):
+    """3D basis: tensor product of Chebyshev poynomials and two Fourier series.
+
+    Fourier series in both the poloidal and toroidal coordinates.
+
+    Parameters
+    ----------
+    L : int
+        Maximum radial resolution.
+    M : int
+        Maximum poloidal resolution.
+    N : int
+        Maximum toroidal resolution.
+    NFP : int
+        Number of field periods.
+    sym : {``'cos'``, ``'sin'``, ``False``}
+        * ``'cos'`` for cos(m*t-n*z) symmetry
+        * ``'sin'`` for sin(m*t-n*z) symmetry
+        * ``False`` for no symmetry (Default)
+
+    """
+
+    def __init__(self, L, M, N, NFP=1, sym=False):
+
+        self._L = L
+        self._M = M
+        self._N = N
+        self._NFP = NFP
+        self._sym = sym
+        self._spectral_indexing = "linear"
+
+        self._modes = self._get_modes(L=self.L, M=self.M, N=self.N)
+
+        super().__init__()
+
+    def _get_modes(self, L=0, M=0, N=0):
+        """Get mode numbers for Chebyshev-Fourier series.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resoltuion.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+
+        Returns
+        -------
+        modes : ndarray of int, shape(num_modes,3)
+            Array of mode numbers [l,m,n].
+            Each row is one basis function with modes (l,m,n).
+
+        """
+        dim_pol = 2 * M + 1
+        dim_tor = 2 * N + 1
+        l = np.arange(L + 1)
+        m = np.arange(dim_pol) - M
+        n = np.arange(dim_tor) - N
+        ll, mm, nn = np.meshgrid(l, m, n)
+        ll = ll.reshape((-1, 1), order="F")
+        mm = mm.reshape((-1, 1), order="F")
+        nn = nn.reshape((-1, 1), order="F")
+        y = np.hstack([ll, mm, nn])
+        return y
+
+    def evaluate(
+        self, nodes, derivatives=np.array([0, 0, 0]), modes=None, unique=False
+    ):
+        """Evaluate basis functions at specified nodes.
+
+        Parameters
+        ----------
+        nodes : ndarray of float, size(num_nodes,3)
+            Node coordinates, in (rho,theta,zeta).
+        derivatives : ndarray of int, shape(num_derivatives,3)
+            Order of derivatives to compute in (rho,theta,zeta).
+        modes : ndarray of in, shape(num_modes,3), optional
+            Basis modes to evaluate (if None, full basis is used).
+        unique : bool, optional
+            whether to workload by only calculating for unique values of nodes, modes
+            can be faster, but doesn't work with jit or autodiff
+
+        Returns
+        -------
+        y : ndarray, shape(num_nodes,num_modes)
+            Basis functions evaluated at nodes.
+
+        """
+        if modes is None:
+            modes = self.modes
+        if not len(modes):
+            return np.array([]).reshape((len(nodes), 0))
+
+        r, t, z = nodes.T
+        l, m, n = modes.T
+
+        radial = chebyshev(r[:, np.newaxis], l, dr=derivatives[0])
+        poloidal = fourier(t[:, np.newaxis], m, 1, derivatives[1])
+        toroidal = fourier(z[:, np.newaxis], n, self.NFP, derivatives[2])
+
+        return radial * poloidal * toroidal
+
+    def change_resolution(self, L, M, N, NFP=None, sym=None):
+        """Change resolution of the basis to the given resolutions.
+
+        Parameters
+        ----------
+        L : int
+            Maximum radial resolution.
+        M : int
+            Maximum poloidal resolution.
+        N : int
+            Maximum toroidal resolution.
+        NFP : int
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
+
+        Returns
+        -------
+        None
+
+        """
+        self._NFP = NFP if NFP is not None else self.NFP
+        if L != self.L or M != self.M or N != self.N or sym != self.sym:
+            self._L = L
+            self._M = M
+            self._N = N
+            self._sym = sym if sym is not None else self.sym
+            self._modes = self._get_modes(self.L, self.M, self.N)
             self._set_up()
 
 
@@ -1053,11 +1181,13 @@ class FourierZernikeBasis(Basis):
             modes = self.modes
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
+
         # TODO: avoid duplicate calculations when mixing derivatives
         r, t, z = nodes.T
         lm = modes[:, :2]
         m = modes[:, 1]
         n = modes[:, 2]
+
         if unique:
             _, ridx, routidx = np.unique(
                 r, return_index=True, return_inverse=True, axis=0
@@ -1098,6 +1228,7 @@ class FourierZernikeBasis(Basis):
             radial = radial[routidx][:, lmoutidx]
             poloidal = poloidal[toutidx][:, moutidx]
             toroidal = toroidal[zoutidx][:, noutidx]
+
         return radial * poloidal * toroidal
 
     def change_resolution(self, L, M, N, NFP=None, sym=None):
@@ -1219,6 +1350,49 @@ def polyval_vec(p, x, prec=None):
             y = y * unq_x + np.atleast_2d(unq_p[:, k]).T
 
     return y[outidx][:, xidx].astype(float)
+
+
+def chebyshev(r, l, dr=0):
+    """Shifted Chebyshev polynomial.
+
+    Parameters
+    ----------
+    rho : ndarray, shape(N,)
+        radial coordinates to evaluate basis
+    l : ndarray of int, shape(K,)
+        radial mode number(s)
+    dr : int
+        order of derivative (Default = 0)
+
+    Returns
+    -------
+    y : ndarray, shape(N,K)
+        basis function(s) evaluated at specified points
+
+    """
+    if dr != 0:
+        raise NotImplementedError(
+            "Derivatives of Chebyshev polynomials not implemented."
+        )
+
+    L = int(max(l))
+    x = 2 * r - 1  # shift: x = 2 * rho - 1
+
+    T0 = np.ones_like(x)  # T_0 = 1
+    T1 = x  # T_1 = x
+
+    y = np.zeros((r.size, l.size))
+    y[:, l == 0] = T0
+    y[:, l == 1] = T1
+
+    # recurrance relation: T_{n} = 2 * x * T_{n-1} - T_{n-2}
+    for j in range(2, L + 1):
+        T2 = 2 * x * T1 - T0
+        y[:, l == j] = T2
+        T0 = T1
+        T1 = T2
+
+    return y
 
 
 def zernike_radial_coeffs(l, m, exact=True):

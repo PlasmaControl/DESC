@@ -23,7 +23,9 @@ On Your Local Machine
     pip install desc-opt
 
 **Or from GitHub (for development builds)**
-`Tested to work on M1 Macbook on 5-3-23`
+
+`Option 1 tested to work on M1 Macbook on 5-3-23`
+
 First download the repository from GitHub.
 
 .. code-block:: sh
@@ -235,7 +237,7 @@ To check that you have properly installed DESC and its dependencies, try the fol
 
 You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
 
-You can also try running an example input file:
+You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`_):
 
 .. code-block:: console
 
@@ -248,7 +250,9 @@ If you encounter issues during installation, please `leave us an issue on Github
 
 **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
 
-**Solution**: This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
+**Solution**:
+
+This may be caused by DESC not being on your PYTHONPATH, or your environment containing DESC not being activated.
 
 Try adding the DESC directory to your PYTHONPATH manually by adding the line ``export PYTHONPATH="$PYTHONPATH:path/to/DESC"`` (where ``/path/to/DESC`` is the path to the DESC folder on your machine) to the end of your ``~/.bashrc`` (or other shell configuration) file. You will also need to run ``source ~/.bashrc`` after making the change to ensure that your path updates properly for your current terminal session.
 
@@ -256,4 +260,6 @@ Try ensuring you've activated the conda environment that DESC is in ( ``conda ac
 
 **Problem**: I've installed DESC, but when I check my installation I get an error ``ModuleNotFoundError: No module named 'termcolor'`` (or another module which is not ``desc``).
 
-**Solution**: you likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.
+**Solution**:
+
+You likely are not running python from the environment in which you've installed DESC. Try ensuring you've activated the conda environment that DESC is in( ``conda activate desc-env`` ), then retry using DESC.

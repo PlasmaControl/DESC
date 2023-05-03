@@ -126,7 +126,7 @@ First, install JAX (commands taken from `this tutorial <https://github.com/Princ
 
 .. code-block:: sh
 
-    module load anaconda3/2021.11
+    module load anaconda3/2022.5
     conda create --name desc-env python=3.9
     conda activate desc-env
     pip install "jax[cuda11_cudnn82]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
@@ -143,6 +143,12 @@ Then, we install DESC:
     pip install --editable .
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
+
+**Note: To run DESC on GPU on Della, it was found to be necessary to load the following modules before running DESC on a node which you've requested a GPU:**
+
+.. code-block:: sh
+
+    module load cudatoolkit/11.7 cudnn/cuda-11.x/8.2.0
 
 Stellar Cluster (Princeton)
 +++++++++++++++++++++++

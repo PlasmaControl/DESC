@@ -27,10 +27,13 @@ from .utils import (
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["psi_r", "sqrt(g)"],
+    data=["psi_r", "sqrt(g)"] + ["psi_rr", "sqrt(g)_r"],
 )
 def _B0(params, transforms, profiles, data, **kwargs):
-    data["B0"] = data["psi_r"] / data["sqrt(g)"]
+    if transforms["grid"].axis.size:
+        data["B0"] = data["psi_rr"] / data["sqrt(g)_r"]
+    else:
+        data["B0"] = data["psi_r"] / data["sqrt(g)"]
     return data
 
 

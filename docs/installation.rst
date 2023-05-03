@@ -23,7 +23,7 @@ On Your Local Machine
     pip install desc-opt
 
 **Or from GitHub (for development builds)**
-
+`Tested to work on M1 Macbook on 5-3-23`
 First download the repository from GitHub.
 
 .. code-block:: sh

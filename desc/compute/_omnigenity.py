@@ -450,7 +450,7 @@ def _B_omni_coords(params, transforms, profiles, data, **kwargs):
     if M == 0:
         matrix = jnp.array([[N - M * iota, iota / N], [0, 1 / N]])
     else:
-        matrix = jnp.array([[N, M * iota / (N - M * iota)], [1, M / (N - M * iota)]])
+        matrix = jnp.array([[N, M * iota / (N - M * iota)], [M, M / (N - M * iota)]])
     alpha = data["zeta"]  # zeta is used as a placeholder for alpha (field line label)
 
     # solve for (theta_B,zeta_B) cooresponding to (eta,alpha)

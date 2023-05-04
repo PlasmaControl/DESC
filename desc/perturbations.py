@@ -198,19 +198,17 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     tangents = jnp.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac"]["R_lmn"](
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac"]["Z_lmn"](
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
@@ -277,7 +275,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
         RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
-            f = objective.compute_scaled(x)
+            f = objective.compute_scaled_error(x)
             RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
@@ -600,19 +598,17 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dxdc = jnp.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac"]["R_lmn"](
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dxdRb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac"]["Z_lmn"](
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdZb))
@@ -620,8 +616,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # 1st order
     if order > 0:
 
-        f = objective_f.compute_scaled(xf)
-        g = objective_g.compute_scaled(xg)
+        f = objective_f.compute_scaled_error(xf)
+        g = objective_g.compute_scaled_error(xg)
 
         # 1st partial derivatives of f objective wrt x
         if verbose > 0:

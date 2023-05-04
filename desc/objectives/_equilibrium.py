@@ -59,7 +59,7 @@ class ForceBalance(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -68,7 +68,8 @@ class ForceBalance(_Objective):
         name="force",
         equality=True,
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         self.equality = equality
         super().__init__(
@@ -241,7 +242,7 @@ class RadialForceBalance(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -249,7 +250,8 @@ class RadialForceBalance(_Objective):
         grid=None,
         name="radial force",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -411,7 +413,7 @@ class HelicalForceBalance(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -419,7 +421,8 @@ class HelicalForceBalance(_Objective):
         grid=None,
         name="helical force",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -583,7 +586,7 @@ class Energy(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -592,7 +595,8 @@ class Energy(_Objective):
         gamma=0,
         name="energy",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         self.gamma = gamma
         super().__init__(
@@ -770,7 +774,7 @@ class CurrentDensity(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -778,7 +782,8 @@ class CurrentDensity(_Objective):
         grid=None,
         name="current density",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,

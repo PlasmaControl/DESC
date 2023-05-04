@@ -58,7 +58,7 @@ class TestObjectiveFunction:
                 "Psi": eq.Psi,
             }
             np.testing.assert_allclose(
-                obj.compute(**kwargs),
+                obj.compute_unscaled(**kwargs),
                 eq.compute(f, grid=obj._transforms["grid"])[f]
                 * obj._transforms["grid"].weights,
             )
@@ -76,7 +76,7 @@ class TestObjectiveFunction:
                 target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
             V = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            V_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            V_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             V_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 20 * np.pi**2)
             np.testing.assert_allclose(V_scaled, 10)
@@ -92,7 +92,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = AspectRatio(target=5, weight=1, eq=eq)
             AR = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            AR_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            AR_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(AR, 10)
             np.testing.assert_allclose(AR_scaled, 5)
 
@@ -106,7 +106,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Elongation(target=0, weight=2, eq=eq)
             f = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            f_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            f_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
@@ -119,7 +119,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Energy(target=0, weight=mu_0, eq=eq, normalize=False)
             W = obj.compute_unscaled(*obj.xs(eq))
-            W_scaled = obj.compute_scaled(*obj.xs(eq))
+            W_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(W, 10 / mu_0)
             np.testing.assert_allclose(W_scaled, 10)
 
@@ -133,7 +133,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = RotationalTransform(target=1, weight=2, eq=eq)
             iota = obj.compute_unscaled(*obj.xs(eq))
-            iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            iota_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
             np.testing.assert_allclose(iota_scaled, -2 / np.sqrt(3))
 
@@ -147,7 +147,7 @@ class TestObjectiveFunction:
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
             I = obj.compute_unscaled(*obj.xs(eq))
-            I_scaled = obj.compute_scaled(*obj.xs(eq))
+            I_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(I, 0)
             np.testing.assert_allclose(I_scaled, -2 / np.sqrt(3))
 
@@ -266,7 +266,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MercierStability(eq=eq)
-            DMerc = obj.compute(*obj.xs(eq))
+            DMerc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(len(DMerc), obj._transforms["grid"].num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
@@ -279,7 +279,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MagneticWell(eq=eq)
-            magnetic_well = obj.compute(*obj.xs(eq))
+            magnetic_well = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(len(magnetic_well), obj._transforms["grid"].num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
@@ -331,30 +331,30 @@ def test_rejit():
     eq = Equilibrium()
     obj.build(eq)
     assert obj.compute_unscaled(4) == 8
-    assert obj.compute_scaled(4) == 8
+    assert obj.compute_scaled_error(4) == 8
     obj.target = 1
     obj.weight = 2
     assert obj.compute(4) == 10  # compute method is not JIT compiled
-    assert obj.compute_scaled(4) == 8  # only compute_scaled is JIT compiled
+    assert obj.compute_scaled_error(4) == 8  # only compute_scaled is JIT compiled
     obj.jit()
     assert obj.compute(4) == 10
-    assert obj.compute_scaled(4) == 18
+    assert obj.compute_scaled_error(4) == 18
 
     objFun = ObjectiveFunction(obj)
     objFun.build(eq)
     x = objFun.x(eq)
 
-    f = objFun.compute_scaled(x)
+    f = objFun.compute_scaled_error(x)
     J = objFun.jac_scaled(x)
     np.testing.assert_allclose(f, [-5598, 402, 396])
     np.testing.assert_allclose(J, np.diag([-1800, 0, -18]))
     objFun.objectives[0].target = 3
     objFun.objectives[0].weight = 4
     objFun.objectives[0].y = 2
-    np.testing.assert_allclose(objFun.compute_scaled(x), f)
+    np.testing.assert_allclose(objFun.compute_scaled_error(x), f)
     np.testing.assert_allclose(objFun.jac_scaled(x), J)
     objFun.jit()
-    np.testing.assert_allclose(objFun.compute_scaled(x), [-7164, 836, 828])
+    np.testing.assert_allclose(objFun.compute_scaled_error(x), [-7164, 836, 828])
     np.testing.assert_allclose(objFun.jac_scaled(x), J * 4 / 3)
 
 
@@ -580,3 +580,69 @@ def test_rebuild():
     obj = ObjectiveFunction(f_obj)
     obj.build(eq)
     eq.solve(maxiter=2, objective=obj)
+
+
+@pytest.mark.unit
+def test_jvp_scaled():
+    """Test that jvps are scaled correctly."""
+    eq = Equilibrium()
+    weight = 3
+    target = 5
+    objective = ObjectiveFunction(Volume(target=target, normalize=True, weight=weight))
+    objective.build(eq)
+    x = objective.x(eq)
+    dx = x / 100
+    jvp1u = objective.jvp_unscaled((dx,), x)
+    jvp2u = objective.jvp_unscaled((dx, dx), x)
+    jvp3u = objective.jvp_unscaled((dx, dx, dx), x)
+    jvp1s = objective.jvp_scaled((dx,), x)
+    jvp2s = objective.jvp_scaled((dx, dx), x)
+    jvp3s = objective.jvp_scaled((dx, dx, dx), x)
+
+    np.testing.assert_allclose(
+        jvp1u / objective._objectives[0].normalization * weight, jvp1s
+    )
+    np.testing.assert_allclose(
+        jvp2u / objective._objectives[0].normalization * weight, jvp2s
+    )
+    np.testing.assert_allclose(
+        jvp3u / objective._objectives[0].normalization * weight, jvp3s
+    )
+
+    with pytest.raises(NotImplementedError):
+        _ = objective.jvp_scaled((dx, dx, dx, dx), x)
+
+    with pytest.raises(NotImplementedError):
+        _ = objective.jvp_unscaled((dx, dx, dx, dx), x)
+
+
+@pytest.mark.unit
+def test_objective_target_bounds():
+    """Test that the target_scaled and bounds_scaled etc return the right things."""
+    eq = Equilibrium()
+
+    vol = Volume(target=3, normalize=True)
+    asp = AspectRatio(bounds=(2, 3), normalize=False)
+    fbl = ForceBalance(normalize=True, bounds=(-1, 2), weight=5)
+
+    objective = ObjectiveFunction((vol, asp, fbl))
+    objective.build(eq)
+
+    target = objective.target_scaled
+    bounds = objective.bounds_scaled
+    weight = objective.weights
+
+    assert bounds[0][0] == 3 / vol.normalization
+    assert bounds[1][0] == 3 / vol.normalization
+    assert bounds[0][1] == 2
+    assert bounds[1][1] == 3
+    assert np.all(bounds[0][2:] == -1 / fbl.normalization)
+    assert np.all(bounds[1][2:] == 2 / fbl.normalization)
+
+    assert target[0] == 3 / vol.normalization
+    assert target[1] == 2.5
+    assert np.all(target[2:] == 0.5 / fbl.normalization)
+
+    assert weight[0] == 1
+    assert weight[1] == 1
+    assert np.all(weight[2:] == 5)

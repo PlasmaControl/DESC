@@ -48,9 +48,12 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
     c0 = constraint.compute_scaled(x0)
     ncon = c0.size
     bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
-
-    lbs, ubs = constraint.bounds[0], constraint.bounds[1]
+    con_bounds = constraint._objective.bounds_scaled
+    lbs, ubs = con_bounds[0], con_bounds[1]
     lbx, ubx = bounds
+
+    print("lbs are " + str(lbs))
+    print("ubs are " + str(ubs))
 
     ineq_mask = lbs != ubs
     eq_mask = lbs == ubs
@@ -93,7 +96,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
         c = constraint.compute_scaled(x)
         sbig = jnp.zeros(ncon)
         sbig = put(sbig, ineq_mask, s)
-        return c - sbig
+        return c - sbig - target
 
     def conjac_wrapped(z):
         x, s = z2xs(z)
@@ -444,7 +447,9 @@ def check_termination(
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(
+        scale_inv < np.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
+    )
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
@@ -454,7 +459,9 @@ def compute_jac_scale(A, prev_scale_inv=None):
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(
+        scale_inv < np.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
+    )
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
@@ -492,5 +499,5 @@ def f_where_x(x, xs, fs, dim=0):
     if dim == 1:
         f = np.atleast_1d(f)
     if dim == 2:
-        f = np.atleast_2d(f.T).T
+        f = np.atleast_2d(f).reshape((-1, x.size))
     return f

@@ -57,6 +57,8 @@ def fmin_lag_ls_stel(
     #        return fun(recover(x))
 
     constr = np.array([constraint])
+    print("obj is " + str(np.linalg.norm(fun(x))))
+    print("constr norm is " + str(np.linalg.norm(constr[0].fun(x))))
     L = AugLagrangianLS(fun, constr)
     gradL = Derivative(L.compute, 0, "fwd")
 

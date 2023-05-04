@@ -189,7 +189,7 @@ def test_solve_bounds():
     eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
 
     # check that all errors are nearly 0, since residual values are within target bounds
-    f = obj.compute_scaled(obj.x(eq))
+    f = obj.compute_scaled_error(obj.x(eq))
     np.testing.assert_allclose(f, 0, atol=1e-4)
 
 
@@ -207,7 +207,7 @@ def test_1d_optimization(SOLOVEV):
         FixPsi(),
     )
     options = {"perturb_options": {"order": 1}}
-    with pytest.warns(UserWarning):
+    with pytest.warns((FutureWarning, UserWarning)):
         eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)

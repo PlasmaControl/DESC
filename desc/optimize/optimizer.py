@@ -159,15 +159,33 @@ class Optimizer(IOAble):
             objective, nonlinear_constraint = combine_args(
                 objective, nonlinear_constraint
             )
+        if len(linear_constraints) and not isinstance(x_scale, str):
+            # need to project x_scale down to correct size
+            Z = objective._Z
+            x_scale = np.broadcast_to(x_scale, objective._objective.dim_x)
+            x_scale = np.abs(
+                np.diag(Z.T @ np.diag(x_scale[objective._unfixed_idx]) @ Z)
+            )
+            x_scale = np.where(x_scale < np.finfo(x_scale.dtype).eps, 1, x_scale)
+
         if not objective.compiled:
-            mode = "scalar" if optimizers[method]["scalar"] else "lsq"
+            if optimizers[method]["scalar"] and optimizers[method]["hessian"]:
+                mode = "scalar"
+            elif optimizers[method]["scalar"]:
+                mode = "bfgs"
+            else:
+                mode = "lsq"
             try:
                 objective.compile(mode, verbose)
             except ValueError:
                 objective.build(eq, verbose=verbose)
                 objective.compile(mode, verbose=verbose)
         if nonlinear_constraint is not None and not nonlinear_constraint.compiled:
-            nonlinear_constraint.compile("lsq", verbose)
+            try:
+                nonlinear_constraint.compile("lsq", verbose)
+            except ValueError:
+                nonlinear_constraint.build(eq, verbose=verbose)
+                nonlinear_constraint.compile("lsq", verbose)
 
         if objective.scalar and (not optimizers[method]["scalar"]):
             warnings.warn(
@@ -194,6 +212,17 @@ class Optimizer(IOAble):
         if verbose > 0:
             print("Number of parameters: {}".format(x0.size))
             print("Number of objectives: {}".format(objective.dim_f))
+            if nonlinear_constraint is not None:
+                num_equality = np.count_nonzero(
+                    nonlinear_constraint.bounds_scaled[0]
+                    == nonlinear_constraint.bounds_scaled[1]
+                )
+                print("Number of equality constraints: {}".format(num_equality))
+                print(
+                    "Number of inequality constraints: {}".format(
+                        nonlinear_constraint.dim_f - num_equality
+                    )
+                )
 
         if verbose > 0:
             print("Starting optimization")
@@ -388,7 +417,7 @@ def _get_default_tols(
         options.pop("ftol", 1e-6 if optimizers[method]["stochastic"] else 1e-2),
     )
     stoptol.setdefault("gtol", options.pop("gtol", 1e-8))
-    stoptol.setdefault("ctol", options.pop("gtol", 1e-4))
+    stoptol.setdefault("ctol", options.pop("ctol", 1e-4))
     stoptol.setdefault("maxiter", options.pop("maxiter", 100))
 
     # if we define an "iteration" as a sucessful step, it can take a few function
@@ -407,11 +436,13 @@ optimizers = {}
 
 def register_optimizer(
     name,
+    description,
     scalar,
     equality_constraints,
     inequality_constraints,
     stochastic,
     hessian,
+    GPU=False,
     **kwargs,
 ):
     """Decorator to wrap a function for optimization.
@@ -449,6 +480,8 @@ def register_optimizer(
     name : str or array-like of str
         Name of the optimizer method. If one function supports multiple methods,
         provide a list of names.
+    description : str or array-like of str
+        Short description of the optimizer method, with references if possible.
     scalar : bool or array-like of bool
         Whether the method assumes a scalar residual, or a vector of residuals for
         least squares.
@@ -460,45 +493,62 @@ def register_optimizer(
         Whether the method can handle noisy objectives.
     hessian : bool or array-like of bool
         Whether the method requires calculation of the full hessian matrix.
+    GPU : bool or array-like of bool
+        Whether the method supports running on GPU
     """
     (
         name,
+        description,
         scalar,
         equality_constraints,
         inequality_constraints,
         stochastic,
         hessian,
+        GPU,
     ) = map(
         np.atleast_1d,
         (
             name,
+            description,
             scalar,
             equality_constraints,
             inequality_constraints,
             stochastic,
             hessian,
+            GPU,
         ),
     )
     (
         name,
+        description,
         scalar,
         equality_constraints,
         inequality_constraints,
         stochastic,
         hessian,
+        GPU,
     ) = np.broadcast_arrays(
-        name, scalar, equality_constraints, inequality_constraints, stochastic, hessian
+        name,
+        description,
+        scalar,
+        equality_constraints,
+        inequality_constraints,
+        stochastic,
+        hessian,
+        GPU,
     )
 
     def _decorator(func):
 
         for i, nm in enumerate(name):
             d = {
+                "description": description[i % len(name)],
                 "scalar": scalar[i % len(name)],
                 "equality_constraints": equality_constraints[i % len(name)],
                 "inequality_constraints": inequality_constraints[i % len(name)],
                 "stochastic": stochastic[i % len(name)],
                 "hessian": hessian[i % len(name)],
+                "GPU": GPU[i % len(name)],
                 "fun": func,
             }
             optimizers[nm] = d

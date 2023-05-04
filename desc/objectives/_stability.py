@@ -59,13 +59,15 @@ class MercierStability(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(0, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="Mercier Stability",
     ):
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -168,14 +170,14 @@ class MercierStability(_Objective):
             self._transforms["grid"], data["D_Mercier"], surface_label="rho"
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -249,7 +251,7 @@ class MagneticWell(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(0, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -257,6 +259,8 @@ class MagneticWell(_Objective):
         name="Magnetic Well",
         equality=True,
     ):
+        if target is None and bounds is None:
+            bounds = (0, np.inf)
         self._grid = grid
         self.equality = equality
         super().__init__(
@@ -355,14 +359,14 @@ class MagneticWell(_Objective):
             self._transforms["grid"], data["magnetic well"], surface_label="rho"
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

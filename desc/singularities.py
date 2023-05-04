@@ -31,7 +31,7 @@ def get_fourier_interp_matrix(eval_grid, src_grid, s, q):
     r, w, dr, dw = _get_quadrature_nodes(q)
 
     src_dtheta = src_grid.spacing[:, 1]
-    src_dzeta = src_grid.spacing[:, 2]
+    src_dzeta = src_grid.spacing[:, 2] / src_grid.NFP
     eval_theta = eval_grid.nodes[:, 1]
     eval_zeta = eval_grid.nodes[:, 2]
 

@@ -9,7 +9,13 @@ import numpy as np
 from termcolor import colored
 
 from desc.backend import jnp
-from desc.basis import ChebyshevDoubleFourierBasis, ChebyshevPolynomial, FourierZernikeBasis, fourier, zernike_radial
+from desc.basis import (
+    ChebyshevDoubleFourierBasis,
+    ChebyshevPolynomial,
+    FourierZernikeBasis,
+    fourier,
+    zernike_radial,
+)
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
@@ -550,7 +556,19 @@ class _Configuration(IOAble, ABC):
         return new
 
     def change_resolution(
-        self, L=None, M=None, N=None, NFP=None, sym=None, *args, **kwargs
+        self,
+        L=None,
+        M=None,
+        N=None,
+        NFP=None,
+        sym=None,
+        L_well=None,
+        M_well=None,
+        L_omni=None,
+        M_omni=None,
+        N_omni=None,
+        *args,
+        **kwargs,
     ):
         """Set the spectral resolution.
 
@@ -569,6 +587,8 @@ class _Configuration(IOAble, ABC):
 
         """
         L_change = M_change = N_change = NFP_change = sym_change = False
+        L_well_change = M_well_change = False
+        L_omni_change = M_omni_change = N_omni_change = None
         if L is not None and L != self.L:
             L_change = True
             self._L = L
@@ -584,13 +604,43 @@ class _Configuration(IOAble, ABC):
         if sym is not None and sym != self.sym:
             sym_change = True
             self._sym = sym
+        if L_well is not None and L_well != self.L_well:
+            L_well_change = True
+            self._L_well = L_well
+        if M_well is not None and M_well != self.M_well:
+            M_well_change = True
+            raise NotImplementedError("Cannot change M_well (number of spline points).")
+        if L_omni is not None and L_omni != self.L_omni:
+            L_omni_change = True
+            self._L_omni = L_omni
+        if M_omni is not None and M_omni != self.M_omni:
+            M_omni_change = True
+            self._M_omni = M_omni
+        if N_omni is not None and N_omni != self.N_omni:
+            N_omni_change = True
+            self._N_omni = N_omni
 
-        if not np.any([L_change, M_change, N_change, NFP_change, sym_change]):
+        if not np.any(
+            [
+                L_change,
+                M_change,
+                N_change,
+                NFP_change,
+                sym_change,
+                L_well_change,
+                M_well_change,
+                L_omni_change,
+                M_omni_change,
+                N_omni_change,
+            ]
+        ):
             return
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
+        old_modes_well = self.well_basis.modes
+        old_modes_omni = self.omni_basis.modes
 
         self.R_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
@@ -600,6 +650,10 @@ class _Configuration(IOAble, ABC):
         )
         self.L_basis.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.well_basis.change_resolution(self.L_well)
+        self.omni_basis.change_resolution(
+            self.L_omni, self.M_omni, self.N_omni, NFP=self.NFP, sym="cos(t)"
         )
 
         for profile in [
@@ -622,6 +676,17 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
+        self._omni_lmn = copy_coeffs(
+            self.omni_lmn, old_modes_omni, self.omni_basis.modes
+        )
+
+        old_well = self.well_l.reshape((-1, self.M_well))
+        new_well = np.zeros((self.L_well + 1, self.M_well))
+        for j in range(self.M_well):
+            new_well[:, j] = copy_coeffs(
+                old_well[:, j], old_modes_well, self.well_basis.modes
+            )
+        self._well_l = new_well.flatten()
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.

@@ -259,6 +259,11 @@ class Equilibrium(_Configuration, IOAble):
         L=None,
         M=None,
         N=None,
+        L_well=None,
+        M_well=None,
+        L_omni=None,
+        M_omni=None,
+        N_omni=None,
         L_grid=None,
         M_grid=None,
         N_grid=None,
@@ -288,6 +293,8 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         L_change = M_change = N_change = NFP_change = sym_change = False
+        L_well_change = M_well_change = False
+        L_omni_change = M_omni_change = N_omni_change = None
         if L is not None and L != self.L:
             L_change = True
         if M is not None and M != self.M:
@@ -298,9 +305,35 @@ class Equilibrium(_Configuration, IOAble):
             NFP_change = True
         if sym is not None and sym != self.sym:
             sym_change = True
+        if L_well is not None and L_well != self.L_well:
+            L_well_change = True
+        if M_well is not None and M_well != self.M_well:
+            M_well_change = True
+            raise NotImplementedError("Cannot change M_well (number of spline points).")
+        if L_omni is not None and L_omni != self.L_omni:
+            L_omni_change = True
+        if M_omni is not None and M_omni != self.M_omni:
+            M_omni_change = True
+        if N_omni is not None and N_omni != self.N_omni:
+            N_omni_change = True
 
-        if any([L_change, M_change, N_change, NFP_change, sym_change]):
-            super().change_resolution(L, M, N, NFP, sym)
+        if any(
+            [
+                L_change,
+                M_change,
+                N_change,
+                NFP_change,
+                sym_change,
+                L_well_change,
+                M_well_change,
+                L_omni_change,
+                M_omni_change,
+                N_omni_change,
+            ]
+        ):
+            super().change_resolution(
+                L, M, N, NFP, sym, L_well, M_well, L_omni, M_omni, N_omni
+            )
 
         if L_grid is not None and L_grid != self.L_grid:
             self._L_grid = L_grid
@@ -311,7 +344,15 @@ class Equilibrium(_Configuration, IOAble):
 
     @classmethod
     def from_near_axis(
-        cls, na_eq, r=0.1, L=None, M=8, N=None, ntheta=None, spectral_indexing="ansi", **kwargs
+        cls,
+        na_eq,
+        r=0.1,
+        L=None,
+        M=8,
+        N=None,
+        ntheta=None,
+        spectral_indexing="ansi",
+        **kwargs,
     ):
         """Initialize an Equilibrium from a near-axis solution.
 

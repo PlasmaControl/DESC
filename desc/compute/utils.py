@@ -285,7 +285,11 @@ def get_transforms(keys, eq, grid, **kwargs):
     for c in ["R", "L", "Z"]:
         if c in derivs:
             transforms[c] = Transform(
-                grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
+                grid,
+                getattr(eq, c + "_basis"),
+                derivs=derivs[c],
+                build=True,
+                build_pinv=False,
             )
     if "B" in derivs:
         transforms["B"] = Transform(
@@ -313,6 +317,20 @@ def get_transforms(keys, eq, grid, **kwargs):
             build=True,
             build_pinv=True,
         )
+    if "A" in derivs:
+        transforms["A"] = Transform(
+            grid,
+            DoubleFourierSeries(
+                M=eq.M,
+                N=eq.N,
+                NFP=eq.NFP,
+                sym=False,
+            ),
+            derivs=derivs["A"],
+            build=True,
+            build_pinv=True,
+        )
+
     return transforms
 
 

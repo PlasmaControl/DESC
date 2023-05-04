@@ -697,7 +697,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
         # With the correct value of the integral on this surface stored
         # in integrals[0], we copy it to the duplicate surface at integrals[-1].
         if has_endpoint_dupe:
-            # assert integrals[-1] == 0
+            # could assert integrals[-1] == 0 but it offends jax
             integrals = put(integrals, -1, integrals[0])
         return integrals
 

@@ -127,7 +127,7 @@ class TestComputeUtils:
 
     @pytest.mark.unit
     def test_surface_vector_averages(self):
-        """Test that surface_averages computation of vector valued functions."""
+        """Test surface average of vector valued functions computation."""
         nrho = 13
         ntheta = 11
         nzeta = 9

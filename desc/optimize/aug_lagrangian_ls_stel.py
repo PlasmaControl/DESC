@@ -48,24 +48,14 @@ def fmin_lag_ls_stel(
 
     mu = options.pop("mu", 10 * jnp.ones(len(c)))
     lmbda = options.pop("lmbda", 10 * jnp.ones(len(c)))
-    #    x = np.append(x, 1.0 * np.ones(constraint._ineq_dim))
-
-    #    def recover(x):
-    #        return x[0 : len(x) - constraint._ineq_dim]
-
-    #    def wrapped_obj(x):
-    #        return fun(recover(x))
 
     constr = np.array([constraint])
-    print("obj is " + str(np.linalg.norm(fun(x))))
-    print("constr norm is " + str(np.linalg.norm(constr[0].fun(x))))
     L = AugLagrangianLS(fun, constr)
     gradL = Derivative(L.compute, 0, "fwd")
 
     gtolk = 1 / (10 * np.linalg.norm(mu))
     ctolk = 1 / (np.linalg.norm(mu) ** (0.1))
     xold = x
-    #    f = fun(recover(x))
     fold = f
 
     while iteration < maxiter:
@@ -84,12 +74,9 @@ def fmin_lag_ls_stel(
         )
 
         x = xk["x"]
-        print("slack vars are " + str(x[-10:]))
         f = fun(x)
         cv = L.compute_constraints(x)
-        print("mag well constr is " + str(cv[-10:]))
         c = np.max(cv)
-        print("max c is " + str(c))
 
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")

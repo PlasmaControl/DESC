@@ -52,9 +52,6 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
     lbs, ubs = con_bounds[0], con_bounds[1]
     lbx, ubx = bounds
 
-    print("lbs are " + str(lbs))
-    print("ubs are " + str(ubs))
-
     ineq_mask = lbs != ubs
     eq_mask = lbs == ubs
     eq_target = lbs[~ineq_mask]

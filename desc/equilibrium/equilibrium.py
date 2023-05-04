@@ -259,16 +259,16 @@ class Equilibrium(_Configuration, IOAble):
         L=None,
         M=None,
         N=None,
-        L_well=None,
-        M_well=None,
-        L_omni=None,
-        M_omni=None,
-        N_omni=None,
         L_grid=None,
         M_grid=None,
         N_grid=None,
         NFP=None,
         sym=None,
+        L_well=None,
+        M_well=None,
+        L_omni=None,
+        M_omni=None,
+        N_omni=None,
     ):
         """Set the spectral resolution and real space grid resolution.
 

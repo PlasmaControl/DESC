@@ -53,7 +53,7 @@ class GenericObjective(_Objective):
         self,
         f,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -61,7 +61,8 @@ class GenericObjective(_Objective):
         grid=None,
         name="generic",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self.f = f
         self._grid = grid
         super().__init__(
@@ -168,7 +169,7 @@ class ToroidalCurrent(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -176,7 +177,8 @@ class ToroidalCurrent(_Objective):
         grid=None,
         name="toroidal current",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -271,14 +273,14 @@ class ToroidalCurrent(_Objective):
         )
         return compress(self._transforms["grid"], data["current"], surface_label="rho")
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -344,7 +346,7 @@ class RotationalTransform(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -352,7 +354,8 @@ class RotationalTransform(_Objective):
         grid=None,
         name="rotational transform",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -443,14 +446,14 @@ class RotationalTransform(_Objective):
         )
         return compress(self._transforms["grid"], data["iota"], surface_label="rho")
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

@@ -317,12 +317,12 @@ def test_build_init():
         obj.build(eq)
 
     arg = fbR1.args[0]
-    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
     arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
@@ -330,12 +330,12 @@ def test_build_init():
     fbZ1 = FixBoundaryZ(eq=eq)
 
     arg = fbR1.args[0]
-    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
     arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 

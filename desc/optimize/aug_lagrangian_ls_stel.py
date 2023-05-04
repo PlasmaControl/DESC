@@ -77,14 +77,17 @@ def fmin_lag_ls_stel(
             ),
             bounds=bounds,
             gtol=gtolk,
-            maxiter=10,
+            maxiter=5,
             verbose=2,
         )
 
         x = xk["x"]
+        print("slack vars are " + str(x[-10:]))
         f = fun(x)
         cv = L.compute_constraints(x)
+        print("mag well constr is " + str(cv[-10:]))
         c = np.max(cv)
+        print("max c is " + str(c))
 
         if np.linalg.norm(xold - x) < xtol:
             print("xtol satisfied\n")

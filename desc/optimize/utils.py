@@ -47,8 +47,6 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
 
     c0 = constraint.compute_scaled(x0)
     ncon = c0.size
-    # constraint.bounds[0] = jnp.broadcast_to(constraint.bounds[0], ncon)
-    # constraint.bounds[1] = jnp.broadcast_to(constraint.bounds[1], ncon)
     bounds = tuple(jnp.broadcast_to(bi, x0.shape) for bi in bounds)
 
     lbs, ubs = constraint.bounds[0], constraint.bounds[1]
@@ -58,7 +56,6 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
     eq_mask = lbs == ubs
     eq_target = lbs[~ineq_mask]
     nslack = jnp.sum(ineq_mask)
-    print("nslack is " + str(nslack))
     zbounds = (
         jnp.concatenate([lbx, lbs[ineq_mask]]),
         jnp.concatenate([ubx, ubs[ineq_mask]]),
@@ -96,7 +93,7 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
         c = constraint.compute_scaled(x)
         sbig = jnp.zeros(ncon)
         sbig = put(sbig, ineq_mask, s)
-        return c - sbig - target
+        return c - sbig
 
     def conjac_wrapped(z):
         x, s = z2xs(z)

@@ -144,7 +144,7 @@ class TestComputeUtils:
         b0_avg = surface_averages(grid, data["B"][:, 0], data["sqrt(g)"])
         b1_avg = surface_averages(grid, data["B"][:, 1], data["sqrt(g)"])
         b2_avg = surface_averages(grid, data["B"][:, 2], data["sqrt(g)"])
-        np.testing.assert_allclose(b_avg, np.column_stack((b0_avg, b1_avg, b2_avg)))
+        np.testing.assert_allclose(b_avg, np.column_stack([b0_avg, b1_avg, b2_avg]))
 
     @pytest.mark.unit
     def test_surface_area_unweighted(self):

@@ -294,6 +294,6 @@ else:
         """
 
         def fun_vmap(fun_inputs):
-            return np.stack((fun(fun_input) for fun_input in fun_inputs), axis=out_axes)
+            return np.stack([fun(fun_input) for fun_input in fun_inputs], axis=out_axes)
 
         return fun_vmap

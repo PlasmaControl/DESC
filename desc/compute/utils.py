@@ -691,21 +691,20 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
     # surface label and is treated as one, like in the previous paragraph.
 
     def integrate_component(integrands):
-        integrals = jnp.histogram(nodes_modulo, bins=bins, weights=integrands)[0]
-        # By modulating nodes, we 'moved' all the area from
-        # surface_label=max_surface_val to the surface_label=0 surface.
-        # With the correct value of the integral on this surface stored
-        # in integrals[0], we copy it to the duplicate surface at integrals[-1].
-        if has_endpoint_dupe:
-            # could assert integrals[-1] == 0 but it offends jax
-            integrals = put(integrals, -1, integrals[0])
-        return integrals
+        return jnp.histogram(nodes_modulo, bins=bins, weights=integrands)[0]
 
     # integral of a vector valued function is a vector of integrals
     vector_of_integrands = jnp.atleast_2d(ds * q.T)
     vector_of_integrals = jnp.atleast_1d(
         jnp.squeeze(vmap(integrate_component, out_axes=1)(vector_of_integrands))
     )
+    if has_endpoint_dupe:
+        # By modulating nodes, we 'moved' all the area from
+        # surface_label=max_surface_val to the surface_label=0 surface.
+        # With the correct value of the integral on this surface stored
+        # at index 0, we copy it to the duplicate surface at index -1.
+        assert jnp.all(vector_of_integrals[-1] == 0)
+        vector_of_integrals = put(vector_of_integrals, -1, vector_of_integrals[0])
     return expand(grid, vector_of_integrals, surface_label)
 
 

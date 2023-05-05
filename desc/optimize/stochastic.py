@@ -24,7 +24,7 @@ def sgd(
     verbose=1,
     maxiter=None,
     callback=None,
-    options={},
+    options=None,
 ):
     """Minimize a scalar function using stochastic gradient descent with momentum.
 
@@ -89,6 +89,7 @@ def sgd(
         Boolean flag indicating if the optimizer exited successfully.
 
     """
+    options = {} if options is None else options
     nfev = 0
     ngev = 0
     iteration = 0

@@ -8,11 +8,14 @@ from .stochastic import sgd
 
 @register_optimizer(
     name="lsq-exact",
+    description="Trust region least squares method, "
+    + "similar to the `trf` method in scipy",
     scalar=False,
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
     hessian=False,
+    GPU=True,
 )
 def _optimize_desc_least_squares(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
@@ -63,11 +66,13 @@ def _optimize_desc_least_squares(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    options["max_nfev"] = stoptol["max_nfev"]
+    options["max_njev"] = stoptol["max_njev"]
 
     result = lsqtr(
-        objective.compute,
+        objective.compute_scaled_error,
         x0=x0,
-        jac=objective.jac,
+        jac=objective.jac_scaled,
         args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
@@ -83,11 +88,22 @@ def _optimize_desc_least_squares(
 
 @register_optimizer(
     name=["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"],
+    description=[
+        "Trust region method using Powell's dogleg method to approximately solve the "
+        + "trust region subproblem.",
+        "Trust region method solving the subproblem over the 2d subspace spanned by "
+        + "the gradient and newton direction.",
+        "Trust region method using Powell's dogleg method to approximately solve the "
+        + "trust region subproblem. Uses BFGS to approximate hessian",
+        "Trust region method solving the subproblem over the 2d subspace spanned by "
+        + "the gradient and newton direction. Uses BFGS to approximate hessian",
+    ],
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
     hessian=[True, True, False, False],
+    GPU=True,
 )
 def _optimize_desc_fmin_scalar(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
@@ -139,6 +155,9 @@ def _optimize_desc_fmin_scalar(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    options["max_nfev"] = stoptol["max_nfev"]
+    options["max_ngev"] = stoptol["max_ngev"]
+    options["max_nhev"] = stoptol["max_nhev"]
 
     result = fmintr(
         objective.compute_scalar,
@@ -161,11 +180,13 @@ def _optimize_desc_fmin_scalar(
 
 @register_optimizer(
     name="sgd",
+    description="Stochastic gradient descent with Nesterov momentum",
     scalar=True,
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=True,
     hessian=False,
+    GPU=True,
 )
 def _optimize_desc_stochastic(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None

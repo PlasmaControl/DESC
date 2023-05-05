@@ -53,7 +53,7 @@ class AspectRatio(_Objective):
     def __init__(
         self,
         eq=None,
-        target=2,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -61,8 +61,9 @@ class AspectRatio(_Objective):
         grid=None,
         name="aspect ratio",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 2
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -86,10 +87,10 @@ class AspectRatio(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
@@ -100,8 +101,8 @@ class AspectRatio(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -173,7 +174,7 @@ class Elongation(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -181,8 +182,9 @@ class Elongation(_Objective):
         grid=None,
         name="elongation",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -206,10 +208,10 @@ class Elongation(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["a_major/a_minor"]
@@ -220,8 +222,8 @@ class Elongation(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -293,7 +295,7 @@ class Volume(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -301,8 +303,9 @@ class Volume(_Objective):
         grid=None,
         name="volume",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -326,10 +329,10 @@ class Volume(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(
-                L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP
-            )
+        if self._grid is None:
+            grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["V"]
@@ -340,8 +343,8 @@ class Volume(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -426,7 +429,7 @@ class PlasmaVesselDistance(_Objective):
         surface,
         eq=None,
         target=None,
-        bounds=(1, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -434,6 +437,8 @@ class PlasmaVesselDistance(_Objective):
         plasma_grid=None,
         name="plasma vessel distance",
     ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
@@ -461,15 +466,19 @@ class PlasmaVesselDistance(_Objective):
 
         """
         if self._surface_grid is None:
-            self._surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            surface_grid = self._surface_grid
         if self._plasma_grid is None:
-            self._plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-        if not np.allclose(self._surface_grid.nodes[:, 0], 1):
+            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            plasma_grid = self._plasma_grid
+        if not np.allclose(surface_grid.nodes[:, 0], 1):
             warnings.warn("Surface grid includes off-surface pts, should be rho=1")
-        if not np.allclose(self._plasma_grid.nodes[:, 0], 1):
+        if not np.allclose(plasma_grid.nodes[:, 0], 1):
             warnings.warn("Plasma grid includes interior points, should be rho=1")
 
-        self._dim_f = self._surface_grid.num_nodes
+        self._dim_f = surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
         self._args = get_params(self._data_keys)
 
@@ -479,12 +488,10 @@ class PlasmaVesselDistance(_Objective):
         timer.start("Precomputing transforms")
 
         self._surface_coords = self._surface.compute_coordinates(
-            grid=self._surface_grid, basis="xyz"
+            grid=surface_grid, basis="xyz"
         )
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self._plasma_grid)
-        self._transforms = get_transforms(
-            self._data_keys, eq=eq, grid=self._plasma_grid
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=plasma_grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=plasma_grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -570,15 +577,16 @@ class MeanCurvature(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(-np.inf, 0),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="mean-curvature",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            bounds = (-np.inf, 0)
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -602,10 +610,12 @@ class MeanCurvature(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H"]
         self._args = get_params(self._data_keys)
 
@@ -614,8 +624,8 @@ class MeanCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -639,7 +649,7 @@ class MeanCurvature(_Objective):
 
         Returns
         -------
-        H : ndarray, shape(self.grid.num_nodes,)
+        H : ndarray
             Mean curvature at each point (m^-1).
 
         """
@@ -699,7 +709,7 @@ class PrincipalCurvature(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -707,8 +717,9 @@ class PrincipalCurvature(_Objective):
         grid=None,
         name="principal-curvature",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 1
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -732,10 +743,12 @@ class PrincipalCurvature(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1", "curvature_k2"]
         self._args = get_params(self._data_keys)
 
@@ -744,8 +757,8 @@ class PrincipalCurvature(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -769,7 +782,7 @@ class PrincipalCurvature(_Objective):
 
         Returns
         -------
-        k : ndarray, shape(self.grid.num_nodes,)
+        k : ndarray
             Max absolute principal curvature at each point (m^-1).
 
         """

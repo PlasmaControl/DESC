@@ -1,5 +1,4 @@
 """Tests for linear constraints and objectives."""
-import jax.numpy as jnp
 import numpy as np
 import pytest
 import scipy.linalg
@@ -11,6 +10,8 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,
@@ -110,7 +111,7 @@ def test_bc_on_interior_surfaces():
 def test_constrain_bdry_with_only_one_mode():
     """Test Fixing boundary with a surface with only one mode in its basis."""
     eq = Equilibrium()
-    FixZ = FixBoundaryZ(fixed_boundary=True)
+    FixZ = BoundaryZSelfConsistency()
     try:
         FixZ.build(eq)
     except Exception:
@@ -134,20 +135,10 @@ def test_constrain_asserts():
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
         eqi.solve(constraints=(FixCurrent(), FixIota()))
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         eqi.solve(constraints=(FixPressure(target=2), FixPressure(target=1)))
-    # cannot use two constraints on the same R mode
-    with pytest.raises(RuntimeError):
-        fixmode1 = FixModeR(modes=np.array([1, 1, 0]))
-        fixmode2 = FixModeR(modes=np.array([[0, 0, 0], [1, 1, 0]]))
-        eqc.solve(constraints=(fixmode1, fixmode2))
-    # cannot use two constraints on the same Z mode
-    with pytest.raises(RuntimeError):
-        fixmode1 = FixModeZ(modes=np.array([1, -1, 0]))
-        fixmode2 = FixModeZ(modes=np.array([1, -1, 0]))
-        eqc.solve(constraints=(fixmode1, fixmode2))
     # cannot use two incompatible constraints
-    with pytest.raises(ValueError):
+    with pytest.raises(AssertionError):
         con1 = FixCurrent(target=eqc.c_l)
         con2 = FixCurrent(target=eqc.c_l + 1)
         eqc.solve(constraints=(con1, con2))
@@ -178,8 +169,8 @@ def test_fixed_mode_solve():
         FixPressure(),
         FixIota(),
         FixPsi(),
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         fixR,
         fixZ,
     )
@@ -232,8 +223,8 @@ def test_fixed_modes_solve():
         FixPressure(),
         FixIota(),
         FixPsi(),
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         fixR,
         fixZ,
     )
@@ -306,7 +297,7 @@ def test_factorize_linear_constraints_asserts():
     from desc.objectives.utils import factorize_linear_constraints
 
     with pytest.raises(ValueError):
-        xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+        xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
             constraints, arg_order
         )
 
@@ -320,57 +311,33 @@ def test_build_init():
     eq = Equilibrium(M=3, N=1)
 
     # initialize the constraints without building
-    fbR1 = FixBoundaryR(fixed_boundary=False)
-    fbZ1 = FixBoundaryZ(fixed_boundary=False)
-    fbR2 = FixBoundaryR(fixed_boundary=True)
-    fbZ2 = FixBoundaryZ(fixed_boundary=True)
-    for obj in (fbR1, fbR2, fbZ1, fbZ2):
+    fbR1 = FixBoundaryR()
+    fbZ1 = FixBoundaryZ()
+    for obj in (fbR1, fbZ1):
         obj.build(eq)
 
     arg = fbR1.args[0]
-    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
-    arg = fbR2.args[0]
-    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
-
     arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
-    arg = fbZ2.args[0]
-    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
-
-    fbR1 = FixBoundaryR(fixed_boundary=False, eq=eq)
-    fbZ1 = FixBoundaryZ(fixed_boundary=False, eq=eq)
-    fbR2 = FixBoundaryR(fixed_boundary=True, eq=eq)
-    fbZ2 = FixBoundaryZ(fixed_boundary=True, eq=eq)
+    fbR1 = FixBoundaryR(eq=eq)
+    fbZ1 = FixBoundaryZ(eq=eq)
 
     arg = fbR1.args[0]
-    A = fbR1.derivatives["jac"][arg](np.zeros(fbR1.dimensions[arg]))
+    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
-    arg = fbR2.args[0]
-    A = fbR2.derivatives["jac"][arg](np.zeros(fbR2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.R_basis.num_modes, eq.R_basis.num_modes)
-
     arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac"][arg](np.zeros(fbZ1.dimensions[arg]))
+    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
-
-    arg = fbZ2.args[0]
-    A = fbZ2.derivatives["jac"][arg](np.zeros(fbZ2.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.Z_basis.num_modes, eq.Z_basis.num_modes)
 
 
 @pytest.mark.unit
@@ -429,35 +396,31 @@ def test_correct_indexing_passed_modes():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
     ]
     constraints = (
-        FixBoundaryR(modes=R_modes, fixed_boundary=True, normalize=False),
-        FixBoundaryZ(modes=Z_modes, fixed_boundary=True, normalize=False),
+        FixBoundaryR(modes=R_modes, normalize=False),
+        FixBoundaryZ(modes=Z_modes, normalize=False),
+        BoundaryRSelfConsistency(),
+        BoundaryZSelfConsistency(),
     )
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
+    objective.set_args("Rb_lmn", "Zb_lmn")
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -499,39 +462,31 @@ def test_correct_indexing_passed_modes_and_passed_target():
         idxs.append(eq.surface.Z_basis.get_idx(*mode))
     target_Z = eq.surface.Z_lmn[idxs]
     constraints = (
-        FixBoundaryR(
-            modes=R_modes, fixed_boundary=True, normalize=False, target=target_R
-        ),
-        FixBoundaryZ(
-            modes=Z_modes, fixed_boundary=True, normalize=False, target=target_Z
-        ),
+        FixBoundaryR(modes=R_modes, normalize=False, target=target_R),
+        FixBoundaryZ(modes=Z_modes, normalize=False, target=target_Z),
+        BoundaryRSelfConsistency(),
+        BoundaryZSelfConsistency(),
     )
     for con in constraints:
         con.build(eq, verbose=0)
     objective.build(eq)
+    objective.set_args("Rb_lmn", "Zb_lmn")
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -580,27 +535,20 @@ def test_correct_indexing_passed_modes_axis():
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -689,27 +637,20 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     objective.build(eq)
     from desc.objectives.utils import factorize_linear_constraints
 
-    xp, A, Ainv, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
+    xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints,
         objective.args,
     )
-
-    from scipy.linalg import block_diag
-
-    from desc.compute import arg_order
-
-    A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-    b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
 
     x1 = objective.x(eq)
     x2 = recover(project(x1))
 
     atol = 2e-15
     assert np.isclose(np.max(np.abs(x1 - x2)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ xp - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x1 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ x2 - b_full)), 0, atol=atol)
-    assert np.isclose(np.max(np.abs(A_full @ Z)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ xp[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x1[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ x2[unfixed_idx] - b)), 0, atol=atol)
+    assert np.isclose(np.max(np.abs(A @ Z)), 0, atol=atol)
 
 
 @pytest.mark.unit
@@ -717,11 +658,11 @@ def test_FixBoundary_with_single_weight():
     """Test Fixing boundary with only a single, passed weight."""
     eq = Equilibrium()
     w = 1.1
-    FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), fixed_boundary=True, weight=w)
+    FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), weight=w)
     FixZ.build(eq)
     np.testing.assert_array_equal(FixZ.weight.size, 1)
     np.testing.assert_array_equal(FixZ.weight, w)
-    FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), fixed_boundary=True, weight=w)
+    FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), weight=w)
     FixR.build(eq)
     np.testing.assert_array_equal(FixR.weight.size, 1)
     np.testing.assert_array_equal(FixR.weight, w)
@@ -731,16 +672,16 @@ def test_FixBoundary_with_single_weight():
 def test_FixBoundary_passed_target_no_passed_modes_error():
     """Test Fixing boundary with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixBoundaryZ(modes=True, fixed_boundary=True, target=np.array([[0]]))
+    FixZ = FixBoundaryZ(modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixZ.build(eq)
-    FixZ = FixBoundaryZ(modes=False, fixed_boundary=False, target=np.array([[0]]))
+    FixZ = FixBoundaryZ(modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixZ.build(eq)
-    FixR = FixBoundaryR(modes=True, fixed_boundary=False, target=np.array([[0]]))
+    FixR = FixBoundaryR(modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
-    FixR = FixBoundaryR(modes=False, fixed_boundary=True, target=np.array([[0]]))
+    FixR = FixBoundaryR(modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
         FixR.build(eq)
 

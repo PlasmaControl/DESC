@@ -17,7 +17,12 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
-from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
+from ._qs import (
+    Isodynamicity,
+    QuasisymmetryBoozer,
+    QuasisymmetryTripleProduct,
+    QuasisymmetryTwoTerm,
+)
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
     AxisRSelfConsistency,

@@ -49,10 +49,9 @@ def test_vmec_input(tmpdir_factory):
     with open(path_converted_file) as f:
         lines_converted = f.readlines()
     # skip first 3 lines as they have date and pwd info
-    for line1, line2 in zip(lines_correct[3:], lines_converted[3:]):
+    for line1, line2 in zip(lines_correct[3:], lines_converted[4:]):
         assert line1.strip() == line2.strip()
-    # skip first 4 here as the directly written file lacks a header
-    for line1, line2 in zip(lines_correct[4:], lines_direct):
+    for line1, line2 in zip(lines_correct[3:], lines_direct):
         assert line1.strip() == line2.strip()
 
 
@@ -88,7 +87,7 @@ def test_write_desc_input_Nones(tmpdir_factory):
     for i, inp in enumerate(ir2.inputs):
         assert inp["ftol"] == correct_ftols[i]
 
-    # now check that the written line is the
+    # now check that the written line is
     # the correct "ftol = 1e-2, 1e-3"
     # and that gtol is NOT written anywhere,
     # since only None was passed in for that input
@@ -170,7 +169,7 @@ class TestInputReader:
         ), "numpy environment variable incorrect with default argument"
         assert ir.args.version is False, "version is not default False"
         assert (
-            len(ir.inputs[0]) == 28
+            len(ir.inputs[0]) == 27
         ), "number of inputs does not match number expected in MIN_INPUT"
         # test equality of arguments
 

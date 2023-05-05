@@ -53,7 +53,7 @@ class GenericObjective(_Objective):
         self,
         f,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -61,9 +61,10 @@ class GenericObjective(_Objective):
         grid=None,
         name="generic",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self.f = f
-        self.grid = grid
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -88,18 +89,20 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        if self._grid is None:
+            grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
+        else:
+            grid = self._grid
 
         if data_index[self.f]["dim"] == 0:
             self._dim_f = 1
             self._scalar = True
         else:
-            self._dim_f = self.grid.num_nodes * data_index[self.f]["dim"]
+            self._dim_f = grid.num_nodes * data_index[self.f]["dim"]
             self._scalar = False
         self._args = get_params(self.f)
-        self._profiles = get_profiles(self.f, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self.f, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self.f, eq=eq, grid=grid)
+        self._transforms = get_transforms(self.f, eq=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -125,7 +128,7 @@ class GenericObjective(_Objective):
         )
         f = data[self.f]
         if not self.scalar:
-            f = (f.T * self.grid.weights).flatten()
+            f = (f.T * self._transforms["grid"].weights).flatten()
         return f
 
 
@@ -166,7 +169,7 @@ class ToroidalCurrent(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -174,8 +177,9 @@ class ToroidalCurrent(_Objective):
         grid=None,
         name="toroidal current",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -199,8 +203,8 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -208,11 +212,13 @@ class ToroidalCurrent(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
+        else:
+            grid = self._grid
 
         if isinstance(self._target, Profile):
-            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
+            self._target = self._target(grid.nodes[grid.unique_rho_idx])
 
-        self._dim_f = self.grid.num_rho
+        self._dim_f = grid.num_rho
         self._data_keys = ["current"]
         self._args = get_params(self._data_keys)
 
@@ -221,8 +227,8 @@ class ToroidalCurrent(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -265,12 +271,16 @@ class ToroidalCurrent(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(self.grid, data["current"], surface_label="rho")
+        return compress(self._transforms["grid"], data["current"], surface_label="rho")
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -336,7 +346,7 @@ class RotationalTransform(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -344,8 +354,9 @@ class RotationalTransform(_Objective):
         grid=None,
         name="rotational transform",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
@@ -369,8 +380,8 @@ class RotationalTransform(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
-            self.grid = LinearGrid(
+        if self._grid is None:
+            grid = LinearGrid(
                 L=eq.L_grid,
                 M=eq.M_grid,
                 N=eq.N_grid,
@@ -378,10 +389,13 @@ class RotationalTransform(_Objective):
                 sym=eq.sym,
                 axis=False,
             )
-        if isinstance(self._target, Profile):
-            self._target = self._target(self.grid.nodes[self.grid.unique_rho_idx])
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_rho
+        if isinstance(self._target, Profile):
+            self._target = self._target(grid.nodes[grid.unique_rho_idx])
+
+        self._dim_f = grid.num_rho
         self._data_keys = ["iota"]
         self._args = get_params(self._data_keys)
 
@@ -390,8 +404,8 @@ class RotationalTransform(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -430,12 +444,16 @@ class RotationalTransform(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(self.grid, data["iota"], surface_label="rho")
+        return compress(self._transforms["grid"], data["iota"], surface_label="rho")
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(self.grid, self.grid.spacing[:, 0], surface_label="rho")
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        w = compress(
+            self._transforms["grid"],
+            self._transforms["grid"].spacing[:, 0],
+            surface_label="rho",
+        )
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

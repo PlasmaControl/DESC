@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.compute import arg_order
-from desc.utils import svd_inv_null
+from desc.utils import Index, flatten_list, svd_inv_null
 
 from ._equilibrium import (
     CurrentDensity,
@@ -123,6 +123,7 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
     constraints = (
         FixAxisR(),
         FixAxisZ(),
+        FixLambdaGauge(),
         FixPsi(),
     )
     if profiles:
@@ -264,13 +265,15 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         if obj.bounds is not None:
             raise ValueError("Linear constraints must use target instead of bounds.")
         A_ = {
-            arg: obj.derivatives["jac"][arg](
+            arg: obj.derivatives["jac_scaled"][arg](
                 *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
             )
             for arg in args
         }
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -obj.compute_scaled(*[jnp.zeros(obj.dimensions[arg]) for arg in obj.args])
+        b_ = -obj.compute_scaled_error(
+            *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
+        )
         A.append(A_)
         b.append(b_)
 
@@ -287,13 +290,18 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         b_full = put(
             b_full, fixed_rows, b_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)
         )
+        A_full = put(
+            A_full,
+            Index[fixed_rows, :],
+            A_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)[:, None],
+        )
         xp = put(xp, fixed_idx, b_full[fixed_rows])
         # some values might be fixed, but they still show up in other constraints
         # this is where the fixed cols have >1 nonzero val
         # for fixed variables, we delete that row and col of A, but that means
         # we need to subtract the fixed value from b so that the equation is balanced.
-        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    x1 = 1.5
-        # combining gives 3 x2 + 1 x3 = 1, with x1 now removed
+        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    4 x1 = 2
+        # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
         b_full = put(
             b_full,
             unfixed_rows,
@@ -322,7 +330,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        res = con.compute_scaled(**xp_dict)
+        res = con.compute_scaled_error(**xp_dict)
         x = np.concatenate([xp_dict[arg] for arg in con.args])
         # stuff like density is O(1e19) so need some adjustable tolerance here.
         atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
@@ -367,3 +375,27 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def combine_args(*objectives):
+    """Given ObjectiveFunctions, modify all to take the same state vector.
+
+    The new state vector will be a combination of all arguments taken by any objective.
+
+    Parameters
+    ----------
+    objectives : ObjectiveFunction
+        ObjectiveFunctions to modify.
+
+    Returns
+    -------
+    objectives : ObjectiveFunction
+        Original ObjectiveFunctions modified to take the same state vector.
+    """
+    args = flatten_list([obj.args for obj in objectives])
+    args = [arg for arg in arg_order if arg in args]
+
+    for obj in objectives:
+        obj.set_args(*args)
+
+    return objectives

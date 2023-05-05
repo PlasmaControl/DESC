@@ -2,10 +2,9 @@
 
 import warnings
 
-import numpy as np
 from termcolor import colored
 
-from desc.backend import put, use_jax
+from desc.backend import jnp, put, use_jax
 from desc.compute import arg_order, profile_names
 from desc.objectives import (
     BoundaryRSelfConsistency,
@@ -51,9 +50,9 @@ def get_deltas(things1, things2):
             s1 = s1.copy()
             s2 = s2.copy()
             s1.change_resolution(s2.L, s2.M, s2.N)
-            if not np.allclose(s2.R_lmn, s1.R_lmn):
+            if not jnp.allclose(s2.R_lmn, s1.R_lmn):
                 deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
-            if not np.allclose(s2.Z_lmn, s1.Z_lmn):
+            if not jnp.allclose(s2.Z_lmn, s1.Z_lmn):
                 deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
 
     for key, val in profile_names.items():
@@ -65,13 +64,13 @@ def get_deltas(things1, things2):
                 t2 = t2.copy()
                 if hasattr(t1, "change_resolution") and hasattr(t2, "basis"):
                     t1.change_resolution(t2.basis.L)
-                if not np.allclose(t2.params, t1.params):
+                if not jnp.allclose(t2.params, t1.params):
                     deltas[val] = t2.params - t1.params
 
     if "Psi" in things1:
         psi1 = things1.pop("Psi")
         psi2 = things2.pop("Psi")
-        if psi1 is not None and not np.allclose(psi2, psi1):
+        if psi1 is not None and not jnp.allclose(psi2, psi1):
             deltas["Psi"] = psi2 - psi1
 
     assert len(things1) == 0, "get_deltas got an unexpected key: {}".format(
@@ -138,8 +137,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 "yellow",
             )
         )
-    if np.isscalar(tr_ratio):
-        tr_ratio = tr_ratio * np.ones(order)
+    if jnp.isscalar(tr_ratio):
+        tr_ratio = tr_ratio * jnp.ones(order)
     elif len(tr_ratio) < order:
         raise ValueError(
             "Got only {} tr_ratios for order {} perturbations.".format(
@@ -147,12 +146,12 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             )
         )
     # remove deltas that are zero
-    deltas = {key: val for key, val in deltas.items() if np.any(val)}
+    deltas = {key: val for key, val in deltas.items() if jnp.any(val)}
 
-    # make sure things are at least 1D for np.concatenate later
+    # make sure things are at least 1D for jnp.concatenate later
     # in case only a single delta is being passed
     for key in deltas.keys():
-        deltas[key] = np.atleast_1d(deltas[key])
+        deltas[key] = jnp.atleast_1d(deltas[key])
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
@@ -188,91 +187,95 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # state vector
     x = objective.x(eq)
     x_reduced = project(x)
-    x_norm = np.linalg.norm(x_reduced)
+    x_norm = jnp.linalg.norm(x_reduced)
 
     # perturbation vectors
-    dx1_reduced = np.zeros_like(x_reduced)
-    dx2_reduced = np.zeros_like(x_reduced)
-    dx3_reduced = np.zeros_like(x_reduced)
+    dx1_reduced = jnp.zeros_like(x_reduced)
+    dx2_reduced = jnp.zeros_like(x_reduced)
+    dx3_reduced = jnp.zeros_like(x_reduced)
 
     # tangent vectors
-    tangents = np.zeros((objective.dim_x,))
+    tangents = jnp.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac"]["R_lmn"](
-            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
-        Ainv = np.linalg.pinv(A)
+        Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
-        tangents += np.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac"]["Z_lmn"](
-            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
-        Ainv = np.linalg.pinv(A)
+        Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
-        tangents += np.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
     if len([arg for arg in other_args if arg in deltas.keys()]):
-        dc = np.concatenate(
+        dc = jnp.concatenate(
             [
                 deltas[arg]
                 for arg in other_args
                 if arg in deltas.keys() and arg in objective.args
             ]
         )
-        x_idx = np.concatenate(
+        x_idx = jnp.concatenate(
             [
                 objective.x_idx[arg]
                 for arg in other_args
                 if arg in deltas.keys() and arg in objective.args
             ]
         )
-        x_idx.sort(kind="mergesort")
-        tangents += np.eye(objective.dim_x)[:, x_idx] @ dc
+        x_idx = jnp.sort(x_idx)
+        tangents += jnp.eye(objective.dim_x)[:, x_idx] @ dc
 
     # 1st order
     if order > 0:
 
         if (weight is None) or (weight == "auto"):
-            w = np.ones((objective.dim_x,))
+            w = jnp.ones((objective.dim_x,))
             if weight == "auto" and (("p_l" in deltas) or ("i_l" in deltas)):
-                w[objective.x_idx["R_lmn"]] = (
-                    abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1
+                w = put(
+                    w,
+                    objective.x_idx["R_lmn"],
+                    (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
-                w[objective.x_idx["Z_lmn"]] = (
-                    abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1
+                w = put(
+                    w,
+                    objective.x_idx["Z_lmn"],
+                    (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
-                w[objective.x_idx["L_lmn"]] = (
-                    abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1
+                w = put(
+                    w,
+                    objective.x_idx["L_lmn"],
+                    (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
             weight = w
-        weight = np.atleast_1d(weight)
+        weight = jnp.atleast_1d(weight)
         assert (
             len(weight) == objective.dim_x
         ), "Size of weight supplied to perturbation does not match objective.dim_x."
         if weight.ndim == 1:
             weight = weight[unfixed_idx]
-            weight = np.diag(weight)
+            weight = jnp.diag(weight)
         else:
             weight = weight[unfixed_idx, unfixed_idx]
         W = Z.T @ weight @ Z
         scale_inv = W
-        scale = np.linalg.inv(scale_inv)
+        scale = jnp.linalg.inv(scale_inv)
 
         # 1st partial derivatives wrt both state vector (x) and input parameters (c)
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac(x)
+        Jx = objective.jac_scaled(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
-        RHS1 = objective.jvp(tangents, x)
+        RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
-            f = objective.compute(x)
+            f = objective.compute_scaled_error(x)
             RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
@@ -281,7 +284,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Factoring df")
         timer.start("df/dx factorization")
-        u, s, vt = np.linalg.svd(Jx_reduced, full_matrices=False)
+        u, s, vt = jnp.linalg.svd(Jx_reduced, full_matrices=False)
         timer.stop("df/dx factorization")
         if verbose > 1:
             timer.disp("df/dx factorization")
@@ -291,7 +294,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             u,
             s,
             vt.T,
-            tr_ratio[0] * np.linalg.norm(scale_inv @ x_reduced),
+            tr_ratio[0] * jnp.linalg.norm(scale_inv @ x_reduced),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -307,7 +310,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
-        RHS2 = 0.5 * objective.jvp((tangents, tangents), x)
+        RHS2 = 0.5 * objective.jvp_scaled((tangents, tangents), x)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -317,7 +320,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             u,
             s,
             vt.T,
-            tr_ratio[1] * np.linalg.norm(dx1_h),
+            tr_ratio[1] * jnp.linalg.norm(dx1_h),
             initial_alpha=alpha / tr_ratio[1],
             rtol=0.01,
             max_iter=10,
@@ -332,8 +335,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
-        RHS3 += objective.jvp((dx2, tangents), x)
+        RHS3 = (1 / 6) * objective.jvp_scaled((tangents, tangents, tangents), x)
+        RHS3 += objective.jvp_scaled((dx2, tangents), x)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -343,7 +346,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             u,
             s,
             vt.T,
-            tr_ratio[2] * np.linalg.norm(dx2_h),
+            tr_ratio[2] * jnp.linalg.norm(dx2_h),
             initial_alpha=alpha / tr_ratio[2],
             rtol=0.01,
             max_iter=10,
@@ -376,7 +379,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+                value, jnp.where(jnp.abs(value) < 10 * jnp.finfo(value.dtype).eps)[0], 0
             )
             # don't set nonexistent profile (values are empty ndarrays)
             if value.size:
@@ -384,7 +387,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     timer.stop("Total perturbation")
     if verbose > 0:
-        print("||dx||/||x|| = {:10.3e}".format(np.linalg.norm(dx_reduced) / x_norm))
+        print("||dx||/||x|| = {:10.3e}".format(jnp.linalg.norm(dx_reduced) / x_norm))
     if verbose > 1:
         timer.disp("Total perturbation")
 
@@ -457,8 +460,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 "yellow",
             )
         )
-    if np.isscalar(tr_ratio):
-        tr_ratio = tr_ratio * np.ones(order)
+    if jnp.isscalar(tr_ratio):
+        tr_ratio = tr_ratio * jnp.ones(order)
     elif len(tr_ratio) < order:
         raise ValueError(
             "Got only {} tr_ratios for order {} perturbations.".format(
@@ -474,41 +477,41 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     deltas = {}
     if type(dR) is bool or dR is None:
         if dR is True:
-            deltas["R_lmn"] = np.ones((objective_f.dimensions["R_lmn"],), dtype=bool)
-    elif np.any(dR):
+            deltas["R_lmn"] = jnp.ones((objective_f.dimensions["R_lmn"],), dtype=bool)
+    elif jnp.any(dR):
         deltas["R_lmn"] = dR
     if type(dZ) is bool or dZ is None:
         if dZ is True:
-            deltas["Z_lmn"] = np.ones((objective_f.dimensions["Z_lmn"],), dtype=bool)
-    elif np.any(dZ):
+            deltas["Z_lmn"] = jnp.ones((objective_f.dimensions["Z_lmn"],), dtype=bool)
+    elif jnp.any(dZ):
         deltas["Z_lmn"] = dZ
     if type(dL) is bool or dL is None:
         if dL is True:
-            deltas["L_lmn"] = np.ones((objective_f.dimensions["L_lmn"],), dtype=bool)
-    elif np.any(dL):
+            deltas["L_lmn"] = jnp.ones((objective_f.dimensions["L_lmn"],), dtype=bool)
+    elif jnp.any(dL):
         deltas["L_lmn"] = dL
     if type(dp) is bool or dp is None:
         if dp is True:
-            deltas["p_l"] = np.ones((objective_f.dimensions["p_l"],), dtype=bool)
-    elif np.any(dp):
+            deltas["p_l"] = jnp.ones((objective_f.dimensions["p_l"],), dtype=bool)
+    elif jnp.any(dp):
         deltas["p_l"] = dp
     if type(di) is bool or di is None:
         if di is True:
-            deltas["i_l"] = np.ones((objective_f.dimensions["i_l"],), dtype=bool)
-    elif np.any(di):
+            deltas["i_l"] = jnp.ones((objective_f.dimensions["i_l"],), dtype=bool)
+    elif jnp.any(di):
         deltas["i_l"] = di
     if type(dPsi) is bool or dPsi is None:
         if dPsi is True:
-            deltas["Psi"] = np.ones((objective_f.dimensions["Psi"],), dtype=bool)
+            deltas["Psi"] = jnp.ones((objective_f.dimensions["Psi"],), dtype=bool)
     if type(dRb) is bool or dRb is None:
         if dRb is True:
-            deltas["Rb_lmn"] = np.ones((objective_f.dimensions["Rb_lmn"],), dtype=bool)
-    elif np.any(dRb):
+            deltas["Rb_lmn"] = jnp.ones((objective_f.dimensions["Rb_lmn"],), dtype=bool)
+    elif jnp.any(dRb):
         deltas["Rb_lmn"] = dRb
     if type(dZb) is bool or dZb is None:
         if dZb is True:
-            deltas["Zb_lmn"] = np.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
-    elif np.any(dZb):
+            deltas["Zb_lmn"] = jnp.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
+    elif jnp.any(dZb):
         deltas["Zb_lmn"] = dZb
 
     if not len(deltas):
@@ -521,15 +524,15 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     timer.start("Total perturbation")
 
     # parameter vector
-    c = np.array([])
-    c_idx = np.array([], dtype=bool)
+    c = jnp.array([])
+    c_idx = jnp.array([], dtype=bool)
     for key, value in deltas.items():
-        c_idx = np.append(c_idx, np.where(value)[0] + c.size)
-        c = np.concatenate((c, getattr(eq, key)))
+        c_idx = jnp.append(c_idx, jnp.where(value)[0] + c.size)
+        c = jnp.concatenate((c, getattr(eq, key)))
 
     # optimization subspace matrix
     if subspace is None:
-        subspace = np.eye(c.size)[:, c_idx]
+        subspace = jnp.eye(c.size)[:, c_idx]
     dim_c, dim_opt = subspace.shape
 
     if dim_c != c.size:
@@ -577,10 +580,10 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dx2_reduced = 0
 
     # dx/dx_reduced
-    dxdx_reduced = np.eye(objective_f.dim_x)[:, unfixed_idx] @ Z
+    dxdx_reduced = jnp.eye(objective_f.dim_x)[:, unfixed_idx] @ Z
 
     # dx/dc
-    dxdc = np.zeros((objective_f.dim_x, 0))
+    dxdc = jnp.zeros((objective_f.dim_x, 0))
     if len(
         [
             arg
@@ -588,41 +591,39 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if arg in deltas.keys()
         ]
     ):
-        x_idx = np.concatenate(
+        x_idx = jnp.concatenate(
             [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
         )
-        x_idx.sort(kind="mergesort")
-        dxdc = np.eye(objective_f.dim_x)[:, x_idx]
+        x_idx = jnp.sort(x_idx)
+        dxdc = jnp.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac"]["R_lmn"](
-            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
-        Ainv = np.linalg.pinv(A)
-        dxdRb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
-        dxdc = np.hstack((dxdc, dxdRb))
+        Ainv = jnp.linalg.pinv(A)
+        dxdRb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
+        dxdc = jnp.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac"]["Z_lmn"](
-            *[np.zeros(con.dimensions[arg]) for arg in con.args]
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
-        Ainv = np.linalg.pinv(A)
-        dxdZb = np.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
-        dxdc = np.hstack((dxdc, dxdZb))
+        Ainv = jnp.linalg.pinv(A)
+        dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
+        dxdc = jnp.hstack((dxdc, dxdZb))
 
     # 1st order
     if order > 0:
 
-        f = objective_f.compute(xf)
-        g = objective_g.compute(xg)
+        f = objective_f.compute_scaled_error(xf)
+        g = objective_g.compute_scaled_error(xg)
 
         # 1st partial derivatives of f objective wrt x
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Fx = objective_f.jac(xf)
+        Fx = objective_f.jac_scaled(xf)
         Fx = align_jacobian(Fx, objective_f, objective_g)
         timer.stop("df computation")
         if verbose > 1:
@@ -632,7 +633,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
-        Gx = objective_g.jac(xg)
+        Gx = objective_g.jac_scaled(xg)
         Gx = align_jacobian(Gx, objective_g, objective_f)
         timer.stop("dg computation")
         if verbose > 1:
@@ -651,11 +652,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Fxh = Fx_reduced * wx
         Gxh = Gx_reduced * wx
         if cutoff is None:
-            cutoff = np.finfo(Fx_reduced.dtype).eps * np.max(Fx_reduced.shape)
-        uf, sf, vtf = np.linalg.svd(Fxh, full_matrices=False)
+            cutoff = jnp.finfo(Fx_reduced.dtype).eps * max(Fx_reduced.shape)
+        uf, sf, vtf = jnp.linalg.svd(Fxh, full_matrices=False)
         sf += sf[-1]  # add a tiny bit of regularization
-        sfi = np.where(sf < cutoff * sf[0], 0, 1 / sf)
-        Fxh_inv = vtf.T @ (sfi[..., np.newaxis] * uf.T)
+        sfi = jnp.where(sf < cutoff * sf[0], 0, 1 / sf)
+        Fxh_inv = vtf.T @ (sfi[..., jnp.newaxis] * uf.T)
 
         GxFx = Gxh @ Fxh_inv
         LHS = GxFx @ Fc - Gc
@@ -663,7 +664,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
         # scaling for c
         # approx dc/dx at const f
-        dcdx_f = np.linalg.lstsq(Fc, Fx_reduced, rcond=None)[0]
+        dcdx_f = jnp.linalg.lstsq(Fc, Fx_reduced, rcond=None)[0]
         wc, _ = compute_jac_scale(dcdx_f.T)
         LHSh = LHS * wc
         # restrict to optimization subspace
@@ -672,13 +673,13 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Factoring LHS")
         timer.start("LHS factorization")
-        ug, sg, vtg = np.linalg.svd(LHS_opt, full_matrices=False)
+        ug, sg, vtg = jnp.linalg.svd(LHS_opt, full_matrices=False)
         timer.stop("LHS factorization")
         if verbose > 1:
             timer.disp("LHS factorization")
 
-        c_norm = np.linalg.norm(dcdx_f @ x_reduced)
-        x_norm = np.linalg.norm(wx * x_reduced)
+        c_norm = jnp.linalg.norm(dcdx_f @ x_reduced)
+        x_norm = jnp.linalg.norm(wx * x_reduced)
 
         dc1h_opt, bound_hit, _ = trust_region_step_exact_svd(
             -RHS_1g,
@@ -709,18 +710,18 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # 2nd order
     if order > 1:
 
-        idx = np.array([], dtype=int)
+        idx = jnp.array([], dtype=int)
         for arg in objective_f.args:
             if arg not in objective_g.args:
-                idx = np.concatenate((idx, objective_f.x_idx[arg]))
-        dxf_dxg = np.delete(np.eye(objective_f.dim_x), idx, 1)
+                idx = jnp.concatenate((idx, objective_f.x_idx[arg]))
+        dxf_dxg = jnp.delete(jnp.eye(objective_f.dim_x), idx, 1)
 
         # 2nd partial derivatives of f objective wrt both x and c
         if verbose > 0:
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
-        RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), xf)
+        RHS_2f = -0.5 * objective_f.jvp_scaled((tangents_f, tangents_f), xf)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -730,7 +731,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
-        RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
+        RHS_2g = (
+            0.5 * objective_g.jvp_scaled((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
+        )
         timer.stop("d^2g computation")
         if verbose > 1:
             timer.disp("d^2g computation")
@@ -740,7 +743,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             ug,
             sg,
             vtg.T,
-            tr_ratio[1] * np.linalg.norm(dc1h_opt),
+            tr_ratio[1] * jnp.linalg.norm(dc1h_opt),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -755,7 +758,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             uf,
             sf,
             vtf.T,
-            tr_ratio[1] * np.linalg.norm(dx1h_reduced),
+            tr_ratio[1] * jnp.linalg.norm(dx1h_reduced),
             initial_alpha=None,
             rtol=0.01,
             max_iter=10,
@@ -792,7 +795,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for key, value in args.items():
         if key not in deltas:
             value = put(  # parameter values below threshold are set to 0
-                value, np.where(np.abs(value) < 10 * np.finfo(value.dtype).eps)[0], 0
+                value, jnp.where(jnp.abs(value) < 10 * jnp.finfo(value.dtype).eps)[0], 0
             )
             # don't set nonexistent profile (values are empty ndarrays)
             if value.size:
@@ -802,13 +805,15 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     timer.stop("Total perturbation")
     if verbose > 0:
-        print("||dc||/||c|| = {:10.3e}".format(np.linalg.norm(dc) / np.linalg.norm(c)))
+        print(
+            "||dc||/||c|| = {:10.3e}".format(jnp.linalg.norm(dc) / jnp.linalg.norm(c))
+        )
         print(
             "||dx||/||x|| = {:10.3e}".format(
-                np.linalg.norm(dx_reduced) / np.linalg.norm(x_reduced)
+                jnp.linalg.norm(dx_reduced) / jnp.linalg.norm(x_reduced)
             )
         )
     if verbose > 1:
         timer.disp("Total perturbation")
 
-    return eq_new, predicted_reduction, dc_opt, dc, np.linalg.norm(c), bound_hit
+    return eq_new, predicted_reduction, dc_opt, dc, jnp.linalg.norm(c), bound_hit

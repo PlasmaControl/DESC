@@ -244,7 +244,7 @@ def trust_region_step_exact_cho(
 
     Solves problems of the form
         (B + alpha*I)*p = -g,  ||p|| < trust_radius
-    for symmetric positive definite B
+    for symmetric B. A modified Cholesky factorization is used to deal with indefinite B
 
     Parameters
     ----------
@@ -276,8 +276,8 @@ def trust_region_step_exact_cho(
 
     """
     # try full newton step
-    R, lower = cho_factor(B)
-    p = cho_solve((R, lower), -g)
+    R = chol(B)
+    p = cho_solve((R, True), -g)
     if np.linalg.norm(p) <= trust_radius:
         return p, False, 0.0
 
@@ -295,8 +295,8 @@ def trust_region_step_exact_cho(
             alpha = max(0.001 * alpha_upper, (alpha_lower * alpha_upper) ** 0.5)
 
         Bi = B + alpha * jnp.eye(B.shape[0])
-        R, lower = cho_factor(Bi)
-        p = cho_solve((R, lower), -g)
+        R = chol(Bi)
+        p = cho_solve((R, True), -g)
         p_norm = np.linalg.norm(p)
         phi = p_norm - trust_radius
         if phi < 0:
@@ -304,7 +304,7 @@ def trust_region_step_exact_cho(
         if phi > 0:
             alpha_lower = alpha
 
-        q = solve_triangular(R.T, p, lower=(not lower))
+        q = solve_triangular(R.T, p, lower=False)
         q_norm = np.linalg.norm(q)
 
         alpha += (p_norm / q_norm) ** 2 * phi / trust_radius
@@ -312,8 +312,8 @@ def trust_region_step_exact_cho(
             break
 
     Bi = B + alpha * jnp.eye(B.shape[0])
-    R, lower = cho_factor(Bi)
-    p = cho_solve((R, lower), -g)
+    R = chol(Bi)
+    p = cho_solve((R, True), -g)
 
     # Make the norm of p equal to trust_radius; p is changed only slightly during this.
     # This is done to prevent p from lying outside the trust region
@@ -330,7 +330,6 @@ def update_tr_radius(
     step_norm,
     bound_hit,
     max_tr=np.inf,
-    min_tr=0,
     increase_threshold=0.75,
     increase_ratio=2,
     decrease_threshold=0.25,
@@ -352,8 +351,6 @@ def update_tr_radius(
         whether the current step hits the trust region bound
     max_tr : float
         maximum allowed trust region radius
-    min_tr : float
-        minimum allowed trust region radius
     increase_threshold, increase_ratio : float
         if ratio > inrease_threshold, trust radius is increased by a factor
         of increase_ratio
@@ -380,7 +377,7 @@ def update_tr_radius(
     elif reduction_ratio > increase_threshold:
         trust_radius = max(step_norm * increase_ratio, trust_radius)
 
-    trust_radius = np.clip(trust_radius, min_tr, max_tr)
+    trust_radius = np.clip(trust_radius, 0, max_tr)
 
     return trust_radius, reduction_ratio
 

@@ -1615,9 +1615,10 @@ def test_bootstrap_objective_build():
         obj.build(eq)
 
     # make sure default grid has the right nodes
-    assert obj.grid.num_theta == 13
-    assert obj.grid.num_zeta == 13
-    assert obj.grid.num_rho == 5
+    assert obj._transforms["grid"].num_theta == 13
+    assert obj._transforms["grid"].num_zeta == 13
+    assert obj._transforms["grid"].num_rho == 5
     np.testing.assert_allclose(
-        obj.grid.nodes[obj.grid.unique_rho_idx, 0], np.array([0.2, 0.4, 0.6, 0.8, 1.0])
+        obj._transforms["grid"].nodes[obj._transforms["grid"].unique_rho_idx, 0],
+        np.array([0.2, 0.4, 0.6, 0.8, 1.0]),
     )

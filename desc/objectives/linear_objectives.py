@@ -608,7 +608,7 @@ class FixBoundaryW(_Objective):
     _scalar = False
     _linear = True
     _fixed = False
-    _units = "(m)"
+    _units = "(rad)"
     _print_value_fmt = "W boundary error: {:10.3e} "
 
     def __init__(
@@ -654,8 +654,8 @@ class FixBoundaryW(_Objective):
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
         elif self._modes is True:  # all modes
-            modes = eq.W_basis.modes
-            idx = np.arange(eq.W_basis.num_modes)
+            modes = eq.surface.W_basis.modes
+            idx = np.arange(eq.surface.W_basis.num_modes)
         else:  # specified modes
             modes = np.atleast_2d(self._modes)
             dtype = {
@@ -663,14 +663,14 @@ class FixBoundaryW(_Objective):
                 "formats": 3 * [modes.dtype],
             }
             _, idx, modes_idx = np.intersect1d(
-                eq.W_basis.modes.astype(modes.dtype).view(dtype),
+                eq.surface.W_basis.modes.astype(modes.dtype).view(dtype),
                 modes.view(dtype),
                 return_indices=True,
             )
             # rearrange modes to match order of basis.modes
             # and eq.surface.Z_lmn,
             # necessary so that the A matrix rows match up with the target b
-            modes = np.atleast_2d(eq.W_basis.modes[idx, :])
+            modes = np.atleast_2d(eq.surface.W_basis.modes[idx, :])
 
             if idx.size < modes.shape[0]:
                 warnings.warn(
@@ -692,7 +692,7 @@ class FixBoundaryW(_Objective):
                 )
             self.target = self.target[modes_idx]
 
-        self._A = np.eye(eq.W_basis.num_modes)[idx, :]
+        self._A = np.eye(eq.surface.W_basis.num_modes)[idx, :]
 
         # use surface parameters as target if needed
         if self.target is None:

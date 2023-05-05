@@ -281,12 +281,12 @@ class _Configuration(IOAble, ABC):
                 raise ValueError("boundary should either have l=0 or n=0")
             if self.bdry_mode == "lcfs":
                 self._surface = FourierRZToroidalSurface(
-                    surface[:, 3],
-                    surface[:, 4],
-                    surface[:, 1:3].astype(int),
-                    surface[:, 1:3].astype(int),
-                    self.NFP,
-                    self.sym,
+                    R_lmn=surface[:, 3],
+                    Z_lmn=surface[:, 4],
+                    modes_R=surface[:, 1:3].astype(int),
+                    modes_Z=surface[:, 1:3].astype(int),
+                    NFP=self.NFP,
+                    sym=self.sym,
                 )
             elif self.bdry_mode == "poincare":
                 self._surface = ZernikeRZToroidalSection(
@@ -611,6 +611,7 @@ class _Configuration(IOAble, ABC):
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
+            AW = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -629,10 +630,20 @@ class _Configuration(IOAble, ABC):
                     )
                 )
                 AZ[j, i] = zernike_radial(rho, l, m)
+            for i, (l, m, n) in enumerate(self.Z_basis.modes):
+                j = np.argwhere(
+                    np.logical_and(
+                        surface.W_basis.modes[:, 1] == m,
+                        surface.W_basis.modes[:, 2] == n,
+                    )
+                )
+                AW[j, i] = zernike_radial(rho, l, m)
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
+            Wb = AW @ self.W_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
+            surface.W_lmn = Wb
             surface.grid = LinearGrid(
                 rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
             )
@@ -858,16 +869,11 @@ class _Configuration(IOAble, ABC):
     @property
     def Wb_lmn(self):
         """ndarray: Spectral coefficients of omega at the boundary."""
-        if hasattr(self.surface, "W_lmn"):
-            return self.surface.W_lmn
-        else:
-            return np.zeros_like(self.Zb_lmn)
+        return self.surface.W_lmn
 
     @Wb_lmn.setter
     def Wb_lmn(self, Wb_lmn):
-        if hasattr(self.surface, "W_lmn"):
-            self.surface.W_lmn = Wb_lmn
-        # TODO: raise error?
+        self.surface.W_lmn = Wb_lmn
 
     @property
     def Ra_n(self):

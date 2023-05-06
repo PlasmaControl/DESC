@@ -620,7 +620,70 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
     return res
 
 
-def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=False):
+def line_integrals(grid, q=jnp.array([1]), curve_label="theta", fix_surface=("rho", 1)):
+    """Compute the line integral of a quantity over curves covering fix_surface.
+
+    As an example, by specifying the combination of line_label="theta" and
+    fix_surface=("rho", 1), the intention is to integrate along the outermost
+    perimeter of a particular zeta surface (toroidal cross-section), for each
+    zeta surface in the grid.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    q : ndarray
+        Quantity to integrate.
+    curve_label : str
+        The curve label of rho, theta, or zeta to compute the integration over.
+        To clarify, a theta (poloidal) curve is the intersection of a
+        rho (flux) surface and zeta (toroidal) surface.
+    fix_surface : str, float
+        A tuple of the form: label, value.
+        fix_surface label should differ from curve_label.
+        By default, fix_surface is chosen to be the last closed flux surface.
+
+    Returns
+    -------
+    integrals : ndarray
+        Line integrals of q over curves covering the given surface.
+
+    """
+    if curve_label == fix_surface[0]:
+        raise ValueError("There is no valid use for this combination of inputs.")
+    if isinstance(grid, ConcentricGrid):
+        # It might be fine, but I haven't thought it through yet.
+        raise ValueError("ConcentricGrid not supported for line integrals.")
+
+    if fix_surface[0] == "rho":
+        nodes = grid.nodes[:, 0]
+        dl_fix = grid.spacing[:, 0]
+    elif fix_surface[0] == "theta":
+        nodes = grid.nodes[:, 1]
+        dl_fix = grid.spacing[:, 1]
+    else:
+        nodes = grid.nodes[:, 2]
+        dl_fix = grid.spacing[:, 2]
+
+    # Generate a new quantity q_prime which is zero everywhere
+    # except on the fixed surface, on which q_prime takes the value of q.
+    # Then forward the computation to surface_integrals.
+    q_prime = q * (nodes == fix_surface[1])
+    # The differential element of the line integral, denoted dl,
+    # should correspond to curve label.
+    # The differential element of the surface integral is
+    # ds = dl * dl_fix, so we scale q_prime by 1 / dl_fix.
+    q_prime /= dl_fix
+    if fix_surface[0] == "rho":
+        q_prime *= fix_surface[1]  # dl = 2pi rho
+        # Todo: Ask Daniel why we normalized ds by max_rho; I've forgotten why.
+        # q_prime /= max_rho
+
+    surface_label = list({"rho", "theta", "zeta"} - {curve_label, fix_surface[0]})[0]
+    return surface_integrals(grid, q_prime, surface_label)
+
+
+def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
@@ -630,10 +693,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
     q : ndarray
         Quantity to integrate.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
-    max_surface : bool
-        If True, only computes the surface integral on the flux surface with the
-        maximum radial coordinate (as opposed to on all flux surfaces).
+        The surface label of rho, theta, or zeta to compute the integration over.
 
     Returns
     -------
@@ -649,62 +709,58 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho", max_surface=F
                 "yellow",
             )
         )
-    q = jnp.atleast_1d(q)
-    nodes, unique_idx, _, ds, max_surface_val, has_endpoint_dupe = _get_grid_surface(
+    _, unique_idx, inverse_idx, ds, _, has_endpoint_dupe = _get_grid_surface(
         grid, surface_label
     )
-    if max_surface:
-        # Todo: generalize and make line integral function
-        assert q.ndim == 1 and surface_label == "zeta"
-        # does a line integral
-        max_rho = grid.nodes[grid.unique_rho_idx[-1], 0]
-        idx = np.nonzero(grid.nodes[:, 0] == max_rho)[0]
-        q = q[idx]
-        nodes = nodes[idx]
-        unique_idx = (unique_idx / grid.num_rho).astype(int)
-        ds = ds[idx] / grid.spacing[idx, 0] / max_rho
 
-    # Separate nodes into bins with boundaries at unique values of the surface label.
-    # This groups nodes with identical surface label values.
-    # Each is assigned a weight of their contribution to the integral.
-    # The elements of each bin are summed, performing the integration.
-    bins = jnp.append(nodes[unique_idx], max_surface_val)
-    # to group duplicate nodes together
-    nodes_modulo = nodes % max_surface_val if has_endpoint_dupe else nodes
-    # Longer explanation:
-    #     Imagine a torus cross-section at zeta=pi.
-    # A grid with a duplicate zeta=pi node has 2 of those cross-sections.
-    #     In grid.py, we multiply by 1/n the areas of surfaces with
-    # duplicity n. This prevents the area of that surface from being
-    # double-counted, as surfaces with the same node value are combined
-    # into 1 integral, which sums their areas. Thus, if the zeta=pi
-    # cross-section has duplicity 2, we ensure that the area on the zeta=pi
-    # surface will have the correct total area of pi+pi = 2pi.
-    #     An edge case exists if the duplicate surface has nodes with
-    # different values for the surface label, which only occurs when
-    # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
-    # has a duplicate surface at surface_label=0 and
-    # surface_label=max_surface_val. Although the modulo of these values
-    # are equal, their numeric values are not, so jnp.histogram would treat
-    # them as different surfaces. We solve this issue by modulating
-    # 'nodes', so that the duplicate surface has nodes with the same
-    # surface label and is treated as one, like in the previous paragraph.
+    def group_surfaces(i):
+        # True at the indexes which correspond to the ith surface.
+        # False everywhere else.
+        # The integral over the ith surface is the inner product
+        # of the returned value and the integrand.
+        return inverse_idx == i
+        # could also return nodes == nodes[unique_idx][i]
+
+    # groups can be precomputed in grid.py if desired
+    groups = vmap(group_surfaces)(jnp.arange(unique_idx.size))
+    if has_endpoint_dupe:
+        groups = put(
+            groups, jnp.asarray([0, -1]), jnp.logical_or(groups[0], groups[-1])
+        )
+        #     Imagine a torus cross-section at zeta=pi.
+        # A grid with a duplicate zeta=pi node has 2 of those cross-sections.
+        #     In grid.py, we multiply by 1/n the areas of surfaces with
+        # duplicity n. This prevents the area of that surface from being
+        # double-counted, as surfaces with the same node value are combined
+        # into 1 integral, which sums their areas. Thus, if the zeta=pi
+        # cross-section has duplicity 2, we ensure that the area on the zeta=pi
+        # surface will have the correct total area of pi+pi = 2pi.
+        #     An edge case exists if the duplicate surface has nodes with
+        # different values for the surface label, which only occurs when
+        # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
+        # has a duplicate surface at surface_label=0 and
+        # surface_label=max_surface_val. Although the modulo of these values
+        # are equal, their numeric values are not, so the integration below
+        # would treat them as different surfaces. We solve this issue by
+        # combining the indices corresponding the integrands of the duplicated
+        # surface, so that the duplicate surface is treated as one, like in the
+        # previous paragraph.
 
     def integrate_component(integrands):
-        return jnp.histogram(nodes_modulo, bins=bins, weights=integrands)[0]
+        # Unlike groups @ integrands, dot(groups, integrands) has the
+        # desirable characteristic that jnp.array([False]) * jnp.nan equals 0.
+        # Although, np.array([False]) * np.nan equals nan.
+        # Todo: Move dot function to desc.backend,
+        #     Copy dot function unmodified to the if use_jax section.
+        #     For the use_numpy section, modify array multiply operation
+        #     with masked array multiply operation, so that False * np.nan = 0.
+        return dot(groups, integrands)
 
     # integral of a vector valued function is a vector of integrals
-    vector_of_integrands = jnp.atleast_2d(ds * q.T)
+    vector_of_integrands = jnp.atleast_2d(ds * jnp.atleast_1d(q).T)
     vector_of_integrals = jnp.atleast_1d(
         jnp.squeeze(vmap(integrate_component, out_axes=1)(vector_of_integrands))
     )
-    if has_endpoint_dupe:
-        # By modulating nodes, we 'moved' all the area from
-        # surface_label=max_surface_val to the surface_label=0 surface.
-        # With the correct value of the integral on this surface stored
-        # at index 0, we copy it to the duplicate surface at index -1.
-        assert jnp.all(vector_of_integrals[-1] == 0)
-        vector_of_integrals = put(vector_of_integrals, -1, vector_of_integrals[0])
     return expand(grid, vector_of_integrals, surface_label)
 
 

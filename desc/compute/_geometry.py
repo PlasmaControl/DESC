@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import compress, cross, dot, surface_integrals
+from .utils import compress, cross, dot, surface_integrals, line_integrals
 
 
 @register_compute_fun(
@@ -198,11 +198,9 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     P = compress(  # perimeter
         transforms["grid"],
-        surface_integrals(
+        line_integrals(
             transforms["grid"],
             jnp.sqrt(data["g_tt"]),
-            surface_label="zeta",
-            max_surface=True,
         ),
         surface_label="zeta",
     )

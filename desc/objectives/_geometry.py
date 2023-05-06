@@ -292,7 +292,7 @@ class FluxGradient(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=0,
         bounds=None,
         weight=1,
         normalize=True,

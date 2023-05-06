@@ -31,9 +31,9 @@ class AugLagrangianLS(ObjectiveFunction):
     def compute(self, x, lmbda, mu):
         L = self.func(x)
         c = self.compute_constraints(x)
-        c = -lmbda * c + mu / 2 * c**2
+        #        c = -lmbda * c + mu / 2 * c**2
+        c = 1 / (np.sqrt(2 * mu)) * (-lmbda + mu * c)
         L = jnp.concatenate((L, c), axis=None)
-        print("L is evaluated")
         return L
 
     def compute_scalar(self, x, lmbda, mu):

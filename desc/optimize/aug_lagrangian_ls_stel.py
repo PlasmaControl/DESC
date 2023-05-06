@@ -47,7 +47,7 @@ def fmin_lag_ls_stel(
     nfev += 1
 
     mu = options.pop("mu", 10 * jnp.ones(len(c)))
-    lmbda = options.pop("lmbda", 10 * jnp.ones(len(c)))
+    lmbda = options.pop("lmbda", 0.01 * jnp.ones(len(c)))
 
     constr = np.array([constraint])
     L = AugLagrangianLS(fun, constr)
@@ -69,7 +69,7 @@ def fmin_lag_ls_stel(
             ),
             bounds=bounds,
             gtol=gtolk,
-            maxiter=5,
+            maxiter=10,
             verbose=2,
         )
 
@@ -95,6 +95,7 @@ def fmin_lag_ls_stel(
 
             else:
                 print("Updating lambda")
+                #                lmbda = lmbda - mu * cv
                 lmbda = lmbda - mu * cv
                 ctolk = ctolk / (np.max(mu) ** (0.9))
                 gtolk = gtolk / (np.max(mu))

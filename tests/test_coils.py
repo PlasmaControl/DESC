@@ -1,5 +1,7 @@
 """Tests for coils and coilsets."""
 
+import shutil
+
 import numpy as np
 import pytest
 
@@ -247,6 +249,32 @@ class TestCoilSet:
         assert len(coils1) == 4
         assert coils1[-1] is coil2
         assert coils1[-2][0].__class__ is coil1.__class__
+
+
+@pytest.mark.unit
+def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
+    """Test loading in and saving CoilSets from MAKEGRID format files."""
+    Ncoils = 48
+    input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils"
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    tmp_path = tmpdir.join("coils.MAKEGRID_format_{Ncoils}_coils")
+    shutil.copyfile(input_path, tmp_path)
+
+    coilset = CoilSet.from_makegrid_coilfile(str(tmp_path))
+    assert len(coilset) == Ncoils  # correct number of coils
+    # TODO: add better tests for this?
+    path = tmpdir.join("coils.MAKEGRID_format_desc")
+    coilset.save_in_MAKEGRID_format(str(path))
+
+    with open(tmp_path) as f:
+        lines_orig = f.readlines()
+    with open(path) as f:
+        lines_new = f.readlines()
+    for line_orig, line_new in zip(lines_orig, lines_new):
+        assert line_orig == line_new
+
+
+# TODO: add test where the CoilSet is not only XYZcoils
 
 
 @pytest.mark.unit

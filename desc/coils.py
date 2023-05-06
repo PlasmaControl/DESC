@@ -476,8 +476,7 @@ class CoilSet(Coil, MutableSequence):
         coil_file : str or path-like
             path to coil file in txt format
         """
-        coils = []  # list of dict of coords ['X','Y','Z']
-        cfnames = []
+        coils = []  # list of XYZCoils
         coilinds = []
 
         # read in the coils file
@@ -489,12 +488,7 @@ class CoilSet(Coil, MutableSequence):
                 if line.find("mirror") != -1:
                     coilinds.append(i)
         for i, (start, end) in enumerate(zip(coilinds[0:-1], coilinds[1:])):
-            cfnames.append(f"temp_coil{i}.txt")
-            with open(f"temp_coil{i}.txt", "w+") as f:
-                f.writelines(lines[start + 1 : end])
-
-        for i, fname in enumerate(cfnames):
-            coords = np.genfromtxt(fname)
+            coords = np.genfromtxt(lines[start + 1 : end])
             if i % 20 == 0:
                 print("reading coil " + f"{i}")
 
@@ -507,7 +501,60 @@ class CoilSet(Coil, MutableSequence):
             # makegrid convention, but tests show
             # the resulting field agrees better with DESC eq if negative curr
 
-            return CoilSet(*coils)
+        return CoilSet(*coils)
+
+    def save_in_MAKEGRID_format(self, coilsFilename, params={}):
+        """Save CoilSet of as a MAKEGRID-formatted coil txtfile.
+
+        Parameters
+        ----------
+        filename : str or path-like
+            path save CoilSet as a file in MAKEGRID txt format
+        params : dict or array-like of dict, optional
+            parameters to pass to curves, either the same for all curves,
+            or one for each member
+        """
+        if isinstance(params, dict):
+            params = [params] * len(self)
+        assert len(params) == len(self)
+
+        with open(coilsFilename, "w") as f:
+            f.write("periods " + str(1) + "\n")
+            f.write("begin filament\n")
+            f.write("mirror NIL\n")
+
+            # FIXME: proper way to pass in params?
+            # or just do grid as a param, since we want to use the current coils?
+            # TODO: use numpy to make this faster? instead of line by line
+            for coil, par in zip(self.coils, params):
+                if isinstance(coil, XYZCoil):
+                    contour_X = coil.X[0:-1]
+                    contour_Y = coil.Y[0:-1]
+                    contour_Z = coil.Z[0:-1]
+                else:
+                    coords = coil.compute_coordinates(basis="xyz")
+                    contour_X = coords[0:-1, 0]
+                    contour_Y = coords[0:-1, 1]
+                    contour_Z = coords[0:-1, 2]
+
+                for k in range(contour_X.size):
+                    f.write(
+                        "{:14.22e} {:14.22e} {:14.22e} {:14.22e}\n".format(
+                            contour_X[k], contour_Y[k], contour_Z[k], coil.current
+                        )
+                    )
+                # Close the loop
+                k = 0
+                f.write(
+                    "{:14.22e} {:14.22e} {:14.22e} {:14.22e} 1 Modular\n".format(
+                        contour_X[k], contour_Y[k], contour_Z[k], 0
+                    )
+                )
+
+            f.write("end\n")
+        print(f"Saved coils file at : {coilsFilename}")
+
+    # FIXME: implement this properly for all coiltypes
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

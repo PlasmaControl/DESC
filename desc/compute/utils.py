@@ -440,8 +440,6 @@ def _get_grid_surface(grid, surface_label):
         Indexing array to go from unique values to full grid.
     ds : ndarray
         The differential elements (dtheta * dzeta for rho surface).
-    max_surface_val : float
-        The supremum of this surface_label.
     has_endpoint_dupe : bool
         Whether this surface label's nodes have a duplicate at the endpoint
         of a periodic domain. (e.g. a node at 0 and 2pi).
@@ -453,27 +451,24 @@ def _get_grid_surface(grid, surface_label):
         unique_idx = grid.unique_rho_idx
         inverse_idx = grid.inverse_rho_idx
         ds = grid.spacing[:, 1:].prod(axis=1)
-        max_surface_val = 1
     elif surface_label == "theta":
         nodes = grid.nodes[:, 1]
         unique_idx = grid.unique_theta_idx
         inverse_idx = grid.inverse_theta_idx
         ds = grid.spacing[:, [0, 2]].prod(axis=1)
-        max_surface_val = 2 * jnp.pi
     else:
         nodes = grid.nodes[:, 2]
         unique_idx = grid.unique_zeta_idx
         inverse_idx = grid.inverse_zeta_idx
         ds = grid.spacing[:, :2].prod(axis=1)
-        max_surface_val = 2 * jnp.pi / grid.NFP
 
-    assert nodes[unique_idx[-1]] <= max_surface_val
     has_endpoint_dupe = (
         surface_label != "rho"
         and nodes[unique_idx[0]] == 0
-        and nodes[unique_idx[-1]] == max_surface_val
+        and nodes[unique_idx[-1]]
+        == (2 * jnp.pi if surface_label == "theta" else 2 * np.pi / grid.NFP)
     )
-    return nodes, unique_idx, inverse_idx, ds, max_surface_val, has_endpoint_dupe
+    return nodes, unique_idx, inverse_idx, ds, has_endpoint_dupe
 
 
 def compress(grid, x, surface_label="rho"):
@@ -620,19 +615,22 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
     return res
 
 
-def line_integrals(grid, q=jnp.array([1]), line_label="theta", fix_surface=("rho", 1)):
+def line_integrals(
+    grid, q=jnp.array([1.0]), line_label="theta", fix_surface=("rho", 1.0)
+):
     """Compute the line integral of a quantity over curves covering fix_surface.
 
     As an example, by specifying the combination of line_label="theta" and
-    fix_surface=("rho", 1), the intention is to integrate along the outermost
+    fix_surface=("rho", 1.0), the intention is to integrate along the outermost
     perimeter of a particular zeta surface (toroidal cross-section), for each
     zeta surface in the grid.
 
     Notes
     -----
-        It is assumed that the integration curve has length 1 when line_label is
-        rho and length 2pi when line label is theta or zeta.
-        You may need to scale the output by a factor of major radius, etc.
+        It is assumed that the integration curve has length 1 when the line
+        label is rho and length 2pi when the line label is theta or zeta.
+        Hence, you may need to scale the output by a factor of rho surface
+        value, major radius, etc.
 
     Parameters
     ----------
@@ -657,9 +655,8 @@ def line_integrals(grid, q=jnp.array([1]), line_label="theta", fix_surface=("rho
     """
     if line_label == fix_surface[0]:
         raise ValueError("There is no valid use for this combination of inputs.")
-    if isinstance(grid, ConcentricGrid):
-        # It might be fine, but I haven't thought it through yet.
-        raise ValueError("ConcentricGrid not supported for line integrals.")
+    if line_label == "rho" and isinstance(grid, ConcentricGrid):
+        raise ValueError("ConcentricGrid should not be used for such integrals.")
 
     if fix_surface[0] == "rho":
         nodes = grid.nodes[:, 0]
@@ -674,22 +671,24 @@ def line_integrals(grid, q=jnp.array([1]), line_label="theta", fix_surface=("rho
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
     # Then forward the computation to surface_integrals.
-    q_prime = q * (nodes == fix_surface[1])
     # The differential element of the line integral, denoted dl,
-    # should correspond to curve label.
+    # should correspond to the line label's spacing.
     # The differential element of the surface integral is
     # ds = dl * dl_fix, so we scale q_prime by 1 / dl_fix.
-    q_prime /= dl_fix
+    mask = nodes == fix_surface[1]
+    q_prime = (mask * jnp.atleast_1d(q).T / dl_fix).T
     if fix_surface[0] == "rho":
-        q_prime *= fix_surface[1]  # dl = 2pi rho
+        pass
         # Todo: Ask Daniel why we normalized ds by max_rho
-        # q_prime /= max_rho
+        #     that is, why set q_prime /= max_rho?
+        #     was the intention
+        #     q_prime *= fix_surface[1]  # so that dl = 2pi rho
 
     surface_label = list({"rho", "theta", "zeta"} - {line_label, fix_surface[0]})[0]
     return surface_integrals(grid, q_prime, surface_label)
 
 
-def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
+def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Parameters
@@ -715,23 +714,25 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
                 "yellow",
             )
         )
-    _, unique_idx, inverse_idx, ds, _, has_endpoint_dupe = _get_grid_surface(
+    _, unique_idx, inverse_idx, ds, has_endpoint_dupe = _get_grid_surface(
         grid, surface_label
     )
 
-    def group_surfaces(i):
+    def mask_surface(i):
         # True at the indexes which correspond to the ith surface.
         # False everywhere else.
-        # The integral over the ith surface is the inner product
-        # of the returned value and the integrand.
+        # The integral over the ith surface is the dot product
+        # of the returned mask and all integrands.
         return inverse_idx == i
 
-    # groups can be precomputed in grid.py if desired
-    groups = vmap(group_surfaces)(jnp.arange(unique_idx.size))
+    # masks can be precomputed in grid.py if desired
+    # TODO: ? create sparse matrix with
+    #   https://jax.readthedocs.io/en/latest/jax.experimental.sparse.html for jnp
+    #   https://docs.scipy.org/doc/scipy/reference/sparse.html for np
+    #   could be worth memory saving if we decide to store these precomputed
+    masks = vmap(mask_surface)(jnp.arange(unique_idx.size))
     if has_endpoint_dupe:
-        groups = put(
-            groups, jnp.asarray([0, -1]), jnp.logical_or(groups[0], groups[-1])
-        )
+        masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
         # Imagine a torus cross-section at zeta=pi.
         # A grid with a duplicate zeta=pi node has 2 of those cross-sections.
         #     In grid.py, we multiply by 1/n the areas of surfaces with
@@ -744,20 +745,18 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         # different values for the surface label, which only occurs when
         # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
         # has a duplicate surface at surface_label=0 and
-        # surface_label=max_surface_val. Although the modulo of these values
-        # are equal, their numeric values are not, so the integration below
+        # surface_label=max surface value. Although the modulo of these values
+        # are equal, their numeric values are not, so the integration
         # would treat them as different surfaces. We solve this issue by
-        # combining the indices corresponding the integrands of the duplicated
+        # combining the indices corresponding to the integrands of the duplicated
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
 
     def integrate_component(integrands):
-        return groups @ integrands
+        return masks @ integrands
 
     # integral of a vector valued function is a vector of integrals
-    vector_of_integrands = jnp.atleast_2d(
-        jnp.nan_to_num(ds * jnp.atleast_1d(q).T, copy=False)
-    )
+    vector_of_integrands = jnp.atleast_2d(ds * jnp.nan_to_num(q).T)
     vector_of_integrals = jnp.atleast_1d(
         jnp.squeeze(vmap(integrate_component, out_axes=1)(vector_of_integrands))
     )
@@ -765,7 +764,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
 
 
 def surface_averages(
-    grid, q, sqrt_g=jnp.array([1]), surface_label="rho", denominator=None
+    grid, q, sqrt_g=jnp.array([1.0]), surface_label="rho", denominator=None
 ):
     """Compute the surface average of a quantity for all surfaces in the grid.
 
@@ -829,7 +828,7 @@ def surface_max(grid, x, surface_label="rho"):
         Maximum of x over each surface in grid.
 
     """
-    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
+    _, unique_idx, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     maxs = -jnp.inf * jnp.ones(unique_idx.size)
@@ -859,7 +858,7 @@ def surface_min(grid, x, surface_label="rho"):
         Minimum of x over each surface in grid.
 
     """
-    _, unique_idx, inverse_idx, _, _, _ = _get_grid_surface(grid, surface_label)
+    _, unique_idx, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
     inverse_idx = jnp.asarray(inverse_idx)
     x = jnp.asarray(x)
     mins = jnp.inf * jnp.ones(unique_idx.size)

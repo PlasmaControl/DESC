@@ -35,7 +35,7 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
     integrals : ndarray
         Surface integrals of q over each surface in grid.
     """
-    nodes, _, _, ds, _, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
+    nodes, _, _, ds, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
     weights = np.nan_to_num(ds * q)
 
     surfaces = dict()

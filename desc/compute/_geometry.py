@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import compress, cross, dot, surface_integrals, line_integrals
+from .utils import compress, cross, dot, line_integrals, surface_integrals
 
 
 @register_compute_fun(

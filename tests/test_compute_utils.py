@@ -35,24 +35,20 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
     integrals : ndarray
         Surface integrals of q over each surface in grid.
     """
-    nodes, _, _, ds, max_surface_val, has_endpoint_dupe = _get_grid_surface(
-        grid, surface_label
-    )
-    # to group duplicate nodes together
-    nodes_modulo = nodes % max_surface_val if has_endpoint_dupe else nodes
-
-    weights = np.asarray(ds * q)
+    nodes, _, _, ds, _, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
+    weights = np.nan_to_num(ds * q)
 
     surfaces = dict()
     # collect node indices for each surface_label surface
-    for grid_column_idx, surface_label_value in enumerate(nodes_modulo):
+    for grid_column_idx, surface_label_value in enumerate(nodes):
         surfaces.setdefault(surface_label_value, list()).append(grid_column_idx)
     # integration over non-contiguous elements
     integrals = list()
     for _, surface_idx in sorted(surfaces.items()):
         integrals.append(weights[surface_idx].sum())
     if has_endpoint_dupe:
-        integrals.append(integrals[0])
+        integrals[0] += integrals[-1]
+        integrals[-1] = integrals[0]
     return np.asarray(integrals)
 
 

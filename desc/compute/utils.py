@@ -620,7 +620,7 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
     return res
 
 
-def line_integrals(grid, q=jnp.array([1]), curve_label="theta", fix_surface=("rho", 1)):
+def line_integrals(grid, q=jnp.array([1]), line_label="theta", fix_surface=("rho", 1)):
     """Compute the line integral of a quantity over curves covering fix_surface.
 
     As an example, by specifying the combination of line_label="theta" and
@@ -628,19 +628,25 @@ def line_integrals(grid, q=jnp.array([1]), curve_label="theta", fix_surface=("rh
     perimeter of a particular zeta surface (toroidal cross-section), for each
     zeta surface in the grid.
 
+    Notes
+    -----
+        It is assumed that the integration curve has length 1 when line_label is
+        rho and length 2pi when line label is theta or zeta.
+        You may need to scale the output by a factor of major radius, etc.
+
     Parameters
     ----------
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
-    curve_label : str
-        The curve label of rho, theta, or zeta to compute the integration over.
+    line_label : str
+        The coordinate curve of rho, theta, or zeta to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
         rho (flux) surface and zeta (toroidal) surface.
     fix_surface : str, float
         A tuple of the form: label, value.
-        fix_surface label should differ from curve_label.
+        fix_surface label should differ from line_label.
         By default, fix_surface is chosen to be the last closed flux surface.
 
     Returns
@@ -649,7 +655,7 @@ def line_integrals(grid, q=jnp.array([1]), curve_label="theta", fix_surface=("rh
         Line integrals of q over curves covering the given surface.
 
     """
-    if curve_label == fix_surface[0]:
+    if line_label == fix_surface[0]:
         raise ValueError("There is no valid use for this combination of inputs.")
     if isinstance(grid, ConcentricGrid):
         # It might be fine, but I haven't thought it through yet.
@@ -676,10 +682,10 @@ def line_integrals(grid, q=jnp.array([1]), curve_label="theta", fix_surface=("rh
     q_prime /= dl_fix
     if fix_surface[0] == "rho":
         q_prime *= fix_surface[1]  # dl = 2pi rho
-        # Todo: Ask Daniel why we normalized ds by max_rho; I've forgotten why.
+        # Todo: Ask Daniel why we normalized ds by max_rho
         # q_prime /= max_rho
 
-    surface_label = list({"rho", "theta", "zeta"} - {curve_label, fix_surface[0]})[0]
+    surface_label = list({"rho", "theta", "zeta"} - {line_label, fix_surface[0]})[0]
     return surface_integrals(grid, q_prime, surface_label)
 
 
@@ -719,7 +725,6 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         # The integral over the ith surface is the inner product
         # of the returned value and the integrand.
         return inverse_idx == i
-        # could also return nodes == nodes[unique_idx][i]
 
     # groups can be precomputed in grid.py if desired
     groups = vmap(group_surfaces)(jnp.arange(unique_idx.size))
@@ -727,7 +732,7 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         groups = put(
             groups, jnp.asarray([0, -1]), jnp.logical_or(groups[0], groups[-1])
         )
-        #     Imagine a torus cross-section at zeta=pi.
+        # Imagine a torus cross-section at zeta=pi.
         # A grid with a duplicate zeta=pi node has 2 of those cross-sections.
         #     In grid.py, we multiply by 1/n the areas of surfaces with
         # duplicity n. This prevents the area of that surface from being
@@ -747,17 +752,12 @@ def surface_integrals(grid, q=jnp.array([1]), surface_label="rho"):
         # previous paragraph.
 
     def integrate_component(integrands):
-        # Unlike groups @ integrands, dot(groups, integrands) has the
-        # desirable characteristic that jnp.array([False]) * jnp.nan equals 0.
-        # Although, np.array([False]) * np.nan equals nan.
-        # Todo: Move dot function to desc.backend,
-        #     Copy dot function unmodified to the if use_jax section.
-        #     For the use_numpy section, modify array multiply operation
-        #     with masked array multiply operation, so that False * np.nan = 0.
-        return dot(groups, integrands)
+        return groups @ integrands
 
     # integral of a vector valued function is a vector of integrals
-    vector_of_integrands = jnp.atleast_2d(ds * jnp.atleast_1d(q).T)
+    vector_of_integrands = jnp.atleast_2d(
+        jnp.nan_to_num(ds * jnp.atleast_1d(q).T, copy=False)
+    )
     vector_of_integrals = jnp.atleast_1d(
         jnp.squeeze(vmap(integrate_component, out_axes=1)(vector_of_integrands))
     )

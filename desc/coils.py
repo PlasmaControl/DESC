@@ -70,6 +70,8 @@ class Coil(MagneticField, ABC):
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
         """
+        if params is None:
+            params = {}
         assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
@@ -348,7 +350,7 @@ class CoilSet(Coil, MutableSequence):
         field : ndarray, shape(n,3)
             magnetic field at specified points, in either rpz or xyz coordinates
         """
-        if isinstance(params, dict):
+        if isinstance(params, dict) or params is None:
             params = [params] * len(self)
         assert len(params) == len(self)
         B = 0

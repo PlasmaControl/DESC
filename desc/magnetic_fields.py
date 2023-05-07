@@ -179,7 +179,7 @@ class SumMagneticField(MagneticField):
         )
         self._fields = fields
 
-    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+    def compute_magnetic_field(self, coords, params={}, basis="rpz"):
         """Compute magnetic field at a set of points.
 
         Parameters

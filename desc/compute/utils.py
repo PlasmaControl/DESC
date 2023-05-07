@@ -678,10 +678,9 @@ def line_integrals(
     mask = nodes == fix_surface[1]
     q_prime = (mask * jnp.atleast_1d(q).T / dl_fix).T
     if fix_surface[0] == "rho":
-        pass
+        q_prime /= fix_surface[1]
         # Todo: Ask Daniel why we normalized ds by max_rho
-        #     that is, why set q_prime /= max_rho?
-        #     was the intention
+        #     Was the intention?
         #     q_prime *= fix_surface[1]  # so that dl = 2pi rho
 
     surface_label = list({"rho", "theta", "zeta"} - {line_label, fix_surface[0]})[0]
@@ -719,7 +718,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     )
 
     def mask_surface(i):
-        # True at the indexes which correspond to the ith surface.
+        # True at the indices which correspond to the ith surface.
         # False everywhere else.
         # The integral over the ith surface is the dot product
         # of the returned mask and the integrands.

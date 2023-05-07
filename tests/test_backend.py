@@ -35,5 +35,5 @@ def test_vmap():
         return x[: x.size // 2] ** 3
 
     outputs = np.array([[0, 1, 8], [125, 64, 27], [0, -1, -8]])
-    np.testing.assert_allclose(vmap(f, out_axes=0)(inputs), outputs)
+    np.testing.assert_allclose(vmap(f)(inputs), outputs)
     np.testing.assert_allclose(vmap(f, out_axes=1)(inputs), outputs.T)

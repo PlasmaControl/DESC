@@ -201,6 +201,10 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
         line_integrals(
             transforms["grid"],
             jnp.sqrt(data["g_tt"]),
+            fix_surface=(
+                "rho",
+                transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0],
+            ),
         ),
         surface_label="zeta",
     )

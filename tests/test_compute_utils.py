@@ -28,26 +28,27 @@ def benchmark_surface_integrals(grid, q=np.array([1]), surface_label="rho"):
     q : ndarray
         Quantity to integrate.
     surface_label : str
-        The surface label of rho, theta, or zeta to compute integration over.
+        The surface label of rho, theta, or zeta to compute the integration over.
 
     Returns
     -------
     integrals : ndarray
         Surface integrals of q over each surface in grid.
+
     """
     nodes, _, _, ds, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
-    weights = np.nan_to_num(ds * q)
+    weights = (ds * np.nan_to_num(q).T).T
 
-    surfaces = dict()
+    surfaces = {}
     # collect node indices for each surface_label surface
     for grid_column_idx, surface_label_value in enumerate(nodes):
-        surfaces.setdefault(surface_label_value, list()).append(grid_column_idx)
+        surfaces.setdefault(surface_label_value, []).append(grid_column_idx)
     # integration over non-contiguous elements
-    integrals = list()
+    integrals = []
     for _, surface_idx in sorted(surfaces.items()):
-        integrals.append(weights[surface_idx].sum())
+        integrals += [weights[surface_idx].sum(axis=0)]
     if has_endpoint_dupe:
-        integrals[0] += integrals[-1]
+        integrals[0] = integrals[0] + integrals[-1]
         integrals[-1] = integrals[0]
     return np.asarray(integrals)
 
@@ -91,14 +92,14 @@ class TestComputeUtils:
         should also be done on grids with duplicate nodes (e.g. endpoint=True).
         """
 
-        def test_B_theta(surface_label, grid, eq):
+        def test_b_theta(surface_label, grid, eq):
             q = eq.compute("B_theta", grid=grid)["B_theta"]
-            integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
-            integrals_2 = compress(
+            actual = compress(
                 grid, surface_integrals(grid, q, surface_label), surface_label
             )
+            desired = benchmark_surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(
-                integrals_1, integrals_2, atol=1e-16, err_msg=surface_label
+                actual, desired, atol=1e-16, err_msg=surface_label
             )
 
         nrho = 13
@@ -115,11 +116,11 @@ class TestComputeUtils:
             sym=True,
         )
         for label in ("rho", "theta", "zeta"):
-            test_B_theta(label, lg, eq)
-            test_B_theta(label, lg_endpoint, eq)
+            test_b_theta(label, lg, eq)
+            test_b_theta(label, lg_endpoint, eq)
             if label != "theta":
                 # theta integrals are poorly defined on concentric grids
-                test_B_theta(label, cg_sym, eq)
+                test_b_theta(label, cg_sym, eq)
 
     @pytest.mark.unit
     def test_surface_vector_averages(self):
@@ -129,18 +130,19 @@ class TestComputeUtils:
         nzeta = 9
         eq = get("W7-X")
         grid = ConcentricGrid(
-            L=(nrho + ntheta) // 2,
-            M=(nrho + ntheta) // 2,
+            L=(nrho + ntheta),
+            M=(nrho + ntheta),
             N=nzeta,
             NFP=eq.NFP,
             sym=True,
         )
-        data = eq.compute("B", grid=grid)
-        b_avg = surface_averages(grid, data["B"], data["sqrt(g)"])
-        b0_avg = surface_averages(grid, data["B"][:, 0], data["sqrt(g)"])
-        b1_avg = surface_averages(grid, data["B"][:, 1], data["sqrt(g)"])
-        b2_avg = surface_averages(grid, data["B"][:, 2], data["sqrt(g)"])
-        np.testing.assert_allclose(b_avg, np.column_stack([b0_avg, b1_avg, b2_avg]))
+        data = eq.compute(["B", "sqrt(g)"], grid=grid)
+        actual = surface_averages(grid, data["B"], data["sqrt(g)"])
+        desired = (
+            benchmark_surface_integrals(grid, (data["B"].T * data["sqrt(g)"]).T).T
+            / benchmark_surface_integrals(grid, data["sqrt(g)"])
+        ).T
+        np.testing.assert_allclose(compress(grid, actual), desired)
 
     @pytest.mark.unit
     def test_surface_area_unweighted(self):
@@ -225,8 +227,8 @@ class TestComputeUtils:
         """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
         eq = get("W7-X")
         grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=eq.sym)
-        sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
-        areas = compress(grid, surface_integrals(grid, sqrt_g))
+        data = eq.compute("sqrt(g)", grid=grid)
+        areas = compress(grid, surface_integrals(grid, data["sqrt(g)"]))
         np.testing.assert_allclose(areas, np.sort(areas))
 
     @pytest.mark.unit
@@ -234,8 +236,7 @@ class TestComputeUtils:
         """Test that surface averages of flux functions are identity operations."""
         eq = get("W7-X")
         grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute("p", grid=grid)
-        data = eq.compute("sqrt(g)", grid=grid, data=data)
+        data = eq.compute(["p", "sqrt(g)"], grid=grid)
         pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
         np.testing.assert_allclose(data["p"], pressure_average)
 

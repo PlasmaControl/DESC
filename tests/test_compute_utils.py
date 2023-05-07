@@ -123,8 +123,8 @@ class TestComputeUtils:
                 test_b_theta(label, cg_sym, eq)
 
     @pytest.mark.unit
-    def test_surface_vector_averages(self):
-        """Test surface average of vector valued functions computation."""
+    def test_surface_averages_vectors(self):
+        """Test computation of surface averages of vector-valued integrands."""
         nrho = 13
         ntheta = 11
         nzeta = 9
@@ -143,6 +143,51 @@ class TestComputeUtils:
             / benchmark_surface_integrals(grid, data["sqrt(g)"])
         ).T
         np.testing.assert_allclose(compress(grid, actual), desired)
+
+    @pytest.mark.unit
+    def test_surface_averages_functions(self):
+        """Test computation of surface averages of function-valued integrands."""
+        grid = LinearGrid(L=5, M=5, N=5, sym=True, NFP=3)
+        function_of_integration_variables = np.arange(grid.num_nodes)
+        function_independent_of_integration_variables_size = grid.num_nodes // 2
+        function_independent_of_integration_variables = np.sin(
+            np.arange(function_independent_of_integration_variables_size)
+        )
+        # the order matters
+        integrands = np.outer(
+            function_of_integration_variables,
+            function_independent_of_integration_variables,
+        )
+        averages = surface_integrals(grid, integrands)
+        assert averages.shape == (
+            grid.num_nodes,
+            function_independent_of_integration_variables_size,
+        )
+
+    @pytest.mark.unit
+    def test_surface_averages_vector_functions(self):
+        """Test surface averages of vector-valued function-valued integrands."""
+        grid = LinearGrid(L=5, M=5, N=5, sym=True, NFP=3)
+        function_of_integration_variables = np.arange(grid.num_nodes)
+        function_independent_of_integration_variables_length = grid.num_nodes // 2
+        vector_size = 3
+        vector_function_independent_of_integration_variables = np.sin(
+            np.arange(
+                function_independent_of_integration_variables_length * vector_size
+            ).reshape(function_independent_of_integration_variables_length, vector_size)
+        )
+        # the order matters
+        integrands = np.einsum(
+            "a,bc->bac",
+            function_of_integration_variables,
+            vector_function_independent_of_integration_variables,
+        )
+        averages = surface_averages(grid, integrands)
+        assert averages.shape == (
+            grid.num_nodes,
+            function_independent_of_integration_variables_length,
+            vector_size,
+        )
 
     @pytest.mark.unit
     def test_surface_area_unweighted(self):

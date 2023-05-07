@@ -420,6 +420,29 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
+def transpose_perm(q):
+    """Return the transpose permutation for broadcasting with 1d arrays.
+
+    Parameters
+    ----------
+    q : ndarray
+        Quantity with 1 <= q.ndim <= 3.
+        If q.ndim is 2 (3), then the first (second) axis should have length grid.num_nodes.
+
+    Returns
+    -------
+    perm : tuple
+        Permutation matrix to allow broadcasting with an array of length grid.num_nodes.
+
+    """
+    if q.ndim == 1:
+        return (0,)
+    elif q.ndim == 2:
+        return 1, 0
+    else:
+        return 0, 2, 1
+
+
 def _get_grid_surface(grid, surface_label):
     """Return grid quantities associated with the given surface label.
 
@@ -637,7 +660,7 @@ def line_integrals(
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to integrate.
+        Quantity to integrate. Assumes q.ndim <= 3.
     line_label : str
         The coordinate curve of rho, theta, or zeta to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
@@ -668,6 +691,8 @@ def line_integrals(
         nodes = grid.nodes[:, 2]
         dl_fix = grid.spacing[:, 2]
 
+    q = jnp.atleast_1d(q)
+    perm = transpose_perm(q)
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
     # Then forward the computation to surface_integrals.
@@ -676,7 +701,7 @@ def line_integrals(
     # The differential element of the surface integral is
     # ds = dl * dl_fix, so we scale q_prime by 1 / dl_fix.
     mask = nodes == fix_surface[1]
-    q_prime = (mask * jnp.atleast_1d(q).T / dl_fix).T
+    q_prime = (mask * q.transpose(perm) / dl_fix).transpose(perm)
     if fix_surface[0] == "rho":
         q_prime /= fix_surface[1]
         # Todo: Ask Daniel why we normalized ds by max_rho
@@ -695,7 +720,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to integrate.
+        Quantity to integrate. Assumes q.ndim <= 3.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
@@ -748,8 +773,10 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
 
-    integrands = (ds * jnp.nan_to_num(q).T).T
-    integrals = masks @ integrands
+    q = jnp.atleast_1d(q)
+    perm = transpose_perm(q)
+    integrands = (ds * jnp.nan_to_num(q).transpose(perm)).transpose(perm)
+    integrals = jnp.swapaxes(masks @ integrands, 0, integrands.ndim - 2)
     return expand(grid, integrals, surface_label)
 
 
@@ -768,7 +795,7 @@ def surface_averages(
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to average.
+        Quantity to average. Assumes q.ndim <= 3.
     sqrt_g : ndarray
         Coordinate system Jacobian determinant; see data_index["sqrt(g)"].
     surface_label : str
@@ -784,6 +811,7 @@ def surface_averages(
 
     """
     q = jnp.atleast_1d(q)
+    perm = transpose_perm(q)
     sqrt_g = jnp.atleast_1d(sqrt_g)
 
     if denominator is None:
@@ -794,9 +822,13 @@ def surface_averages(
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
 
-    averages = (
-        surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
-    ).T
+    averages = surface_integrals(
+        grid, (sqrt_g * q.transpose(perm)).transpose(perm), surface_label
+    )
+    if q.ndim == 3:
+        averages = (averages.transpose((2, 1, 0)) / denominator).transpose((2, 1, 0))
+    else:
+        averages = (averages.transpose(perm) / denominator).transpose(perm)
     return averages
 
 

@@ -754,26 +754,26 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     #     f is a function which may be independent of the integration variables
     #     v is the vector of components of f.
     # The intention is to integrate `integrands` which is a
-    #     vector-valued           (with v.size components)
-    #     function-valued         (with image size of f.size)
-    #     function over the grid  (with domain size of g.size = grid.num_nodes)
+    #     vector-valued            (with v.size components)
+    #     function-valued          (with image size of f.size)
+    #     function over the grid   (with domain size of g.size = grid.num_nodes)
     # over each surface in the grid.
-    #
+
     # The distinction between f and v is semantic.
     # We may alternatively consider an `integrands` of shape (g.size, f.size) to
     # represent a vector-valued (with f.size components) function over the grid.
     # Likewise, we may alternatively consider an `integrands` of shape
     # (g.size, v.size) to represent a function-valued (with image size v.size)
     # function over the grid. When `integrands` has dimension one, it is a
-    # scalar function over the grid. In other words, it is a
-    #     vector-valued           (with 1 component),
-    #     function-valued         (with image size of 1)
-    #     function over the grid  (with domain size of g.size = grid.num_nodes).
-    #
+    # scalar function over the grid. That is, a
+    #     vector-valued            (with 1 component),
+    #     function-valued          (with image size of 1)
+    #     function over the grid   (with domain size of g.size = grid.num_nodes)
+
     # The integration is performed by applying `masks`, the surface
     # integral operator, to `integrands`. This operator hits the matrix formed
     # by the last two dimensions of `integrands`, for every element along its
-    # first dimension. Therefore, when `integrands` has three dimensions, the
+    # previous dimension. Therefore, when `integrands` has three dimensions, the
     # second must hold g. We may choose which of the first and third dimensions
     # hold f and v. The choice below transposes `integrands` to shape
     # (v.size, g.size, f.size). As we expect f.size >> v.size, the integration

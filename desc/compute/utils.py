@@ -420,29 +420,6 @@ def cross(a, b, axis=-1):
     return jnp.cross(a, b, axis=axis)
 
 
-def transpose_perm(q):
-    """Return the transpose permutation for broadcasting with 1d arrays.
-
-    Parameters
-    ----------
-    q : ndarray
-        Quantity with 1 <= q.ndim <= 3.
-        If q.ndim is 2 (3), then the first (second) axis should have length grid.num_nodes.
-
-    Returns
-    -------
-    perm : tuple
-        Permutation matrix to allow broadcasting with an array of length grid.num_nodes.
-
-    """
-    if q.ndim == 1:
-        return (0,)
-    elif q.ndim == 2:
-        return 1, 0
-    else:
-        return 0, 2, 1
-
-
 def _get_grid_surface(grid, surface_label):
     """Return grid quantities associated with the given surface label.
 
@@ -691,8 +668,6 @@ def line_integrals(
         nodes = grid.nodes[:, 2]
         dl_fix = grid.spacing[:, 2]
 
-    q = jnp.atleast_1d(q)
-    perm = transpose_perm(q)
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
     # Then forward the computation to surface_integrals.
@@ -701,7 +676,7 @@ def line_integrals(
     # The differential element of the surface integral is
     # ds = dl * dl_fix, so we scale q_prime by 1 / dl_fix.
     mask = nodes == fix_surface[1]
-    q_prime = (mask * q.transpose(perm) / dl_fix).transpose(perm)
+    q_prime = (mask * jnp.atleast_1d(q).T / dl_fix).T
     if fix_surface[0] == "rho":
         q_prime /= fix_surface[1]
         # Todo: Ask Daniel why we normalized ds by max_rho
@@ -746,11 +721,11 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # True at the indices which correspond to the ith surface.
         # False everywhere else.
         # The integral over the ith surface is the dot product
-        # of the returned mask and the integrands.
+        # of the returned mask vector and the integrands vectors.
         return inverse_idx == i
 
-    # TODO: sparse matrix?
-    # TODO: precompute masks in grid.py?
+    # TODO: Sparse matrix?
+    # TODO: Precompute masks in grid.py?
     masks = vmap(mask_surface)(jnp.arange(unique_idx.size))
     if has_endpoint_dupe:
         masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
@@ -773,10 +748,40 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
 
-    q = jnp.atleast_1d(q)
-    perm = transpose_perm(q)
-    integrands = (ds * jnp.nan_to_num(q).transpose(perm)).transpose(perm)
-    integrals = jnp.swapaxes(masks @ integrands, 0, integrands.ndim - 2)
+    integrands = (ds * jnp.nan_to_num(q).T).T
+    # `integrands` has shape (g.size, f.size, v.size), where
+    #     g is the grid function depending on the integration variables
+    #     f is a function which may be independent of the integration variables
+    #     v is the vector of components of f.
+    # The intention is to integrate `integrands` which is a
+    #     vector-valued           (with v.size components)
+    #     function-valued         (with image size of f.size)
+    #     function over the grid  (with domain size of g.size = grid.num_nodes)
+    # over each surface in the grid.
+    #
+    # The distinction between f and v is semantic.
+    # We may alternatively consider an `integrands` of shape (g.size, f.size) to
+    # represent a vector-valued (with f.size components) function over the grid.
+    # Likewise, we may alternatively consider an `integrands` of shape
+    # (g.size, v.size) to represent a function-valued (with image size v.size)
+    # function over the grid. When `integrands` has dimension one, it is a
+    # scalar function over the grid. In other words, it is a
+    #     vector-valued           (with 1 component),
+    #     function-valued         (with image size of 1)
+    #     function over the grid  (with domain size of g.size = grid.num_nodes).
+    #
+    # The integration is performed by applying `masks`, the surface
+    # integral operator, to `integrands`. This operator hits the matrix formed
+    # by the last two dimensions of `integrands`, for every element along its
+    # first dimension. Therefore, when `integrands` has three dimensions, the
+    # second must hold g. We may choose which of the first and third dimensions
+    # hold f and v. The choice below transposes `integrands` to shape
+    # (v.size, g.size, f.size). As we expect f.size >> v.size, the integration
+    # is potentially faster since numpy likely optimizes large matrix products.
+    axis_to_move = (integrands.ndim == 3) * 2  # interpolates (3, 2, 1) ↦ (2, 0, 0)
+    integrals = jnp.moveaxis(
+        masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
+    )
     return expand(grid, integrals, surface_label)
 
 
@@ -811,7 +816,6 @@ def surface_averages(
 
     """
     q = jnp.atleast_1d(q)
-    perm = transpose_perm(q)
     sqrt_g = jnp.atleast_1d(sqrt_g)
 
     if denominator is None:
@@ -822,13 +826,9 @@ def surface_averages(
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
 
-    averages = surface_integrals(
-        grid, (sqrt_g * q.transpose(perm)).transpose(perm), surface_label
-    )
-    if q.ndim == 3:
-        averages = (averages.transpose((2, 1, 0)) / denominator).transpose((2, 1, 0))
-    else:
-        averages = (averages.transpose(perm) / denominator).transpose(perm)
+    averages = (
+        surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
+    ).T
     return averages
 
 

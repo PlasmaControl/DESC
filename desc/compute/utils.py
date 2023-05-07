@@ -722,14 +722,11 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # True at the indexes which correspond to the ith surface.
         # False everywhere else.
         # The integral over the ith surface is the dot product
-        # of the returned mask and all integrands.
+        # of the returned mask and the integrands.
         return inverse_idx == i
 
-    # masks can be precomputed in grid.py if desired
-    # TODO: ? create sparse matrix with
-    #   https://jax.readthedocs.io/en/latest/jax.experimental.sparse.html for jnp
-    #   https://docs.scipy.org/doc/scipy/reference/sparse.html for np
-    #   could be worth memory saving if we decide to store these precomputed
+    # TODO: sparse matrix?
+    # TODO: precompute masks in grid.py?
     masks = vmap(mask_surface)(jnp.arange(unique_idx.size))
     if has_endpoint_dupe:
         masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
@@ -752,15 +749,9 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
 
-    def integrate_component(integrands):
-        return masks @ integrands
-
-    # integral of a vector valued function is a vector of integrals
-    vector_of_integrands = jnp.atleast_2d(ds * jnp.nan_to_num(q).T)
-    vector_of_integrals = jnp.atleast_1d(
-        jnp.squeeze(vmap(integrate_component, out_axes=1)(vector_of_integrands))
-    )
-    return expand(grid, vector_of_integrals, surface_label)
+    integrands = (ds * jnp.nan_to_num(q).T).T
+    integrals = masks @ integrands
+    return expand(grid, integrals, surface_label)
 
 
 def surface_averages(

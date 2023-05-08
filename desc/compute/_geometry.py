@@ -210,8 +210,6 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
         )
         / max_rho
     )
-    # FIXME: If we want perimeter, we should multiply by max_rho, not divide.
-    #     Reviewers please confirm whether this is a bug.
     A = compress(  # surface area
         transforms["grid"],
         surface_integrals(

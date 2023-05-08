@@ -8,11 +8,11 @@ from desc.compute.utils import (
     _get_grid_surface,
     compress,
     expand,
+    line_integrals,
     surface_averages,
     surface_integrals,
     surface_max,
     surface_min,
-    line_integrals,
 )
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid

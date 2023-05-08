@@ -635,7 +635,7 @@ def line_integrals(
         Correctness is not guaranteed on grids with duplicate nodes.
         A warning will display if the given grid has duplicate nodes,
         and is one of the predefined types (Linear, Concentric, Quadrature).
-        If the grid is custom, no attempt is made to warn the user.
+        If the grid is custom, no attempt is made to warn.
 
     Parameters
     ----------

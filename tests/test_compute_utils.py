@@ -56,8 +56,8 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
 
 
 # arbitrary choice
-L = 8
-M = 8
+L = 6
+M = 6
 N = 3
 NFP = 5
 
@@ -261,9 +261,9 @@ class TestComputeUtils:
         """
 
         def test(grid):
-            def rho_line_integrals(fix_zeta_val):
+            def rho_line_integrals(fix_theta_val):
                 return line_integrals(
-                    grid, line_label="rho", fix_surface=("zeta", fix_zeta_val)
+                    grid, line_label="rho", fix_surface=("theta", fix_theta_val)
                 )
 
             def theta_line_integrals(fix_zeta_val):
@@ -276,15 +276,17 @@ class TestComputeUtils:
                     grid, line_label="zeta", fix_surface=("rho", fix_rho_val)
                 )
 
-            unique_rho = grid.nodes[grid.unique_rho_idx, 0]
-            unique_zeta = grid.nodes[grid.unique_zeta_idx, 2]
             if not isinstance(grid, ConcentricGrid):
-                np.testing.assert_allclose(vmap(rho_line_integrals)(unique_zeta), 1)
                 np.testing.assert_allclose(
-                    vmap(zeta_line_integrals)(unique_rho), 2 * np.pi
+                    vmap(rho_line_integrals)(grid.nodes[grid.unique_theta_idx, 1]), 1
+                )
+                np.testing.assert_allclose(
+                    vmap(zeta_line_integrals)(grid.nodes[grid.unique_rho_idx, 0]),
+                    2 * np.pi,
                 )
             np.testing.assert_allclose(
-                vmap(theta_line_integrals)(unique_zeta), 2 * np.pi
+                vmap(theta_line_integrals)(grid.nodes[grid.unique_zeta_idx, 2]),
+                2 * np.pi,
             )
 
         lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False)

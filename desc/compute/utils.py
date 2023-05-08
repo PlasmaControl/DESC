@@ -650,7 +650,7 @@ def line_integrals(
     fix_surface : str, float
         A tuple of the form: label, value.
         fix_surface label should differ from line_label.
-        By default, fix_surface is chosen to be the last closed flux surface.
+        By default, fix_surface is chosen to be the flux surface at rho=1.
 
     Returns
     -------
@@ -810,7 +810,7 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        Volume enclosed by the surfaces, derivative wrt radial coordinate.
+        Volume enclosed by the surfaces, derivative wrt the surface label.
         This can optionally be supplied to avoid redundant computations.
 
     Returns

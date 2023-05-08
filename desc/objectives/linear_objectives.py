@@ -3112,7 +3112,7 @@ class StraightBmaxContour(_Objective):
 
         """
         basis = eq.omni_basis
-        self._dim_f = int(basis.num_modes / (basis.N + 1))
+        self._dim_f = int(basis.num_modes / (basis.M + 1))
 
         self._A = np.zeros((self._dim_f, basis.num_modes))
         m0_modes = basis.modes[np.nonzero(basis.modes[:, 1] == 0)[0]]

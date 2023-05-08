@@ -6,7 +6,7 @@ Created on Wed Jul 13 10:39:48 2022
 """
 
 import numpy as np
-from scipy.optimize import OptimizeResult, minimize
+from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
 from desc.derivatives import Derivative
@@ -20,10 +20,9 @@ def conv_test(x, L, gL):
 
 def fmin_lag_stel(
     fun,
+    constraint,
     x0,
-    grad,
-    eq_constr,
-    ineq_constr,
+    bounds,
     args=(),
     x_scale=1,
     ftol=1e-6,
@@ -41,94 +40,50 @@ def fmin_lag_stel(
     nhev = 0
     iteration = 0
 
-    N = x0.size
     x = x0.copy()
     f = fun(x, *args)
+    c = constraint.fun(x)
     nfev += 1
-    g = grad(x, *args)
-    ngev += 1
 
-    eq = eq_constr(x) if eq_constr is not None else jnp.array([])
-    ineq = ineq_constr(x) if ineq_constr is not None else jnp.array([])
-    eq_dim = len(eq.flatten())
-    ineq_dim = len(ineq.flatten())
-    x = np.append(x, 1.0 * np.ones(ineq_dim))
+    mu = options.pop("mu", 1)
+    lmbda = options.pop("lmbda", jnp.zeros(len(c)))
 
-    if maxiter is None:
-        maxiter = N * 100
-
-    mu = options.pop("mu", 1.0)
-    lmbda = options.pop("lmbda", 0.0 * jnp.ones(eq_dim + ineq_dim))
-    bounds = options.pop("bounds", jnp.zeros(eq_dim + ineq_dim))
-
-    def recover(x):
-        return x[0 : len(x) - ineq_dim]
-
-    def wrapped_constraint(x):
-        c = np.array([])
-        slack = x[len(recover(x)) :] ** 2
-        x_recov = recover(x)
-        eq = eq_constr(x_recov) if eq_constr is not None else jnp.array([])
-        ineq = ineq_constr(x_recov) if ineq_constr is not None else jnp.array([])
-
-        c = jnp.append(c, eq_constr(x_recov))
-        slack = jnp.append(jnp.zeros(len(eq.flatten())), slack)
-        c = jnp.append(c, ineq)
-        c = c - bounds + slack
-        return c
-
-    def wrapped_obj(x):
-        return fun(recover(x))
-
-    constr = np.array([wrapped_constraint])
-    L = AugLagrangian(wrapped_obj, constr)
-    gradL = Derivative(L.compute, 0, "rev")
+    constr = np.array([constraint])
+    L = AugLagrangian(fun, constr)
+    gradL = Derivative(L.compute, 0, "fwd")
     hessL = Derivative(L.compute, argnum=0, mode="hess")
 
-    gtolk = 1 / (10 * mu)
-    c = np.linalg.norm(L.compute_constraints(x))
-    ctolk = c / (mu ** (0.1))
+    gtolk = 1 / (10 * np.linalg.norm(mu))
+    ctolk = 1 / (np.linalg.norm(mu) ** (0.1))
     xold = x
-    f = fun(recover(x))
-    fold = f
-    cv = L.compute_constraints(x)
-    # lmbda = lmbda - mu * cv
-    print("f is " + str(f))
-    print("lmbda term is " + str(np.dot(lmbda, cv)))
-    print("mu term is " + str(mu / 2 * np.dot(cv, cv)))
-    print("The constraints are " + str(c))
 
     while iteration < maxiter:
-        # xk = fmintr(
-        #    L.compute,
-        #    x,
-        #    grad=gradL,
-        #    hess=hessL,
-        #    args=(
-        #        lmbda,
-        #        mu,
-        #    ),
-        #    gtol=gtolk,
-        #    maxiter=20,
-        #    verbose=2,
-        # )
-        xk = minimize(
+        xk = fmintr(
             L.compute,
             x,
-            args=(lmbda, mu),
-            method="trust-exact",
-            jac=gradL,
+            grad=gradL,
             hess=hessL,
-            options={"maxiter": 20},
+            args=(
+                lmbda,
+                mu,
+            ),
+            gtol=gtolk,
+            maxiter=20,
+            verbose=2,
         )
+        # xk = minimize(
+        #     L.compute,
+        #     x,
+        #     args=(lmbda, mu),
+        #     method="trust-exact",
+        #     jac=gradL,
+        #     hess=hessL,
+        #     options={"maxiter": 20},
+        #     verbose=2
+        # )
         x = xk["x"]
-        f = fun(recover(x))
-        print("f is " + str(f))
+        f = fun(x)
         cv = L.compute_constraints(x)
-        print("The constraints are " + str(np.linalg.norm(cv)))
-        print("lmbda term is " + str(np.dot(lmbda, cv)))
-        print("mu term is " + str(mu / 2 * np.dot(cv, cv)))
-        print("\n")
         c = np.linalg.norm(cv)
 
         if np.linalg.norm(xold - x) < xtol:
@@ -158,7 +113,7 @@ def fmin_lag_stel(
         fold = f
 
     g = gradL(x, lmbda, mu)
-    f = fun(recover(x))
+    f = fun(x)
     success = True
     message = "successful"
     result = OptimizeResult(
@@ -173,5 +128,5 @@ def fmin_lag_stel(
         nit=iteration,
         message=message,
     )
-    result["allx"] = [recover(x)]
+    result["allx"] = [x]
     return result

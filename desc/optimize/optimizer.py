@@ -358,33 +358,6 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
     return objective, nonlinear_constraint
 
 
-def _wrap_constraints(
-    method, nonlinear_constraints, equality_constraints, inequality_constraints
-):
-    for constraint in nonlinear_constraints:
-        if not isinstance(
-            constraint,
-            (
-                ForceBalance,
-                RadialForceBalance,
-                HelicalForceBalance,
-                CurrentDensity,
-                MagneticWell,
-                AspectRatio,
-            ),
-        ):
-            raise ValueError(
-                "optimizer method {} ".format(method)
-                + "cannot handle general nonlinear constraint {}.".format(constraint)
-            )
-
-    constraint_objectives = ObjectiveFunction(nonlinear_constraints)
-    equality_objectives = ObjectiveFunction(equality_constraints)
-    inequality_objectives = ObjectiveFunction(inequality_constraints)
-
-    return constraint_objectives, equality_objectives, inequality_objectives
-
-
 def _get_default_tols(
     method,
     ftol=None,

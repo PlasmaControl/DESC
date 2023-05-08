@@ -74,10 +74,6 @@ class ObjectiveFunction(IOAble):
         objectives._dim_x = self._dim_x
         objectives._x_idx = self._x_idx
 
-    def _set_state_vector(self):
-        """Set state vector components, dimensions, and indices."""
-        self._args = np.concatenate([obj.args for obj in self.objectives])
-
     def set_args(self, *args):
         """Set which arguments the objective should expect.
 

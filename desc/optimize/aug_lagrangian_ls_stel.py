@@ -40,7 +40,6 @@ def fmin_lag_ls_stel(
     nhev = 0
     iteration = 0
 
-    N = x0.size
     x = x0.copy()
     f = fun(x, *args)
     c = constraint.fun(x)
@@ -109,7 +108,6 @@ def fmin_lag_ls_stel(
         fold = f
 
     g = gradL(x, lmbda, mu)
-    # f = fun(recover(x))
     f = fun(x)
     success = True
     message = "successful"

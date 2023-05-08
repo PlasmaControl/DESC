@@ -6,7 +6,6 @@ from desc.compute import get_params, get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.objectives.objective_funs import _Objective
-from desc.transform import Transform
 from desc.utils import Timer
 
 

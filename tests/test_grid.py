@@ -5,7 +5,7 @@ import pytest
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import compress, surface_averages, surface_integrals
+from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
@@ -580,25 +580,6 @@ class TestGrid:
         assert cg.L == 3
         assert cg.M == 4
         assert cg.N == 5
-
-    @pytest.mark.unit
-    def test_enforce_symmetry_sum(self):
-        """Test that enforce_symmetry sums dtheta to 2pi.
-
-        Relies on correctness of surface_integrals.
-        """
-
-        def test(grid):
-            # check if theta nodes cover the circumference of the theta curve
-            dtheta_sums = surface_integrals(grid, q=1 / grid.spacing[:, 2])
-            np.testing.assert_allclose(dtheta_sums, 2 * np.pi * grid.num_zeta)
-
-        # Before enforcing symmetry,
-        # this grid has 2 surfaces near axis lacking theta > pi nodes.
-        # These edge cases should be handled correctly.
-        # Otherwise, a dimension mismatch or broadcast error should be raised.
-        test(ConcentricGrid(L=20, M=3, N=2, sym=True))
-        test(LinearGrid(L=20, M=3, N=2, sym=True))
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):

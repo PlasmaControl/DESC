@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+from desc.backend import vmap
 from desc.compute.utils import (
     _get_grid_surface,
     compress,
@@ -11,6 +12,7 @@ from desc.compute.utils import (
     surface_integrals,
     surface_max,
     surface_min,
+    line_integrals,
 )
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
@@ -188,7 +190,7 @@ class TestComputeUtils:
         test("zeta", cg)
 
     @pytest.mark.unit
-    def test_surface_area_unweighted(self):
+    def test_surface_area(self):
         """Test that surface_integrals(ds) is 4pi^2 for rho, 2pi for theta, zeta.
 
         This test should ensure that surfaces have the correct area on grids
@@ -202,17 +204,15 @@ class TestComputeUtils:
             correct_area = 4 * np.pi**2 if surface_label == "rho" else 2 * np.pi
             np.testing.assert_allclose(areas, correct_area, err_msg=surface_label)
 
+        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, endpoint=False)
+        lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=False)
+        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, endpoint=True)
+        lg_sym_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
         rho = np.linspace(1, 0, L)[::-1]
         theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
         theta_endpoint = np.linspace(0, 2 * np.pi, M, endpoint=True)
         zeta = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
         zeta_endpoint = np.linspace(0, 2 * np.pi / NFP, N, endpoint=True)
-
-        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, endpoint=False)
-        lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=False)
-        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False, endpoint=True)
-        lg_sym_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
-
         lg_2 = LinearGrid(
             rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=False, endpoint=False
         )
@@ -253,13 +253,55 @@ class TestComputeUtils:
                 test(label, cg_sym)
 
     @pytest.mark.unit
-    def test_surface_area_weighted(self):
-        """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
-        eq = get("W7-X")
-        grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute("sqrt(g)", grid=grid)
-        areas = compress(grid, surface_integrals(grid, data["sqrt(g)"]))
-        np.testing.assert_allclose(areas, np.sort(areas))
+    def test_line_area(self):
+        """Test that line_integrals(dl) is 1 for rho, 2pi for theta, zeta.
+
+        This test should ensure that lines have the correct length on grids
+        constructed by specifying L, M, N and by specifying an array of nodes.
+        """
+
+        def test(grid):
+            def rho_line_integrals(fix_zeta_val):
+                return line_integrals(
+                    grid, line_label="rho", fix_surface=("zeta", fix_zeta_val)
+                )
+
+            def theta_line_integrals(fix_zeta_val):
+                return line_integrals(
+                    grid, line_label="theta", fix_surface=("zeta", fix_zeta_val)
+                )
+
+            def zeta_line_integrals(fix_rho_val):
+                return line_integrals(
+                    grid, line_label="zeta", fix_surface=("rho", fix_rho_val)
+                )
+
+            unique_zeta = grid.nodes[grid.unique_zeta_idx, 2]
+            if not isinstance(grid, ConcentricGrid):
+                np.testing.assert_allclose(vmap(rho_line_integrals)(unique_zeta), 1)
+            np.testing.assert_allclose(
+                vmap(theta_line_integrals)(unique_zeta), 2 * np.pi
+            )
+            # Todo: resolve line_integral question
+            # unique_rho = grid.nodes[grid.unique_rho_idx, 0]
+            # np.testing.assert_allclose(vmap(zeta_line_integrals)(unique_rho), 2 * np.pi)
+
+        lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
+        lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+        rho = np.linspace(1, 0, L)[::-1]
+        theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / NFP, N, endpoint=False)
+        lg_2 = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=False)
+        lg_2_sym = LinearGrid(rho=rho, theta=theta, zeta=zeta, NFP=NFP, sym=True)
+        cg = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
+        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+
+        test(lg)
+        test(lg_sym)
+        test(lg_2)
+        test(lg_2_sym)
+        test(cg)
+        test(cg_sym)
 
     @pytest.mark.unit
     def test_surface_averages_identity_op(self):

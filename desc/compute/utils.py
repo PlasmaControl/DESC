@@ -6,8 +6,8 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import fori_loop, jnp, put, vmap
-from desc.grid import ConcentricGrid
+from desc.backend import fori_loop, jnp, put
+from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
 
@@ -632,6 +632,11 @@ def line_integrals(
         Hence, you may need to scale the output by a factor of rho surface
         value, major radius, etc.
 
+        Correctness is not guaranteed on grids with duplicate nodes.
+        A warning will display if the given grid has duplicate nodes,
+        and is one of the predefined types (Linear, Concentric, Quadrature).
+        If the grid is custom, no attempt is made to warn the user.
+
     Parameters
     ----------
     grid : Grid
@@ -653,10 +658,18 @@ def line_integrals(
         Line integrals of q over curves covering the given surface.
 
     """
-    if line_label == fix_surface[0]:
-        raise ValueError("There is no valid use for this combination of inputs.")
-    if line_label == "rho" and isinstance(grid, ConcentricGrid):
-        raise ValueError("ConcentricGrid should not be used for such integrals.")
+    assert (
+        line_label != fix_surface[0]
+    ), "There is no valid use for this combination of inputs."
+    assert not (
+        line_label == "rho" and isinstance(grid, ConcentricGrid)
+    ), "ConcentricGrid should not be used for such integrals."
+    if isinstance(grid, LinearGrid) and grid.endpoint:
+        warnings.warn(
+            colored(
+                "Correctness not guaranteed on grids with duplicate nodes.", "yellow"
+            )
+        )
 
     if fix_surface[0] == "rho":
         nodes = grid.nodes[:, 0]
@@ -717,16 +730,12 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         grid, surface_label
     )
 
-    def mask_surface(i):
-        # True at the indices which correspond to the ith surface.
-        # False everywhere else.
-        # The integral over the ith surface is the dot product
-        # of the returned mask vector and the integrands vectors.
-        return inverse_idx == i
-
-    # TODO: Sparse matrix?
-    # TODO: Precompute masks in grid.py?
-    masks = vmap(mask_surface)(jnp.arange(unique_idx.size))
+    # Todo: define masks as a sparse matrix?
+    # The ith row of masks is True at the indices which correspond to the ith
+    # surface. False everywhere else.
+    # The integral over the ith surface is the dot product of the ith row vector
+    # and the integrands vectors.
+    masks = inverse_idx == jnp.arange(unique_idx.size)[:, jnp.newaxis]
     if has_endpoint_dupe:
         masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
         # Imagine a torus cross-section at zeta=pi.

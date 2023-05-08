@@ -56,8 +56,8 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
 
 
 # arbitrary choice
-L = 6
-M = 6
+L = 8
+M = 8
 N = 3
 NFP = 5
 
@@ -134,7 +134,7 @@ class TestComputeUtils:
         def test(surface_label, grid):
             g_size = grid.num_nodes  # not a choice; required
             # arbitrary choice, but 1 != f_size != g_size is better to test
-            f_size = g_size // 3
+            f_size = g_size // 2
             g = np.cos(np.arange(g_size)) ** 2
             f = np.sin(np.arange(f_size)) ** 2
             q = np.outer(g, f)
@@ -164,9 +164,9 @@ class TestComputeUtils:
         def test(surface_label, grid):
             g_size = grid.num_nodes  # not a choice; required
             # arbitrary choice, but v_size != f_size != g_size is better to test
-            f_size = g_size // 3
+            f_size = g_size // 4
             # arbitrary choice, but f_size != v_size != g_size is better to test
-            v_size = g_size // 8
+            v_size = g_size // 12
             g = np.cos(np.arange(g_size)) ** 2
             fv = np.sin(np.arange(f_size * v_size).reshape(f_size, v_size)) ** 2
             q = np.einsum("g,fv->gfv", g, fv)
@@ -253,7 +253,7 @@ class TestComputeUtils:
                 test(label, cg_sym)
 
     @pytest.mark.unit
-    def test_line_area(self):
+    def test_line_length(self):
         """Test that line_integrals(dl) is 1 for rho, 2pi for theta, zeta.
 
         This test should ensure that lines have the correct length on grids
@@ -276,15 +276,16 @@ class TestComputeUtils:
                     grid, line_label="zeta", fix_surface=("rho", fix_rho_val)
                 )
 
+            unique_rho = grid.nodes[grid.unique_rho_idx, 0]
             unique_zeta = grid.nodes[grid.unique_zeta_idx, 2]
             if not isinstance(grid, ConcentricGrid):
                 np.testing.assert_allclose(vmap(rho_line_integrals)(unique_zeta), 1)
+                np.testing.assert_allclose(
+                    vmap(zeta_line_integrals)(unique_rho), 2 * np.pi
+                )
             np.testing.assert_allclose(
                 vmap(theta_line_integrals)(unique_zeta), 2 * np.pi
             )
-            # Todo: resolve line_integral question
-            # unique_rho = grid.nodes[grid.unique_rho_idx, 0]
-            # np.testing.assert_allclose(vmap(zeta_line_integrals)(unique_rho), 2 * np.pi)
 
         lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
         lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True)

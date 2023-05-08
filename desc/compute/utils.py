@@ -661,9 +661,9 @@ def line_integrals(
     assert (
         line_label != fix_surface[0]
     ), "There is no valid use for this combination of inputs."
-    assert not (
-        line_label == "rho" and isinstance(grid, ConcentricGrid)
-    ), "ConcentricGrid should not be used for such integrals."
+    assert line_label == "theta" or not isinstance(
+        grid, ConcentricGrid
+    ), "ConcentricGrid should only be used for theta line integrals."
     if isinstance(grid, LinearGrid) and grid.endpoint:
         warnings.warn(
             colored(
@@ -690,12 +690,6 @@ def line_integrals(
     # ds = dl * dl_fix, so we scale q_prime by 1 / dl_fix.
     mask = nodes == fix_surface[1]
     q_prime = (mask * jnp.atleast_1d(q).T / dl_fix).T
-    if fix_surface[0] == "rho":
-        q_prime /= fix_surface[1]
-        # Todo: Ask Daniel why we normalized ds by max_rho
-        #     Was the intention?
-        #     q_prime *= fix_surface[1]  # so that dl = 2pi rho
-
     surface_label = list({"rho", "theta", "zeta"} - {line_label, fix_surface[0]})[0]
     return surface_integrals(grid, q_prime, surface_label)
 
@@ -758,7 +752,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # previous paragraph.
 
     integrands = (ds * jnp.nan_to_num(q).T).T
-    # `integrands` has shape (g.size, f.size, v.size), where
+    # `integrands` (and `q`) has shape (g.size, f.size, v.size), where
     #     g is the grid function depending on the integration variables
     #     f is a function which may be independent of the integration variables
     #     v is the vector of components of f.
@@ -781,12 +775,13 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
 
     # The integration is performed by applying `masks`, the surface
     # integral operator, to `integrands`. This operator hits the matrix formed
-    # by the last two dimensions of `integrands`, for every element along its
-    # previous dimension. Therefore, when `integrands` has three dimensions, the
-    # second must hold g. We may choose which of the first and third dimensions
-    # hold f and v. The choice below transposes `integrands` to shape
-    # (v.size, g.size, f.size). As we expect f.size >> v.size, the integration
-    # is potentially faster since numpy likely optimizes large matrix products.
+    # by the last two dimensions of `integrands`, for every element along the
+    # previous dimension of `integrands`. Therefore, when `integrands` has three
+    # dimensions, the second must hold g. We may choose which of the first and
+    # third dimensions hold f and v. The choice below transposes `integrands` to
+    # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
+    # integration is potentially faster since numpy likely optimizes large
+    # matrix products.
     axis_to_move = (integrands.ndim == 3) * 2  # interpolates (3, 2, 1) ↦ (2, 0, 0)
     integrals = jnp.moveaxis(
         masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move

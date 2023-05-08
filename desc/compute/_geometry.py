@@ -196,18 +196,22 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
     data=["sqrt(g)", "g_tt"],
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
-    P = compress(  # perimeter
-        transforms["grid"],
-        line_integrals(
+    max_rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0]
+    P = (
+        compress(  # perimeter
             transforms["grid"],
-            jnp.sqrt(data["g_tt"]),
-            fix_surface=(
-                "rho",
-                transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0],
+            line_integrals(
+                transforms["grid"],
+                jnp.sqrt(data["g_tt"]),
+                line_label="theta",
+                fix_surface=("rho", max_rho),
             ),
-        ),
-        surface_label="zeta",
+            surface_label="zeta",
+        )
+        / max_rho
     )
+    # FIXME: If we want perimeter, we should multiply by max_rho, not divide.
+    #     Reviewers please confirm whether this is a bug.
     A = compress(  # surface area
         transforms["grid"],
         surface_integrals(

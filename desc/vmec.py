@@ -251,8 +251,8 @@ class VMECIO:
         )
 
         ier_flag = file.createVariable("ier_flag", np.int32)
-        ier_flag.long_name = "error flag (0 = solved equilibrium, 1 = unsolved)"
-        ier_flag[:] = int(not eq.solved)
+        ier_flag.long_name = "error flag (1 = error with equilibrium solution)"
+        ier_flag[:] = 0
 
         lfreeb = file.createVariable("lfreeb__logical__", np.int32)
         lfreeb.long_name = "free boundary logical (0 = fixed boundary)"

@@ -877,4 +877,5 @@ def surface_min(grid, x, surface_label="rho"):
     """
     _, unique_idx, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
     masks = inverse_idx == jnp.arange(unique_idx.size)[:, jnp.newaxis]
-    return jnp.amin(x[jnp.newaxis, :], axis=-1, initial=jnp.inf, where=masks)
+    mins = jnp.amin(x[jnp.newaxis, :], axis=-1, initial=jnp.inf, where=masks)
+    return expand(grid, mins, surface_label)

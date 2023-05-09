@@ -367,5 +367,5 @@ class TestComputeUtils:
             for j in range(grid.num_rho):
                 Bmax_alt[j] = np.max(B[grid.inverse_rho_idx == j])
                 Bmin_alt[j] = np.min(B[grid.inverse_rho_idx == j])
-            np.testing.assert_allclose(Bmax_alt, surface_max(grid, B))
-            np.testing.assert_allclose(Bmin_alt, surface_min(grid, B))
+            np.testing.assert_allclose(Bmax_alt, compress(grid, surface_max(grid, B)))
+            np.testing.assert_allclose(Bmin_alt, compress(grid, surface_min(grid, B)))

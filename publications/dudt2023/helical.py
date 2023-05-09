@@ -34,8 +34,8 @@ M_omni = 1
 N_omni = 1
 well_weight = 2
 aspect_ratio = 20
-target_mode = [0, 1, -1]
-target_amplitude = np.pi / 6
+target_mode = [0, 1, 1]
+target_amplitude = -np.pi / 6
 surfaces = [0.2, 0.4, 0.6, 0.8, 1.0]
 
 M_booz = int(np.ceil(1.5 * M))
@@ -121,7 +121,7 @@ for rho in surfaces:
     )
 
 objective = ObjectiveFunction(
-    (CurrentDensity(bounds=(-1e-6, 1e-6), weight=2e2),) + tuple(objs.values())
+    (CurrentDensity(bounds=(-1e-6, 1e-6), weight=4e1),) + tuple(objs.values())
 )
 eq, result = eq.solve(
     objective=objective,

@@ -113,7 +113,7 @@ for rho in surfaces:
     )
 
 objective = ObjectiveFunction(
-    (CurrentDensity(bounds=(-1e-6, 1e-6), weight=1e2),) + tuple(objs.values())
+    (CurrentDensity(bounds=(-1e-6, 1e-6), weight=3e1),) + tuple(objs.values())
 )
 eq, result = eq.solve(
     objective=objective,
@@ -122,7 +122,7 @@ eq, result = eq.solve(
     ftol=1e-3,
     xtol=1e-6,
     gtol=1e-6,
-    maxiter=200,
+    maxiter=100,
     verbose=3,
     copy=True,
 )

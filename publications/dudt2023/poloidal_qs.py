@@ -85,7 +85,6 @@ eq = solve_continuation_automatic(
 )[-1]
 if not sym:
     eq.change_resolution(sym=False)
-eq.save("poloidal_qs.h5")
 
 constraints = (
     FixAxisR(),

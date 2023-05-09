@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jit, jnp, put, while_loop
+from desc.backend import fori_loop, jit, jnp, put, while_loop
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -88,9 +88,16 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
     # nearest neighbor search on coarse grid for initial guess
     yg = ConcentricGrid(L=eq.L_grid, M=eq.M_grid, N=int(eq.N_grid * eq.NFP)).nodes
     xg = compute(yg, inbasis)
-    distance = jnp.linalg.norm(coords[:, np.newaxis] - xg, axis=-1)
-    idx = jnp.argmin(distance, axis=1)
+    idx = jnp.zeros(len(coords)).astype(int)
+    coords = jnp.asarray(coords)
 
+    def _distance_body(i, idx):
+        distance = jnp.linalg.norm(coords[i] - xg, axis=-1)
+        k = jnp.argmin(distance)
+        idx = put(idx, i, k)
+        return idx
+
+    idx = fori_loop(0, len(coords), _distance_body, idx)
     yk = yg[idx]
     alpha = 0.5
     yk = fixup(yk)

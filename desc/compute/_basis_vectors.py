@@ -575,9 +575,9 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    dtdv = 1 / (1 + data["lambda_t"])
+    dt_dv = 1 / (1 + data["lambda_t"])
     data["e_theta_PEST"] = jnp.array(
-        [data["R_t"] * dtdv, data["0"], data["Z_t"] * dtdv]
+        [data["R_t"] * dt_dv, data["0"], data["Z_t"] * dt_dv]
     ).T
     return data
 

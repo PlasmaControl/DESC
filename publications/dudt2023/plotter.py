@@ -33,7 +33,6 @@ eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")
 
 colors = [purple, orange]
 styles = ["-", "-"]
-# labels = ["Omnigenous", "Quasi-Symmetric"]
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(21, 7), sharex=True, sharey=True)
 # poloidal
 labels = ["QI", "QP"]

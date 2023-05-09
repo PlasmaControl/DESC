@@ -33,9 +33,10 @@ eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")
 
 colors = [purple, orange]
 styles = ["-", "-"]
-labels = ["Omnigenous", "Quasi-Symmetric"]
+# labels = ["Omnigenous", "Quasi-Symmetric"]
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(21, 7), sharex=True, sharey=True)
 # poloidal
+labels = ["QI", "QP"]
 grid_ax = LinearGrid(theta=1, zeta=6, NFP=1, rho=0.0, endpoint=True)
 grid = LinearGrid(theta=100, zeta=6, NFP=1, rho=1.0, endpoint=True)
 for i, eq in enumerate((eq_pol, eq_pol_qs)):
@@ -54,10 +55,14 @@ for i, eq in enumerate((eq_pol, eq_pol_qs)):
             linestyle=styles[i],
             lw=3,
         )
+        if j == 0:
+            line.set_label(labels[i])
+ax[0].legend(loc="upper right", ncol=1)
 ax[0].set_xlabel(r"$R$ (m)")
 ax[0].set_ylabel(r"$Z$ (m)")
 ax[0].set_title(r"$M=0,~N=1$")
 # helical
+labels = ["OH", "QH"]
 grid_ax = LinearGrid(theta=1, zeta=6, NFP=5, rho=0.0, endpoint=True)
 grid = LinearGrid(theta=100, zeta=6, NFP=5, rho=1.0, endpoint=True)
 for i, eq in enumerate((eq_hel, eq_hel_qs)):
@@ -67,6 +72,7 @@ for i, eq in enumerate((eq_hel, eq_hel_qs)):
     Z0 = coords_ax["Z"]
     R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
     Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    ax[1].plot(R0, Z0, "ko", ms=6)
     for j in range(grid.num_zeta - 1):
         (line,) = ax[1].plot(
             R[:, -1, j],
@@ -77,12 +83,11 @@ for i, eq in enumerate((eq_hel, eq_hel_qs)):
         )
         if j == 0:
             line.set_label(labels[i])
-    if i == 1:
-        ax[1].plot(R0, Z0, "ko", ms=6, label="Magnetic Axis")
-ax[1].legend(loc="upper left", ncol=1)
+ax[1].legend(loc="upper right", ncol=1)
 ax[1].set_xlabel(r"$R$ (m)")
 ax[1].set_title(r"$M=1,~N=5$")
 # toroidal
+labels = ["OT", "QA"]
 grid_ax = LinearGrid(theta=1, zeta=6, NFP=1, rho=0.0, endpoint=True)
 grid = LinearGrid(theta=100, zeta=6, NFP=1, rho=1.0, endpoint=True)
 for i, eq in enumerate((eq_tor, eq_tor_qs)):
@@ -101,6 +106,9 @@ for i, eq in enumerate((eq_tor, eq_tor_qs)):
             linestyle=styles[i],
             lw=3,
         )
+        if j == 0:
+            line.set_label(labels[i])
+ax[2].legend(loc="upper right", ncol=1)
 ax[2].set_xlabel(r"$R$ (m)")
 ax[2].set_title(r"$M=1,~N=0$")
 fig.tight_layout()
@@ -145,7 +153,7 @@ contour_kwargs["extend"] = "both"
 div = make_axes_locatable(ax[0, 0])
 im = ax[0, 0].contour(zz, tt, BB, **contour_kwargs)
 cax = div.append_axes("right", **cax_kwargs)
-cbar = fig.colorbar(im, cax=cax)
+cbar = fig.colorbar(im, cax=cax, format="%.2f")
 cbar.update_ticks()
 ax[0, 0].plot(zeta, theta, color="k", ls="--", lw=2)
 ax[0, 0].set_ylabel(r"$\theta_{Boozer}$")
@@ -177,7 +185,7 @@ contour_kwargs["extend"] = "both"
 div = make_axes_locatable(ax[1, 0])
 im = ax[1, 0].contour(zz, tt, BB, **contour_kwargs)
 cax = div.append_axes("right", **cax_kwargs)
-cbar = fig.colorbar(im, cax=cax)
+cbar = fig.colorbar(im, cax=cax, format="%.2f")
 cbar.update_ticks()
 ax[1, 0].plot(zeta, theta, color="k", ls="--", lw=2)
 ax[1, 0].set_xlabel(r"$\zeta_{Boozer}$")
@@ -224,7 +232,7 @@ contour_kwargs["extend"] = "both"
 div = make_axes_locatable(ax[0, 1])
 im = ax[0, 1].contour(zz, tt, BB, **contour_kwargs)
 cax = div.append_axes("right", **cax_kwargs)
-cbar = fig.colorbar(im, cax=cax)
+cbar = fig.colorbar(im, cax=cax, format="%.2f")
 cbar.update_ticks()
 ax[0, 1].plot(zeta, theta, color="k", ls="--", lw=2)
 ax[0, 1].set_title(r"$M=1,~N=5$")
@@ -255,7 +263,7 @@ contour_kwargs["extend"] = "both"
 div = make_axes_locatable(ax[1, 1])
 im = ax[1, 1].contour(zz, tt, BB, **contour_kwargs)
 cax = div.append_axes("right", **cax_kwargs)
-cbar = fig.colorbar(im, cax=cax)
+cbar = fig.colorbar(im, cax=cax, format="%.2f")
 cbar.update_ticks()
 ax[1, 1].plot(zeta, theta, color="k", ls="--", lw=2)
 ax[1, 1].set_xlabel(r"$\zeta_{Boozer}$")
@@ -301,7 +309,7 @@ contour_kwargs["extend"] = "both"
 div = make_axes_locatable(ax[0, 2])
 im = ax[0, 2].contour(zz, tt, BB, **contour_kwargs)
 cax = div.append_axes("right", **cax_kwargs)
-cbar = fig.colorbar(im, cax=cax)
+cbar = fig.colorbar(im, cax=cax, format="%.2f")
 cbar.update_ticks()
 ax[0, 2].plot(zeta, theta, color="k", ls="--", lw=2)
 ax[0, 2].set_title(r"$M=1,~N=0$")
@@ -332,7 +340,7 @@ contour_kwargs["extend"] = "both"
 div = make_axes_locatable(ax[1, 2])
 im = ax[1, 2].contour(zz, tt, BB, **contour_kwargs)
 cax = div.append_axes("right", **cax_kwargs)
-cbar = fig.colorbar(im, cax=cax)
+cbar = fig.colorbar(im, cax=cax, format="%.2f")
 cbar.update_ticks()
 ax[1, 2].plot(zeta, theta, color="k", ls="--", lw=2)
 ax[1, 2].set_xlabel(r"$\zeta_{Boozer}$")

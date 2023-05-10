@@ -1,6 +1,6 @@
 This folder contains the files necessary to reproduce the results in the paper "??".
 A copy of this paper is included as `dudt2023omnigenity.pdf`.
-In order to run the following code, checkout version `2f6f291ec0ea01cb0db0ce4be883824ab713c013` of DESC.
+In order to run the following code, checkout version `8fcf0d13187b2b9ff8f9fcba3a7d795df35a9380` of DESC.
 
 The included files are as follows:
 

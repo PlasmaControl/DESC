@@ -19,9 +19,13 @@ from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
 def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
-    """Intuitive implementation of surface_integrals function in compute.utils.
+    """Compute the surface integral of a quantity for all surfaces in the grid.
 
-    Compute the surface integral of a quantity for all surfaces in the grid.
+    Notes
+    -----
+        It is assumed that the integration surface has area 4π^2 when the
+        surface label is rho and area 2π when the surface label is theta or
+        zeta. You may want to multiply q by the surface area Jacobian.
 
     Parameters
     ----------

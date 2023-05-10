@@ -440,7 +440,7 @@ def _get_grid_surface(grid, surface_label):
         The relevant columns of grid.spacing.
     has_endpoint_dupe : bool
         Whether this surface label's nodes have a duplicate at the endpoint
-        of a periodic domain. (e.g. a node at 0 and 2pi).
+        of a periodic domain. (e.g. a node at 0 and 2π).
 
     """
     assert surface_label in {"rho", "theta", "zeta"}
@@ -625,9 +625,8 @@ def line_integrals(
     Notes
     -----
         It is assumed that the integration curve has length 1 when the line
-        label is rho and length 2pi when the line label is theta or zeta.
-        Hence, you may need to scale the output by a factor of rho surface
-        value, major radius, etc.
+        label is rho and length 2π when the line label is theta or zeta.
+        You may want to multiply q by the line length Jacobian.
 
         Correctness is not guaranteed on grids with duplicate nodes.
         An attempt to display a warning is made if the given grid has duplicate
@@ -640,7 +639,7 @@ def line_integrals(
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to integrate. Assumes q.ndim <= 3.
+        Quantity to integrate.
     line_label : str
         The coordinate curve of rho, theta, or zeta to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
@@ -686,12 +685,18 @@ def line_integrals(
 def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
+    Notes
+    -----
+        It is assumed that the integration surface has area 4π^2 when the
+        surface label is rho and area 2π when the surface label is theta or
+        zeta. You may want to multiply q by the surface area Jacobian.
+
     Parameters
     ----------
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to integrate. Assumes q.ndim <= 3.
+        Quantity to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
@@ -714,21 +719,20 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     )
 
     # Todo: define masks as a sparse matrix?
-    # The ith row of masks is True at the indices which correspond to the ith
-    # surface. False everywhere else.
-    # The integral over the ith surface is the dot product of the ith row vector
-    # and the integrands vectors.
+    # The ith row of masks is True only at the indices which correspond to the
+    # ith surface. The integral over the ith surface is the dot product of the
+    # ith row vector and the vector of integrands of all surfaces.
     masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
     if has_endpoint_dupe:
         masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
-        # Imagine a torus cross-section at zeta=pi.
-        # A grid with a duplicate zeta=pi node has 2 of those cross-sections.
+        # Imagine a torus cross-section at zeta=π.
+        # A grid with a duplicate zeta=π node has 2 of those cross-sections.
         #     In grid.py, we multiply by 1/n the areas of surfaces with
         # duplicity n. This prevents the area of that surface from being
         # double-counted, as surfaces with the same node value are combined
-        # into 1 integral, which sums their areas. Thus, if the zeta=pi
-        # cross-section has duplicity 2, we ensure that the area on the zeta=pi
-        # surface will have the correct total area of pi+pi = 2pi.
+        # into 1 integral, which sums their areas. Thus, if the zeta=π
+        # cross-section has duplicity 2, we ensure that the area on the zeta=π
+        # surface will have the correct total area of π+π = 2π.
         #     An edge case exists if the duplicate surface has nodes with
         # different values for the surface label, which only occurs when
         # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
@@ -741,6 +745,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # previous paragraph.
 
     integrands = (spacing.prod(axis=1) * jnp.nan_to_num(q).T).T
+    assert integrands.ndim <= 3  # otherwise replace @ with jnp.tensordot.
     # `integrands` (and `q`) has shape (g.size, f.size, v.size), where
     #     g is the grid function depending on the integration variables
     #     f is a function which may be independent of the integration variables
@@ -750,7 +755,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     #     function-valued          (with image size of f.size)
     #     function over the grid   (with domain size of g.size = grid.num_nodes)
     # over each surface in the grid.
-
+    #
     # The distinction between f and v is semantic.
     # We may alternatively consider an `integrands` of shape (g.size, f.size) to
     # represent a vector-valued (with f.size components) function over the grid.
@@ -761,7 +766,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     #     vector-valued            (with 1 component),
     #     function-valued          (with image size of 1)
     #     function over the grid   (with domain size of g.size = grid.num_nodes)
-
+    #
     # The integration is performed by applying `masks`, the surface
     # integral operator, to `integrands`. This operator hits the matrix formed
     # by the last two dimensions of `integrands`, for every element along the
@@ -793,7 +798,7 @@ def surface_averages(
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to average. Assumes q.ndim <= 3.
+        Quantity to average.
     sqrt_g : ndarray
         Coordinate system Jacobian determinant; see data_index["sqrt(g)"].
     surface_label : str

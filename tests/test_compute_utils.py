@@ -38,10 +38,11 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
         Surface integrals of q over each surface in grid.
 
     """
-    nodes, _, _, ds, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
-    weights = (ds * np.nan_to_num(q).T).T
+    _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
+    weights = (spacing.prod(axis=1) * np.nan_to_num(q).T).T
 
     surfaces = {}
+    nodes = grid.nodes[:, {"rho": 0, "theta": 1, "zeta": 2}[surface_label]]
     # collect node indices for each surface_label surface
     for grid_column_idx, surface_label_value in enumerate(nodes):
         surfaces.setdefault(surface_label_value, []).append(grid_column_idx)

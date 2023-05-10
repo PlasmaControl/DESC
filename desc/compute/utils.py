@@ -432,14 +432,12 @@ def _get_grid_surface(grid, surface_label):
 
     Returns
     -------
-    nodes : ndarray
-        The column in the grid corresponding to this surface_label's nodes.
-    unique_idx : ndarray
-        The indices of the unique values of the surface_label in grid.nodes.
+    unique_size : ndarray
+        The number of the unique values of the surface_label.
     inverse_idx : ndarray
         Indexing array to go from unique values to full grid.
-    ds : ndarray
-        The differential elements (dtheta * dzeta for rho surface).
+    spacing : ndarray
+        The relevant columns of grid.spacing.
     has_endpoint_dupe : bool
         Whether this surface label's nodes have a duplicate at the endpoint
         of a periodic domain. (e.g. a node at 0 and 2pi).
@@ -447,28 +445,27 @@ def _get_grid_surface(grid, surface_label):
     """
     assert surface_label in {"rho", "theta", "zeta"}
     if surface_label == "rho":
-        nodes = grid.nodes[:, 0]
-        unique_idx = grid.unique_rho_idx
+        unique_size = grid.num_rho
         inverse_idx = grid.inverse_rho_idx
-        ds = grid.spacing[:, 1:].prod(axis=1)
+        spacing = grid.spacing[:, 1:]
+        has_endpoint_dupe = False
     elif surface_label == "theta":
-        nodes = grid.nodes[:, 1]
-        unique_idx = grid.unique_theta_idx
+        unique_size = grid.num_theta
         inverse_idx = grid.inverse_theta_idx
-        ds = grid.spacing[:, [0, 2]].prod(axis=1)
+        spacing = grid.spacing[:, [0, 2]]
+        has_endpoint_dupe = (
+            grid.nodes[grid.unique_theta_idx[0], 1] == 0
+            and grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+        )
     else:
-        nodes = grid.nodes[:, 2]
-        unique_idx = grid.unique_zeta_idx
+        unique_size = grid.num_zeta
         inverse_idx = grid.inverse_zeta_idx
-        ds = grid.spacing[:, :2].prod(axis=1)
-
-    has_endpoint_dupe = (
-        surface_label != "rho"
-        and nodes[unique_idx[0]] == 0
-        and nodes[unique_idx[-1]]
-        == (2 * jnp.pi if surface_label == "theta" else 2 * np.pi / grid.NFP)
-    )
-    return nodes, unique_idx, inverse_idx, ds, has_endpoint_dupe
+        spacing = grid.spacing[:, :2]
+        has_endpoint_dupe = (
+            grid.nodes[grid.unique_zeta_idx[0], 2] == 0
+            and grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+        )
+    return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
 
 def compress(grid, x, surface_label="rho"):
@@ -633,8 +630,9 @@ def line_integrals(
         value, major radius, etc.
 
         Correctness is not guaranteed on grids with duplicate nodes.
-        A warning will display if the given grid has duplicate nodes,
-        and is one of the predefined types (Linear, Concentric, Quadrature).
+        An attempt to display a warning is made if the given grid has duplicate
+        nodes and is one of the predefined grid types
+        (Linear, Concentric, Quadrature).
         If the grid is custom, no attempt is made to warn.
 
     Parameters
@@ -670,27 +668,18 @@ def line_integrals(
                 "Correctness not guaranteed on grids with duplicate nodes.", "yellow"
             )
         )
-
-    if fix_surface[0] == "rho":
-        nodes = grid.nodes[:, 0]
-        dl_fix = grid.spacing[:, 0]
-    elif fix_surface[0] == "theta":
-        nodes = grid.nodes[:, 1]
-        dl_fix = grid.spacing[:, 1]
-    else:
-        nodes = grid.nodes[:, 2]
-        dl_fix = grid.spacing[:, 2]
-
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
     # Then forward the computation to surface_integrals.
     # The differential element of the line integral, denoted dl,
     # should correspond to the line label's spacing.
     # The differential element of the surface integral is
-    # ds = dl * dl_fix, so we scale q_prime by 1 / dl_fix.
-    mask = nodes == fix_surface[1]
-    q_prime = (mask * jnp.atleast_1d(q).T / dl_fix).T
-    surface_label = list({"rho", "theta", "zeta"} - {line_label, fix_surface[0]})[0]
+    # ds = dl * fix_surface_dl, so we scale q_prime by 1 / fix_surface_dl.
+    labels = {"rho": 0, "theta": 1, "zeta": 2}
+    column_id = labels[fix_surface[0]]
+    mask = grid.nodes[:, column_id] == fix_surface[1]
+    q_prime = (mask * jnp.atleast_1d(q).T / grid.spacing[:, column_id]).T
+    (surface_label,) = labels.keys() - {line_label, fix_surface[0]}
     return surface_integrals(grid, q_prime, surface_label)
 
 
@@ -720,7 +709,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
                 "yellow",
             )
         )
-    _, unique_idx, inverse_idx, ds, has_endpoint_dupe = _get_grid_surface(
+    unique_size, inverse_idx, spacing, has_endpoint_dupe = _get_grid_surface(
         grid, surface_label
     )
 
@@ -729,7 +718,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     # surface. False everywhere else.
     # The integral over the ith surface is the dot product of the ith row vector
     # and the integrands vectors.
-    masks = inverse_idx == jnp.arange(unique_idx.size)[:, jnp.newaxis]
+    masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
     if has_endpoint_dupe:
         masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
         # Imagine a torus cross-section at zeta=pi.
@@ -751,7 +740,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
 
-    integrands = (ds * jnp.nan_to_num(q).T).T
+    integrands = (spacing.prod(axis=1) * jnp.nan_to_num(q).T).T
     # `integrands` (and `q`) has shape (g.size, f.size, v.size), where
     #     g is the grid function depending on the integration variables
     #     f is a function which may be independent of the integration variables
@@ -875,7 +864,7 @@ def surface_min(grid, x, surface_label="rho"):
         Minimum of x over each surface in grid.
 
     """
-    _, unique_idx, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
-    masks = inverse_idx == jnp.arange(unique_idx.size)[:, jnp.newaxis]
-    mins = jnp.amin(x[jnp.newaxis, :], axis=-1, initial=jnp.inf, where=masks)
+    unique_size, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
+    masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
+    mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)
     return expand(grid, mins, surface_label)

@@ -292,7 +292,7 @@ def to_sfl(
     N_grid : int, optional
         toroidal spatial resolution to use for fit to new basis. Default = 2*N
     rcond : float, optional
-        cutoff for small singular values in least squares fit.
+        cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
 

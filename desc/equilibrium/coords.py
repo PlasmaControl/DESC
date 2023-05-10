@@ -314,7 +314,7 @@ def compute_flux_coords(
     return jnp.vstack([rho, theta, phi]).T
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
     Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -332,8 +332,8 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     grid  :  Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn : ndarray, optional
-        spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn : ndarray, optional
+        spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -347,21 +347,26 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         R_lmn = eq.R_lmn
     if Z_lmn is None:
         Z_lmn = eq.Z_lmn
+    if L_lmn is None:
+        L_lmn = eq.L_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
     data = compute_fun(
-        "sqrt(g)",
+        "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
         },
         transforms=transforms,
         profiles={},  # no profiles needed
     )
 
-    nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+    nested = jnp.all(
+        jnp.sign(data["sqrt(g)_PEST"][0]) == jnp.sign(data["sqrt(g)_PEST"])
+    )
     if not nested:
         if msg == "auto":
             warnings.warn(

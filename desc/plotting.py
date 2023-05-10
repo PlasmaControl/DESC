@@ -404,23 +404,23 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        label: str, label of the plotted line (e.g. to be shown with ax.legend())
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-        linecolor: str or tuple, color to use for plot line
-        ls: str, linestyle to use for plot line
-        lw: float, linewidth to use for plot line
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``linecolor``: str or tuple, color to use for plot line
+        * ``ls``: str, linestyle to use for plot line
+        * ``lw``: float, linewidth to use for plot line
 
     Returns
     -------
@@ -429,11 +429,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho","theta" or "zeta", depending on what 1-D variable is plotted against
-            key of the name of variable plotted
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -544,23 +540,22 @@ def plot_2d(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),cmap="plasma")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        title_font_size: integer, font size of the title
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        levels: int or array-like, passed to contourf
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``title_font_size``: integer, font size of the title
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -569,14 +564,7 @@ def plot_2d(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            two of "rho","theta" or "zeta", depending on what 1-D variable
-                 is plotted against.
-            "normalization": normalization used in the plot,
-                 if norm_F=False or F is not plotted, this is just equal to 1.
-            key of the name of variable plotted.
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -711,26 +699,25 @@ def plot_3d(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),cmap="plasma")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        alpha: float btwn [0,1.0], the transparency of the plotted surface
-        title_font_size: integer, font size of the title
-        elev: float, elevation orientation angle of 3D plot (in the z plane)
-        azim: float, azimuthal orientation angle of 3D plot (in the x,y plane)
-        dist: float, distance from the camera to the center point of the plot
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-        zlabel_fontsize: float, fontsize of the zlabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
+        * ``title_font_size``: integer, font size of the title
+        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
+        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
+        * ``dist``: float, distance from the camera to the center point of the plot
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``zlabel_fontsize``: float, fontsize of the zlabel
 
     Returns
     -------
@@ -739,11 +726,7 @@ def plot_3d(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "X","Y","Z", cartesian coordinates
-            key of the name of variable plotted
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -924,24 +907,23 @@ def plot_fsa(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        label: str, label of the plotted line (e.g. to be shown with ax.legend())
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-        linecolor: str or tuple, color to use for plot line
-        ls: str, linestyle to use for plot line
-        lw: float, linewidth to use for plot line
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``linecolor``: str or tuple, color to use for plot line
+        * ``ls``: str, linestyle to use for plot line
+        * ``lw``: float, linewidth to use for plot line
 
     Returns
     -------
@@ -950,13 +932,7 @@ def plot_fsa(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho"
-            "<name>_fsa" where name is the passed name of variable plotted
-            "normalization": normalization used in the plot,
-                 if norm_F=False or F is not plotted, this is just equal to 1.
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1081,25 +1057,24 @@ def plot_section(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        levels: int or array-like, passed to contourf
-        nphi: int, number of equispaced phi planes to plot sections at (default 1
-            for axisymmetry and 6 for non-axisymmetry)
-        title_font_size: integer, font size of the title
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``nzeta``: int, number of equispaced zeta planes to plot sections at (default
+          1 for axisymmetry and 6 for non-axisymmetry)
+        * ``title_font_size``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1108,13 +1083,7 @@ def plot_section(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "R","Z" cylindrical coordinates
-            key of the name of variable plotted
-            "normalization": normalization used in the plot,
-                 if norm_F=False or F is not plotted, this is just equal to 1.
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1290,35 +1259,36 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        label: str, label of the plotted line (e.g. to be shown with ax.legend())
-        NR: int, number of equispaced rho point to use in plotting the vartheta contours
-        NT: int, number of equispaced theta points to use in plotting the rho contours
-        theta_color: str or tuple, color to use for constant vartheta contours
-        theta_ls: str, linestyle to use for constant vartheta contours
-        theta_lw: float, linewidth to use for constant vartheta contours
-        rho_color: str or tuple, color to use for constant rho contours
-        rho_ls: str, linestyle to use for constant rho contours
-        rho_lw: float, linewidth to use for constant rho contours
-        lcfs_color: str or tuple, color to use for the LCFS constant rho contour
-        lcfs_ls: str, linestyle to use for the LCFS constant rho contour
-        lcfs_lw: float, linewidth to use for the LCFS constant rho contour
-        axis_color: str or tuple, color to use for the axis plotted point
-        axis_alpha: float, transparency of the axis plotted point
-        axis_marker: str, markerstyle to use for the axis plotted point
-        axis_size: float, markersize to use for the axis plotted point
-        title_font_size: integer, font size of the title
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
+        * ``NR``: int, number of equispaced rho point to use in plotting the vartheta
+          contours
+        * ``NT``: int, number of equispaced theta points to use in plotting the rho
+          contours
+        * ``theta_color``: str or tuple, color to use for constant vartheta contours
+        * ``theta_ls``: str, linestyle to use for constant vartheta contours
+        * ``theta_lw``: float, linewidth to use for constant vartheta contours
+        * ``rho_color``: str or tuple, color to use for constant rho contours
+        * ``rho_ls``: str, linestyle to use for constant rho contours
+        * ``rho_lw``: float, linewidth to use for constant rho contours
+        * ``lcfs_color``: str or tuple, color to use for the LCFS constant rho contour
+        * ``lcfs_ls``: str, linestyle to use for the LCFS constant rho contour
+        * ``lcfs_lw``: float, linewidth to use for the LCFS constant rho contour
+        * ``axis_color``: str or tuple, color to use for the axis plotted point
+        * ``axis_alpha``: float, transparency of the axis plotted point
+        * ``axis_marker``: str, markerstyle to use for the axis plotted point
+        * ``axis_size``: float, markersize to use for the axis plotted point
+        * ``title_font_size``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1327,12 +1297,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho_R_coords","rho_Z_coords", Cylindrical R,Z coordinates of rho contours
-            "vartheta_R_coords", "vartheta_Z_coords",
-                Cylindrical R,Z coordinates of vartheta contours
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1532,24 +1497,23 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cmap : colormap to use for plotting, discretized into len(phi) colors
-        colors: array of colors to use for each phi angle
-        ls : array of line styles to use for each phi angle
-        lw : array of line widths to use for each phi angle
-        marker: str, marker style to use for the axis plotted points
-        size: float, marker size to use for the axis plotted points
-        label_fontsize: float, fontsize of the x and y labels
-        legend_fontsize: float, fontsize of the legend
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: colormap to use for plotting, discretized into len(zeta) colors
+        * ``colors``: array of colors to use for each zeta angle
+        * ``ls``: array of line styles to use for each zeta angle
+        * ``lw``: array of line widths to use for each zeta angle
+        * ``marker``: str, marker style to use for the axis plotted points
+        * ``size``: float, marker size to use for the axis plotted points
+        * ``label_fontsize``: float, fontsize of the x and y labels
+        * ``legend_fontsize``: float, fontsize of the legend
 
     Returns
     -------
@@ -1558,10 +1522,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "R","Z" cylindrical coordinates of boundary
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1692,21 +1653,21 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cmap : colormap to use for plotting, discretized into len(eqs) colors
-        colors: array of colors to use for each Equilibrium
-        ls : array of line styles to use for each Equilibrium
-        lw : array of line widths to use for each Equilibrium
-        label_fontsize: float, fontsize of the x and y labels
-        legend_fontsize: float, fontsize of the legend
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
+        * ``colors``: array of colors to use for each Equilibrium
+        * ``ls``: array of line styles to use for each Equilibrium
+        * ``lw``: array of line widths to use for each Equilibrium
+        * ``label_fontsize``: float, fontsize of the x and y labels
+        * ``legend_fontsize``: float, fontsize of the legend
 
 
     Returns
@@ -1716,10 +1677,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys: list of len(eqs) corresponding to input eqs
-            "R","Z" cylindrical coordinates of boundary
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1869,21 +1827,20 @@ def plot_comparison(
         Array the same length as eqs of labels to apply to each equilibrium.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        legend: bool, whether to display legend or not
-        legend_kw: dict, any keyword arguments to be pased to ax.legend()
-        title_font_size: integer, font size of the title
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``title_font_size``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1892,12 +1849,7 @@ def plot_comparison(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys: Each are a list of len(eqs) corresponding to each eq input
-            "rho_R_coords","rho_Z_coords", Cylindrical R,Z coordinates of rho contours
-            "vartheta_R_coords", "vartheta_Z_coords",
-                Cylindrical R,Z coordinates of vartheta contours
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2027,20 +1979,19 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         Axis to plot on    return_data : bool
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        lw: float, linewidth of plotted coils
-        ls: str, linestyle of plotted coils
-        color: str, color of plotted coils
-        cmap: str, colormap to be passed to matplotlib.cm.get_cmap()
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``lw``: float, linewidth of plotted coils
+        * ``ls``: str, linestyle of plotted coils
+        * ``color``: str, color of plotted coils
+        * ``cmap``: str, colormap to be passed to matplotlib.cm.get_cmap()
 
     Returns
     -------
@@ -2049,15 +2000,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        each key is a flattened list of coords corresponding to each coil
-        i..e if the coils given is [Coilset,Coilset,Coilset] each of len 3,
-        plot_data["X"] is length 9, with the first three corresponding to the
-        x coordinates of the first Coilset
-        plot_data keys:
-            "X","Y","Z" are the cartesian coordinates of the coil
-
+        dictionary of the data plotted, only returned if ``return_data=True``
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)
@@ -2171,17 +2114,17 @@ def plot_boozer_modes(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        linewidth: float, linewidth
-        linestyle: str, linestyle
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``lw``: float, linewidth
+        * ``ls``: str, linestyle
 
 
     Returns
@@ -2191,14 +2134,7 @@ def plot_boozer_modes(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "B_mn": |B| harmonic in boozer angles, shape [num_rho,num_modes]
-                where first index corresponds to the rho surface
-                and second to the modes in B_modes
-            "B_modes": array of modes corresponding to B_mn, given as (0,m,n)
-            "rho"
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2218,8 +2154,8 @@ def plot_boozer_modes(
     B_mn = np.array([[]])
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    linestyle = kwargs.pop("linestyle", "-")
-    linewidth = kwargs.pop("linewidth", 2)
+    linestyle = kwargs.pop("ls", "-")
+    linewidth = kwargs.pop("lw", 2)
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
@@ -2322,19 +2258,18 @@ def plot_boozer_surface(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),cmap="plasma")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        levels: int or array-like, passed to contourf
-        title_font_size: integer, font size of the title
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``title_font_size``: integer, font size of the title
 
     Returns
     -------
@@ -2343,12 +2278,7 @@ def plot_boozer_surface(
     ax : matplotlib.axes.Axes or ndarray of Axes
         axes being plotted to
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "|B|": magnetic field magntitude on surface
-            "theta_Boozer","zeta_Boozer": Boozer poloidal, toroidal angles
-                array of shape (num_theta, num_zeta)
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2475,23 +2405,26 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        ls: list of strs of length 3, linestyles to use for the 3 different qs metrics
-        colors: list of strs of length 3, colors to use for the 3 different qs metrics
-        markers: list of strs of length 3, markers to use for the 3 different qs metrics
-        labels:  list of strs of length 3, labels to use for the 3 different qs metrics
-        ylabel: str, ylabel to use for plot
-        legend: bool, whether to display legend or not
-        legend_kw: dict, any keyword arguments to be pased to ax.legend()
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``ls``: list of strs of length 3, linestyles to use for the 3 different
+          qs metrics
+        * ``colors``: list of strs of length 3, colors to use for the 3 different
+          qs metrics
+        * ``markers``: list of strs of length 3, markers to use for the 3 different
+          qs metrics
+        * ``labels``:  list of strs of length 3, labels to use for the 3 different
+          qs metrics
+        * ``ylabel``: str, ylabel to use for plot
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
 
     Returns
     -------
@@ -2500,13 +2433,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys: each are arrays of length num_rho
-            "f_T": QS triple product metric
-            "f_B": Boozer QS metric (sum of symmetry-breaking modes)
-            "f_C": QS two-term metric
-            "rho"
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2671,16 +2598,16 @@ def plot_grid(grid, return_data=False, **kwargs):
         Grid to plot.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        title_font_size: integer, font size of the title
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``title_font_size``: integer, font size of the title
 
 
     Returns
@@ -2690,11 +2617,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho", "theta": rho,theta positions of the grid nodes on zeta=0 surface
-            plots are made as a polar plot using above keys
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2783,7 +2706,17 @@ def plot_basis(basis, return_data=False, **kwargs):
         basis to plot
     return_data : bool
         if True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
 
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``title_font_size``: integer, font size of the title
 
     Returns
     -------
@@ -2794,35 +2727,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         2d or 3d bases return an ndarray or dict of axes.    return_data : bool
         if True, return the data plotted as well as fig,ax
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho", "theta", "zeta": varies, what coordinate(s) the basis depends on
-                FourierSeries will return "zeta"
-                PowerSeries will return "rho"
-                DoubleFourierSeries will return "theta","zeta"
-                FourierZernike and ZernikePolynomial return "rho","theta"
-                (FourierZernike only plotted at zeta=0 plane)
-            "l","m","n": basis radial, poloidal, and toroidal modenumbers
-                FourierSeries will return "n"
-                PowerSeries will return "l"
-                DoubleFourierSeries will return "m","n"
-                FourierZernike and ZernikePolynomial return "l","m"
-                (FourierZernike only plotted at zeta=0 plane)
-            "amplitude": the amplitude of the basis functions
-
-    **kwargs : fig,ax and plotting properties
-        Specify properties of the figure, axis, and plot appearance e.g.::
-
-            plot_X(figsize=(4,6))
-
-        Valid keyword arguments are:
-
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cbar_ratio: float
-        title_ratio: float
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        title_font_size: integer, font size of the title
+        dictionary of the data plotted, only returned if ``return_data=True``
 
 
     Examples
@@ -3048,11 +2953,10 @@ def plot_logo(savepath=None, **kwargs):
     savepath : str or path-like
         path to save the figure to.
         File format is inferred from the filename (Default value = None)
-    **kwargs :
+    **kwargs : dict, optional
         additional plot formatting parameters.
         options include ``'Dcolor'``, ``'Dcolor_rho'``, ``'Dcolor_theta'``,
         ``'Ecolor'``, ``'Scolor'``, ``'Ccolor'``, ``'BGcolor'``, ``'fig_width'``
-
 
     Returns
     -------
@@ -3312,16 +3216,15 @@ def plot_field_lines_sfl(
         if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
 
     Returns
     -------
@@ -3330,10 +3233,7 @@ def plot_field_lines_sfl(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        Dict containing the R,phi,Z coordinates of each field line traced.
-        Dictionary entries are lists corresponding to the field lines for
-        each seed_theta given. Also contains the scipy IVP solutions for info
-        on how each line was integrated
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------

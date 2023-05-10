@@ -629,7 +629,7 @@ def line_integrals(
         You may want to multiply q by the line length Jacobian.
 
         Correctness is not guaranteed on grids with duplicate nodes.
-        An attempt to display a warning is made if the given grid has duplicate
+        An attempt to print a warning is made if the given grid has duplicate
         nodes and is one of the predefined grid types
         (Linear, Concentric, Quadrature).
         If the grid is custom, no attempt is made to warn.

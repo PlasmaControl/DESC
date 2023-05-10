@@ -136,8 +136,8 @@ tt = (
 )
 basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=1)
 B_transform = Transform(grid_plot, basis)
-# quasi-symmetric
-data = eq_pol_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
+# omnigenous
+data = eq_pol.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
 iota = compress(grid, data["iota"])
 BB = B_transform.transform(data["|B|_mn"]).reshape(
     (grid_plot.num_theta, grid_plot.num_zeta), order="F"
@@ -162,14 +162,14 @@ ax[0, 0].set_ylim([0, 2 * np.pi])
 ax[0, 0].text(
    0.05,
    0.95,
-   r"QP",
+   r"QI",
    transform=ax[0, 0].transAxes,
    fontsize=14,
    verticalalignment="top",
    bbox=props,
 )
-# omnigenous
-data = eq_pol.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
+# quasi-symmetric
+data = eq_pol_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
 iota = compress(grid, data["iota"])
 BB = B_transform.transform(data["|B|_mn"]).reshape(
     (grid_plot.num_theta, grid_plot.num_zeta), order="F"
@@ -194,7 +194,7 @@ ax[1, 0].set_ylim([0, 2 * np.pi])
 ax[1, 0].text(
    0.05,
    0.95,
-   r"QI",
+   r"QP",
    transform=ax[1, 0].transAxes,
    fontsize=14,
    verticalalignment="top",
@@ -215,8 +215,8 @@ tt = (
 )
 basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=5)
 B_transform = Transform(grid_plot, basis)
-# quasi-symmetric
-data = eq_hel_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
+# omnigenous
+data = eq_hel.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
 iota = compress(grid, data["iota"])
 BB = B_transform.transform(data["|B|_mn"]).reshape(
     (grid_plot.num_theta, grid_plot.num_zeta), order="F"
@@ -240,14 +240,14 @@ ax[0, 1].set_ylim([0, 2 * np.pi])
 ax[0, 1].text(
    0.05,
    0.95,
-   r"QH",
+   r"OH",
    transform=ax[0, 1].transAxes,
    fontsize=14,
    verticalalignment="top",
    bbox=props,
 )
-# omnigenous
-data = eq_hel.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
+# quasi-symmetric
+data = eq_hel_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
 iota = compress(grid, data["iota"])
 BB = B_transform.transform(data["|B|_mn"]).reshape(
     (grid_plot.num_theta, grid_plot.num_zeta), order="F"
@@ -271,7 +271,7 @@ ax[1, 1].set_ylim([0, 2 * np.pi])
 ax[1, 1].text(
    0.05,
    0.95,
-   r"OH",
+   r"QH",
    transform=ax[1, 1].transAxes,
    fontsize=14,
    verticalalignment="top",
@@ -292,8 +292,8 @@ tt = (
 )
 basis = DoubleFourierSeries(M=16, N=16, sym="cos", NFP=1)
 B_transform = Transform(grid_plot, basis)
-# quasi-symmetric
-data = eq_tor_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
+# omnigenous
+data = eq_tor.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
 iota = compress(grid, data["iota"])
 BB = B_transform.transform(data["|B|_mn"]).reshape(
     (grid_plot.num_theta, grid_plot.num_zeta), order="F"
@@ -317,14 +317,14 @@ ax[0, 2].set_ylim([0, 2 * np.pi])
 ax[0, 2].text(
    0.05,
    0.95,
-   r"QA",
+   r"OT",
    transform=ax[0, 2].transAxes,
    fontsize=14,
    verticalalignment="top",
    bbox=props,
 )
-# omnigenous
-data = eq_tor.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
+# quasi-symmetric
+data = eq_tor_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
 iota = compress(grid, data["iota"])
 BB = B_transform.transform(data["|B|_mn"]).reshape(
     (grid_plot.num_theta, grid_plot.num_zeta), order="F"
@@ -348,7 +348,7 @@ ax[1, 2].set_ylim([0, 2 * np.pi])
 ax[1, 2].text(
    0.05,
    0.95,
-   r"OT",
+   r"QA",
    transform=ax[1, 2].transAxes,
    fontsize=14,
    verticalalignment="top",

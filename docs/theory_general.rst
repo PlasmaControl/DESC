@@ -2,21 +2,17 @@
 General
 =======
 
-The theoretical approach and numerical methods used by DESC are explained in this publication_ [1]_.
+The theoretical approach and numerical methods used by DESC are explained in this publication [1]_.
 The code is constantly evolving and may differ from the implementation presented in the original paper.
 This documentation aims to reflect the latest version of the code, and major discrepancies from the publication will be noted when relevant.
 
-.. [1] D.W. Dudt and E. Kolemen (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*.
-.. _publication: https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf
+See also our recent pre-prints on comparisons to VMEC [2]_ perturbation and continuation methods [3]_ and quasi-symmetry optimization [4]_:
 
-See also our recent pre-prints [2-4]:
 
-.. [2] D. Panici, R. Conlin, D.W. Dudt and E. Kolemen. “The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations.” pre-print.
-.. _publication: https://arxiv.org/abs/2203.17173
-.. [3] R. Conlin, D.W. Dudt, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part II: Perturbation and continuation methods.” pre-print.
-.. _publication: https://arxiv.org/abs/2203.15927
-.. [4] D.W. Dudt, R. Conlin, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization.” pre-print.
-.. _publication: https://arxiv.org/abs/2204.00078
+.. [1] D.W. Dudt and E. Kolemen (2020). DESC: A Stellarator Equilibrium Solver. *Physics of Plasmas*. `pdf <https://github.com/PlasmaControl/DESC/blob/master/docs/Dudt_Kolemen_PoP_2020.pdf>`__
+.. [2] D. Panici, R. Conlin, D.W. Dudt and E. Kolemen. “The DESC Stellarator Code Suite Part I: Quick and accurate equilibria computations.” `arxiv <https://arxiv.org/abs/2203.17173>`__
+.. [3] R. Conlin, D.W. Dudt, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part II: Perturbation and continuation methods.” `arxiv <https://arxiv.org/abs/2203.15927>`__
+.. [4] D.W. Dudt, R. Conlin, D. Panici and E. Kolemen. “The DESC Stellarator Code Suite Part III: Quasi-symmetry optimization.” `arxiv <https://arxiv.org/abs/2204.00078>`__
 
 Flux coordinates
 ****************

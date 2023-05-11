@@ -1400,8 +1400,8 @@ class FixSumModesR(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, size-1 ndarray, optional
         Fourier-Zernike R coefficient target sum. If None,
-         uses current sum of Equilibrium's R coefficients.
-         len(target)=1
+        uses current sum of Equilibrium's R coefficients.
+        len(target)=1
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
         len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
@@ -1416,10 +1416,10 @@ class FixSumModesR(_Objective):
         be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
-         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
+        Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
-         len(weight) = len(modes).
+        len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
     surface_label : float
@@ -1564,8 +1564,8 @@ class FixSumModesZ(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Fourier-Zernike Z coefficient target sum. If None,
-         uses current sum of Equilibrium's Z coefficients.
-         len(target)=1
+        uses current sum of Equilibrium's Z coefficients.
+        len(target)=1
     bounds : tuple, optional
         Lower and upper bounds on the objective. Overrides target.
         len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
@@ -1580,10 +1580,10 @@ class FixSumModesZ(_Objective):
         be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
-         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
+        Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
-         len(weight) = len(modes).
+        len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
     surface_label : float

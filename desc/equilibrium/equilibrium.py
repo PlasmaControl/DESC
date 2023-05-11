@@ -310,7 +310,7 @@ class Equilibrium(_Configuration, IOAble):
         r : float
             Radius of the desired boundary surface (in meters).
         L : int (optional)
-            Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+            Radial resolution. Default 2*M for ``spectral_indexing=='fringe'``, else M
         M : int (optional)
             Poloidal resolution. Default is 8
         N : int (optional)
@@ -430,7 +430,7 @@ class Equilibrium(_Configuration, IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
-        maxiter=50,
+        maxiter=None,
         x_scale="auto",
         options=None,
         verbose=1,
@@ -548,7 +548,7 @@ class Equilibrium(_Configuration, IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
-        maxiter=50,
+        maxiter=None,
         x_scale="auto",
         options=None,
         verbose=1,
@@ -627,6 +627,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("Start of solver")
             objective.print_value(objective.x(eq))
+            for con in constraints:
+                con.print_value(*con.xs(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
             if value[-1].size:
@@ -634,6 +636,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))
+            for con in constraints:
+                con.print_value(*con.xs(eq))
 
         eq.solved = result["success"]
         return eq, result
@@ -647,8 +651,8 @@ class Equilibrium(_Configuration, IOAble):
         maxiter=50,
         verbose=1,
         copy=False,
-        solve_options={},
-        perturb_options={},
+        solve_options=None,
+        perturb_options=None,
     ):
         """Optimize an equilibrium for an objective.
 
@@ -685,6 +689,9 @@ class Equilibrium(_Configuration, IOAble):
         from desc.optimize.tr_subproblems import update_tr_radius
         from desc.optimize.utils import check_termination
         from desc.perturbations import optimal_perturb
+
+        solve_options = {} if solve_options is None else solve_options
+        perturb_options = {} if perturb_options is None else perturb_options
 
         if constraint is None:
             constraint = get_equilibrium_objective()
@@ -886,10 +893,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
     ----------
     args : Equilibrium, dict or list of dict
         Should be either:
-          * An Equilibrium (or several)
-          * A dictionary of inputs (or several) to create a equilibria
-          * A single list of dictionaries, one for each equilibrium in a continuation.
-          * Nothing, to create an empty family.
+
+        * An Equilibrium (or several)
+        * A dictionary of inputs (or several) to create a equilibria
+        * A single list of dictionaries, one for each equilibrium in a continuation.
+        * Nothing, to create an empty family.
+
         For more information see inputs required by ``'Equilibrium'``.
     """
 
@@ -1022,15 +1031,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
             * 3: as above plus detailed solver output
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
-        **kwargs : control continuation step sizes
+        **kwargs : dict, optional
+            * ``mres_step``: int, default 6. The amount to increase Mpol by at each
+              continuation step
+            * ``pres_step``: float, ``0<=pres_step<=1``, default 0.5. The amount to
+              increase pres_ratio by at each continuation step
+            * ``bdry_step``: float, ``0<=bdry_step<=1``, default 0.25. The amount to
+              increase bdry_ratio by at each continuation step
 
-            Valid keyword arguments are:
-
-            mres_step: int, the amount to increase Mpol by at each continuation step
-            pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
-                            at each continuation step
-            bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
-                            at each continuation step
         Returns
         -------
         eqfam : EquilibriaFamily

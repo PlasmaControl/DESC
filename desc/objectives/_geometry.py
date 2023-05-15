@@ -54,7 +54,7 @@ class AspectRatio(_Objective):
     def __init__(
         self,
         eq=None,
-        target=2,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -62,7 +62,8 @@ class AspectRatio(_Objective):
         grid=None,
         name="aspect ratio",
     ):
-
+        if target is None and bounds is None:
+            target = 2
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -174,7 +175,7 @@ class Elongation(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -182,7 +183,8 @@ class Elongation(_Objective):
         grid=None,
         name="elongation",
     ):
-
+        if target is None and bounds is None:
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -294,7 +296,7 @@ class Volume(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -302,7 +304,8 @@ class Volume(_Objective):
         grid=None,
         name="volume",
     ):
-
+        if target is None and bounds is None:
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -430,7 +433,7 @@ class PlasmaVesselDistance(_Objective):
         surface,
         eq=None,
         target=None,
-        bounds=(1, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -439,6 +442,8 @@ class PlasmaVesselDistance(_Objective):
         alpha=None,
         name="plasma vessel distance",
     ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
@@ -581,14 +586,15 @@ class MeanCurvature(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(-np.inf, 0),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="mean-curvature",
     ):
-
+        if target is None and bounds is None:
+            bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -712,7 +718,7 @@ class PrincipalCurvature(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -720,7 +726,8 @@ class PrincipalCurvature(_Objective):
         grid=None,
         name="principal-curvature",
     ):
-
+        if target is None and bounds is None:
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,

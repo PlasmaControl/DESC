@@ -15,14 +15,23 @@ from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):
-    """Radial and helical MHD force balance.
+    r"""Radial and helical MHD force balance.
 
-    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
-    f_rho = F_rho |grad(rho)| dV  (N)
+    Given force densities:
 
-    F_helical = sqrt(g) J^rho
-    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_helical = F_helical |e^helical| dV  (N)
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    Fₕₑₗᵢ √g J^ρ
+
+    and helical basis vector:
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    Minimizes the magnitude of the forces:
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
 
     Parameters
     ----------
@@ -52,13 +61,14 @@ class ForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Total force: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -66,7 +76,8 @@ class ForceBalance(_Objective):
         grid=None,
         name="force",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -198,10 +209,11 @@ class ForceBalance(_Objective):
 
 
 class RadialForceBalance(_Objective):
-    """Radial MHD force balance.
+    r"""Radial MHD force balance.
 
-    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
-    f_rho = F_rho |grad(rho)| dV  (N)
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
 
     Parameters
     ----------
@@ -231,13 +243,14 @@ class RadialForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Radial force: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -245,7 +258,8 @@ class RadialForceBalance(_Objective):
         grid=None,
         name="radial force",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -366,11 +380,13 @@ class RadialForceBalance(_Objective):
 
 
 class HelicalForceBalance(_Objective):
-    """Helical MHD force balance.
+    r"""Helical MHD force balance.
 
-    F_helical = sqrt(g) J^rho
-    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_helical = F_helical |e^helical| dV  (N)
+    Fₕₑₗᵢ √g J^ρ
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
 
     Parameters
     ----------
@@ -400,13 +416,14 @@ class HelicalForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Helical force: {:10.3e}, "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -414,7 +431,8 @@ class HelicalForceBalance(_Objective):
         grid=None,
         name="helical force",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -571,13 +589,14 @@ class Energy(_Objective):
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
     _linear = False
+    _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -586,7 +605,8 @@ class Energy(_Objective):
         gamma=0,
         name="energy",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         self.gamma = gamma
         super().__init__(
@@ -757,13 +777,14 @@ class CurrentDensity(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(A*m)"
     _print_value_fmt = "Total current density: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -771,7 +792,8 @@ class CurrentDensity(_Objective):
         grid=None,
         name="current density",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,

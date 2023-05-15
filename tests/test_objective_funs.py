@@ -36,6 +36,7 @@ from desc.objectives import (
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
+from desc.objectives.utils import jax_softmax, jax_softmin
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -475,6 +476,31 @@ def test_plasma_vessel_distance():
     with pytest.warns(UserWarning):
         obj.build(eq)
 
+    # test softmin, should give value less than true minimum
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    assert np.all(np.abs(d) < a_s - a_p)
+
+    # for large enough alpha, should be same as actual min
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+        alpha=100,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
 
 @pytest.mark.unit
 def test_mean_curvature():
@@ -646,3 +672,24 @@ def test_objective_target_bounds():
     assert weight[0] == 1
     assert weight[1] == 1
     assert np.all(weight[2:] == 5)
+
+
+@pytest.mark.unit
+def test_jax_softmax_and_softmin():
+    """Test softmax and softmin function."""
+    arr = np.arange(-10, 10, 1)
+    # expect this to not be equal to the max but rather be more
+    softmax = jax_softmax(arr, alpha=1)
+    assert softmax > np.max(arr)
+
+    # expect this to be equal to the max
+    softmax = jax_softmax(arr, alpha=100)
+    np.testing.assert_almost_equal(softmax, np.max(arr))
+
+    # expect this to not be equal to the min but rather be less
+    softmin = jax_softmin(arr, alpha=1)
+    assert softmin < np.min(arr)
+
+    # expect this to be equal to the min
+    softmin = jax_softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(softmin, np.min(arr))

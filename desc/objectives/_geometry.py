@@ -416,9 +416,9 @@ class PlasmaVesselDistance(_Objective):
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
-    alpha: float or None, softmin parameter, None by default (means use hard min).
-        larger values of alpha make the softmin closer and closer to the actual min.
-        Too large of values can cause nan's to result, use with caution.
+    use_softmin: Bool, use softmin or hard min.
+    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as alpha -> infinity
     name : str
         Name of the objective function.
     """
@@ -439,7 +439,8 @@ class PlasmaVesselDistance(_Objective):
         normalize_target=True,
         surface_grid=None,
         plasma_grid=None,
-        alpha=None,
+        use_softmin=False,
+        alpha=1.0,
         name="plasma vessel distance",
     ):
         if target is None and bounds is None:
@@ -447,6 +448,7 @@ class PlasmaVesselDistance(_Objective):
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
+        self._use_softmin = use_softmin
         self._alpha = alpha
         super().__init__(
             eq=eq,
@@ -536,10 +538,10 @@ class PlasmaVesselDistance(_Objective):
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
-        if self._alpha is None:  # do hardmin
-            return d.min(axis=0)
-        else:  # alpha supplied, do softmin
+        if self._use_softmin:  # do softmin
             return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+        else:  # do hardmin
+            return d.min(axis=0)
 
 
 class MeanCurvature(_Objective):

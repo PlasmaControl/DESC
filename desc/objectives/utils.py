@@ -1,6 +1,7 @@
 """Functions for getting common objectives and constraints."""
 
 import numpy as np
+from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
 from desc.compute import arg_order
@@ -371,8 +372,28 @@ def align_jacobian(Fx, objective_f, objective_g):
     return A.T
 
 
+def jax_softmax(arr, alpha):
+    """JAX softmax implementation.
+
+    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
+    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
+
+    Parameters
+    ----------
+    arr: ndarray, the array which we would like to apply the softmax function to.
+    alpha: float, the parameter smoothly transitioning the function to a hardmax.
+        as alpha increases, the value returned will come closer and closer to
+        max(arr).
+
+    Returns
+    -------
+    softmax: float, the soft-maximum of the array.
+    """
+    return logsumexp(arr * alpha) / alpha
+
+
 def jax_softmin(arr, alpha):
-    """JAX softmin implementation.
+    """JAX softmin implementation, by taking negative of softmax(-arr).
 
     Parameters
     ----------
@@ -385,12 +406,7 @@ def jax_softmin(arr, alpha):
     -------
     softmin: float, the soft-minimum of the array.
     """
-    # FIXME: this is unstable numerically for large values of alpha, due to
-    # the exp(-alpha*arr) possibly underflowing to 0, resulting in division by 0
-    # and nan as a result
-    # either add a check for this based on alpha and d, or
-    # change the softmin scheme
-    return jnp.sum(arr * jnp.exp(-alpha * arr)) / jnp.sum(jnp.exp(-alpha * arr))
+    return -jax_softmax(-arr, alpha)
 
 
 def combine_args(*objectives):

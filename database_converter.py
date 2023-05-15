@@ -41,3 +41,13 @@ def desc_to_csv(
     data["desc_run_ID"] = None  # what should this be? how to hash?
 
     return None
+
+
+# TODO: other fields?
+# provenance could be used to include if the file was based off a
+# NAE equilibrium, but maybe if this is supposed to be more
+# common we could also include the NAE parameters...
+
+# Aza would ideally like one CSV per input
+# can take multiple inputs at a time
+# then just output to a few csvs

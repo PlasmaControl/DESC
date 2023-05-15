@@ -321,7 +321,10 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     Z2sNAE = qsc.Z2s_untwisted
     Z2cNAE = qsc.Z2c_untwisted
 
-    dvphi_dp = qsc.d_varphi_d_phi  # needed to convert dX_d_dvarphi derivs to dX_d_dphi
+    # need dvarphi_dphi to convert dX_d_dvarphi derivs to dX_d_dphi
+    # formula from https://github.com/landreman/pyQSC/blob/main/qsc/init_axis.py#L110
+    dvphi_dp = qsc.nphi / (np.sum(qsc.d_l_d_phi)) * qsc.d_l_d_phi
+
     # coefficient derivatives
     X1cp = qsc.d_X1c_d_varphi * dvphi_dp
     X1sp = qsc.d_X1s_d_varphi * dvphi_dp

@@ -1209,7 +1209,7 @@ class _Configuration(IOAble, ABC):
             self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -1225,8 +1225,8 @@ class _Configuration(IOAble, ABC):
         grid  :  Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn : ndarray, optional
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, L_lmn : ndarray, optional
+            spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1236,7 +1236,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
 
     def to_sfl(
         self,

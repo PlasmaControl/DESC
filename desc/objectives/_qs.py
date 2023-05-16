@@ -59,7 +59,7 @@ class QuasisymmetryBoozer(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -70,7 +70,8 @@ class QuasisymmetryBoozer(_Objective):
         N_booz=None,
         name="QS Boozer",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         assert len(helicity) == 2
         assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
@@ -252,7 +253,7 @@ class QuasisymmetryTwoTerm(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -261,7 +262,8 @@ class QuasisymmetryTwoTerm(_Objective):
         helicity=(1, 0),
         name="QS two-term",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         self.helicity = helicity
         super().__init__(
@@ -418,7 +420,7 @@ class QuasisymmetryTripleProduct(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -426,7 +428,8 @@ class QuasisymmetryTripleProduct(_Objective):
         grid=None,
         name="QS triple product",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -557,7 +560,7 @@ class Isodynamicity(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=False,
@@ -565,7 +568,8 @@ class Isodynamicity(_Objective):
         grid=None,
         name="Isodynamicity",
     ):
-
+        if target is None and bounds is None:
+            target = 0
         self._grid = grid
         super().__init__(
             eq=eq,

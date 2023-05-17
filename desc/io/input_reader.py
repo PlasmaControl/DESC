@@ -847,41 +847,97 @@ class InputReader:
         pres_scale = 1.0
         curr_tor = None
 
-        # Loop which makes multi-line inputs a single line
-        vmeclines_no_multiline = []
+        # find start of namelist (&INDATA)
+        vmeclines = vmec_file.readlines()
+        for i, line in enumerate(vmeclines):
+            if line.find("&INDATA") != -1:
+                start_ind = i
+                continue
+            elif line.find("&") != -1:  # only care about the INDATA section
+                end_ind = i
+                break
+            elif i == len(vmeclines) - 1:
+                end_ind = i
+        vmeclines = vmeclines[start_ind + 1 : end_ind]
 
-        for line in vmec_file.readlines():
+        ## Loop which makes multi-line inputs a single line
+        vmeclines_no_multiline = []
+        for line in vmeclines:
             comment = line.find("!")
             line = (line.strip() + " ")[0:comment].strip()
+            equal_ind = line.find("=")
+
             # ignore blank lines or leftover comment !'s
             if line.isspace() or line == "" or line == r"!":
                 continue
-            if line.find("&INDATA") != -1:
-                continue
-            elif line.find("&") != -1:  # only care about the INDATA section
-                break
-            if line.find("=") != -1:
+            if equal_ind != -1:
                 vmeclines_no_multiline.append(line)
             else:  # is a multi-line input,append the line to the previous
                 vmeclines_no_multiline[-1] += " " + line
 
-        # Some bool flags to ensure that if a line is duplicate in
-        # the VMEC file, we do not add it twice to the inputs
-        RAXIS_already_read = False
-        ZAXIS_already_read = False
-        RAXIS_CS_already_read = False
-        ZAXIS_CS_already_read = False
+        ## remove duplicate lines
+        vmec_no_multiline_no_duplicates = []
+        already_read_names = []
+        already_read = False
+
+        # it is easiest to find first instances of something, but
+        # we want to keep only the last instance of each duplicate
+        # as that is the behavior VMEC has,
+        # so we will read through the lines reversed
+        vmeclines_no_multiline.reverse()
 
         for line in vmeclines_no_multiline:
             comment = line.find("!")
-            command = (line.strip() + " ")[0:comment]
+            line = (line.strip() + " ")[0:comment].strip()
+            equal_ind = line.find("=")
 
+            # ignore blank lines or leftover comment !'s
+            if line.isspace() or line == "" or line == r"!":
+                continue
+            if equal_ind != -1:
+                # add name of variable to already_read_names
+                input_name = line[0:equal_ind].strip()
+                if input_name not in already_read_names:
+                    already_read_names.append(input_name)
+                    vmec_no_multiline_no_duplicates.append(line)
+                    already_read = False
+                else:
+                    warnings.warn(
+                        colored(
+                            f"Detected multiple inputs for {input_name}! "
+                            + "DESC will default to using the last one.",
+                            "yellow",
+                        )
+                    )
+                    already_read = True
+            # make sure if it is a duplicate line,
+            # to skip the multi-line associated with it
+            elif not already_read:
+                # is a multi-line input,append the line to the previous
+                vmec_no_multiline_no_duplicates[-1] += " " + line
+
+        # undo the reverse so the file we write looks as expected
+        vmec_no_multiline_no_duplicates.reverse()
+
+        ## read the inputs for use in DESC
+        for line in vmec_no_multiline_no_duplicates:
+            comment = line.find("!")
+            command = (line.strip() + " ")[0:comment]
             # global parameters
             if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
-                warnings.warn(colored("Using free-boundary mode!", "yellow"))
+                warnings.warn(
+                    colored(
+                        "Using free-boundary mode! DESC will run as fixed-boundary.",
+                        "yellow",
+                    )
+                )
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
                 warnings.warn(
-                    colored("Using poloidal flux instead of toroidal flux!", "yellow")
+                    colored(
+                        "Using poloidal flux instead of toroidal flux! "
+                        + " DESC will read as toroidal flux.",
+                        "yellow",
+                    )
                 )
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
@@ -950,7 +1006,11 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if numbers[0] != 0:
-                    warnings.warn(colored("GAMMA is not 0.0", "yellow"))
+                    warnings.warn(
+                        colored(
+                            "GAMMA is not 0.0, DESC will set this to 0.0.", "yellow"
+                        )
+                    )
             match = re.search(r"BLOAT\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1057,8 +1117,7 @@ class InputReader:
             match = re.search(
                 r"RAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match and not RAXIS_already_read:
-                RAXIS_already_read = True
+            if match:
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -1068,7 +1127,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] += numbers[k]
+                        inputs["axis"][idx[0], 1] = numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1077,18 +1136,18 @@ class InputReader:
             match = re.search(
                 r"RAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match and not RAXIS_CS_already_read:
-                RAXIS_CS_already_read = False
+            if match:
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                for k in range(len(numbers)):
+                # ignore the n=0 since it should always be zero for sin terms
+                for k in range(1, len(numbers)):
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] += -numbers[k]
+                        inputs["axis"][idx[0], 1] = -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1097,8 +1156,7 @@ class InputReader:
             match = re.search(
                 r"ZAXIS(_CC)?\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match and not ZAXIS_already_read:
-                ZAXIS_already_read = True
+            if match:
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
@@ -1108,7 +1166,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] += numbers[k]
+                        inputs["axis"][idx[0], 2] = numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1117,18 +1175,18 @@ class InputReader:
             match = re.search(
                 r"ZAXIS_CS\s*=(\s*" + num_form + r"\s*,?)*", command, re.IGNORECASE
             )
-            if match and not ZAXIS_CS_already_read:
-                ZAXIS_CS_already_read = True
+            if match:
                 numbers = [
                     float(x)
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                for k in range(len(numbers)):
+                # ignore the n=0 since it should always be zero for sin terms
+                for k in range(1, len(numbers)):
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] += -numbers[k]
+                        inputs["axis"][idx[0], 2] = -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"

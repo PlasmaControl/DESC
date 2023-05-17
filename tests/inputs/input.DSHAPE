@@ -13,6 +13,9 @@
   NS_ARRAY = 16 32 64 128
   NITER_ARRAY = 1000 2000
    4000 20000 ! testing multi-line handling
+  NITER_ARRAY = 1000 2000
+   4000 20000 ! testing multi-line handling and duplicate lines
+
   FTOL_ARRAY = 1E-06 1E-08 1E-10 1E-12
   NSTEP =      100
   NVACSKIP =   6

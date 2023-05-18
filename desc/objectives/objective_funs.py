@@ -45,7 +45,7 @@ class ObjectiveFunction(IOAble):
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "blocked"}
+        assert deriv_mode in {"batched", "blocked", "looped"}
 
         self._objectives = objectives
         self._use_jit = use_jit
@@ -137,24 +137,15 @@ class ObjectiveFunction(IOAble):
             self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
             )
-        self.looped = False
-        if self._deriv_mode == "batched":
+        if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
-            obj_names = [obj.__class__.__name__ for obj in self.objectives]
-            self.looped = any(["BoundaryError" in s for s in obj_names])
-            if self.looped:
-                self._jac_scaled = Derivative(
-                    self.compute_scaled,
-                    mode="looped",
-                )
-                self._jac_unscaled = Derivative(
-                    self.compute_unscaled,
-                    mode="looped",
-                )
-            else:
-                self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
-                self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
+        if self._deriv_mode == "batched":
+            self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
+            self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
+        if self._deriv_mode == "looped":
+            self._jac_scaled = Derivative(self.compute_scaled, mode="looped")
+            self._jac_unscaled = Derivative(self.compute_unscaled, mode="looped")
 
     def jit(self):
         """Apply JIT to compute methods, or re-apply after updating self."""

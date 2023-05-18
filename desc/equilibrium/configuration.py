@@ -1174,7 +1174,7 @@ class _Configuration(IOAble, ABC):
         ----------
         coords : ndarray, shape(k,3)
             2D array of input coordinates. Each row is a different
-            coordinate.
+            point in space.
         inbasis, outbasis : tuple of str
             Labels for input and output coordinates, eg ("R", "phi", "Z") or
             ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
@@ -1202,7 +1202,7 @@ class _Configuration(IOAble, ABC):
         ----------
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            coordinate.
+            point in space.
         L_lmn : ndarray
             spectral coefficients for lambda. Defaults to eq.L_lmn
         tol : float
@@ -1228,7 +1228,7 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2D array of real space coordinates [R,phi,Z]. Each row is a different
-            coordinate.
+            point in space.
         R_lmn, Z_lmn : ndarray
             spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
         tol : float

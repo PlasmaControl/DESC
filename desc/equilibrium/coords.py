@@ -27,7 +27,7 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         Equilibrium to use
     coords : ndarray, shape(k,3)
         2D array of input coordinates. Each row is a different
-        coordinate.
+        point in space.
     inbasis, outbasis : tuple of str
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
@@ -151,7 +151,7 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         Equilibrium to use
     flux_coords : ndarray, shape(k,3)
         2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-        coordinate.
+        point in space.
     L_lmn : ndarray
         spectral coefficients for lambda. Defaults to eq.L_lmn
     tol : float
@@ -225,7 +225,7 @@ def compute_flux_coords(
         Equilibrium to use
     real_coords : ndarray, shape(k,3)
         2D array of real space coordinates [R,phi,Z]. Each row is a different
-        coordinate.
+        point in space.
     R_lmn, Z_lmn : ndarray
         spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
     tol : float

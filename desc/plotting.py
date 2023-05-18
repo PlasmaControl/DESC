@@ -1070,7 +1070,7 @@ def plot_section(
           which element to plot. Default is the norm of the vector.
         * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
-        * ``nzeta``: int, number of equispaced zeta planes to plot sections at (default
+        * ``nphi``: int, number of equispaced phi planes to plot sections at (default
           1 for axisymmetry and 6 for non-axisymmetry)
         * ``title_font_size``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
@@ -1506,10 +1506,10 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``cmap``: colormap to use for plotting, discretized into len(zeta) colors
-        * ``colors``: array of colors to use for each zeta angle
-        * ``ls``: array of line styles to use for each zeta angle
-        * ``lw``: array of line widths to use for each zeta angle
+        * ``cmap``: colormap to use for plotting, discretized into len(phi) colors
+        * ``colors``: array of colors to use for each phi angle
+        * ``ls``: array of line styles to use for each phi angle
+        * ``lw``: array of line widths to use for each phi angle
         * ``marker``: str, marker style to use for the axis plotted points
         * ``size``: float, marker size to use for the axis plotted points
         * ``label_fontsize``: float, fontsize of the x and y labels

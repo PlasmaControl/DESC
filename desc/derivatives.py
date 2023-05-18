@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, put, use_jax
+from desc.backend import fori_loop, jnp, put, use_jax
 
 if use_jax:
     import jax
@@ -275,20 +275,18 @@ class AutoDiffDerivative(_Derivative):
 
     def _jac_looped(self, *args):
 
-        Z = nested_zeros_like(args)
         n = args[self._argnum].size
+        shp = jax.eval_shape(self._fun, *args).shape
         I = jnp.eye(n)
+        J = jnp.zeros((*shp, n)).T
 
-        J = []
-        if not isinstance(Z, tuple):
-            Z = (Z,)
+        def body(i, J):
+            tangents = I[i]
+            Ji = self._compute_jvp(tangents, *args)
+            J = put(J, i, Ji.T)
+            return J
 
-        for i in range(n):
-            tangents = Z[0 : self._argnum] + (I[i],) + Z[self._argnum + 1 :]
-            Ji = jnp.atleast_2d(jax.jit(self._compute_jvp)(tangents, *args))
-            J.append(Ji.T)
-
-        return jnp.hstack(J)
+        return fori_loop(0, n, body, J).T
 
     def _set_mode(self, mode) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp", "looped"]:
@@ -618,6 +616,8 @@ def nested_zeros_like(x):
     """Get a nested pytree of zeros like a given pytree."""
     if x is None:
         return None
+    if jnp.isscalar(x) and isinstance(x, int):
+        return 0
     if jnp.isscalar(x):
         return 0.0
     if isinstance(x, tuple):

@@ -254,7 +254,7 @@ class TestCoilSet:
 @pytest.mark.unit
 def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
     """Test loading in and saving CoilSets from MAKEGRID format files."""
-    Ncoils = 24
+    Ncoils = 22
     input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils"
     tmpdir = tmpdir_factory.mktemp("coil_files")
     tmp_path = tmpdir.join("coils.MAKEGRID_format_{Ncoils}_coils")

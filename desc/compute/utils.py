@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, put
+from desc.backend import jnp, put, fori_loop
 from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
@@ -870,6 +870,17 @@ def surface_min(grid, x, surface_label="rho"):
 
     """
     unique_size, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)
-    masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
-    mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)
+    inverse_idx = jnp.asarray(inverse_idx)
+    x = jnp.asarray(x)
+    mins = jnp.full(unique_size, jnp.inf)
+
+    def body(i, mins):
+        mins = put(mins, inverse_idx[i], jnp.minimum(x[i], mins[inverse_idx[i]]))
+        return mins
+
+    mins = fori_loop(0, inverse_idx.size, body, mins)
+    # The above implementation was benchmarked to be more efficient, after jit
+    # compilation, than the alternative given in the two lines below.
+    # masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
+    # mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)
     return expand(grid, mins, surface_label)

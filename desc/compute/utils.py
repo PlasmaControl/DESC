@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jnp, put, fori_loop
+from desc.backend import fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index

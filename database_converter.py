@@ -69,7 +69,7 @@ def desc_to_csv(  # noqa
         "desc_run_ID"
     ] = None  # FIXME what should this be? how to hash? commit ID?
     data_desc_runs["configid"] = kwargs.get(
-        "configid", None
+        "name", None
     )  # FIXME what should this be? how to hash?
 
     # FIXME: Defaults for these?
@@ -152,7 +152,7 @@ def desc_to_csv(  # noqa
 
     ############ configuration Data Table ############
     data_configurations["configid"] = kwargs.get(
-        "configid", None
+        "name", None
     )  # FIXME what should this be? how to hash?
     data_configurations["name"] = kwargs.get("name", None)
     data_configurations["NFP"] = eq.NFP

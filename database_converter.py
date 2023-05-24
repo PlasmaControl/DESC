@@ -173,7 +173,7 @@ def desc_to_csv(  # noqa
     data_configurations["volume_averaged_B"] = eq.compute("<|B|>_vol")["<|B|>_vol"]
     data_configurations["volume_averaged_beta"] = eq.compute("<beta>_vol")["<beta>_vol"]
     data_configurations["total_toroidal_current"] = float(
-        f'{eq.compute("current")["current"][-1]:1.4e}'
+        f'{eq.compute("current")["current"][-1]:1.2e}'
     )
 
     # surface geometry

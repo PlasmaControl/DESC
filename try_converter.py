@@ -27,6 +27,8 @@ for root, dirs, files in os.walk("desc/examples"):
                 if file.find(name) != -1:
                     inputs[name] = file
 for name in names:
+    if "SOLOVEV" not in name or "CURRENT" in name:
+        continue
     try:
         used_current = is_current[name]
     except KeyError:
@@ -34,7 +36,7 @@ for name in names:
     print(f"Saving example {name}")
     desc_to_csv(
         f"desc/examples/{name}_output.h5",
-        name=name,
+        name="SOLOVEV",
         provenance="Example Equilibrium From DESC Repository desc/examples folder",
         inputfilename=inputs[name],
         current=used_current,

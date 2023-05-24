@@ -172,7 +172,9 @@ def desc_to_csv(  # noqa
     data_configurations["volume"] = eq.compute("V")["V"]
     data_configurations["volume_averaged_B"] = eq.compute("<|B|>_vol")["<|B|>_vol"]
     data_configurations["volume_averaged_beta"] = eq.compute("<beta>_vol")["<beta>_vol"]
-    data_configurations["total_toroidal_current"] = eq.compute("current")["current"][-1]
+    data_configurations["total_toroidal_current"] = float(
+        f'{eq.compute("current")["current"][-1]:1.4e}'
+    )
 
     # surface geometry
     # currently saving as VMEC format but I'd prefer if we could do DESC format...

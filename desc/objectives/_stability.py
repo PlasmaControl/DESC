@@ -257,12 +257,11 @@ class MagneticWell(_Objective):
         normalize_target=True,
         grid=None,
         name="Magnetic Well",
-        equality=True,
     ):
         if target is None and bounds is None:
             bounds = (0, np.inf)
         self._grid = grid
-        self.equality = equality
+
         super().__init__(
             eq=eq,
             target=target,

@@ -60,12 +60,10 @@ class AspectRatio(_Objective):
         normalize_target=True,
         grid=None,
         name="aspect ratio",
-        equality=True,
     ):
         if target is None and bounds is None:
             target = 2
         self._grid = grid
-        self.equality = equality
 
         super().__init__(
             eq=eq,

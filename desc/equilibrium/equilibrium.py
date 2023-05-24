@@ -627,9 +627,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("Start of solver")
             objective.print_value(objective.x(eq))
-        #            for con in constraints:
-        #                print("con is " + str(con))
-        #                con.print_value(*con.xs(eq))
+            for con in constraints:
+                con.print_value(*con.xs(eq))
         for key, value in result["history"].items():
             # don't set nonexistent profile (values are empty ndarrays)
             if value[-1].size:
@@ -637,9 +636,8 @@ class Equilibrium(_Configuration, IOAble):
         if verbose > 0:
             print("End of solver")
             objective.print_value(objective.x(eq))
-        #            for con in constraints:
-        #                print("con is " + str(con))
-        #                con.print_value(*con.xs(eq))
+            for con in constraints:
+                con.print_value(*con.xs(eq))
 
         eq.solved = result["success"]
         return eq, result

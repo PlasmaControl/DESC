@@ -75,12 +75,11 @@ class ForceBalance(_Objective):
         normalize_target=True,
         grid=None,
         name="force",
-        equality=True,
     ):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-        self.equality = equality
+
         super().__init__(
             eq=eq,
             target=target,

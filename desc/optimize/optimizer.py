@@ -226,8 +226,9 @@ class Optimizer(IOAble):
 
         if verbose > 0:
             print("Starting optimization")
+            print("Using method: " + str(self.method))
+
         timer.start("Solution time")
-        print("method is " + str(self.method))
 
         result = optimizers[method]["fun"](
             objective,

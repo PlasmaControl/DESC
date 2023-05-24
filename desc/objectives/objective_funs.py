@@ -56,24 +56,6 @@ class ObjectiveFunction(IOAble):
         if eq is not None:
             self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
-    def combine_args(self, objectives):
-        self._args = np.concatenate(
-            (self.args, [obj.args for obj in objectives.objectives][0])
-        )
-        self._args = [arg for arg in arg_order if arg in self._args]
-
-        self._dimensions = self.objectives[0].dimensions
-        self._dim_x = 0
-        self._x_idx = {}
-        for arg in self.args:
-            self.x_idx[arg] = np.arange(self._dim_x, self._dim_x + self.dimensions[arg])
-            self._dim_x += self.dimensions[arg]
-
-        objectives._args = self._args
-        objectives._dimensions = self._dimensions
-        objectives._dim_x = self._dim_x
-        objectives._x_idx = self._x_idx
-
     def set_args(self, *args):
         """Set which arguments the objective should expect.
 

@@ -404,23 +404,23 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        label: str, label of the plotted line (e.g. to be shown with ax.legend())
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-        linecolor: str or tuple, color to use for plot line
-        ls: str, linestyle to use for plot line
-        lw: float, linewidth to use for plot line
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``linecolor``: str or tuple, color to use for plot line
+        * ``ls``: str, linestyle to use for plot line
+        * ``lw``: float, linewidth to use for plot line
 
     Returns
     -------
@@ -429,11 +429,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho","theta" or "zeta", depending on what 1-D variable is plotted against
-            key of the name of variable plotted
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -544,23 +540,22 @@ def plot_2d(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),cmap="plasma")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        title_font_size: integer, font size of the title
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        levels: int or array-like, passed to contourf
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``title_font_size``: integer, font size of the title
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -569,14 +564,7 @@ def plot_2d(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            two of "rho","theta" or "zeta", depending on what 1-D variable
-                 is plotted against.
-            "normalization": normalization used in the plot,
-                 if norm_F=False or F is not plotted, this is just equal to 1.
-            key of the name of variable plotted.
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -711,26 +699,25 @@ def plot_3d(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),cmap="plasma")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        alpha: float btwn [0,1.0], the transparency of the plotted surface
-        title_font_size: integer, font size of the title
-        elev: float, elevation orientation angle of 3D plot (in the z plane)
-        azim: float, azimuthal orientation angle of 3D plot (in the x,y plane)
-        dist: float, distance from the camera to the center point of the plot
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-        zlabel_fontsize: float, fontsize of the zlabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
+        * ``title_font_size``: integer, font size of the title
+        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
+        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
+        * ``dist``: float, distance from the camera to the center point of the plot
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``zlabel_fontsize``: float, fontsize of the zlabel
 
     Returns
     -------
@@ -739,11 +726,7 @@ def plot_3d(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "X","Y","Z", cartesian coordinates
-            key of the name of variable plotted
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -924,24 +907,23 @@ def plot_fsa(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        label: str, label of the plotted line (e.g. to be shown with ax.legend())
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-        linecolor: str or tuple, color to use for plot line
-        ls: str, linestyle to use for plot line
-        lw: float, linewidth to use for plot line
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``linecolor``: str or tuple, color to use for plot line
+        * ``ls``: str, linestyle to use for plot line
+        * ``lw``: float, linewidth to use for plot line
 
     Returns
     -------
@@ -950,13 +932,7 @@ def plot_fsa(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho"
-            "<name>_fsa" where name is the passed name of variable plotted
-            "normalization": normalization used in the plot,
-                 if norm_F=False or F is not plotted, this is just equal to 1.
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1081,25 +1057,24 @@ def plot_section(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        component: str, one of [None, 'R', 'phi', 'Z'], For vector variables, which
-            element to plot. Default is the norm of the vector.
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        levels: int or array-like, passed to contourf
-        nzeta: int, number of equispaced zeta planes to plot sections at (default 1
-            for axisymmetry and 6 for non-axisymmetry)
-        title_font_size: integer, font size of the title
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
+          which element to plot. Default is the norm of the vector.
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``nphi``: int, number of equispaced phi planes to plot sections at (default
+          1 for axisymmetry and 6 for non-axisymmetry)
+        * ``title_font_size``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1108,13 +1083,7 @@ def plot_section(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "R","Z" cylindrical coordinates
-            key of the name of variable plotted
-            "normalization": normalization used in the plot,
-                 if norm_F=False or F is not plotted, this is just equal to 1.
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1126,29 +1095,47 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
+    if "nzeta" in kwargs:
+        warnings.warn(
+            FutureWarning(
+                "argument nzeta has been renamed to nphi, "
+                + "nzeta will be removed in a future release"
+            )
+        )
+        kwargs["nphi"] = kwargs.pop("nzeta")
     if grid is None:
         if eq.N == 0:
-            nzeta = int(kwargs.pop("nzeta", 1))
+            nphi = int(kwargs.pop("nphi", 1))
         else:
-            nzeta = int(kwargs.pop("nzeta", 6))
+            nphi = int(kwargs.pop("nphi", 6))
         nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
             "NFP": nfp,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, nzeta, endpoint=False),
+            "zeta": np.linspace(0, 2 * np.pi / nfp, nphi, endpoint=False),
         }
         grid = _get_grid(**grid_kwargs)
-        zeta = np.unique(grid.nodes[:, 2])
+        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        phi = np.unique(grid.nodes[:, 2])
+        coords = eq.map_coordinates(
+            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+        )
+        grid = Grid(coords, sort=False)
 
     else:
-        zeta = np.unique(grid.nodes[:, 2])
-        nzeta = zeta.size
-    rows = np.floor(np.sqrt(nzeta)).astype(int)
-    cols = np.ceil(nzeta / rows).astype(int)
+        phi = np.unique(grid.nodes[:, 2])
+        nphi = phi.size
+        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        coords = eq.map_coordinates(
+            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+        )
+        grid = Grid(coords, sort=False)
+    rows = np.floor(np.sqrt(nphi)).astype(int)
+    cols = np.ceil(nphi / rows).astype(int)
 
-    data, label = _compute(eq, name, grid, kwargs.pop("component", None))
+    data, label = _compute(eq, name, grid, kwargs.pop("component", None), reshape=False)
     if norm_F:
         # normalize force by B pressure gradient
         norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
@@ -1169,8 +1156,9 @@ def plot_section(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute(["R", "Z"], grid=grid)
-    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    R = coords["R"].reshape((nt, nr, nz), order="F")
+    Z = coords["Z"].reshape((nt, nr, nz), order="F")
+    data = data.reshape((nt, nr, nz), order="F")
 
     contourf_kwargs = {}
     if log:
@@ -1200,7 +1188,7 @@ def plot_section(
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    for i in range(nzeta):
+    for i in range(nphi):
         divider = make_axes_locatable(ax[i])
 
         cntr = ax[i].contourf(R[:, :, i], Z[:, :, i], data[:, :, i], **contourf_kwargs)
@@ -1217,8 +1205,8 @@ def plot_section(
             + "$ ($"
             + data_index[name]["units"]
             + "$)"
-            + ", $\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
-                eq.NFP * zeta[i] / (2 * np.pi)
+            + ", $\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+                eq.NFP * phi[i] / (2 * np.pi)
             )
         )
         if norm_F:
@@ -1227,8 +1215,8 @@ def plot_section(
                 % (
                     "$" + data_index[name]["label"] + "$",
                     "$" + data_index[norm_name]["label"] + "$",
-                    "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
-                        eq.NFP * zeta[i] / (2 * np.pi)
+                    "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+                        eq.NFP * phi[i] / (2 * np.pi)
                     ),
                 ),
                 fontsize=title_font_size,
@@ -1250,7 +1238,7 @@ def plot_section(
     return fig, ax
 
 
-def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **kwargs):
+def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kwargs):
     """Plot flux surfaces.
 
     Parameters
@@ -1263,43 +1251,44 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     theta : int or array-like
         Values of theta to plot contours of.
         If an integer, plot that many contours linearly spaced in (0,2pi).
-    zeta : int or array-like or None
-        Values of zeta to plot contours at.
+    phi : int or array-like or None
+        Values of phi to plot contours at.
         If an integer, plot that many contours linearly spaced in (0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        label: str, label of the plotted line (e.g. to be shown with ax.legend())
-        NR: int, number of equispaced rho point to use in plotting the vartheta contours
-        NT: int, number of equispaced theta points to use in plotting the rho contours
-        theta_color: str or tuple, color to use for constant vartheta contours
-        theta_ls: str, linestyle to use for constant vartheta contours
-        theta_lw: float, linewidth to use for constant vartheta contours
-        rho_color: str or tuple, color to use for constant rho contours
-        rho_ls: str, linestyle to use for constant rho contours
-        rho_lw: float, linewidth to use for constant rho contours
-        lcfs_color: str or tuple, color to use for the LCFS constant rho contour
-        lcfs_ls: str, linestyle to use for the LCFS constant rho contour
-        lcfs_lw: float, linewidth to use for the LCFS constant rho contour
-        axis_color: str or tuple, color to use for the axis plotted point
-        axis_alpha: float, transparency of the axis plotted point
-        axis_marker: str, markerstyle to use for the axis plotted point
-        axis_size: float, markersize to use for the axis plotted point
-        title_font_size: integer, font size of the title
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``label``: str, label of the plotted line (e.g. to be shown with ax.legend())
+        * ``NR``: int, number of equispaced rho point to use in plotting the vartheta
+          contours
+        * ``NT``: int, number of equispaced theta points to use in plotting the rho
+          contours
+        * ``theta_color``: str or tuple, color to use for constant vartheta contours
+        * ``theta_ls``: str, linestyle to use for constant vartheta contours
+        * ``theta_lw``: float, linewidth to use for constant vartheta contours
+        * ``rho_color``: str or tuple, color to use for constant rho contours
+        * ``rho_ls``: str, linestyle to use for constant rho contours
+        * ``rho_lw``: float, linewidth to use for constant rho contours
+        * ``lcfs_color``: str or tuple, color to use for the LCFS constant rho contour
+        * ``lcfs_ls``: str, linestyle to use for the LCFS constant rho contour
+        * ``lcfs_lw``: float, linewidth to use for the LCFS constant rho contour
+        * ``axis_color``: str or tuple, color to use for the axis plotted point
+        * ``axis_alpha``: float, transparency of the axis plotted point
+        * ``axis_marker``: str, markerstyle to use for the axis plotted point
+        * ``axis_size``: float, markersize to use for the axis plotted point
+        * ``title_font_size``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1308,12 +1297,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho_R_coords","rho_Z_coords", Cylindrical R,Z coordinates of rho contours
-            "vartheta_R_coords", "vartheta_Z_coords",
-                Cylindrical R,Z coordinates of vartheta contours
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1325,6 +1309,15 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         fig, ax = plot_surfaces(eq)
 
     """
+    if "zeta" in kwargs:
+        warnings.warn(
+            FutureWarning(
+                "argument zeta has been renamed to phi, "
+                + "zeta will be removed in a future release"
+            )
+        )
+        phi = kwargs.pop("zeta")
+
     NR = kwargs.pop("NR", 50)
     NT = kwargs.pop("NT", 180)
     figsize = kwargs.pop("figsize", None)
@@ -1360,48 +1353,57 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         theta = np.linspace(0, 2 * np.pi, theta, endpoint=False)
     else:
         theta = np.atleast_1d(theta)
-    if isinstance(zeta, numbers.Integral):
-        zeta = np.linspace(0, 2 * np.pi / nfp, zeta)
-    elif zeta is None:
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / nfp, phi)
+    elif phi is None:
         if eq.N == 0:
-            zeta = np.array([0])
+            phi = np.array([0])
         else:
-            zeta = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
+            phi = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
     else:
-        zeta = np.atleast_1d(zeta)
-    nzeta = len(zeta)
+        phi = np.atleast_1d(phi)
+    nphi = len(phi)
 
     grid_kwargs = {
         "rho": rho,
         "NFP": nfp,
         "theta": np.linspace(0, 2 * np.pi, NT, endpoint=True),
-        "zeta": zeta,
+        "zeta": phi,
     }
     r_grid = _get_grid(**grid_kwargs)
+    rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
+    r_grid = Grid(
+        eq.map_coordinates(
+            r_grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+        ),
+        sort=False,
+    )
     grid_kwargs = {
         "rho": np.linspace(0, 1, NR),
         "NFP": nfp,
         "theta": theta,
-        "zeta": zeta,
+        "zeta": phi,
     }
     if plot_theta:
         # Note: theta* (also known as vartheta) is the poloidal straight field-line
         # angle in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
-        v_grid = Grid(eq.compute_theta_coords(t_grid.nodes))
-    rows = np.floor(np.sqrt(nzeta)).astype(int)
-    cols = np.ceil(nzeta / rows).astype(int)
+        tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
+        v_grid = Grid(
+            eq.map_coordinates(
+                t_grid.nodes, ["rho", "theta_sfl", "phi"], ["rho", "theta", "zeta"]
+            ),
+            sort=False,
+        )
+    rows = np.floor(np.sqrt(nphi)).astype(int)
+    cols = np.ceil(nphi / rows).astype(int)
 
     # rho contours
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         r_coords = eq.compute(["R", "Z"], grid=r_grid)
-    Rr = r_coords["R"].reshape(
-        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-    )
-    Zr = r_coords["Z"].reshape(
-        (r_grid.num_theta, r_grid.num_rho, r_grid.num_zeta), order="F"
-    )
+    Rr = r_coords["R"].reshape((rnt, rnr, rnz), order="F")
+    Zr = r_coords["Z"].reshape((rnt, rnr, rnz), order="F")
     plot_data = {}
 
     if plot_theta:
@@ -1409,12 +1411,8 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             v_coords = eq.compute(["R", "Z"], grid=v_grid)
-        Rv = v_coords["R"].reshape(
-            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-        )
-        Zv = v_coords["Z"].reshape(
-            (t_grid.num_theta, t_grid.num_rho, t_grid.num_zeta), order="F"
-        )
+        Rv = v_coords["R"].reshape((tnt, tnr, tnz), order="F")
+        Zv = v_coords["Z"].reshape((tnt, tnr, tnz), order="F")
         plot_data["vartheta_R_coords"] = Rv
         plot_data["vartheta_Z_coords"] = Zv
 
@@ -1431,7 +1429,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     )
     ax = np.atleast_1d(ax).flatten()
 
-    for i in range(nzeta):
+    for i in range(nphi):
         if plot_theta:
             ax[i].plot(
                 Rv[:, :, i].T,
@@ -1469,7 +1467,7 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
         ax[i].set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
         ax[i].tick_params(labelbottom=True, labelleft=True)
         ax[i].set_title(
-            "$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(nfp * zeta[i] / (2 * np.pi)),
+            "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_font_size,
         )
     fig.set_tight_layout(True)
@@ -1482,15 +1480,15 @@ def plot_surfaces(eq, rho=8, theta=8, zeta=None, ax=None, return_data=False, **k
     return fig, ax
 
 
-def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **kwargs):
+def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundary at multiple toroidal coordinates.
 
     Parameters
     ----------
     eq : Equilibrium
         Object from which to plot.
-    zeta : int or array-like or None
-        Values of zeta to plot boundary surface at.
+    phi : int or array-like or None
+        Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
     plot_axis : bool
@@ -1499,24 +1497,23 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cmap : colormap to use for plotting, discretized into len(zeta) colors
-        colors: array of colors to use for each zeta angle
-        ls : array of line styles to use for each zeta angle
-        lw : array of line widths to use for each zeta angle
-        marker: str, marker style to use for the axis plotted points
-        size: float, marker size to use for the axis plotted points
-        label_fontsize: float, fontsize of the x and y labels
-        legend_fontsize: float, fontsize of the legend
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: colormap to use for plotting, discretized into len(phi) colors
+        * ``colors``: array of colors to use for each phi angle
+        * ``ls``: array of line styles to use for each phi angle
+        * ``lw``: array of line widths to use for each phi angle
+        * ``marker``: str, marker style to use for the axis plotted points
+        * ``size``: float, marker size to use for the axis plotted points
+        * ``label_fontsize``: float, fontsize of the x and y labels
+        * ``legend_fontsize``: float, fontsize of the legend
 
     Returns
     -------
@@ -1525,10 +1522,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "R","Z" cylindrical coordinates of boundary
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1540,6 +1534,15 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
         fig, ax = plot_boundary(eq)
 
     """
+    if "zeta" in kwargs:
+        warnings.warn(
+            FutureWarning(
+                "argument zeta has been renamed to phi, "
+                + "zeta will be removed in a future release"
+            )
+        )
+        phi = kwargs.pop("zeta")
+
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
     colors = kwargs.pop("colors", None)
@@ -1554,44 +1557,57 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
         len(kwargs) == 0
     ), f"plot boundary got unexpected keyword argument: {kwargs.keys()}"
 
-    if zeta is None:
-        zeta = 1 if eq.N == 0 else 4
-    zeta = zeta + 1  # include zeta = 2*pi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
+    elif phi is None:
+        if eq.N == 0:
+            phi = np.array([0])
+        else:
+            phi = np.linspace(0, 2 * np.pi / eq.NFP, 4 + 1)
+    else:
+        phi = np.atleast_1d(phi)
+    nphi = len(phi)
+
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
 
-    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": zeta}
+    grid_kwargs = {"NFP": eq.NFP, "rho": rho, "theta": 100, "zeta": phi}
     grid = _get_grid(**grid_kwargs)
+    nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+    grid = Grid(
+        eq.map_coordinates(
+            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+        ),
+        sort=False,
+    )
 
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, grid.num_zeta - 1)(
-            np.linspace(0, 1, grid.num_zeta - 1)
-        )
+        colors = matplotlib.cm.get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
     if lw is None:
         lw = 1
     if isinstance(lw, int):
-        lw = [lw for i in range(grid.num_zeta - 1)]
+        lw = [lw for i in range(nz - 1)]
     if ls is None:
         ls = "-"
     if isinstance(ls, str):
-        ls = [ls for i in range(grid.num_zeta - 1)]
+        ls = [ls for i in range(nz - 1)]
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         coords = eq.compute(["R", "Z"], grid=grid)
-    R = coords["R"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
-    Z = coords["Z"].reshape((grid.num_theta, grid.num_rho, grid.num_zeta), order="F")
+    R = coords["R"].reshape((nt, nr, nz), order="F")
+    Z = coords["Z"].reshape((nt, nr, nz), order="F")
 
     fig, ax = _format_ax(ax, figsize=figsize, equal=True)
 
-    for i in range(grid.num_zeta - 1):
+    for i in range(nphi - 1):
         ax.plot(
             R[:, -1, i],
             Z[:, -1, i],
             color=colors[i],
             linestyle=ls[i],
             lw=lw[i],
-            label="$\\zeta \\cdot NFP/2\\pi = {:.3f}$".format(
-                grid.NFP * grid.nodes[grid.unique_zeta_idx[i], 2] / (2 * np.pi)
+            label="$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(
+                grid.NFP * phi[i] / (2 * np.pi)
             ),
         )
         if rho[0] == 0:
@@ -1620,7 +1636,7 @@ def plot_boundary(eq, zeta=None, plot_axis=False, ax=None, return_data=False, **
     return fig, ax
 
 
-def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **kwargs):
+def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundaries at multiple toroidal coordinates.
 
     Parameters
@@ -1629,29 +1645,29 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         Equilibria to plot.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
-    zeta : int or array-like or None
-        Values of zeta to plot boundary surface at.
+    phi : int or array-like or None
+        Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cmap : colormap to use for plotting, discretized into len(eqs) colors
-        colors: array of colors to use for each Equilibrium
-        ls : array of line styles to use for each Equilibrium
-        lw : array of line widths to use for each Equilibrium
-        label_fontsize: float, fontsize of the x and y labels
-        legend_fontsize: float, fontsize of the legend
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
+        * ``colors``: array of colors to use for each Equilibrium
+        * ``ls``: array of line styles to use for each Equilibrium
+        * ``lw``: array of line widths to use for each Equilibrium
+        * ``label_fontsize``: float, fontsize of the x and y labels
+        * ``legend_fontsize``: float, fontsize of the legend
 
 
     Returns
@@ -1661,10 +1677,7 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys: list of len(eqs) corresponding to input eqs
-            "R","Z" cylindrical coordinates of boundary
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1676,6 +1689,15 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
+    if "zeta" in kwargs:
+        warnings.warn(
+            FutureWarning(
+                "argument zeta has been renamed to phi, "
+                + "zeta will be removed in a future release"
+            )
+        )
+        phi = kwargs.pop("zeta")
+
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
     colors = kwargs.pop("colors", None)
@@ -1688,10 +1710,10 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         len(kwargs) == 0
     ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
 
-    if zeta is None:
-        zeta = 4
-    if isinstance(zeta, int):
-        zeta = zeta + 1  # include zeta = 2*pi
+    if phi is None:
+        phi = 4
+    if isinstance(phi, int):
+        phi = phi + 1  # include phi = 2*pi
 
     neq = len(eqs)
 
@@ -1717,23 +1739,26 @@ def plot_boundaries(eqs, labels=None, zeta=None, ax=None, return_data=False, **k
         grid_kwargs = {
             "NFP": eqs[i].NFP,
             "theta": 100,
-            "zeta": zeta if eqs[i].N > 0 else 2,
+            "zeta": phi if eqs[i].N > 0 else 2,
         }
         grid = _get_grid(**grid_kwargs)
+        nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
+        grid = Grid(
+            eqs[i].map_coordinates(
+                grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            ),
+            sort=False,
+        )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             coords = eqs[i].compute(["R", "Z"], grid=grid)
-        R = coords["R"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
-        Z = coords["Z"].reshape(
-            (grid.num_theta, grid.num_rho, grid.num_zeta), order="F"
-        )
+        R = coords["R"].reshape((nt, nr, nz), order="F")
+        Z = coords["Z"].reshape((nt, nr, nz), order="F")
 
         plot_data["R"].append(R)
         plot_data["Z"].append(Z)
 
-        for j in range(grid.num_zeta - 1):
+        for j in range(nz - 1):
             (line,) = ax.plot(
                 R[:, -1, j],
                 Z[:, -1, j],
@@ -1761,7 +1786,7 @@ def plot_comparison(
     eqs,
     rho=8,
     theta=8,
-    zeta=None,
+    phi=None,
     ax=None,
     cmap="rainbow",
     colors=None,
@@ -1783,8 +1808,8 @@ def plot_comparison(
     theta : int or array-like
         Values of theta to plot contours of.
         If an integer, plot that many contours linearly spaced in (0,2pi).
-    zeta : int or array-like or None
-        Values of zeta to plot contours at.
+    phi : int or array-like or None
+        Values of phi to plot contours at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
     ax : matplotlib AxesSubplot, optional
@@ -1802,21 +1827,20 @@ def plot_comparison(
         Array the same length as eqs of labels to apply to each equilibrium.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        legend: bool, whether to display legend or not
-        legend_kw: dict, any keyword arguments to be pased to ax.legend()
-        title_font_size: integer, font size of the title
-        xlabel_fontsize: float, fontsize of the xlabel
-        ylabel_fontsize: float, fontsize of the ylabel
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``title_font_size``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1825,12 +1849,7 @@ def plot_comparison(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys: Each are a list of len(eqs) corresponding to each eq input
-            "rho_R_coords","rho_Z_coords", Cylindrical R,Z coordinates of rho contours
-            "vartheta_R_coords", "vartheta_Z_coords",
-                Cylindrical R,Z coordinates of vartheta contours
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -1847,6 +1866,15 @@ def plot_comparison(
                                  )
 
     """
+    if "zeta" in kwargs:
+        warnings.warn(
+            FutureWarning(
+                "argument zeta has been renamed to phi, "
+                + "zeta will be removed in a future release"
+            )
+        )
+        phi = kwargs.pop("zeta")
+
     figsize = kwargs.pop("figsize", None)
     title_font_size = kwargs.pop("title_font_size", None)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
@@ -1862,18 +1890,18 @@ def plot_comparison(
         labels = [str(i) for i in range(neq)]
     N = np.max([eq.N for eq in eqs])
     nfp = eqs[0].NFP
-    if isinstance(zeta, numbers.Integral):
-        zeta = np.linspace(0, 2 * np.pi / nfp, zeta, endpoint=False)
-    elif zeta is None:
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / nfp, phi, endpoint=False)
+    elif phi is None:
         if N == 0:
-            zeta = np.array([0])
+            phi = np.array([0])
         else:
-            zeta = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
+            phi = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
     else:
-        zeta = np.atleast_1d(zeta)
-    nzeta = len(zeta)
-    rows = np.floor(np.sqrt(nzeta)).astype(int)
-    cols = np.ceil(nzeta / rows).astype(int)
+        phi = np.atleast_1d(phi)
+    nphi = len(phi)
+    rows = np.floor(np.sqrt(nphi)).astype(int)
+    cols = np.ceil(nphi / rows).astype(int)
 
     figw = 4 * cols
     figh = 5 * rows
@@ -1901,7 +1929,7 @@ def plot_comparison(
             eq,
             rho,
             theta,
-            zeta,
+            phi,
             ax,
             theta_color=colors[i % len(colors)],
             theta_ls=linestyles[i % len(linestyles)],
@@ -1951,20 +1979,19 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         Axis to plot on    return_data : bool
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),label="your_label")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        lw: float, linewidth of plotted coils
-        ls: str, linestyle of plotted coils
-        color: str, color of plotted coils
-        cmap: str, colormap to be passed to matplotlib.cm.get_cmap()
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``lw``: float, linewidth of plotted coils
+        * ``ls``: str, linestyle of plotted coils
+        * ``color``: str, color of plotted coils
+        * ``cmap``: str, colormap to be passed to matplotlib.cm.get_cmap()
 
     Returns
     -------
@@ -1973,15 +2000,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        each key is a flattened list of coords corresponding to each coil
-        i..e if the coils given is [Coilset,Coilset,Coilset] each of len 3,
-        plot_data["X"] is length 9, with the first three corresponding to the
-        x coordinates of the first Coilset
-        plot_data keys:
-            "X","Y","Z" are the cartesian coordinates of the coil
-
+        dictionary of the data plotted, only returned if ``return_data=True``
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)
@@ -2095,17 +2114,17 @@ def plot_boozer_modes(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        linewidth: float, linewidth
-        linestyle: str, linestyle
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``lw``: float, linewidth
+        * ``ls``: str, linestyle
 
 
     Returns
@@ -2115,14 +2134,7 @@ def plot_boozer_modes(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "B_mn": |B| harmonic in boozer angles, shape [num_rho,num_modes]
-                where first index corresponds to the rho surface
-                and second to the modes in B_modes
-            "B_modes": array of modes corresponding to B_mn, given as (0,m,n)
-            "rho"
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2142,8 +2154,8 @@ def plot_boozer_modes(
     B_mn = np.array([[]])
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
-    linestyle = kwargs.pop("linestyle", "-")
-    linewidth = kwargs.pop("linewidth", 2)
+    linestyle = kwargs.pop("ls", "-")
+    linewidth = kwargs.pop("lw", 2)
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
@@ -2246,19 +2258,18 @@ def plot_boozer_surface(
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6),cmap="plasma")
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        levels: int or array-like, passed to contourf
-        title_font_size: integer, font size of the title
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
+        * ``title_font_size``: integer, font size of the title
 
     Returns
     -------
@@ -2267,12 +2278,7 @@ def plot_boozer_surface(
     ax : matplotlib.axes.Axes or ndarray of Axes
         axes being plotted to
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "|B|": magnetic field magntitude on surface
-            "theta_Boozer","zeta_Boozer": Boozer poloidal, toroidal angles
-                array of shape (num_theta, num_zeta)
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2399,23 +2405,26 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         Axis to plot on.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        ls: list of strs of length 3, linestyles to use for the 3 different qs metrics
-        colors: list of strs of length 3, colors to use for the 3 different qs metrics
-        markers: list of strs of length 3, markers to use for the 3 different qs metrics
-        labels:  list of strs of length 3, labels to use for the 3 different qs metrics
-        ylabel: str, ylabel to use for plot
-        legend: bool, whether to display legend or not
-        legend_kw: dict, any keyword arguments to be pased to ax.legend()
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``ls``: list of strs of length 3, linestyles to use for the 3 different
+          qs metrics
+        * ``colors``: list of strs of length 3, colors to use for the 3 different
+          qs metrics
+        * ``markers``: list of strs of length 3, markers to use for the 3 different
+          qs metrics
+        * ``labels``:  list of strs of length 3, labels to use for the 3 different
+          qs metrics
+        * ``ylabel``: str, ylabel to use for plot
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
 
     Returns
     -------
@@ -2424,13 +2433,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys: each are arrays of length num_rho
-            "f_T": QS triple product metric
-            "f_B": Boozer QS metric (sum of symmetry-breaking modes)
-            "f_C": QS two-term metric
-            "rho"
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2595,16 +2598,16 @@ def plot_grid(grid, return_data=False, **kwargs):
         Grid to plot.
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        title_font_size: integer, font size of the title
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``title_font_size``: integer, font size of the title
 
 
     Returns
@@ -2614,11 +2617,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho", "theta": rho,theta positions of the grid nodes on zeta=0 surface
-            plots are made as a polar plot using above keys
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------
@@ -2707,7 +2706,17 @@ def plot_basis(basis, return_data=False, **kwargs):
         basis to plot
     return_data : bool
         if True, return the data plotted as well as fig,ax
+    **kwargs : dict, optional
+        Specify properties of the figure, axis, and plot appearance e.g.::
 
+            plot_X(figsize=(4,6),cmap="plasma")
+
+        Valid keyword arguments are:
+
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``title_font_size``: integer, font size of the title
 
     Returns
     -------
@@ -2718,35 +2727,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         2d or 3d bases return an ndarray or dict of axes.    return_data : bool
         if True, return the data plotted as well as fig,ax
     plot_data : dict
-        dictionary of the data plotted
-        only returned if return_data=True
-        plot_data keys:
-            "rho", "theta", "zeta": varies, what coordinate(s) the basis depends on
-                FourierSeries will return "zeta"
-                PowerSeries will return "rho"
-                DoubleFourierSeries will return "theta","zeta"
-                FourierZernike and ZernikePolynomial return "rho","theta"
-                (FourierZernike only plotted at zeta=0 plane)
-            "l","m","n": basis radial, poloidal, and toroidal modenumbers
-                FourierSeries will return "n"
-                PowerSeries will return "l"
-                DoubleFourierSeries will return "m","n"
-                FourierZernike and ZernikePolynomial return "l","m"
-                (FourierZernike only plotted at zeta=0 plane)
-            "amplitude": the amplitude of the basis functions
-
-    **kwargs : fig,ax and plotting properties
-        Specify properties of the figure, axis, and plot appearance e.g.::
-
-            plot_X(figsize=(4,6))
-
-        Valid keyword arguments are:
-
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-        cbar_ratio: float
-        title_ratio: float
-        cmap: str, matplotib colormap scheme to use, passed to ax.contourf
-        title_font_size: integer, font size of the title
+        dictionary of the data plotted, only returned if ``return_data=True``
 
 
     Examples
@@ -2972,11 +2953,10 @@ def plot_logo(savepath=None, **kwargs):
     savepath : str or path-like
         path to save the figure to.
         File format is inferred from the filename (Default value = None)
-    **kwargs :
+    **kwargs : dict, optional
         additional plot formatting parameters.
         options include ``'Dcolor'``, ``'Dcolor_rho'``, ``'Dcolor_theta'``,
         ``'Ecolor'``, ``'Scolor'``, ``'Ccolor'``, ``'BGcolor'``, ``'fig_width'``
-
 
     Returns
     -------
@@ -3236,16 +3216,15 @@ def plot_field_lines_sfl(
         if True, return the data plotted as well as fig,ax
     return_data : bool
         if True, return the data plotted as well as fig,ax
-
-    **kwargs : fig,ax and plotting properties
+    **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
 
             plot_X(figsize=(4,6))
 
         Valid keyword arguments are:
 
-        figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
-
+        * ``figsize``: tuple of length 2, the size of the figure (to be passed to
+          matplotlib)
 
     Returns
     -------
@@ -3254,10 +3233,7 @@ def plot_field_lines_sfl(
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
     plot_data : dict
-        Dict containing the R,phi,Z coordinates of each field line traced.
-        Dictionary entries are lists corresponding to the field lines for
-        each seed_theta given. Also contains the scipy IVP solutions for info
-        on how each line was integrated
+        dictionary of the data plotted, only returned if ``return_data=True``
 
     Examples
     --------

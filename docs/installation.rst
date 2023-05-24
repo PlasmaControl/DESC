@@ -5,9 +5,9 @@ Installation
 Follow these instructions to install DESC and its dependencies.
 Note that most of the installation options here do not install JAX with GPU support.
 We do include installation instructions to install JAX with GPU support on some computing clusters that we have tested.
-In general, to install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`_.
+In general, to install JAX with GPU support, please refer to the `JAX installation docs <https://github.com/google/jax#installation>`__.
 
-For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`_.
+For information on using conda, see `here <https://conda.io/projects/conda/en/latest/user-guide/getting-started.html#starting-conda>`__.
 Other package managers like venv could be used instead of conda, we have just chosen conda as our package manager of choice, and only test with conda environments, so your mileage may vary with other managers.
 
 **NOTE: DESC requires python>=3.8.**
@@ -117,15 +117,15 @@ With CPU+GPU support
 We will show the installation instructions that work for the clusters we've tested.
 If your cluster is not shown, try the installation for the cluster most resembling your own, or see if your cluster has
 specific JAX GPU installation instructions, as that is the main installation difference between clusters.
-(note, most of these clusters below are `x86_64` architectures, see the `JAX installation docs <https://github.com/google/jax#installation>`_ for more info if you have a different architecture ).
+(note, most of these clusters below are `x86_64` architectures, see the `JAX installation docs <https://github.com/google/jax#installation>`__ for more info if you have a different architecture ).
 
 **Note that DESC does not always test on or guarantee support of the latest version of JAX (which does not have a stable 1.0 release yet), and thus older versions of GPU-accelerated versions of JAX may need to be installed, which may in turn require lower versions of JaxLib, as well as CUDA and CuDNN.**
 
 Della Cluster (Princeton)
-+++++++++++++++++++++++
++++++++++++++++++++++++++
 These instructions were tested and confirmed to work on the Della cluster at Princeton as of 5-3-2023.
 
-First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`_ ):
+First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
 
 .. code-block:: sh
 
@@ -154,11 +154,11 @@ Then, we install DESC:
     module load cudatoolkit/11.7 cudnn/cuda-11.x/8.2.0
 
 Stellar Cluster (Princeton)
-+++++++++++++++++++++++
++++++++++++++++++++++++++++
 Using pip install and including GPU capabilities.
 These instructions were tested and confirmed to work on the Stellar cluster at Princeton as of 5-2-2023.
 
-First, install JAX with GPU support (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`_ ):
+First, install JAX with GPU support (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
 
 .. code-block:: sh
 
@@ -237,7 +237,7 @@ To check that you have properly installed DESC and its dependencies, try the fol
 
 You should see an output stating the DESC version, the JAX version, and your device (CPU or GPU).
 
-You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`_):
+You can also try running an example input file (filepath shown here is from the ``DESC`` folder, if you have cloned the git repo, otherwise the file can be found and downloaded `here <https://github.com/PlasmaControl/DESC/blob/master/desc/examples/SOLOVEV>`__):
 
 .. code-block:: console
 
@@ -246,7 +246,7 @@ You can also try running an example input file (filepath shown here is from the 
 Troubleshooting
 ***************
 We list here some common problems encountered during installation and their possible solutions.
-If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`_ and we will try our best to help!
+If you encounter issues during installation, please `leave us an issue on Github <https://github.com/PlasmaControl/DESC/issues>`__ and we will try our best to help!
 
 **Problem**: I've installed DESC, but when I check my installation I get an error :code:`ModuleNotFoundError: No module named 'desc'`.
 

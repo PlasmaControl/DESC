@@ -15,14 +15,23 @@ from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):
-    """Radial and helical MHD force balance.
+    r"""Radial and helical MHD force balance.
 
-    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
-    f_rho = F_rho |grad(rho)| dV  (N)
+    Given force densities:
 
-    F_helical = sqrt(g) J^rho
-    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_helical = F_helical |e^helical| dV  (N)
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    Fₕₑₗᵢ √g J^ρ
+
+    and helical basis vector:
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    Minimizes the magnitude of the forces:
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
 
     Parameters
     ----------
@@ -202,10 +211,11 @@ class ForceBalance(_Objective):
 
 
 class RadialForceBalance(_Objective):
-    """Radial MHD force balance.
+    r"""Radial MHD force balance.
 
-    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
-    f_rho = F_rho |grad(rho)| dV  (N)
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
 
     Parameters
     ----------
@@ -372,11 +382,13 @@ class RadialForceBalance(_Objective):
 
 
 class HelicalForceBalance(_Objective):
-    """Helical MHD force balance.
+    r"""Helical MHD force balance.
 
-    F_helical = sqrt(g) J^rho
-    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_helical = F_helical |e^helical| dV  (N)
+    Fₕₑₗᵢ √g J^ρ
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
 
     Parameters
     ----------

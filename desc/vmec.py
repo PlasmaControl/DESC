@@ -14,7 +14,13 @@ from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
-from desc.objectives import FixBoundaryR, FixBoundaryZ, ObjectiveFunction
+from desc.objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
+    FixBoundaryR,
+    FixBoundaryZ,
+    ObjectiveFunction,
+)
 from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -104,16 +110,16 @@ class VMECIO:
             inputs["sym"] = True
 
         # profiles
-        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:]))
-        pres = file.variables["presf"][:]
-        inputs["pressure"] = SplineProfile(r, pres, name="pressure")
+        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:].filled()))
+        pres = file.variables["presf"][:].filled()
+        inputs["pressure"] = SplineProfile(pres, r, name="pressure")
         if profile == "iota":
-            iota = file.variables["iotaf"][:]
-            inputs["iota"] = SplineProfile(r, iota, name="iota")
+            iota = file.variables["iotaf"][:].filled()
+            inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
-            curr = 2 * np.pi / mu_0 * file.variables["buco"][:]
-            inputs["current"] = SplineProfile(r, curr, name="current")
+            curr = 2 * np.pi / mu_0 * file.variables["buco"][:].filled()
+            inputs["current"] = SplineProfile(curr, r, name="current")
             inputs["iota"] = None
 
         file.close()
@@ -142,11 +148,13 @@ class VMECIO:
 
         # apply boundary conditions
         constraints = (
-            FixBoundaryR(fixed_boundary=True),
-            FixBoundaryZ(fixed_boundary=True),
+            FixBoundaryR(),
+            FixBoundaryZ(),
+            BoundaryRSelfConsistency(),
+            BoundaryZSelfConsistency(),
         )
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
-        _, _, _, _, _, _, project, recover = factorize_linear_constraints(
+        _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
         args = objective.unpack_state(recover(project(objective.x(eq))))
@@ -710,10 +718,23 @@ class VMECIO:
             cos_transform = Transform(
                 grid=grid, basis=cos_basis, build=False, build_pinv=True
             )
+
+            def cosfit(x):
+                y = cos_transform.fit(x)
+                return np.where(cos_transform.basis.modes[:, 1] < 0, -y, y)
+
+            def sinfit(x):
+                y = sin_transform.fit(x)
+                return np.where(sin_transform.basis.modes[:, 1] < 0, -y, y)
+
         else:
             full_transform = Transform(
                 grid=grid, basis=full_basis, build=False, build_pinv=True
             )
+
+            def fullfit(x):
+                y = full_transform.fit(x)
+                return np.where(full_transform.basis.modes[:, 1] < 0, -y, y)
 
         rmin_surf = file.createVariable("rmin_surf", np.float64)
         rmin_surf.long_name = "minimum R coordinate range"
@@ -767,9 +788,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         gmnc[0, :] = 0
         gmnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -806,7 +827,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -849,7 +870,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -892,7 +913,7 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
                 x_mn[i, :] = full_transform.fit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
@@ -933,18 +954,18 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = sin_transform.fit(data[i, :])
+                x_mn[i, :] = sinfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
-        bsubsmns[:, :] = -s  # negative sign for negative Jacobian
-        bsubsmns[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
+        bsubsmns[:, :] = s
+        bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
         # TODO: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
-            bsubsmnc[:, :] = -c
-            bsubsmnc[0, :] = -(
+            bsubsmnc[:, :] = c
+            bsubsmnc[0, :] = (
                 c[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
         timer.stop("B_psi")
@@ -981,9 +1002,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubumnc[0, :] = 0
         bsubumnc[1:, :] = -c  # negative sign for negative Jacobian
@@ -1024,9 +1045,9 @@ class VMECIO:
         x_mn = np.zeros((surfs - 1, m.size))
         for i in range(surfs - 1):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         bsubvmnc[0, :] = 0
         bsubvmnc[1:, :] = c
@@ -1073,9 +1094,9 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currumnc[:, :] = c
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
@@ -1127,9 +1148,9 @@ class VMECIO:
         x_mn = np.zeros((surfs, m.size))
         for i in range(surfs):
             if eq.sym:
-                x_mn[i, :] = cos_transform.fit(data[i, :])
+                x_mn[i, :] = cosfit(data[i, :])
             else:
-                x_mn[i, :] = full_transform.fit(data[i, :])
+                x_mn[i, :] = fullfit(data[i, :])
         xm, xn, s, c = ptolemy_identity_rev(m, n, x_mn)
         currvmnc[:, :] = -c  # negative sign for negative Jacobian
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis

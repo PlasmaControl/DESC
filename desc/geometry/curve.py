@@ -165,6 +165,10 @@ class FourierRZCurve(Curve):
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(N=N, NFP=self.NFP)
             self.Z_basis.change_resolution(N=N, NFP=self.NFP)
+            if hasattr(self.grid, "change_resolution"):
+                self.grid.change_resolution(
+                    self.grid.L, self.grid.M, self.grid.N, self.NFP
+                )
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)

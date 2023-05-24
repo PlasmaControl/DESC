@@ -237,6 +237,7 @@ Name,Label,Units,Description,Module
 ``grad(|B|^2)_zeta``,:math:`(\nabla B^{2})_{\zeta}`,Tesla squared,Covariant toroidal component of magnetic pressure gradient,``desc.compute._field``
 ``grad(|B|^2)``,:math:`\nabla B^{2}`,Tesla squared / meters,Magnetic pressure gradient,``desc.compute._field``
 ``|grad(|B|^2)|/2mu0``,:math:`|\nabla B^{2}/(2\mu_0)|`,Newton / cubic meter,Magnitude of magnetic pressure gradient,``desc.compute._field``
+``<|grad(|B|^2)|/2mu0>_vol``,:math:`\langle |\nabla B^{2}/(2\mu_0)| \rangle_{vol}`,Newtons per cubic meter,Volume average of magnitude of magnetic pressure gradient,``desc.compute._field``
 ``(curl(B)xB)_rho``,:math:`((\nabla \times \mathbf{B}) \times \mathbf{B})_{\rho}`,Tesla squared,Covariant radial component of Lorentz force,``desc.compute._field``
 ``(curl(B)xB)_theta``,:math:`((\nabla \times \mathbf{B}) \times \mathbf{B})_{\theta}`,Tesla squared,Covariant poloidal component of Lorentz force,``desc.compute._field``
 ``(curl(B)xB)_zeta``,:math:`((\nabla \times \mathbf{B}) \times \mathbf{B})_{\zeta}`,Tesla squared,Covariant toroidal component of Lorentz force,``desc.compute._field``
@@ -246,12 +247,13 @@ Name,Label,Units,Description,Module
 ``((B*grad)B)_theta``,:math:`((\mathbf{B} \cdot \nabla) \mathbf{B})_{\theta}`,Tesla squared,Covariant poloidal component of magnetic tension,``desc.compute._field``
 ``((B*grad)B)_zeta``,:math:`((\mathbf{B} \cdot \nabla) \mathbf{B})_{\zeta}`,Tesla squared,Covariant toroidal component of magnetic tension,``desc.compute._field``
 ``|(B*grad)B|``,:math:`|(\mathbf{B} \cdot \nabla) \mathbf{B}|`,Tesla squared / meters,Magnitude of magnetic tension,``desc.compute._field``
+``<|(B*grad)B|>_vol``,:math:`\langle |(\mathbf{B} \cdot \nabla) \mathbf{B}| \rangle_{vol}`,Tesla squared / meters,Volume average magnetic tension magnitude,``desc.compute._field``
 ``B*grad(|B|)``,:math:`\mathbf{B} \cdot \nabla B`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_t``,:math:`\partial_{\theta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
 ``(B*grad(|B|))_z``,:math:`\partial_{\zeta} (\mathbf{B} \cdot \nabla B)`,Tesla squared / meters,,``desc.compute._field``
 ``max_tz |B|``,:math:`\max_{\theta \zeta} |B|`,Tesla,Maximum field strength on each flux surface,``desc.compute._field``
 ``min_tz |B|``,:math:`\min_{\theta \zeta} |B|`,Tesla,Minimum field strength on each flux surface,``desc.compute._field``
-``effective r/R0``,:math:`(r / R_0)_{effective}`,None,"Effective local inverse aspect ratio, based on max and min |B|",``desc.compute._field``
+``effective r/R0``,:math:`(r / R_0)_{effective}`,None,"Effective local inverse aspect ratio, based on max and min \|B|",``desc.compute._field``
 ``kappa``,:math:`\kappa`,Inverse meters,Curvature vector of magnetic field lines,``desc.compute._field``
 ``kappa_n``,:math:`\kappa_n`,Inverse meters,Normal curvature vector of magnetic field lines,``desc.compute._field``
 ``kappa_g``,:math:`\kappa_g`,Inverse meters,Geodesic curvature vector of magnetic field lines,``desc.compute._field``
@@ -302,6 +304,24 @@ Name,Label,Units,Description,Module
 ``g^rt``,:math:`g^{\rho\theta}`,inverse square meters,Radial/Poloidal element of contravariant metric tensor,``desc.compute._metric``
 ``g^rz``,:math:`g^{\rho\zeta}`,inverse square meters,Radial/Toroidal element of contravariant metric tensor,``desc.compute._metric``
 ``g^tz``,:math:`g^{\theta\zeta}`,inverse square meters,Poloidal/Toroidal element of contravariant metric tensor,``desc.compute._metric``
+``g^rr_r``,:math:`g^{\rho}{\rho}_{\rho}`,inverse square meters,"Radial/Radial element of contravariant metric tensor, first radial derivative",``desc.compute._metric``
+``g^rt_r``,:math:`g^{\rho}{\theta}_{\rho}`,inverse square meters,"Radial/Poloidal element of contravariant metric tensor, first radial derivative",``desc.compute._metric``
+``g^rz_r``,:math:`g^{\rho}{\zeta}_{\rho}`,inverse square meters,"Radial/Toroidal element of contravariant metric tensor, first radial derivative",``desc.compute._metric``
+``g^tt_r``,:math:`g^{\theta}{\theta}_{\rho}`,inverse square meters,"Poloidal/Poloidal element of contravariant metric tensor, first radial derivative",``desc.compute._metric``
+``g^tz_r``,:math:`g^{\theta}{\zeta}_{\rho}`,inverse square meters,"Poloidal/Toroidal element of contravariant metric tensor, first radial derivative",``desc.compute._metric``
+``g^zz_r``,:math:`g^{\zeta}{\zeta}_{\rho}`,inverse square meters,"Toroidal/Toroidal element of contravariant metric tensor, first radial derivative",``desc.compute._metric``
+``g^rr_t``,:math:`g^{\rho}{\rho}_{\theta}`,inverse square meters,"Radial/Radial element of contravariant metric tensor, first poloidal derivative",``desc.compute._metric``
+``g^rt_t``,:math:`g^{\rho}{\theta}_{\theta}`,inverse square meters,"Radial/Poloidal element of contravariant metric tensor, first poloidal derivative",``desc.compute._metric``
+``g^rz_t``,:math:`g^{\rho}{\zeta}_{\theta}`,inverse square meters,"Radial/Toroidal element of contravariant metric tensor, first poloidal derivative",``desc.compute._metric``
+``g^tt_t``,:math:`g^{\theta}{\theta}_{\theta}`,inverse square meters,"Poloidal/Poloidal element of contravariant metric tensor, first poloidal derivative",``desc.compute._metric``
+``g^tz_t``,:math:`g^{\theta}{\zeta}_{\theta}`,inverse square meters,"Poloidal/Toroidal element of contravariant metric tensor, first poloidal derivative",``desc.compute._metric``
+``g^zz_t``,:math:`g^{\zeta}{\zeta}_{\theta}`,inverse square meters,"Toroidal/Toroidal element of contravariant metric tensor, first poloidal derivative",``desc.compute._metric``
+``g^rr_z``,:math:`g^{\rho}{\rho}_{\zeta}`,inverse square meters,"Radial/Radial element of contravariant metric tensor, first toroidal derivative",``desc.compute._metric``
+``g^rt_z``,:math:`g^{\rho}{\theta}_{\zeta}`,inverse square meters,"Radial/Poloidal element of contravariant metric tensor, first toroidal derivative",``desc.compute._metric``
+``g^rz_z``,:math:`g^{\rho}{\zeta}_{\zeta}`,inverse square meters,"Radial/Toroidal element of contravariant metric tensor, first toroidal derivative",``desc.compute._metric``
+``g^tt_z``,:math:`g^{\theta}{\theta}_{\zeta}`,inverse square meters,"Poloidal/Poloidal element of contravariant metric tensor, first toroidal derivative",``desc.compute._metric``
+``g^tz_z``,:math:`g^{\theta}{\zeta}_{\zeta}`,inverse square meters,"Poloidal/Toroidal element of contravariant metric tensor, first toroidal derivative",``desc.compute._metric``
+``g^zz_z``,:math:`g^{\zeta}{\zeta}_{\zeta}`,inverse square meters,"Toroidal/Toroidal element of contravariant metric tensor, first toroidal derivative",``desc.compute._metric``
 ``|grad(rho)|``,:math:`|\nabla \rho|`,inverse meters,Magnitude of contravariant radial basis vector,``desc.compute._metric``
 ``|grad(theta)|``,:math:`|\nabla \theta|`,inverse meters,Magnitude of contravariant poloidal basis vector,``desc.compute._metric``
 ``|grad(zeta)|``,:math:`|\nabla \zeta|`,inverse meters,Magnitude of contravariant toroidal basis vector,``desc.compute._metric``
@@ -357,6 +377,7 @@ Name,Label,Units,Description,Module
 ``B modes``,:math:`Boozer modes`,None,Boozer harmonics,``desc.compute._qs``
 ``f_C``,:math:`(M \iota - N) (\mathbf{B} \times \nabla \psi) \cdot \nabla B - (M G + N I) \mathbf{B} \cdot \nabla B`,Tesla cubed,Two-term quasisymmetry metric,``desc.compute._qs``
 ``f_T``,:math:`\nabla \psi \times \nabla B \cdot \nabla (\mathbf{B} \cdot \nabla B)`,Tesla quarted / square meters,Triple product quasisymmetry metric,``desc.compute._qs``
+``isodynamicity``,:math:`1/B^2 (\mathbf{b} \times \nabla B) \cdot \nabla \psi`,None,"Measure of cross field drift at each point, unweighted by particle energy",``desc.compute._qs``
 ``D_shear``,:math:`D_{shear}`,Inverse Webers squared,Mercier stability criterion magnetic shear term,``desc.compute._stability``
 ``D_current``,:math:`D_{current}`,Inverse Webers squared,Mercier stability criterion toroidal current term,``desc.compute._stability``
 ``D_well``,:math:`D_{well}`,Inverse Webers squared,Mercier stability criterion magnetic well term,``desc.compute._stability``

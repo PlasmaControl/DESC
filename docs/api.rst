@@ -114,30 +114,31 @@ Objective Functions
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
     desc.objectives.Energy
-    desc.objectives.FixAtomicNumber,
-    desc.objectives.FixAxisR,
-    desc.objectives.FixAxisZ,
-    desc.objectives.FixBoundaryR,
-    desc.objectives.FixBoundaryZ,
-    desc.objectives.FixCurrent,
-    desc.objectives.FixElectronDensity,
-    desc.objectives.FixElectronTemperature,
-    desc.objectives.FixIonTemperature,
-    desc.objectives.FixIota,
-    desc.objectives.FixModeR,
-    desc.objectives.FixModeZ,
-    desc.objectives.FixPressure,
-    desc.objectives.FixPsi,
-    desc.objectives.FixSumModesR,
-    desc.objectives.FixSumModesZ,
-    desc.objectives.FixThetaSFL,
+    desc.objectives.FixAtomicNumber
+    desc.objectives.FixAxisR
+    desc.objectives.FixAxisZ
+    desc.objectives.FixBoundaryR
+    desc.objectives.FixBoundaryZ
+    desc.objectives.FixCurrent
+    desc.objectives.FixElectronDensity
+    desc.objectives.FixElectronTemperature
+    desc.objectives.FixIonTemperature
+    desc.objectives.FixIota
+    desc.objectives.FixModeR
+    desc.objectives.FixModeZ
+    desc.objectives.FixPressure
+    desc.objectives.FixPsi
+    desc.objectives.FixSumModesR
+    desc.objectives.FixSumModesZ
+    desc.objectives.FixThetaSFL
     desc.objectives.ForceBalance
     desc.objectives.GenericObjective
-    desc.objectives.get_equilibrium_objective,
-    desc.objectives.get_fixed_axis_constraints,
-    desc.objectives.get_fixed_boundary_constraints,
-    desc.objectives.get_NAE_constraints,
+    desc.objectives.get_equilibrium_objective
+    desc.objectives.get_fixed_axis_constraints
+    desc.objectives.get_fixed_boundary_constraints
+    desc.objectives.get_NAE_constraints
     desc.objectives.HelicalForceBalance
+    desc.objectives.Isodynamicity
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability

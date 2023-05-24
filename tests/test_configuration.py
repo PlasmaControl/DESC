@@ -491,6 +491,20 @@ def test_is_nested():
 
 
 @pytest.mark.unit
+def test_is_nested_theta():
+    """Test that new version of is nested also catches messed up theta contours."""
+    eq = Equilibrium(L=6, M=6, N=0, iota=1)
+    # just mess with lambda, so rho contours are the same
+    eq.L_lmn += 1e-1 * np.random.default_rng(seed=3).random(eq.L_lmn.shape)
+    grid = QuadratureGrid(10, 10, 0, NFP=eq.NFP)
+    g1 = eq.compute("sqrt(g)", grid=grid)["sqrt(g)"]
+    g2 = eq.compute("sqrt(g)_PEST", grid=grid)["sqrt(g)_PEST"]
+    assert np.all(g1 > 0)  # regular jacobian will still be fine
+    assert np.any(g2 < 0)  # PEST jacobian should be negative
+    assert not eq.is_nested()
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 def test_get_profile(DSHAPE_current):
     """Test getting/setting iota and current profiles."""

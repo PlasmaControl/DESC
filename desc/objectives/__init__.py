@@ -17,6 +17,7 @@ from ._geometry import (
     PrincipalCurvature,
     Volume,
 )
+from ._iota_utils import IotaAt, MeanIota
 from ._qs import (
     Isodynamicity,
     QuasisymmetryBoozer,

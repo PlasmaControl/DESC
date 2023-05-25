@@ -1,14 +1,21 @@
 """Augmented Langrangian for scalar valued objectives."""
 
 import numpy as np
+from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
 from desc.optimize.fmin_scalar import fmintr
 
-from .utils import check_termination, inequality_to_bounds
+from .bound_utils import find_active_constraints
+from .utils import (
+    check_termination,
+    inequality_to_bounds,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
-def fmin_lag_stel(
+def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     grad,
@@ -163,8 +170,10 @@ def fmin_lag_stel(
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
+    g = grad_wrapped(z, *args)
     c = constraint_wrapped.fun(z)
     nfev += 1
+    ngev += 1
 
     if maxiter is None:
         maxiter = z.size
@@ -181,6 +190,19 @@ def fmin_lag_stel(
     fold = f
     allx = []
 
+    success = None
+    message = None
+    step_norm = jnp.inf
+    actual_reduction = jnp.inf
+    g_norm = np.linalg.norm(g, ord=np.inf)
+    constr_violation = np.linalg.norm(c, ord=np.inf)
+
+    if verbose > 1:
+        print_header_nonlinear(constrained=True)
+        print_iteration_nonlinear(
+            iteration, nfev, f, actual_reduction, step_norm, g_norm, constr_violation
+        )
+
     while iteration < maxiter:
         result = fmintr(
             lagfun,
@@ -194,7 +216,7 @@ def fmin_lag_stel(
             xtol=xtol,
             gtol=gtolk,
             maxiter=maxiter_inner,
-            verbose=verbose - 1,
+            verbose=0,
         )
         allx += result["allx"]
         nfev += result["nfev"]
@@ -209,9 +231,18 @@ def fmin_lag_stel(
         z_norm = np.linalg.norm(z)
         g_norm = result["optimality"]
         actual_reduction = fold - f
+        iteration = iteration + 1
 
-        if verbose:
-            print(f"Constraint violation: {constr_violation:.4e}")
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration,
+                nfev,
+                f,
+                actual_reduction,
+                step_norm,
+                g_norm,
+                constr_violation,
+            )
 
         success, message = check_termination(
             actual_reduction,
@@ -238,27 +269,47 @@ def fmin_lag_stel(
             break
 
         if constr_violation < ctolk:
-            if verbose > 1:
-                print("Updating multipliers")
             lmbda = lmbda - mu * c
             ctolk = ctolk / (mu ** (0.9))
             gtolk = gtolk / (mu)
         else:
-            if verbose > 1:
-                print("Updating penalty parameter")
             mu = 2 * mu
             ctolk = constr_violation / (mu ** (0.1))
             gtolk = gtolk / mu
 
-        iteration = iteration + 1
         zold = z
         fold = f
 
-    result["message"] = message
-    result["success"] = success
-    result["x"] = z2xs(result["x"])[0]
-    result["fun"] = f
-    result["y"] = lmbda
+    x, s = z2xs(z)
+    active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
+    result = OptimizeResult(
+        x=x,
+        y=lmbda,
+        success=success,
+        fun=f,
+        grad=g,
+        optimality=g_norm,
+        nfev=nfev,
+        ngev=ngev,
+        nhev=nhev,
+        nit=iteration,
+        message=message,
+        active_mask=active_mask,
+        constr_violation=constr_violation,
+    )
+    if verbose > 0:
+        if result["success"]:
+            print(result["message"])
+        else:
+            print("Warning: " + result["message"])
+        print(f"""         Current function value: {result["fun"]:.3e}""")
+        print(f"""         Constraint violation: {result['constr_violation']:.3e}""")
+        print(f"""         Total delta_x: {jnp.linalg.norm(x0 - result["x"]):.3e}""")
+        print(f"""         Iterations: {result["nit"]:d}""")
+        print(f"""         Function evaluations: {result["nfev"]:d}""")
+        print(f"""         Gradient evaluations: {result["ngev"]:d}""")
+        print(f"""         Hessian evaluations: {result["nhev"]:d}""")
+
     result["allx"] = [z2xs(x)[0] for x in allx]
-    result["nit"] = iteration
+
     return result

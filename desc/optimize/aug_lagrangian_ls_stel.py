@@ -1,14 +1,21 @@
 """Augmented Langrangian for vector valued objectives."""
 
 import numpy as np
+from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
 from desc.optimize.least_squares import lsqtr
 
-from .utils import check_termination, inequality_to_bounds
+from .bound_utils import find_active_constraints
+from .utils import (
+    check_termination,
+    inequality_to_bounds,
+    print_header_nonlinear,
+    print_iteration_nonlinear,
+)
 
 
-def fmin_lag_ls_stel(
+def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
@@ -140,9 +147,12 @@ def fmin_lag_ls_stel(
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
+    J = jac_wrapped(z, *args)
     cost = 1 / 2 * jnp.dot(f, f)
+    g = jnp.dot(f, J)
     c = constraint_wrapped.fun(z)
     nfev += 1
+    njev += 1
 
     if maxiter is None:
         maxiter = z.size
@@ -157,6 +167,19 @@ def fmin_lag_ls_stel(
     zold = z
     cost_old = cost
     allx = []
+
+    success = None
+    message = None
+    step_norm = jnp.inf
+    actual_reduction = jnp.inf
+    g_norm = np.linalg.norm(g, ord=np.inf)
+    constr_violation = np.linalg.norm(c, ord=np.inf)
+
+    if verbose > 1:
+        print_header_nonlinear(constrained=True)
+        print_iteration_nonlinear(
+            iteration, nfev, cost, actual_reduction, step_norm, g_norm, constr_violation
+        )
 
     while iteration < maxiter:
         result = lsqtr(
@@ -174,7 +197,7 @@ def fmin_lag_ls_stel(
             xtol=xtol,
             gtol=gtolk,
             maxiter=maxiter_inner,
-            verbose=verbose,
+            verbose=0,
         )
         # update outer counters
         allx += result["allx"]
@@ -183,16 +206,26 @@ def fmin_lag_ls_stel(
         z = result["x"]
         f = fun_wrapped(z, *args)
         cost = 1 / 2 * jnp.dot(f, f)
-        c = constraint_wrapped.fun(z, *args)
+        c = constraint_wrapped.fun(z)
         nfev += 1
+        njev += 1
         constr_violation = np.linalg.norm(c, ord=np.inf)
         step_norm = np.linalg.norm(zold - z)
         z_norm = np.linalg.norm(z)
         g_norm = result["optimality"]
         actual_reduction = cost_old - cost
+        iteration = iteration + 1
 
-        if verbose:
-            print(f"Constraint violation: {constr_violation:.4e}")
+        if verbose > 1:
+            print_iteration_nonlinear(
+                iteration,
+                nfev,
+                cost,
+                actual_reduction,
+                step_norm,
+                g_norm,
+                constr_violation,
+            )
 
         # check if we can stop the outer loop
         success, message = check_termination(
@@ -221,26 +254,47 @@ def fmin_lag_ls_stel(
 
         # otherwise update lagrangian stuff and continue
         if constr_violation < ctolk:
-            if verbose > 1:
-                print("Updating multipliers")
             lmbda = lmbda - mu * c
             ctolk = ctolk / (np.max(mu) ** (0.9))
             gtolk = gtolk / (np.max(mu))
         else:
-            if verbose > 1:
-                print("Updating penalty parameter")
             mu = 5.0 * mu
             ctolk = ctolk / (np.max(mu) ** (0.1))
             gtolk = gtolk / np.max(mu)
 
-        iteration = iteration + 1
         zold = z
         cost_old = cost
 
-    # we can use the last output result object, but update where needed
-    result["message"] = message
-    result["success"] = success
-    result["x"] = z2xs(result["x"])[0]
+    x, s = z2xs(z)
+    active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
+    result = OptimizeResult(
+        x=x,
+        y=lmbda,
+        success=success,
+        cost=cost,
+        fun=f,
+        grad=g,
+        jac=J,
+        optimality=g_norm,
+        nfev=nfev,
+        njev=njev,
+        nit=iteration,
+        message=message,
+        active_mask=active_mask,
+        constr_violation=constr_violation,
+    )
+    if verbose > 0:
+        if result["success"]:
+            print(result["message"])
+        else:
+            print("Warning: " + result["message"])
+        print(f"""         Current function value: {result["cost"]:.3e}""")
+        print(f"""         Constraint violation: {result['constr_violation']:.3e}""")
+        print(f"""         Total delta_x: {jnp.linalg.norm(x0 - result["x"]):.3e}""")
+        print(f"""         Iterations: {result["nit"]:d}""")
+        print(f"""         Function evaluations: {result["nfev"]:d}""")
+        print(f"""         Jacobian evaluations: {result["njev"]:d}""")
+
     result["allx"] = [z2xs(x)[0] for x in allx]
-    result["nit"] = iteration
+
     return result

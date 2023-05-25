@@ -1,6 +1,5 @@
 """Classes defining objectives for equilibrium and optimization."""
 
-from ._auglagrangian import AugLagrangian, AugLagrangianLS
 from ._bootstrap import BootstrapRedlConsistency
 from ._equilibrium import (
     CurrentDensity,

@@ -1,28 +1,19 @@
-#!/usr/bin/env python3
-"""
-Created on Wed Jul 13 10:39:48 2022
-
-@author: pk123
-"""
+"""Augmented Langrangian for vector valued objectives."""
 
 import numpy as np
-from scipy.optimize import OptimizeResult
 
 from desc.backend import jnp
-from desc.derivatives import Derivative
-from desc.objectives._auglagrangian import AugLagrangianLS
 from desc.optimize.least_squares import lsqtr
 
-
-def conv_test(x, L, gL):
-    return np.linalg.norm(jnp.dot(gL.T, L))
+from .utils import check_termination, inequality_to_bounds
 
 
 def fmin_lag_ls_stel(
     fun,
-    constraint,
     x0,
-    bounds,
+    jac,
+    bounds=(-jnp.inf, jnp.inf),
+    constraint=None,
     args=(),
     x_scale=1,
     ftol=1e-6,
@@ -31,97 +22,225 @@ def fmin_lag_ls_stel(
     ctol=1e-6,
     verbose=1,
     maxiter=None,
-    tr_method="svd",
-    callback=None,
     options={},
 ):
+    """Minimize a function with constraints using an augmented Langrangian method.
+
+    The objective function is assumed to be vector valued, and is minimized in the least
+    squares sense.
+
+    Parameters
+    ----------
+    fun : callable
+        objective to be minimized. Should have a signature like fun(x,*args)-> 1d array
+    x0 : array-like
+        initial guess
+    jac : callable:
+        function to compute Jacobian matrix of fun
+    bounds : tuple of array-like
+        Lower and upper bounds on independent variables. Defaults to no bounds.
+        Each array must match the size of x0 or be a scalar, in the latter case a
+        bound will be the same for all variables. Use np.inf with an appropriate sign
+        to disable bounds on all or some variables.
+    constraint : scipy.optimize.NonlinearConstraint
+        constraint to be satisfied
+    args : tuple
+        additional arguments passed to fun, grad, and hess
+    x_scale : array_like or ``'hess'``, optional
+        Characteristic scale of each variable. Setting ``x_scale`` is equivalent
+        to reformulating the problem in scaled variables ``xs = x / x_scale``.
+        An alternative view is that the size of a trust region along jth
+        dimension is proportional to ``x_scale[j]``. Improved convergence may
+        be achieved by setting ``x_scale`` such that a step of a given size
+        along any of the scaled variables has a similar effect on the cost
+        function. If set to ``'hess'``, the scale is iteratively updated using the
+        inverse norms of the columns of the Hessian matrix.
+    ftol : float or None, optional
+        Tolerance for termination by the change of the cost function. Default
+        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+        and there was an adequate agreement between a local quadratic model and
+        the true model in the last step. If None, the termination by this
+        condition is disabled.
+    xtol : float or None, optional
+        Tolerance for termination by the change of the independent variables.
+        Default is 1e-8. Optimization is stopped when
+        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
+        this condition is disabled.
+    gtol : float or None, optional
+        Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
+        Optimizer teriminates when ``norm(g) < gtol``, where
+        If None, the termination by this condition is disabled.
+    verbose : {0, 1, 2}, optional
+        * 0 (default) : work silently.
+        * 1 : display a termination report.
+        * 2 : display progress during iterations
+    maxiter : int, optional
+        maximum number of iterations. Defaults to size(x)*100
+    options : dict, optional
+        dictionary of optional keyword arguments to override default solver settings.
+        See the code for more details.
+
+    Returns
+    -------
+    res : OptimizeResult
+        The optimization result represented as a ``OptimizeResult`` object.
+        Important attributes are: ``x`` the solution array, ``success`` a
+        Boolean flag indicating if the optimizer exited successfully.
+
+    """
+    if constraint is None:
+        # just do regular unconstrained stuff
+        return lsqtr(
+            fun,
+            x0,
+            jac,
+            bounds,
+            args,
+            x_scale=x_scale,
+            ftol=ftol,
+            xtol=xtol,
+            gtol=gtol,
+            verbose=verbose,
+            maxiter=maxiter,
+            options=options,
+        )
+    else:
+        (
+            z0,
+            fun_wrapped,
+            jac_wrapped,
+            _,
+            constraint_wrapped,
+            zbounds,
+            z2xs,
+        ) = inequality_to_bounds(
+            x0,
+            fun,
+            jac,
+            None,
+            constraint,
+            bounds,
+        )
+
+    def lagfun(z, lmbda, mu, *args):
+        f = fun_wrapped(z, *args)
+        c = constraint_wrapped.fun(z, *args)
+        c = 1 / (np.sqrt(2 * mu)) * (-lmbda + mu * c)
+        return jnp.concatenate((f, c))
+
+    def lagjac(z, lmbda, mu, *args):
+        Jf = jac_wrapped(z, *args)
+        Jc = constraint_wrapped.jac(z, *args)
+        Jc = 1 / (np.sqrt(2 * mu)) * (mu * Jc)
+        return jnp.vstack((Jf, Jc))
+
     nfev = 0
-    ngev = 0
-    nhev = 0
+    njev = 0
     iteration = 0
 
-    x = x0.copy()
-    f = fun(x, *args)
-    c = constraint.fun(x)
+    z = z0.copy()
+    f = fun_wrapped(z, *args)
+    cost = 1 / 2 * jnp.dot(f, f)
+    c = constraint_wrapped.fun(z)
     nfev += 1
 
-    mu = options.pop("mu", 10 * jnp.ones(len(c)))
-    lmbda = options.pop("lmbda", 0.01 * jnp.ones(len(c)))
-
-    constr = np.array([constraint])
-    L = AugLagrangianLS(fun, constr)
-    gradL = Derivative(L.compute, 0, "fwd")
+    if maxiter is None:
+        maxiter = z.size
+    mu = options.pop("initial_penalty_parameter", 10)
+    lmbda = options.pop("initial_multipliers", 0.01 * jnp.ones(len(c)))
+    maxiter_inner = options.pop("maxiter_inner", 20)
+    max_nfev = options.pop("max_nfev", 5 * maxiter * maxiter_inner + 1)
+    max_njev = options.pop("max_njev", maxiter * maxiter_inner + 1)
 
     gtolk = 1 / (10 * np.linalg.norm(mu))
     ctolk = 1 / (np.linalg.norm(mu) ** (0.1))
-    xold = x
-    fold = f
+    zold = z
+    cost_old = cost
+    allx = []
 
     while iteration < maxiter:
-        xk = lsqtr(
-            L.compute,
-            x,
-            gradL,
+        result = lsqtr(
+            lagfun,
+            z,
+            lagjac,
+            bounds=zbounds,
             args=(
                 lmbda,
                 mu,
-            ),
-            bounds=bounds,
+            )
+            + args,
+            x_scale=x_scale,
+            ftol=ftol,
+            xtol=xtol,
             gtol=gtolk,
-            maxiter=10,
-            verbose=2,
+            maxiter=maxiter_inner,
+            verbose=verbose,
         )
+        # update outer counters
+        allx += result["allx"]
+        nfev += result["nfev"]
+        njev += result["njev"]
+        z = result["x"]
+        f = fun_wrapped(z, *args)
+        cost = 1 / 2 * jnp.dot(f, f)
+        c = constraint_wrapped.fun(z, *args)
+        nfev += 1
+        constr_violation = np.linalg.norm(c, ord=np.inf)
+        step_norm = np.linalg.norm(zold - z)
+        z_norm = np.linalg.norm(z)
+        g_norm = result["optimality"]
+        actual_reduction = cost_old - cost
 
-        x = xk["x"]
-        f = fun(x)
-        cv = L.compute_constraints(x)
-        c = np.max(cv)
+        if verbose:
+            print(f"Constraint violation: {constr_violation:.4e}")
 
-        if np.linalg.norm(xold - x) < xtol:
-            print("xtol satisfied\n")
+        # check if we can stop the outer loop
+        success, message = check_termination(
+            actual_reduction,
+            cost,
+            step_norm,
+            z_norm,
+            g_norm,
+            1,
+            ftol,
+            xtol,
+            gtol,
+            iteration,
+            maxiter,
+            nfev,
+            max_nfev,
+            njev,
+            max_njev,
+            0,
+            np.inf,
+            constr_violation=constr_violation,
+            ctol=ctol,
+        )
+        if success is not None:
             break
 
-        if (np.linalg.norm(f) - np.linalg.norm(fold)) / np.linalg.norm(fold) > 0.1:
-            mu = mu / 2
-            print("Decreasing mu. mu is now " + str(np.mean(mu)))
-
-        elif c < ctolk:
-            if (
-                c < ctol
-                and conv_test(x, L.compute(x, lmbda, mu), gradL(x, lmbda, mu)) < gtol
-            ):
-                break
-
-            else:
-                print("Updating lambda")
-                #                lmbda = lmbda - mu * cv
-                lmbda = lmbda - mu * cv
-                ctolk = ctolk / (np.max(mu) ** (0.9))
-                gtolk = gtolk / (np.max(mu))
+        # otherwise update lagrangian stuff and continue
+        if constr_violation < ctolk:
+            if verbose > 1:
+                print("Updating multipliers")
+            lmbda = lmbda - mu * c
+            ctolk = ctolk / (np.max(mu) ** (0.9))
+            gtolk = gtolk / (np.max(mu))
         else:
+            if verbose > 1:
+                print("Updating penalty parameter")
             mu = 5.0 * mu
             ctolk = ctolk / (np.max(mu) ** (0.1))
             gtolk = gtolk / np.max(mu)
 
         iteration = iteration + 1
-        xold = x
-        fold = f
+        zold = z
+        cost_old = cost
 
-    g = gradL(x, lmbda, mu)
-    f = fun(x)
-    success = True
-    message = "successful"
-    result = OptimizeResult(
-        x=x,
-        success=success,
-        fun=f,
-        grad=g,
-        optimality=jnp.linalg.norm(g),
-        nfev=nfev,
-        ngev=ngev,
-        nhev=nhev,
-        nit=iteration,
-        message=message,
-    )
-    # result["allx"] = [recover(x)]
+    # we can use the last output result object, but update where needed
+    result["message"] = message
+    result["success"] = success
+    result["x"] = z2xs(result["x"])[0]
+    result["allx"] = [z2xs(x)[0] for x in allx]
+    result["nit"] = iteration
     return result

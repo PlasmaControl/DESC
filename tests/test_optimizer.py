@@ -3,7 +3,14 @@
 import numpy as np
 import pytest
 from numpy.random import default_rng
-from scipy.optimize import BFGS, least_squares, rosen, rosen_der
+from scipy.optimize import (
+    BFGS,
+    NonlinearConstraint,
+    least_squares,
+    minimize,
+    rosen,
+    rosen_der,
+)
 
 import desc.examples
 from desc.backend import jit, jnp
@@ -29,6 +36,8 @@ from desc.optimize import (
     LinearConstraintProjection,
     Optimizer,
     ProximalProjection,
+    fmin_lag_ls_stel,
+    fmin_lag_stel,
     fmintr,
     lsqtr,
     optimizers,
@@ -725,3 +734,96 @@ def test_bounded_optimization():
 
     np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-06, atol=1e-06)
     np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-06, atol=1e-06)
+
+
+@pytest.mark.unit
+def test_auglag():
+    """Test that our augmented lagrangian works as well as scipy for convex problems."""
+    rng = default_rng(12)
+
+    n = 15  # number of variables
+    m = 10  # number of constraints
+    p = 7  # number of primals
+    Qs = []
+    gs = []
+    for i in range(m + p):
+        A = 0.5 - rng.random((n, n))
+        Qs.append(A.T @ A)
+        gs.append(0.5 - rng.random(n))
+
+    @jit
+    def vecfun(x):
+        y0 = x @ Qs[0] + gs[0]
+        y1 = x @ Qs[1] + gs[1]
+        y = jnp.concatenate([y0, y1**2])
+        return y
+
+    @jit
+    def fun(x):
+        y = vecfun(x)
+        return 1 / 2 * jnp.dot(y, y)
+
+    grad = jit(Derivative(fun, mode="grad"))
+    hess = jit(Derivative(fun, mode="hess"))
+    jac = jit(Derivative(vecfun, mode="fwd"))
+
+    @jit
+    def con(x):
+        cs = []
+        for i in range(m):
+            cs.append(x @ Qs[p + i] @ x + gs[p + i] @ x)
+        return jnp.array(cs)
+
+    conjac = jit(Derivative(con, mode="fwd"))
+    conhess = jit(Derivative(lambda x, v: v @ con(x), mode="hess"))
+
+    constraint = NonlinearConstraint(con, -np.inf, 0, conjac, conhess)
+    x0 = rng.random(n)
+
+    out1 = fmin_lag_stel(
+        fun,
+        x0,
+        grad,
+        hess=hess,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale=1,
+        ftol=0,
+        xtol=1e-6,
+        gtol=1e-6,
+        ctol=1e-6,
+        verbose=3,
+        maxiter=None,
+        options={},
+    )
+
+    out2 = fmin_lag_ls_stel(
+        vecfun,
+        x0,
+        jac,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale=1,
+        ftol=0,
+        xtol=1e-6,
+        gtol=1e-6,
+        ctol=1e-6,
+        verbose=3,
+        maxiter=None,
+        options={},
+    )
+
+    out3 = minimize(
+        fun,
+        x0,
+        jac=grad,
+        hess=hess,
+        constraints=constraint,
+        method="trust-constr",
+        options={"verbose": 3, "maxiter": 1000},
+    )
+
+    np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-4, atol=1e-4)

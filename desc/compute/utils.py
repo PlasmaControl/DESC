@@ -744,9 +744,8 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
 
-    integrands = (spacing.prod(axis=1) * jnp.nan_to_num(q).T).T
-    assert integrands.ndim <= 3  # otherwise replace @ with jnp.tensordot.
-    # `integrands` (and `q`) has shape (g.size, f.size, v.size), where
+    integrands = (jnp.prod(spacing, axis=1) * jnp.nan_to_num(q).T).T
+    # `integrands` may have shape (g.size, f.size, v.size), where
     #     g is the grid function depending on the integration variables
     #     f is a function which may be independent of the integration variables
     #     v is the vector of components of f.

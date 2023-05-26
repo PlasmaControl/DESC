@@ -1,7 +1,7 @@
 """Augmented Langrangian for scalar valued objectives."""
 
 import numpy as np
-from scipy.optimize import OptimizeResult
+from scipy.optimize import NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
 from desc.optimize.fmin_scalar import fmintr
@@ -97,39 +97,29 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
 
     """
     if constraint is None:
-        # just do regular unconstrained stuff
-        return fmintr(
-            fun,
-            x0,
-            grad,
-            hess,
-            bounds,
-            args,
-            x_scale=x_scale,
-            ftol=ftol,
-            xtol=xtol,
-            gtol=gtol,
-            verbose=verbose,
-            maxiter=maxiter,
-            options=options,
+        # create a dummy constraint
+        constraint = NonlinearConstraint(
+            fun=lambda x, *args: jnp.array([0.0]),
+            lb=0.0,
+            ub=0.0,
+            jac=lambda x, *args: jnp.zeros((1, x.size)),
         )
-    else:
-        (
-            z0,
-            fun_wrapped,
-            grad_wrapped,
-            hess_wrapped,
-            constraint_wrapped,
-            zbounds,
-            z2xs,
-        ) = inequality_to_bounds(
-            x0,
-            fun,
-            grad,
-            hess,
-            constraint,
-            bounds,
-        )
+    (
+        z0,
+        fun_wrapped,
+        grad_wrapped,
+        hess_wrapped,
+        constraint_wrapped,
+        zbounds,
+        z2xs,
+    ) = inequality_to_bounds(
+        x0,
+        fun,
+        grad,
+        hess,
+        constraint,
+        bounds,
+    )
 
     def lagfun(z, lmbda, mu, *args):
         c = constraint_wrapped.fun(z, *args)

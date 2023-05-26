@@ -79,7 +79,6 @@ class ForceBalance(_Objective):
         if target is None and bounds is None:
             target = 0
         self._grid = grid
-
         super().__init__(
             eq=eq,
             target=target,

@@ -695,6 +695,7 @@ class _Objective(IOAble, ABC):
             "grad": {},
             "hess": {},
         }
+
         for arg in arg_order:
             if arg in self.args:  # derivative wrt arg
                 self._derivatives["jac_unscaled"][arg] = Derivative(

@@ -331,8 +331,6 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
                 f"No nonlinear constraints detected, ignoring wrapper method {wrapper}"
             )
         return objective, nonlinear_constraint
-    if wrapper is None and optimizers[method]["equality_constraints"]:
-        return objective, nonlinear_constraint
     if wrapper is None and not optimizers[method]["equality_constraints"]:
         warnings.warn(
             FutureWarning(

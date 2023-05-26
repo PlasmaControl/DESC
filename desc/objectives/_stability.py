@@ -261,7 +261,6 @@ class MagneticWell(_Objective):
         if target is None and bounds is None:
             bounds = (0, np.inf)
         self._grid = grid
-
         super().__init__(
             eq=eq,
             target=target,

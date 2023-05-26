@@ -83,7 +83,6 @@ class LinearConstraintProjection(ObjectiveFunction):
         """
         timer = Timer()
         timer.start("Linear constraint projection build")
-        self._eq = eq
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should

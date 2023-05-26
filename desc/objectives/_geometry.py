@@ -64,7 +64,6 @@ class AspectRatio(_Objective):
         if target is None and bounds is None:
             target = 2
         self._grid = grid
-
         super().__init__(
             eq=eq,
             target=target,

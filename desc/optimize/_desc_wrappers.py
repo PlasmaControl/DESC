@@ -1,4 +1,4 @@
-import numpy as np
+from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp
 
@@ -8,23 +8,26 @@ from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
 from .stochastic import sgd
-from .utils import inequality_to_bounds
 
 
 @register_optimizer(
-    name="auglag",
-    description="Augmented Lagrangian approach to constrained optimization",
-    scalar=False,
+    name=["auglag", "auglag-bfgs"],
+    description=[
+        "Augmented Lagrangian method with trust region subproblem."
+        "Augmented Lagrangian method with trust region subproblem."
+        + "Uses BFGS to approximate hessian",
+    ],
+    scalar=True,
     equality_constraints=True,
     inequality_constraints=True,
     stochastic=False,
-    hessian=False,
+    hessian=[True, False],
+    GPU=True,
 )
 def _optimize_desc_aug_lagrangian(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for desc.optimize.fmin_lag_ls_stel.
-
 
     Parameters
     ----------
@@ -66,50 +69,42 @@ def _optimize_desc_aug_lagrangian(
 
     """
     options = {} if options is None else options
-    options.setdefault("maxiter", np.iinfo(np.int32).max)
-    options.setdefault("disp", False)
-    x_scale = 1 if x_scale == "auto" else x_scale
-    if isinstance(x_scale, str):
-        raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
-    bounds = (-jnp.inf, jnp.inf)
+    hess = objective.hess if "bfgs" not in method else "bfgs"
+    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
+        options.setdefault("initial_trust_ratio", 1e-3)
+        options.setdefault("max_trust_radius", 1.0)
+    options["max_nfev"] = stoptol["max_nfev"]
+    options["max_ngev"] = stoptol["max_ngev"]
+    options["max_nhev"] = stoptol["max_nhev"]
+
     if constraint is not None:
-        (
-            z0,
-            fun_wrapped,
-            grad_wrapped,
-            hess_wrapped,
-            constraint_wrapped,
-            zbounds,
-            z2xs,
-        ) = inequality_to_bounds(
-            x0,
-            objective.compute_scalar,
-            objective.grad,
-            objective.hess,
-            constraint,
-            bounds,
+        lb, ub = constraint.bounds_scaled
+        constraint_wrapped = NonlinearConstraint(
+            constraint.compute_scaled,
+            lb,
+            ub,
+            constraint.jac_scaled,
         )
     else:
         constraint_wrapped = None
 
     result = fmin_lag_stel(
-        fun_wrapped,
-        constraint_wrapped,
-        x0=z0,
-        bounds=zbounds,
+        objective.compute_scalar,
+        x0=x0,
+        grad=objective.grad,
+        hess=hess,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint_wrapped,
         args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
         gtol=stoptol["gtol"],
-        maxiter=stoptol["maxiter"],
+        ctol=stoptol["ctol"],
         verbose=verbose,
-        callback=None,
+        maxiter=stoptol["maxiter"],
         options=options,
     )
-    x, s = z2xs(result["x"])
-    result["x"] = x
-    result["allx"] = [x]
     return result
 
 
@@ -122,12 +117,12 @@ def _optimize_desc_aug_lagrangian(
     inequality_constraints=True,
     stochastic=False,
     hessian=False,
+    GPU=True,
 )
 def _optimize_desc_aug_lagrangian_least_squares(
     objective, constraint, x0, method, x_scale, verbose, stoptol, options=None
 ):
     """Wrapper for desc.optimize.fmin_lag_ls_stel.
-
 
     Parameters
     ----------
@@ -169,50 +164,39 @@ def _optimize_desc_aug_lagrangian_least_squares(
 
     """
     options = {} if options is None else options
-    options.setdefault("maxiter", np.iinfo(np.int32).max)
-    options.setdefault("disp", False)
-    x_scale = 1 if x_scale == "auto" else x_scale
-    if isinstance(x_scale, str):
-        raise ValueError(f"Method {method} does not support x_scale type {x_scale}")
-    bounds = (-jnp.inf, jnp.inf)
+    if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
+        options.setdefault("initial_trust_radius", 1e-3)
+        options.setdefault("max_trust_radius", 1.0)
+    options["max_nfev"] = stoptol["max_nfev"]
+    options["max_njev"] = stoptol["max_njev"]
+
     if constraint is not None:
-        (
-            z0,
-            fun_wrapped,
-            grad_wrapped,
-            hess_wrapped,
-            constraint_wrapped,
-            zbounds,
-            z2xs,
-        ) = inequality_to_bounds(
-            x0,
-            objective.compute_scaled_error,
-            objective.grad,
-            objective.hess,
-            constraint,
-            bounds,
+        lb, ub = constraint.bounds_scaled
+        constraint_wrapped = NonlinearConstraint(
+            constraint.compute_scaled,
+            lb,
+            ub,
+            constraint.jac_scaled,
         )
     else:
         constraint_wrapped = None
 
     result = fmin_lag_ls_stel(
-        fun_wrapped,
-        constraint_wrapped,
-        x0=z0,
-        bounds=zbounds,
+        objective.compute_scaled_error,
+        x0=x0,
+        jac=objective.jac_scaled,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint_wrapped,
         args=(),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
         gtol=stoptol["gtol"],
-        maxiter=stoptol["maxiter"],
+        ctol=stoptol["ctol"],
         verbose=verbose,
-        callback=None,
+        maxiter=stoptol["maxiter"],
         options=options,
     )
-    x, s = z2xs(result["x"])
-    result["x"] = x
-    result["allx"] = [x]
     return result
 
 

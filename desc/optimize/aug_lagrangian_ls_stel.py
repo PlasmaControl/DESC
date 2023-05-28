@@ -167,9 +167,17 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     constr_violation = np.linalg.norm(c, ord=np.inf)
 
     if verbose > 1:
-        print_header_nonlinear(constrained=True)
+        print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
         print_iteration_nonlinear(
-            iteration, nfev, cost, actual_reduction, step_norm, g_norm, constr_violation
+            iteration,
+            nfev,
+            cost,
+            actual_reduction,
+            step_norm,
+            g_norm,
+            constr_violation,
+            mu,
+            jnp.max(jnp.abs(lmbda)),
         )
 
     while iteration < maxiter:
@@ -216,6 +224,8 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
                 step_norm,
                 g_norm,
                 constr_violation,
+                mu,
+                jnp.max(jnp.abs(lmbda)),
             )
 
         # check if we can stop the outer loop

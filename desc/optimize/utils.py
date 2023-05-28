@@ -316,7 +316,7 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
     return 0.5 * q + l
 
 
-def print_header_nonlinear(constrained=False):
+def print_header_nonlinear(constrained=False, *args):
     """Print a pretty header."""
     s = "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
         "Iteration",
@@ -327,12 +327,21 @@ def print_header_nonlinear(constrained=False):
         "Optimality",
     )
     if constrained:
-        s += "{:^24}".format("Constraint violation")
+        s += "{:^15}".format("Constr viol.")
+    for arg in args:
+        s += "{:^15}".format(arg)
     print(s)
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality, constr_violation=None
+    iteration,
+    nfev,
+    cost,
+    cost_reduction,
+    step_norm,
+    optimality,
+    constr_violation=None,
+    *args,
 ):
     """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
@@ -348,27 +357,29 @@ def print_iteration_nonlinear(
     if cost is None or abs(cost) == np.inf:
         cost = " " * 15
     else:
-        cost = "{:^15.4e}".format(cost)
+        cost = "{: ^15.3e}".format(cost)
 
     if cost_reduction is None or abs(cost_reduction) == np.inf:
         cost_reduction = " " * 15
     else:
-        cost_reduction = "{:^15.2e}".format(cost_reduction)
+        cost_reduction = "{: ^15.3e}".format(cost_reduction)
 
     if step_norm is None or abs(step_norm) == np.inf:
         step_norm = " " * 15
     else:
-        step_norm = "{:^15.2e}".format(step_norm)
+        step_norm = "{:^15.3e}".format(step_norm)
 
     if optimality is None or abs(optimality) == np.inf:
         optimality = " " * 15
     else:
-        optimality = "{:^15.2e}".format(optimality)
+        optimality = "{:^15.3e}".format(optimality)
     s = "{}{}{}{}{}{}".format(
         iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
     if constr_violation is not None:
-        s += "{:^24.2e}".format(constr_violation)
+        s += "{:^15.3e}".format(constr_violation)
+    for arg in args:
+        s += "{:^15.3e}".format(arg)
     print(s)
 
 

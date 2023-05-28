@@ -167,6 +167,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         _J = constraint_wrapped.jac(z, *args)
         _g = grad_wrapped(z, *args)
         y = jnp.linalg.lstsq(_J.T, _g)[0]
+        y = jnp.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
 
     if maxiter is None:
         maxiter = z.size * 100

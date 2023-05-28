@@ -27,6 +27,8 @@ from desc.objectives import (
     FixPressure,
     FixPsi,
     ForceBalance,
+    GenericObjective,
+    MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
     Volume,
@@ -788,7 +790,7 @@ def test_auglag():
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint,
         args=(),
-        x_scale=1,
+        x_scale="auto",
         ftol=0,
         xtol=1e-6,
         gtol=1e-6,
@@ -797,7 +799,7 @@ def test_auglag():
         maxiter=None,
         options={},
     )
-
+    print(out1["active_mask"])
     out2 = fmin_lag_ls_stel(
         vecfun,
         x0,
@@ -805,7 +807,7 @@ def test_auglag():
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint,
         args=(),
-        x_scale=1,
+        x_scale="auto",
         ftol=0,
         xtol=1e-6,
         gtol=1e-6,
@@ -827,3 +829,92 @@ def test_auglag():
 
     np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-4, atol=1e-4)
     np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_constrained_AL_lsq():
+    """Tests that the least squares augmented Lagrangian optimizer does something."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(),  # fix Z shape but not R
+        FixPressure(),  # fix pressure profile
+        FixIota(),  # fix rotational transform profile
+        FixPsi(),  # fix total toroidal magnetic flux
+    )
+    # some random constraints to keep the shape from getting wacky
+    V = eq.compute("V")["V"]
+    Vbounds = (0.95 * V, 1.05 * V)
+    AR = eq.compute("R0/a")["R0/a"]
+    ARbounds = (0.95 * AR, 1.05 * AR)
+    constraints += (
+        Volume(bounds=Vbounds),
+        AspectRatio(bounds=ARbounds),
+        MagneticWell(bounds=(0, jnp.inf)),
+        ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
+    )
+    H = eq.compute(
+        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H"]
+    obj = ObjectiveFunction(MeanCurvature(target=H))
+    eq2, result = eq.optimize(
+        objective=obj,
+        constraints=constraints,
+        optimizer="auglag",
+        maxiter=5000,
+        verbose=3,
+        x_scale="auto",
+        copy=True,
+        options={},
+    )
+    V2 = eq2.compute("V")["V"]
+    AR2 = eq2.compute("R0/a")["R0/a"]
+    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
+    assert ARbounds[0] < AR2 < ARbounds[1]
+    assert Vbounds[0] < V2 < Vbounds[1]
+    assert eq2.is_nested()
+    np.testing.assert_array_less(-Dwell, 0)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_constrained_AL_scalar():
+    """Tests that the augmented Lagrangian constrained optimizer does something."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(),  # fix Z shape but not R
+        FixPressure(),  # fix pressure profile
+        FixIota(),  # fix rotational transform profile
+        FixPsi(),  # fix total toroidal magnetic flux
+    )
+    V = eq.compute("V")["V"]
+    AR = eq.compute("R0/a")["R0/a"]
+    constraints += (
+        Volume(target=V),
+        AspectRatio(target=AR),
+        MagneticWell(bounds=(0, jnp.inf)),
+        ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
+    )
+    # Dummy objective to return 0, we just want a feasible solution.
+    obj = ObjectiveFunction(GenericObjective("0"))
+    eq2, result = eq.optimize(
+        objective=obj,
+        constraints=constraints,
+        optimizer="auglag",
+        maxiter=5000,
+        verbose=3,
+        x_scale="auto",
+        copy=True,
+        options={},
+    )
+    V2 = eq2.compute("V")["V"]
+    AR2 = eq2.compute("R0/a")["R0/a"]
+    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
+    np.testing.assert_allclose(AR, AR2)
+    np.testing.assert_allclose(V, V2)
+    assert eq2.is_nested()
+    np.testing.assert_array_less(-Dwell, 1e-4)

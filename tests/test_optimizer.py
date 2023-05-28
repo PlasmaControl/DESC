@@ -38,9 +38,9 @@ from desc.optimize import (
     LinearConstraintProjection,
     Optimizer,
     ProximalProjection,
-    fmin_lag_ls_stel,
-    fmin_lag_stel,
+    fmin_auglag,
     fmintr,
+    lsq_auglag,
     lsqtr,
     optimizers,
     sgd,
@@ -782,7 +782,7 @@ def test_auglag():
     constraint = NonlinearConstraint(con, -np.inf, 0, conjac, conhess)
     x0 = rng.random(n)
 
-    out1 = fmin_lag_stel(
+    out1 = fmin_auglag(
         fun,
         x0,
         grad,
@@ -800,7 +800,7 @@ def test_auglag():
         options={},
     )
     print(out1["active_mask"])
-    out2 = fmin_lag_ls_stel(
+    out2 = lsq_auglag(
         vecfun,
         x0,
         jac,
@@ -862,8 +862,8 @@ def test_constrained_AL_lsq():
     eq2, result = eq.optimize(
         objective=obj,
         constraints=constraints,
-        optimizer="auglag",
-        maxiter=5000,
+        optimizer="auglag-lsq",
+        maxiter=500,
         verbose=3,
         x_scale="auto",
         copy=True,
@@ -905,7 +905,7 @@ def test_constrained_AL_scalar():
         objective=obj,
         constraints=constraints,
         optimizer="auglag",
-        maxiter=5000,
+        maxiter=500,
         verbose=3,
         x_scale="auto",
         copy=True,
@@ -917,4 +917,4 @@ def test_constrained_AL_scalar():
     np.testing.assert_allclose(AR, AR2)
     np.testing.assert_allclose(V, V2)
     assert eq2.is_nested()
-    np.testing.assert_array_less(-Dwell, 1e-4)
+    np.testing.assert_array_less(-Dwell, 0)

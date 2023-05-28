@@ -180,6 +180,9 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     g_norm = np.linalg.norm(g, ord=np.inf)
     constr_violation = np.linalg.norm(c, ord=np.inf)
 
+    options.setdefault("initial_trust_radius", "scipy")
+    options["return_tr"] = True
+
     if verbose > 1:
         print_header_nonlinear(True, "Penalty param", "max(|mltplr|)")
         print_iteration_nonlinear(
@@ -200,17 +203,14 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
             z,
             lagjac,
             bounds=zbounds,
-            args=(
-                lmbda,
-                mu,
-            )
-            + args,
+            args=(lmbda, mu) + args,
             x_scale=x_scale,
-            ftol=ftol,
-            xtol=xtol,
+            ftol=0,
+            xtol=0,
             gtol=gtolk,
             maxiter=maxiter_inner,
             verbose=0,
+            options=options.copy(),
         )
         # update outer counters
         allx += result["allx"]
@@ -221,12 +221,15 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
         cost = 1 / 2 * jnp.dot(f, f)
         c = constraint_wrapped.fun(z)
         nfev += 1
-        njev += 1
         constr_violation = np.linalg.norm(c, ord=np.inf)
         step_norm = np.linalg.norm(zold - z)
         z_norm = np.linalg.norm(z)
         g_norm = result["optimality"]
         actual_reduction = cost_old - cost
+        # don't stop if we increased cost
+        reduction_ratio = jnp.sign(actual_reduction)
+        # reuse the previous trust radius on the next pass
+        options["initial_trust_radius"] = float(result["alltr"][-1])
         iteration = iteration + 1
 
         if verbose > 1:
@@ -249,7 +252,7 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
             step_norm,
             z_norm,
             g_norm,
-            1,
+            reduction_ratio,
             ftol,
             xtol,
             gtol,

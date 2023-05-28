@@ -405,6 +405,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         success=success,
         fun=f,
         grad=g,
+        v=v,
         hess=H,
         optimality=g_norm,
         nfev=nfev,

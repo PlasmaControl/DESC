@@ -73,6 +73,7 @@ class Optimizer(IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
+        ctol=None,
         x_scale="auto",
         verbose=1,
         maxiter=None,
@@ -102,6 +103,10 @@ class Optimizer(IOAble):
             Absolute tolerance for termination by the norm of the gradient.
             Optimizer terminates when ``norm(g) < gtol``, where
             If None, defaults to 1e-8.
+        ctol : float or None, optional
+            Stopping tolerance on infinity norm of the constraint violation.
+            Optimization will stop when ctol and one of the other tolerances
+            are satisfied. If None, defaults to 1e-4.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -204,7 +209,7 @@ class Optimizer(IOAble):
             ftol,
             xtol,
             gtol,
-            None,
+            ctol,
             maxiter,
             options,
         )

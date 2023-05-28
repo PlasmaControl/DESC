@@ -158,8 +158,17 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     max_nfev = options.pop("max_nfev", 5 * maxiter * maxiter_inner + 1)
     max_njev = options.pop("max_njev", maxiter * maxiter_inner + 1)
 
-    gtolk = 1 / (10 * np.linalg.norm(mu))
-    ctolk = 1 / (np.linalg.norm(mu) ** (0.1))
+    # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
+    omega = options.pop("omega", 1.0)
+    eta = options.pop("eta", 1.0)
+    alpha_omega = options.pop("alpha_omega", 1.0)
+    beta_omega = options.pop("beta_omega", 1.0)
+    alpha_eta = options.pop("alpha_eta", 0.1)
+    beta_eta = options.pop("beta_eta", 0.9)
+    tau = options.pop("tau", 10)
+
+    gtolk = omega / mu**alpha_omega
+    ctolk = eta / mu**alpha_eta
     zold = z
     cost_old = cost
     allx = []
@@ -258,15 +267,16 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
         if success is not None:
             break
 
-        # otherwise update lagrangian stuff and continue
-        if constr_violation < ctolk:
+        if not result["success"]:  # did the subproblem actually finish, or maxiter?
+            continue
+        elif constr_violation < ctolk:
             lmbda = lmbda - mu * c
-            ctolk = ctolk / (np.max(mu) ** (0.9))
-            gtolk = gtolk / (np.max(mu))
+            ctolk = ctolk / (mu**beta_eta)
+            gtolk = gtolk / (mu**beta_omega)
         else:
-            mu = 5.0 * mu
-            ctolk = ctolk / (np.max(mu) ** (0.1))
-            gtolk = gtolk / np.max(mu)
+            mu = tau * mu
+            ctolk = eta / (mu**alpha_eta)
+            gtolk = omega / (mu**alpha_omega)
 
         zold = z
         cost_old = cost

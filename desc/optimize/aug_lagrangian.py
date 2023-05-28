@@ -162,18 +162,19 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
     c = constraint_wrapped.fun(z)
     nfev += 1
 
-    if maxiter is None:
-        maxiter = z.size
     mu = options.pop("initial_penalty_parameter", 10)
     lmbda = options.pop("initial_multipliers", None)
     if lmbda is None:  # use least squares multiplier estimates
         _J = constraint_wrapped.jac(z, *args)
         _g = grad_wrapped(z, *args)
         lmbda = jnp.linalg.lstsq(_J.T, _g)[0]
+
+    if maxiter is None:
+        maxiter = z.size * 100
     maxiter_inner = options.pop("maxiter_inner", 20)
-    max_nfev = options.pop("max_nfev", 5 * maxiter * maxiter_inner + 1)
-    max_ngev = options.pop("max_ngev", maxiter * maxiter_inner + 1)
-    max_nhev = options.pop("max_nhev", maxiter * maxiter_inner + 1)
+    max_nfev = options.pop("max_nfev", 5 * maxiter + 1)
+    max_ngev = options.pop("max_ngev", maxiter + 1)
+    max_nhev = options.pop("max_nhev", maxiter + 1)
 
     # notation following Conn & Gould, algorithm 14.4.2, but with our mu = their mu^-1
     omega = options.pop("omega", 1.0)
@@ -234,6 +235,7 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
         nfev += result["nfev"]
         ngev += result["ngev"]
         nhev += result["nhev"]
+        iteration += result["nit"]
         zold = z
         fold = f
         z = result["x"]
@@ -249,7 +251,6 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
         reduction_ratio = jnp.sign(actual_reduction)
         # reuse the previous trust radius on the next pass
         options["initial_trust_radius"] = float(result["alltr"][-1])
-        iteration = iteration + 1
 
         if verbose > 1:
             print_iteration_nonlinear(

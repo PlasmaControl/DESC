@@ -2,8 +2,8 @@ from scipy.optimize import NonlinearConstraint
 
 from desc.backend import jnp
 
-from .aug_lagrangian import fmin_lag_stel
-from .aug_lagrangian_ls_stel import fmin_lag_ls_stel
+from .aug_lagrangian import fmin_auglag
+from .aug_lagrangian_ls import lsq_auglag
 from .fmin_scalar import fmintr
 from .least_squares import lsqtr
 from .optimizer import register_optimizer
@@ -88,7 +88,7 @@ def _optimize_desc_aug_lagrangian(
     else:
         constraint_wrapped = None
 
-    result = fmin_lag_stel(
+    result = fmin_auglag(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
@@ -181,7 +181,7 @@ def _optimize_desc_aug_lagrangian_least_squares(
     else:
         constraint_wrapped = None
 
-    result = fmin_lag_ls_stel(
+    result = lsq_auglag(
         objective.compute_scaled_error,
         x0=x0,
         jac=objective.jac_scaled,

@@ -15,7 +15,7 @@ from .utils import (
 )
 
 
-def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
+def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
@@ -123,21 +123,21 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     # L(x,y,mu) = 1/2 f(x)^2 - y*c(x) + mu/2 c(x)^2 + y^2/(2*mu)
     # = 1/2 f(x)^2 + 1/2 [-y/sqrt(mu) + sqrt(mu) c(x)]^2
 
-    def lagfun(z, lmbda, mu, *args):
+    def lagfun(z, y, mu, *args):
         f = fun_wrapped(z, *args)
         c = constraint_wrapped.fun(z, *args)
-        c = -lmbda / jnp.sqrt(mu) + jnp.sqrt(mu) * c
+        c = -y / jnp.sqrt(mu) + jnp.sqrt(mu) * c
         return jnp.concatenate((f, c))
 
-    def lagjac(z, lmbda, mu, *args):
+    def lagjac(z, y, mu, *args):
         Jf = jac_wrapped(z, *args)
         Jc = constraint_wrapped.jac(z, *args)
         Jc = jnp.sqrt(mu) * Jc
         return jnp.vstack((Jf, Jc))
 
-    def laggrad(z, lmbda, mu, *args):
-        f = lagfun(z, lmbda, mu, *args)
-        J = lagjac(z, lmbda, mu, *args)
+    def laggrad(z, y, mu, *args):
+        f = lagfun(z, y, mu, *args)
+        J = lagjac(z, y, mu, *args)
         return f @ J
 
     nfev = 0
@@ -151,11 +151,11 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     nfev += 1
 
     mu = options.pop("initial_penalty_parameter", 10)
-    lmbda = options.pop("initial_multipliers", None)
-    if lmbda is None:  # use least squares multiplier estimates
+    y = options.pop("initial_multipliers", None)
+    if y is None:  # use least squares multiplier estimates
         _J = constraint_wrapped.jac(z, *args)
         _g = f @ jac_wrapped(z, *args)
-        lmbda = jnp.linalg.lstsq(_J.T, _g)[0]
+        y = jnp.linalg.lstsq(_J.T, _g)[0]
 
     if maxiter is None:
         maxiter = z.size * 100
@@ -183,7 +183,7 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     step_norm = jnp.inf
     actual_reduction = jnp.inf
 
-    g_norm = np.linalg.norm(laggrad(z, lmbda, mu, *args), ord=np.inf)
+    g_norm = np.linalg.norm(laggrad(z, y, mu, *args), ord=np.inf)
     constr_violation = np.linalg.norm(c, ord=np.inf)
 
     options.setdefault("initial_trust_radius", "scipy")
@@ -200,7 +200,7 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
             g_norm,
             constr_violation,
             mu,
-            jnp.max(jnp.abs(lmbda)),
+            jnp.max(jnp.abs(y)),
         )
 
     while iteration < maxiter:
@@ -209,7 +209,7 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
             z,
             lagjac,
             bounds=zbounds,
-            args=(lmbda, mu) + args,
+            args=(y, mu) + args,
             x_scale=x_scale,
             ftol=0,
             xtol=0,
@@ -248,7 +248,7 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
                 g_norm,
                 constr_violation,
                 mu,
-                jnp.max(jnp.abs(lmbda)),
+                jnp.max(jnp.abs(y)),
             )
 
         # check if we can stop the outer loop
@@ -279,7 +279,7 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
         if not result["success"]:  # did the subproblem actually finish, or maxiter?
             continue
         elif constr_violation < ctolk:
-            lmbda = lmbda - mu * c
+            y = y - mu * c
             ctolk = ctolk / (mu**beta_eta)
             gtolk = gtolk / (mu**beta_omega)
         else:
@@ -294,7 +294,8 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     active_mask = find_active_constraints(z, zbounds[0], zbounds[1], rtol=xtol)
     result = OptimizeResult(
         x=x,
-        y=lmbda,
+        s=s,
+        y=y,
         success=success,
         cost=cost,
         fun=f,

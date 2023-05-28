@@ -139,7 +139,6 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
                 Jc = constraint_wrapped.jac(x, *args)
                 Hc1 = constraint_wrapped.hess(x, lmbda)
                 Hc2 = constraint_wrapped.hess(x, c)
-                # ignoring higher order derivatives of constraints for now
                 return Hf - Hc1 + mu * (Hc2 + jnp.dot(Jc.T, Jc))
 
         else:
@@ -160,10 +159,8 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
-    g = grad_wrapped(z, *args)
     c = constraint_wrapped.fun(z)
     nfev += 1
-    ngev += 1
 
     if maxiter is None:
         maxiter = z.size
@@ -197,7 +194,7 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
     message = None
     step_norm = jnp.inf
     actual_reduction = jnp.inf
-    g_norm = np.linalg.norm(g, ord=np.inf)
+    g_norm = np.linalg.norm(laggrad(z, lmbda, mu, *args), ord=np.inf)
     constr_violation = np.linalg.norm(c, ord=np.inf)
 
     options.setdefault("initial_trust_radius", "scipy")
@@ -309,7 +306,8 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
         y=lmbda,
         success=success,
         fun=f,
-        grad=g,
+        grad=result["grad"],
+        v=result["v"],
         optimality=g_norm,
         nfev=nfev,
         ngev=ngev,

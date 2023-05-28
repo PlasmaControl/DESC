@@ -132,18 +132,20 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
         Jc = 1 / (np.sqrt(2 * mu)) * (mu * Jc)
         return jnp.vstack((Jf, Jc))
 
+    def laggrad(z, lmbda, mu, *args):
+        f = lagfun(z, lmbda, mu, *args)
+        J = lagjac(z, lmbda, mu, *args)
+        return f @ J
+
     nfev = 0
     njev = 0
     iteration = 0
 
     z = z0.copy()
     f = fun_wrapped(z, *args)
-    J = jac_wrapped(z, *args)
     cost = 1 / 2 * jnp.dot(f, f)
-    g = jnp.dot(f, J)
     c = constraint_wrapped.fun(z)
     nfev += 1
-    njev += 1
 
     if maxiter is None:
         maxiter = z.size
@@ -177,7 +179,8 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
     message = None
     step_norm = jnp.inf
     actual_reduction = jnp.inf
-    g_norm = np.linalg.norm(g, ord=np.inf)
+
+    g_norm = np.linalg.norm(laggrad(z, lmbda, mu, *args), ord=np.inf)
     constr_violation = np.linalg.norm(c, ord=np.inf)
 
     options.setdefault("initial_trust_radius", "scipy")
@@ -292,8 +295,9 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
         success=success,
         cost=cost,
         fun=f,
-        grad=g,
-        jac=J,
+        grad=result["grad"],
+        v=result["v"],
+        jac=result["jac"],
         optimality=g_norm,
         nfev=nfev,
         njev=njev,

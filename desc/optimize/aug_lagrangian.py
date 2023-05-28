@@ -1,6 +1,5 @@
 """Augmented Langrangian for scalar valued objectives."""
 
-import numpy as np
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
@@ -195,8 +194,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     message = None
     step_norm = jnp.inf
     actual_reduction = jnp.inf
-    g_norm = np.linalg.norm(laggrad(z, y, mu, *args), ord=np.inf)
-    constr_violation = np.linalg.norm(c, ord=np.inf)
+    g_norm = jnp.linalg.norm(laggrad(z, y, mu, *args), ord=jnp.inf)
+    constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
 
     options.setdefault("initial_trust_radius", "scipy")
     options["return_tr"] = True
@@ -242,9 +241,9 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         f = fun_wrapped(z, *args)
         c = constraint_wrapped.fun(z, *args)
         nfev += 1
-        constr_violation = np.linalg.norm(c, ord=np.inf)
-        step_norm = np.linalg.norm(zold - z)
-        z_norm = np.linalg.norm(z)
+        constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
+        step_norm = jnp.linalg.norm(zold - z)
+        z_norm = jnp.linalg.norm(z)
         g_norm = result["optimality"]
         actual_reduction = fold - f
         # don't stop if we increased cost

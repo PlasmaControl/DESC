@@ -1,6 +1,5 @@
 """Augmented Langrangian for vector valued objectives."""
 
-import numpy as np
 from scipy.optimize import NonlinearConstraint, OptimizeResult
 
 from desc.backend import jnp
@@ -184,8 +183,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     step_norm = jnp.inf
     actual_reduction = jnp.inf
 
-    g_norm = np.linalg.norm(laggrad(z, y, mu, *args), ord=np.inf)
-    constr_violation = np.linalg.norm(c, ord=np.inf)
+    g_norm = jnp.linalg.norm(laggrad(z, y, mu, *args), ord=jnp.inf)
+    constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
 
     options.setdefault("initial_trust_radius", "scipy")
     options["return_tr"] = True
@@ -229,9 +228,9 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
         cost = 1 / 2 * jnp.dot(f, f)
         c = constraint_wrapped.fun(z)
         nfev += 1
-        constr_violation = np.linalg.norm(c, ord=np.inf)
-        step_norm = np.linalg.norm(zold - z)
-        z_norm = np.linalg.norm(z)
+        constr_violation = jnp.linalg.norm(c, ord=jnp.inf)
+        step_norm = jnp.linalg.norm(zold - z)
+        z_norm = jnp.linalg.norm(z)
         g_norm = result["optimality"]
         actual_reduction = cost_old - cost
         # don't stop if we increased cost
@@ -270,7 +269,7 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
             njev,
             max_njev,
             0,
-            np.inf,
+            jnp.inf,
             constr_violation=constr_violation,
             ctol=ctol,
         )

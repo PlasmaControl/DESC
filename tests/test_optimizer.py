@@ -423,12 +423,12 @@ def test_maxiter_1_and_0_solve():
     objectives = ForceBalance()
     obj = ObjectiveFunction(objectives)
     eq = desc.examples.get("SOLOVEV")
-    for opt in ["lsq-exact", "dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
         eq, result = eq.solve(
             maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
         assert result["nit"] == 1
-    for opt in ["lsq-exact", "dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
         eq, result = eq.solve(
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
@@ -862,7 +862,7 @@ def test_constrained_AL_lsq():
     eq2, result = eq.optimize(
         objective=obj,
         constraints=constraints,
-        optimizer="auglag-lsq",
+        optimizer="lsq-auglag",
         maxiter=500,
         verbose=3,
         x_scale="auto",
@@ -904,7 +904,7 @@ def test_constrained_AL_scalar():
     eq2, result = eq.optimize(
         objective=obj,
         constraints=constraints,
-        optimizer="auglag",
+        optimizer="fmin-auglag",
         maxiter=500,
         verbose=3,
         x_scale="auto",

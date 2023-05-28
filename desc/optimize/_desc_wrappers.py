@@ -11,7 +11,7 @@ from .stochastic import sgd
 
 
 @register_optimizer(
-    name="auglag",
+    name="fmin-auglag",
     description="Augmented Lagrangian method with trust region subproblem.",
     scalar=True,
     equality_constraints=True,
@@ -104,7 +104,7 @@ def _optimize_desc_aug_lagrangian(
 
 
 @register_optimizer(
-    name="auglag-lsq",
+    name="lsq-auglag",
     description="Least Squares Augmented Lagrangian approach "
     + "to constrained optimization",
     scalar=False,
@@ -276,12 +276,23 @@ def _optimize_desc_least_squares(
 
 
 @register_optimizer(
-    name=["dogleg", "subspace", "dogleg-bfgs", "subspace-bfgs"],
+    name=[
+        "fmin-exact",
+        "fmin-dogleg",
+        "fmin-subspace",
+        "fmin-exact-bfgs",
+        "fmin-dogleg-bfgs",
+        "fmin-subspace-bfgs",
+    ],
     description=[
+        "Trust region method using iterative cholesky method to exactly solve the "
+        + "trust region subproblem.",
         "Trust region method using Powell's dogleg method to approximately solve the "
         + "trust region subproblem.",
         "Trust region method solving the subproblem over the 2d subspace spanned by "
         + "the gradient and newton direction.",
+        "Trust region method using iterative cholesky method to exactly solve the "
+        + "trust region subproblem. Uses BFGS to approximate hessian",
         "Trust region method using Powell's dogleg method to approximately solve the "
         + "trust region subproblem. Uses BFGS to approximate hessian",
         "Trust region method solving the subproblem over the 2d subspace spanned by "
@@ -291,7 +302,7 @@ def _optimize_desc_least_squares(
     equality_constraints=False,
     inequality_constraints=False,
     stochastic=False,
-    hessian=[True, True, False, False],
+    hessian=[True, True, True, False, False, False],
     GPU=True,
 )
 def _optimize_desc_fmin_scalar(
@@ -354,7 +365,7 @@ def _optimize_desc_fmin_scalar(
         grad=objective.grad,
         hess=hess,
         args=(),
-        method=method.replace("-bfgs", ""),
+        method=method.replace("-bfgs", "").replace("fmin-", ""),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],

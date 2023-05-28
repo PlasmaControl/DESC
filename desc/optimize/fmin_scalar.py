@@ -168,7 +168,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         subproblem = trust_region_step_exact_cho
     else:
         raise ValueError(
-            colored("method should be one of 'dogleg' or 'subspace'", "red")
+            colored("method should be one of 'exact', 'dogleg' or 'subspace'", "red")
         )
 
     if maxiter is None:

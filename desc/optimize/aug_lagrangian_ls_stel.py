@@ -120,16 +120,19 @@ def fmin_lag_ls_stel(  # noqa: C901 - FIXME: simplify this
         bounds,
     )
 
+    # L(x,y,mu) = 1/2 f(x)^2 - y*c(x) + mu/2 c(x)^2 + y^2/(2*mu)
+    # = 1/2 f(x)^2 + 1/2 [-y/sqrt(mu) + sqrt(mu) c(x)]^2
+
     def lagfun(z, lmbda, mu, *args):
         f = fun_wrapped(z, *args)
         c = constraint_wrapped.fun(z, *args)
-        c = 1 / (np.sqrt(2 * mu)) * (-lmbda + mu * c)
+        c = -lmbda / jnp.sqrt(mu) + jnp.sqrt(mu) * c
         return jnp.concatenate((f, c))
 
     def lagjac(z, lmbda, mu, *args):
         Jf = jac_wrapped(z, *args)
         Jc = constraint_wrapped.jac(z, *args)
-        Jc = 1 / (np.sqrt(2 * mu)) * (mu * Jc)
+        Jc = jnp.sqrt(mu) * Jc
         return jnp.vstack((Jf, Jc))
 
     def laggrad(z, lmbda, mu, *args):

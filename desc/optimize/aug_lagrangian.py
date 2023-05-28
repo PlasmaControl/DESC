@@ -168,7 +168,11 @@ def fmin_lag_stel(  # noqa: C901 - FIXME: simplify this
     if maxiter is None:
         maxiter = z.size
     mu = options.pop("initial_penalty_parameter", 10)
-    lmbda = options.pop("initial_multipliers", jnp.zeros(len(c)))
+    lmbda = options.pop("initial_multipliers", None)
+    if lmbda is None:  # use least squares multiplier estimates
+        _J = constraint_wrapped.jac(z, *args)
+        _g = grad_wrapped(z, *args)
+        lmbda = jnp.linalg.lstsq(_J.T, _g)[0]
     maxiter_inner = options.pop("maxiter_inner", 20)
     max_nfev = options.pop("max_nfev", 5 * maxiter * maxiter_inner + 1)
     max_ngev = options.pop("max_ngev", maxiter * maxiter_inner + 1)

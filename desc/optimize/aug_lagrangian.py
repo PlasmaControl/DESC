@@ -19,7 +19,7 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     grad,
-    hess="bfgs",
+    hess,
     bounds=(-jnp.inf, jnp.inf),
     constraint=None,
     args=(),
@@ -42,9 +42,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         initial guess
     grad : callable
         function to compute gradient, df/dx. Should take the same arguments as fun
-    hess : callable or ``'bfgs'``, optional:
-        function to compute Hessian matrix of fun, or ``'bfgs'`` in which case the BFGS
-        method will be used to approximate the Hessian.
+    hess : callable
+        function to compute Hessian matrix of fun
     bounds : tuple of array-like
         Lower and upper bounds on independent variables. Defaults to no bounds.
         Each array must match the size of x0 or be a scalar, in the latter case a
@@ -130,27 +129,27 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
         J = constraint_wrapped.jac(z, *args)
         return grad_wrapped(z, *args) - jnp.dot(y, J) + mu * jnp.dot(c, J)
 
-    if callable(hess_wrapped):
-        if callable(constraint_wrapped.hess):
+    assert callable(hess_wrapped)
+    if callable(constraint_wrapped.hess):
 
-            def laghess(z, y, mu, *args):
-                c = constraint_wrapped.fun(z, *args)
-                Hf = hess_wrapped(z, *args)
-                Jc = constraint_wrapped.jac(z, *args)
-                Hc1 = constraint_wrapped.hess(z, y)
-                Hc2 = constraint_wrapped.hess(z, c)
-                return Hf - Hc1 + mu * (Hc2 + jnp.dot(Jc.T, Jc))
-
-        else:
-
-            def laghess(z, y, mu, *args):
-                H = hess_wrapped(z, *args)
-                J = constraint_wrapped.jac(z, *args)
-                # ignoring higher order derivatives of constraints for now
-                return H + mu * jnp.dot(J.T, J)
+        def laghess(z, y, mu, *args):
+            c = constraint_wrapped.fun(z, *args)
+            Hf = hess_wrapped(z, *args)
+            Jc = constraint_wrapped.jac(z, *args)
+            Hc1 = constraint_wrapped.hess(z, y)
+            Hc2 = constraint_wrapped.hess(z, c)
+            return Hf - Hc1 + mu * (Hc2 + jnp.dot(Jc.T, Jc))
 
     else:
-        laghess = "bfgs"
+
+        def laghess(z, y, mu, *args):
+            H = hess_wrapped(z, *args)
+            J = constraint_wrapped.jac(z, *args)
+            # ignoring higher order derivatives of constraints for now
+            return H + mu * jnp.dot(J.T, J)
+
+    # TODO: figure out how to let BFGS maintain state between subproblems, otherwise
+    # it doesn't really converge
 
     nfev = 0
     ngev = 0

@@ -33,11 +33,11 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_theta_PEST", "e_zeta"],
+    data=["e_rho", "e_theta_PEST", "e_phi"],
 )
 def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
     data["sqrt(g)_PEST"] = dot(
-        data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta"])
+        data["e_rho"], cross(data["e_theta_PEST"], data["e_phi"])
     )
     return data
 

@@ -63,6 +63,25 @@ def _e_sub_zeta_(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_phi",
+    label="\\mathbf{e}_{\\phi}",
+    units="m",
+    units_long="meters",
+    description="Covariant cylindrical toroidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "phi_z"],
+)
+def _e_sub_phi_(params, transforms, profiles, data, **kwargs):
+    # dX/dphi at const r,t = dX/dz * dz/dphi = dX/dz / (dphi/dz)
+    data["e_phi"] = (data["e_zeta"].T / data["phi_z"]).T
+    return data
+
+
+@register_compute_fun(
     name="e_rho_r",
     label="\\partial_{\\rho} \\mathbf{e}_{\\rho}",
     units="m",
@@ -1190,24 +1209,20 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
     label="\\mathbf{e}_{\\theta_{PEST}}",
     units="m",
     units_long="meters",
-    description="Covariant straight field line poloidal basis vector",
+    description="Covariant straight field line (PEST) poloidal basis vector",
     dim=3,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
     data=[
-        "0",
-        "R_t",
-        "Z_t",
-        "lambda_t",
+        "e_theta",
+        "theta_PEST_t",
     ],
 )
 def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    dt_dv = 1 / (1 + data["lambda_t"])
-    data["e_theta_PEST"] = jnp.array(
-        [data["R_t"] * dt_dv, data["0"], data["Z_t"] * dt_dv]
-    ).T
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
     return data
 
 

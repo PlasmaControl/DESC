@@ -105,7 +105,7 @@ def test_map_coordinates():
     eq = desc.examples.get("DSHAPE")
 
     inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_sfl", "zeta"]
+    outbasis = ["rho", "theta_PEST", "zeta"]
 
     rho = np.linspace(0.01, 0.99, 200)
     theta = np.linspace(0, np.pi, 200, endpoint=False)

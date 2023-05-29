@@ -389,6 +389,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         cost=cost,
         fun=f,
         grad=g,
+        v=v,
         jac=J,
         optimality=g_norm,
         nfev=nfev,

@@ -9,7 +9,9 @@ import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
 from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
 from desc.objectives import (
+    AspectRatio,
     Energy,
     FixBoundaryR,
     FixBoundaryZ,
@@ -18,7 +20,9 @@ from desc.objectives import (
     FixPressure,
     FixPsi,
     ForceBalance,
+    MeanCurvature,
     ObjectiveFunction,
+    Volume,
 )
 from desc.objectives.objective_funs import _Objective
 from desc.optimize import (
@@ -152,7 +156,7 @@ class TestFmin:
             hess="bfgs",
             verbose=3,
             method="dogleg",
-            x_scale=1,
+            x_scale="hess",
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
@@ -341,7 +345,7 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac = lambda x: objective._jac(x) + 1e2 * (
+    objective.jac_scaled = lambda x: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
     )
 
@@ -463,6 +467,7 @@ def test_scipy_fail_message():
         assert "Maximum number of iterations has been exceeded" in result["message"]
 
 
+@pytest.mark.unit
 def test_not_implemented_error():
     """Test NotImplementedError."""
     with pytest.raises(NotImplementedError):
@@ -489,6 +494,17 @@ def test_wrappers():
     ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
     assert ob.built
 
+    np.testing.assert_allclose(
+        ob.compute_scaled(ob.x(eq)), obj.compute_scaled(*obj.xs(eq))
+    )
+    np.testing.assert_allclose(
+        ob.compute_unscaled(ob.x(eq)), obj.compute_unscaled(*obj.xs(eq))
+    )
+    np.testing.assert_allclose(ob.target_scaled, obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.bounds_scaled[0], obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.bounds_scaled[1], obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.weights, obj.weight)
+
     con = (
         FixBoundaryR(),
         FixBoundaryZ(),
@@ -511,7 +527,24 @@ def test_wrappers():
     ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
     assert ob.built
 
+    np.testing.assert_allclose(
+        ob.compute_scaled(ob.x(eq)), con[0].compute_scaled(*con[0].xs(eq))
+    )
+    np.testing.assert_allclose(
+        ob.compute_unscaled(ob.x(eq)), con[0].compute_unscaled(*con[0].xs(eq))
+    )
+    np.testing.assert_allclose(ob.target_scaled, con[0].target / con[0].normalization)
+    np.testing.assert_allclose(
+        ob.bounds_scaled[0], con[0].target / con[0].normalization
+    )
+    np.testing.assert_allclose(
+        ob.bounds_scaled[1], con[0].target / con[0].normalization
+    )
+    np.testing.assert_allclose(ob.weights, con[0].weight)
 
+
+@pytest.mark.unit
+@pytest.mark.slow
 def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eq = desc.examples.get("SOLOVEV")
@@ -534,8 +567,93 @@ def test_all_optimizers():
         else:
             obj = fobj
         eq.solve(
-            objective=obj, constraints=constraints, optimizer=opt, maxiter=5, verbose=3
+            objective=obj,
+            constraints=constraints,
+            optimizer=opt,
+            verbose=3,
+            copy=True,
+            maxiter=5,
         )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_scipy_constrained_solve():
+    """Tests that the scipy constrained optimizer does something.
+
+    This isn't that great of a test, since trust-constr and SLSQP don't work well on
+    badly scaled problems like ours. Also usually you'd need to run for way longer,
+    since stopping them early might return a point worse than you started with...
+    """
+    eq = desc.examples.get("DSHAPE")
+    # increase pressure so no longer in force balance
+    eq.p_l *= 1.1
+    eq._node_pattern = "quad"
+
+    constraints = (
+        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(),  # fix Z shape but not R
+        FixPressure(),  # fix pressure profile
+        FixIota(),  # fix rotational transform profile
+        FixPsi(),  # fix total toroidal magnetic flux
+    )
+    # some random constraints to keep the shape from getting wacky
+    V = eq.compute("V")["V"]
+    Vbounds = (0.95 * V, 1.05 * V)
+    AR = eq.compute("R0/a")["R0/a"]
+    ARbounds = (0.95 * AR, 1.05 * AR)
+    H = eq.compute(
+        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H"]
+    Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
+    constraints += (
+        Volume(bounds=Vbounds),
+        AspectRatio(bounds=ARbounds),
+        MeanCurvature(bounds=Hbounds),
+    )
+    obj = ObjectiveFunction(ForceBalance())
+    eq2, result = eq.optimize(
+        objective=obj,
+        constraints=constraints,
+        optimizer="scipy-trust-constr",
+        maxiter=50,
+        verbose=1,
+        x_scale="auto",
+        copy=True,
+        options={
+            "disp": 1,
+            "verbose": 3,
+            "initial_barrier_parameter": 1e-4,
+        },
+    )
+    V2 = eq2.compute("V")["V"]
+    AR2 = eq2.compute("R0/a")["R0/a"]
+    H2 = eq2.compute(
+        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H"]
+
+    assert ARbounds[0] < AR2 < ARbounds[1]
+    assert Vbounds[0] < V2 < Vbounds[1]
+    assert np.all(Hbounds[0] < H2)
+    assert np.all(H2 < Hbounds[1])
+    assert eq2.is_nested()
+
+
+@pytest.mark.unit
+def test_solve_with_x_scale():
+    """Make sure we can manually specify x_scale when solving/optimizing."""
+    # basically just tests that it runs without error
+    eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
+    scale = jnp.concatenate(
+        [
+            (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+            jnp.ones(eq.p_l.size + eq.c_l.size + eq.Rb_lmn.size + eq.Zb_lmn.size + 1),
+        ]
+    )
+    eq.solve(x_scale=scale)
+    assert eq.is_nested()
 
 
 @pytest.mark.unit

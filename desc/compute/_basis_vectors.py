@@ -1186,6 +1186,32 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_PEST",
+    label="\\mathbf{e}_{\\theta_{PEST}}",
+    units="m",
+    units_long="meters",
+    description="Covariant straight field line poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "0",
+        "R_t",
+        "Z_t",
+        "lambda_t",
+    ],
+)
+def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
+    dt_dv = 1 / (1 + data["lambda_t"])
+    data["e_theta_PEST"] = jnp.array(
+        [data["R_t"] * dt_dv, data["0"], data["Z_t"] * dt_dv]
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^rho",
     label="\\mathbf{e}^{\\rho}",
     units="m^{-1}",

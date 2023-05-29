@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jit, jnp, put, while_loop
+from desc.backend import fori_loop, jit, jnp, put, while_loop
 from desc.compute import compute as compute_fun
 from desc.compute import data_index, get_transforms
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -27,7 +27,7 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
         Equilibrium to use
     coords : ndarray, shape(k,3)
         2D array of input coordinates. Each row is a different
-        coordinate.
+        point in space.
     inbasis, outbasis : tuple of str
         Labels for input and output coordinates, eg ("R", "phi", "Z") or
         ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
@@ -88,9 +88,16 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
     # nearest neighbor search on coarse grid for initial guess
     yg = ConcentricGrid(L=eq.L_grid, M=eq.M_grid, N=int(eq.N_grid * eq.NFP)).nodes
     xg = compute(yg, inbasis)
-    distance = jnp.linalg.norm(coords[:, np.newaxis] - xg, axis=-1)
-    idx = jnp.argmin(distance, axis=1)
+    idx = jnp.zeros(len(coords)).astype(int)
+    coords = jnp.asarray(coords)
 
+    def _distance_body(i, idx):
+        distance = jnp.linalg.norm(coords[i] - xg, axis=-1)
+        k = jnp.argmin(distance)
+        idx = put(idx, i, k)
+        return idx
+
+    idx = fori_loop(0, len(coords), _distance_body, idx)
     yk = yg[idx]
     alpha = 0.5
     yk = fixup(yk)
@@ -144,7 +151,7 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         Equilibrium to use
     flux_coords : ndarray, shape(k,3)
         2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-        coordinate.
+        point in space.
     L_lmn : ndarray
         spectral coefficients for lambda. Defaults to eq.L_lmn
     tol : float
@@ -218,7 +225,7 @@ def compute_flux_coords(
         Equilibrium to use
     real_coords : ndarray, shape(k,3)
         2D array of real space coordinates [R,phi,Z]. Each row is a different
-        coordinate.
+        point in space.
     R_lmn, Z_lmn : ndarray
         spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
     tol : float
@@ -307,7 +314,7 @@ def compute_flux_coords(
     return jnp.vstack([rho, theta, phi]).T
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, W_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, W_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
     Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -325,8 +332,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, W_lmn=None, msg=None):
     grid : Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn, W_lmn : ndarray, optional
-        spectral coefficients for R and Z, omega. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+        spectral coefficients for R and Z, lambda, omega. Defaults to eq.R_lmn,
+        eq.Z_lmn etc.
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -342,22 +350,27 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, W_lmn=None, msg=None):
         Z_lmn = eq.Z_lmn
     if W_lmn is None:
         W_lmn = eq.W_lmn
+    if L_lmn is None:
+        L_lmn = eq.L_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
     data = compute_fun(
-        "sqrt(g)",
+        "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
             "W_lmn": W_lmn,
+            "L_lmn": L_lmn,
         },
         transforms=transforms,
         profiles={},  # no profiles needed
     )
 
-    nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+    nested = jnp.all(
+        jnp.sign(data["sqrt(g)_PEST"][0]) == jnp.sign(data["sqrt(g)_PEST"])
+    )
     if not nested:
         if msg == "auto":
             warnings.warn(

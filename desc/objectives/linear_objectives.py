@@ -721,22 +721,6 @@ class FixLambdaGauge(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Value to fix lambda to at rho=0 and (theta=0,zeta=0)
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -751,21 +735,16 @@ class FixLambdaGauge(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
         name="lambda gauge",
     ):
 
         super().__init__(
             eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
             name=name,
         )
 
@@ -949,11 +928,6 @@ class FixThetaSFL(_Objective):
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Value to fix lambda to (always is zero)
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
     name : str
         Name of the objective function.
 
@@ -965,9 +939,9 @@ class FixThetaSFL(_Objective):
     _units = "(radians)"
     _print_value_fmt = "Theta - Theta SFL error: {:10.3e} "
 
-    def __init__(self, eq=None, target=0, weight=1, name="Theta SFL"):
+    def __init__(self, eq=None, name="Theta SFL"):
 
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
+        super().__init__(eq=eq, target=0, weight=1, name=name)
 
     def build(self, eq, use_jit=False, verbose=1):
         """Build constant arrays.
@@ -1025,9 +999,18 @@ class FixAxisR(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1047,10 +1030,11 @@ class FixAxisR(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
-        modes=True,
         normalize=True,
         normalize_target=True,
+        modes=True,
         name="axis R",
     ):
 
@@ -1059,6 +1043,7 @@ class FixAxisR(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -1175,9 +1160,18 @@ class FixAxisZ(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1197,11 +1191,12 @@ class FixAxisZ(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
-        modes=True,
-        name="axis Z",
         normalize=True,
         normalize_target=True,
+        modes=True,
+        name="axis Z",
     ):
 
         self._modes = modes
@@ -1209,6 +1204,7 @@ class FixAxisZ(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -1324,9 +1320,18 @@ class FixModeR(_Objective):
     target : float, ndarray, optional
         Fourier-Zernike R coefficient target values. If None,
          uses Equilibrium's R coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1347,11 +1352,12 @@ class FixModeR(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
-        modes=True,
-        name="Fix Mode R",
         normalize=True,
         normalize_target=True,
+        modes=True,
+        name="Fix Mode R",
     ):
 
         self._modes = modes
@@ -1363,6 +1369,7 @@ class FixModeR(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -1457,9 +1464,18 @@ class FixModeZ(_Objective):
     target : float, ndarray, optional
         Fourier-Zernike Z coefficient target values. If None,
          uses Equilibrium's Z coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1480,11 +1496,12 @@ class FixModeZ(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
-        modes=True,
-        name="Fix Mode Z",
         normalize=True,
         normalize_target=True,
+        modes=True,
+        name="Fix Mode Z",
     ):
 
         self._modes = modes
@@ -1496,6 +1513,7 @@ class FixModeZ(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -1589,17 +1607,26 @@ class FixSumModesR(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, size-1 ndarray, optional
         Fourier-Zernike R coefficient target sum. If None,
-         uses current sum of Equilibrium's R coefficients.
-         len(target)=1
+        uses current sum of Equilibrium's R coefficients.
+        len(target)=1
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
-         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
+        Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
-         len(weight) = len(modes).
+        len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
     surface_label : float
@@ -1619,12 +1646,13 @@ class FixSumModesR(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         sum_weights=None,
         modes=True,
         name="Fix Sum Modes R",
-        normalize=True,
-        normalize_target=True,
     ):
 
         self._modes = modes
@@ -1644,6 +1672,7 @@ class FixSumModesR(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -1742,17 +1771,26 @@ class FixSumModesZ(_Objective):
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Fourier-Zernike Z coefficient target sum. If None,
-         uses current sum of Equilibrium's Z coefficients.
-         len(target)=1
+        uses current sum of Equilibrium's Z coefficients.
+        len(target)=1
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
-         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
+        Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix sum of.
-         len(weight) = len(modes).
+        len(weight) = len(modes).
         If True uses all of the Equilibrium's modes.
         Must be either True or specified as an array
     surface_label : float
@@ -1772,12 +1810,13 @@ class FixSumModesZ(_Objective):
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
+        normalize=True,
+        normalize_target=True,
         sum_weights=None,
         modes=True,
         name="Fix Sum Modes Z",
-        normalize=True,
-        normalize_target=True,
     ):
 
         self._modes = modes
@@ -1797,6 +1836,7 @@ class FixSumModesZ(_Objective):
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             name=name,
             normalize=normalize,
@@ -1927,7 +1967,7 @@ class _FixProfile(_Objective, ABC):
     _scalar = False
     _linear = True
     _fixed = True
-    _print_value_fmt = "Fix-profile error: {:.3e} "
+    _print_value_fmt = "Fix-profile error: {:10.3e} "
 
     def __init__(
         self,

@@ -198,19 +198,17 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     tangents = jnp.zeros((objective.dim_x,))
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac"]["R_lmn"](
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Rb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["R_lmn"]] @ Ainv @ dc
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac"]["Z_lmn"](
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
@@ -278,11 +276,11 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Jx = objective.jac(x)
+        Jx = objective.jac_scaled(x)
         Jx_reduced = Jx[:, unfixed_idx] @ Z @ scale
-        RHS1 = objective.jvp(tangents, x)
+        RHS1 = objective.jvp_scaled(tangents, x)
         if include_f:
-            f = objective.compute(x)
+            f = objective.compute_scaled_error(x)
             RHS1 += f
         timer.stop("df computation")
         if verbose > 1:
@@ -317,7 +315,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents += dx1
-        RHS2 = 0.5 * objective.jvp((tangents, tangents), x)
+        RHS2 = 0.5 * objective.jvp_scaled((tangents, tangents), x)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -342,8 +340,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing d^3f")
         timer.start("d^3f computation")
-        RHS3 = (1 / 6) * objective.jvp((tangents, tangents, tangents), x)
-        RHS3 += objective.jvp((dx2, tangents), x)
+        RHS3 = (1 / 6) * objective.jvp_scaled((tangents, tangents, tangents), x)
+        RHS3 += objective.jvp_scaled((dx2, tangents), x)
         timer.stop("d^3f computation")
         if verbose > 1:
             timer.disp("d^3f computation")
@@ -611,19 +609,17 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         dxdc = jnp.eye(objective_f.dim_x)[:, x_idx]
     if "Rb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryRSelfConsistency)
-        A = con.derivatives["jac"]["R_lmn"](
+        A = con.derivatives["jac_unscaled"]["R_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dxdRb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["R_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdRb))
     if "Zb_lmn" in deltas.keys():
         con = get_instance(constraints, BoundaryZSelfConsistency)
-        A = con.derivatives["jac"]["Z_lmn"](
+        A = con.derivatives["jac_unscaled"]["Z_lmn"](
             *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
         )
-        A = (con.normalization * (A.T / con.weight)).T
         Ainv = jnp.linalg.pinv(A)
         dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdZb))
@@ -631,14 +627,14 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     # 1st order
     if order > 0:
 
-        f = objective_f.compute(xf)
-        g = objective_g.compute(xg)
+        f = objective_f.compute_scaled_error(xf)
+        g = objective_g.compute_scaled_error(xg)
 
         # 1st partial derivatives of f objective wrt x
         if verbose > 0:
             print("Computing df")
         timer.start("df computation")
-        Fx = objective_f.jac(xf)
+        Fx = objective_f.jac_scaled(xf)
         Fx = align_jacobian(Fx, objective_f, objective_g)
         timer.stop("df computation")
         if verbose > 1:
@@ -648,7 +644,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         if verbose > 0:
             print("Computing dg")
         timer.start("dg computation")
-        Gx = objective_g.jac(xg)
+        Gx = objective_g.jac_scaled(xg)
         Gx = align_jacobian(Gx, objective_g, objective_f)
         timer.stop("dg computation")
         if verbose > 1:
@@ -736,7 +732,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing d^2f")
         timer.start("d^2f computation")
         tangents_f = dxdx_reduced @ dx1_reduced + dxdc @ dc1
-        RHS_2f = -0.5 * objective_f.jvp((tangents_f, tangents_f), xf)
+        RHS_2f = -0.5 * objective_f.jvp_scaled((tangents_f, tangents_f), xf)
         timer.stop("d^2f computation")
         if verbose > 1:
             timer.disp("d^2f computation")
@@ -746,7 +742,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             print("Computing d^2g")
         timer.start("d^2g computation")
         tangents_g = (dxdx_reduced @ dx1_reduced + dxdc @ dc1) @ dxf_dxg
-        RHS_2g = 0.5 * objective_g.jvp((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
+        RHS_2g = (
+            0.5 * objective_g.jvp_scaled((tangents_g, tangents_g), xg) + GxFx @ RHS_2f
+        )
         timer.stop("d^2g computation")
         if verbose > 1:
             timer.disp("d^2g computation")

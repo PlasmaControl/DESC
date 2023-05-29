@@ -1228,7 +1228,7 @@ class _Configuration(IOAble, ABC):
         ----------
         coords : ndarray, shape(k,3)
             2D array of input coordinates. Each row is a different
-            coordinate.
+            point in space.
         inbasis, outbasis : tuple of str
             Labels for input and output coordinates, eg ("R", "phi", "Z") or
             ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
@@ -1256,7 +1256,7 @@ class _Configuration(IOAble, ABC):
         ----------
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            coordinate.
+            point in space.
         L_lmn : ndarray
             spectral coefficients for lambda. Defaults to eq.L_lmn
         tol : float
@@ -1282,7 +1282,7 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2D array of real space coordinates [R,phi,Z]. Each row is a different
-            coordinate.
+            point in space.
         R_lmn, Z_lmn : ndarray
             spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
         tol : float
@@ -1304,7 +1304,9 @@ class _Configuration(IOAble, ABC):
             self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, W_lmn=None, msg=None):
+    def is_nested(
+        self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, W_lmn=None, msg=None
+    ):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -1320,8 +1322,9 @@ class _Configuration(IOAble, ABC):
         grid : Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn, W_lmn : ndarray, optional
-            spectral coefficients for R and Z, omega. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
+            spectral coefficients for R and Z, lambda, omega. Defaults to eq.R_lmn,
+            eq.Z_lmn etc.
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1331,7 +1334,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, W_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, W_lmn, msg)
 
     def to_sfl(
         self,

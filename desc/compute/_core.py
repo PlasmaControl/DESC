@@ -1162,7 +1162,7 @@ def _phi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["R", "omega_r"],
+    data=["omega_r"],
 )
 def _phi_r(params, transforms, profiles, data, **kwargs):
     data["phi_r"] = data["omega_r"]

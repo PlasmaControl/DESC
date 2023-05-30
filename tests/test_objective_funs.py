@@ -17,6 +17,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     Energy,
     ForceBalance,
@@ -504,6 +505,51 @@ def test_principal_curvature():
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()
+
+
+@pytest.mark.unit
+def test_field_scale_length():
+    """Test for B field scale length objective function."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[
+            5,
+            1,
+        ],
+        Z_lmn=[
+            -1,
+        ],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[
+            [-1, 0],
+        ],
+        NFP=1,
+    )
+    surf2 = FourierRZToroidalSurface(
+        R_lmn=[
+            10,
+            2,
+        ],
+        Z_lmn=[
+            -2,
+        ],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[
+            [-1, 0],
+        ],
+        NFP=1,
+    )
+    eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
+    eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
+    eq1.solve()
+    eq2.solve()
+
+    obj1 = BScaleLength(eq=eq1, normalize=False)
+    obj2 = BScaleLength(eq=eq2, normalize=False)
+
+    L1 = obj1.compute_unscaled(*obj1.xs(eq1))
+    L2 = obj2.compute_unscaled(*obj2.xs(eq2))
+
+    np.testing.assert_array_less(L1, L2)
 
 
 @pytest.mark.unit

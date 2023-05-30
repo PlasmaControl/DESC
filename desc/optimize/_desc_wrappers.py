@@ -66,6 +66,8 @@ def _optimize_desc_least_squares(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    elif options.get("initial_trust_radius", "scipy") == "scipy":
+        options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_njev"] = stoptol["max_njev"]
 
@@ -155,6 +157,8 @@ def _optimize_desc_fmin_scalar(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    elif options.get("initial_trust_radius", "scipy") == "scipy":
+        options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_ngev"] = stoptol["max_ngev"]
     options["max_nhev"] = stoptol["max_nhev"]

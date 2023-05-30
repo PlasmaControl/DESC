@@ -50,7 +50,7 @@ def register_compute_fun(
     Notes
     -----
     Should only list *direct* dependencies. The full dependencies will be built
-    recursively at runtime using each quantities direct dependencies.
+    recursively at runtime using each quantity's direct dependencies.
     """
     deps = {
         "params": params,

@@ -1136,7 +1136,7 @@ class _Configuration(IOAble, ABC):
                 params=params,
                 transforms=get_transforms(dep1d, eq=self, grid=grid1d, **kwargs),
                 profiles=get_profiles(dep1d, eq=self, grid=grid1d),
-                data=None,
+                data=None,  # Todo: ask if should pass in data0d
                 **kwargs,
             )
             # need to make this data broadcastable with the data on the original grid
@@ -1148,8 +1148,8 @@ class _Configuration(IOAble, ABC):
             data.update(data1d)
 
         # TODO: we can probably reduce the number of deps computed here if some are only
-        # needed as inputs for 0d and 1d qtys, unless the user asks for them
-        # specifically?
+        #   needed as inputs for 0d and 1d qtys, unless the user asks for them
+        #   specifically?
         data = compute_fun(
             names,
             params=params,

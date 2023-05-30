@@ -52,7 +52,7 @@ from .utils import (
 
 
 # rather than having to recursively compute the full dependencies every time we
-# compute something, its easier to just do it once for all quantities when we first
+# compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
 def _build_data_index():
     for key in data_index.keys():

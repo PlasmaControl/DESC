@@ -73,7 +73,7 @@ def compute(names, params, transforms, profiles, data=None, **kwargs):
         if name not in data_index:
             raise ValueError("Unrecognized value '{}'.".format(name))
     allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
-    bad_kwargs = set(kwargs.keys()).difference(allowed_kwargs)
+    bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")
 
@@ -102,10 +102,10 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
     """Same as above but without checking inputs for faster recursion."""
     for name in names:
         if name in data:
+            # don't compute something that's already been computed
             continue
-        if has_dependencies(name, params, transforms, profiles, data):
-            data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
-        else:
+        if not has_dependencies(name, params, transforms, profiles, data):
+            # then compute the missing dependencies first
             data = _compute(
                 data_index[name]["dependencies"]["data"],
                 params=params,
@@ -114,7 +114,7 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
                 data=data,
                 **kwargs,
             )
-            data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
+        data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
     return data
 
 

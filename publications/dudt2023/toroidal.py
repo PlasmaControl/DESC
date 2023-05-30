@@ -91,7 +91,7 @@ print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # optimize with increasing resolution
 for i in range(len(LM)):
-    eq.change_resolution(L=LM[i], M=LM[i], L_grid=2 * LM[i], M_grid=2 * LM[i])
+    eq.change_resolution(L=LM[i], M=LM[i], L_grid=2 * LM[i], M_grid=2 * LM[i], sym=sym)
     M_booz = min(int(np.ceil(1.5 * LM[i])), 16)
     N_booz = min(int(np.ceil(1.5 * N)), 16)
     M_grid = int(np.ceil(1.5 * M_booz))

@@ -29,6 +29,7 @@ Name,Label,Units,Description,Module
 ``e_zeta_rt``,:math:`\partial_{\rho \theta} \mathbf{e}_{\zeta}`,meters,"Covariant toroidal basis vector, second derivative wrt radial coordinate and poloidal angle",``desc.compute._basis_vectors``
 ``e_zeta_rz``,:math:`\partial_{\rho \zeta} \mathbf{e}_{\zeta}`,meters,"Covariant toroidal basis vector, second derivative wrt radial coordinate and toroidal angle",``desc.compute._basis_vectors``
 ``e_zeta_tz``,:math:`\partial_{\theta \zeta} \mathbf{e}_{\zeta}`,meters,"Covariant toroidal basis vector, second derivative wrt poloidal and toroidal angles",``desc.compute._basis_vectors``
+``e_theta_PEST``,:math:`\mathbf{e}_{\theta_{PEST}}`,meters,Covariant straight field line poloidal basis vector,``desc.compute._basis_vectors``
 ``e^rho``,:math:`\mathbf{e}^{\rho}`,inverse meters,Contravariant radial basis vector,``desc.compute._basis_vectors``
 ``e^theta``,:math:`\mathbf{e}^{\theta}`,inverse meters,Contravariant poloidal basis vector,``desc.compute._basis_vectors``
 ``e^zeta``,:math:`\mathbf{e}^{\zeta}`,inverse meters,Contravariant toroidal basis vector,``desc.compute._basis_vectors``
@@ -39,9 +40,21 @@ Name,Label,Units,Description,Module
 ``<J*B> Redl``,:math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle_{Redl}`,Tesla Ampere / meter^2,"Bootstrap current profile, Redl model for quasisymmetry",``desc.compute._bootstrap``
 ``0``,:math:`0`,None,Zeros,``desc.compute._core``
 ``rho``,:math:`\rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux",``desc.compute._core``
+``rho_r``,:math:`\partial_{\rho} \rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux, derivative wrt radial coordinate",``desc.compute._core``
+``rho_t``,:math:`\partial_{\theta} \rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux, derivative wrt poloidal coordinate",``desc.compute._core``
+``rho_z``,:math:`\partial_{\zeta} \rho`,None,"Radial coordinate, proportional to the square root of the toroidal flux, derivative wrt toroidal coordinate",``desc.compute._core``
 ``theta``,:math:`\theta`,radians,"Poloidal angular coordinate (geometric, not magnetic)",``desc.compute._core``
-``zeta``,:math:`\zeta`,radians,"Toroidal angular coordinate, equal to the geometric toroidal angle",``desc.compute._core``
+``theta_r``,:math:`\partial_{\rho} \theta`,radians,"Poloidal angular coordinate (geometric, not magnetic), derivative wrt radial coordinate",``desc.compute._core``
+``theta_t``,:math:`\partial_{\theta} \theta`,radians,"Poloidal angular coordinate (geometric, not magnetic), derivative wrt poloidal coordinate",``desc.compute._core``
+``theta_z``,:math:`\partial_{\zeta} \theta`,radians,"Poloidal angular coordinate (geometric, not magnetic), derivative wrt toroidal coordinate",``desc.compute._core``
+``zeta``,:math:`\zeta`,radians,Toroidal angular coordinate,``desc.compute._core``
+``zeta_r``,:math:`\partial_{\rho} \zeta`,radians,"Toroidal angular coordinate derivative, wrt radial coordinate",``desc.compute._core``
+``zeta_t``,:math:`\partial_{\theta} \zeta`,radians,"Toroidal angular coordinate, derivative wrt poloidal coordinate",``desc.compute._core``
+``zeta_z``,:math:`\partial_{\zeta} \zeta`,radians,"Toroidal angular coordinate, derivative wrt toroidal coordinate",``desc.compute._core``
 ``theta_sfl``,:math:`\vartheta`,radians,PEST straight field line poloidal angular coordinate,``desc.compute._core``
+``theta_sfl_r``,:math:`\partial_{\rho} \vartheta`,radians,"PEST straight field line poloidal angular coordinate, derivative wrt radial coordinate",``desc.compute._core``
+``theta_sfl_t``,:math:`\partial_{\theta} \vartheta`,radians,"PEST straight field line poloidal angular coordinate, derivative wrt poloidal coordinate",``desc.compute._core``
+``theta_sfl_z``,:math:`\partial_{\zeta} \vartheta`,radians,"PEST straight field line poloidal angular coordinate, derivative wrt toroidal coordinate",``desc.compute._core``
 ``alpha``,:math:`\alpha`,None,Field line label,``desc.compute._core``
 ``alpha_r``,:math:`\partial_\rho \alpha`,None,"Field line label, derivative wrt radial coordinate",``desc.compute._core``
 ``alpha_t``,:math:`\partial_\theta \alpha`,None,"Field line label, derivative wrt poloidal coordinate",``desc.compute._core``
@@ -86,9 +99,24 @@ Name,Label,Units,Description,Module
 ``Z_ttz``,:math:`\partial_{\theta \theta \zeta} Z`,meters,"Vertical coordinate in lab frame, third derivative wrt poloidal angle twice and toroidal angle",``desc.compute._core``
 ``Z_tzz``,:math:`\partial_{\theta \zeta \zeta} Z`,meters,"Vertical coordinate in lab frame, third derivative wrt poloidal angle and toroidal angle twice",``desc.compute._core``
 ``Z_rtz``,:math:`\partial_{\rho \theta \zeta} Z`,meters,"Vertical coordinate in lab frame, third derivative wrt radius, poloidal angle, and toroidal angle",``desc.compute._core``
-``phi``,:math:`\phi = \zeta`,radians,Toroidal angle in lab frame,``desc.compute._core``
+``phi``,:math:`\phi`,radians,Toroidal angle in lab frame,``desc.compute._core``
+``phi_r``,:math:`\partial_{\rho} \phi`,radians,"Toroidal angle in lab frame, derivative wrt radial coordinate",``desc.compute._core``
+``phi_t``,:math:`\partial_{\theta} \phi`,radians,"Toroidal angle in lab frame, derivative wrt poloidal coordinate",``desc.compute._core``
+``phi_z``,:math:`\partial_{\zeta} \phi`,radians,"Toroidal angle in lab frame, derivative wrt toroidal coordinate",``desc.compute._core``
+``phi_rr``,:math:`\partial_{\rho \rho} \phi`,radians,"Toroidal angle in lab frame, second derivative wrt radial coordinate",``desc.compute._core``
+``phi_rt``,:math:`\partial_{\rho \theta} \phi`,radians,"Toroidal angle in lab frame, second derivative wrt radial and poloidal coordinate",``desc.compute._core``
+``phi_rz``,:math:`\partial_{\rho \zeta} \phi`,radians,"Toroidal angle in lab frame, second derivative wrt radial and toroidal coordinate",``desc.compute._core``
+``phi_tt``,:math:`\partial_{\theta \theta} \phi`,radians,"Toroidal angle in lab frame, second derivative wrt poloidal coordinate",``desc.compute._core``
+``phi_tz``,:math:`\partial_{\theta \zeta} \phi`,radians,"Toroidal angle in lab frame, second derivative wrt poloidal and toroidal coordinate",``desc.compute._core``
+``phi_zz``,:math:`\partial_{\zeta \zeta} \phi`,radians,"Toroidal angle in lab frame, second derivative wrt toroidal coordinate",``desc.compute._core``
 ``X``,:math:`X = R \cos{\phi}`,meters,Cartesian X coordinate,``desc.compute._core``
+``X_r``,:math:`\partial_{\rho} X`,meters,"Cartesian X coordinate, derivative wrt radial coordinate",``desc.compute._core``
+``X_t``,:math:`\partial_{\theta} X`,meters,"Cartesian X coordinate, derivative wrt poloidal coordinate",``desc.compute._core``
+``X_z``,:math:`\partial_{\zeta} X`,meters,"Cartesian X coordinate, derivative wrt toroidal coordinate",``desc.compute._core``
 ``Y``,:math:`Y = R \sin{\phi}`,meters,Cartesian Y coordinate,``desc.compute._core``
+``Y_r``,:math:`\partial_{\rho} Y`,meters,"Cartesian Y coordinate, derivative wrt radial coordinate",``desc.compute._core``
+``Y_t``,:math:`\partial_{\theta} Y`,meters,"Cartesian Y coordinate, derivative wrt poloidal coordinate",``desc.compute._core``
+``Y_z``,:math:`\partial_{\zeta} Y`,meters,"Cartesian Y coordinate, derivative wrt toroidal coordinate",``desc.compute._core``
 ``lambda``,:math:`\lambda`,radians,Poloidal stream function,``desc.compute._core``
 ``lambda_r``,:math:`\partial_{\rho} \lambda`,radians,"Poloidal stream function, first radial derivative",``desc.compute._core``
 ``lambda_t``,:math:`\partial_{\theta} \lambda`,radians,"Poloidal stream function, first poloidal derivative",``desc.compute._core``
@@ -257,6 +285,9 @@ Name,Label,Units,Description,Module
 ``kappa``,:math:`\kappa`,Inverse meters,Curvature vector of magnetic field lines,``desc.compute._field``
 ``kappa_n``,:math:`\kappa_n`,Inverse meters,Normal curvature vector of magnetic field lines,``desc.compute._field``
 ``kappa_g``,:math:`\kappa_g`,Inverse meters,Geodesic curvature vector of magnetic field lines,``desc.compute._field``
+``grad(B)``,:math:`\nabla \mathbf{B}`,Tesla / meter,Gradient of magnetic field vector,``desc.compute._field``
+``|grad(B)|``,:math:`|\nabla \mathbf{B}|`,Tesla / meter,Frobenius norm of gradient of magnetic field vector,``desc.compute._field``
+``L_grad(B)``,:math:`L_{\nabla \mathbf{B}} = \frac{\sqrt{2}|B|}{|\nabla \mathbf{B}|}`,meters,Magnetic field length scale based on Frobenius norm of gradient of magnetic field vector,``desc.compute._field``
 ``V``,:math:`V`,cubic meters,Volume,``desc.compute._geometry``
 ``V(r)``,:math:`V(\rho)`,cubic meters,Volume enclosed by flux surfaces,``desc.compute._geometry``
 ``V_r(r)``,:math:`\partial_{\rho} V(\rho)`,cubic meters,"Volume enclosed by flux surfaces, derivative wrt radial coordinate",``desc.compute._geometry``
@@ -276,6 +307,7 @@ Name,Label,Units,Description,Module
 ``curvature_K``,:math:`K`,meters squared,Gaussian curvature of flux surfaces,``desc.compute._geometry``
 ``curvature_H``,:math:`H`,meters,Mean curvature of flux surfaces,``desc.compute._geometry``
 ``sqrt(g)``,:math:`\sqrt{g}`,cubic meters,Jacobian determinant of flux coordinate system,``desc.compute._metric``
+``sqrt(g)_PEST``,:math:`\sqrt{g}_{PEST}`,cubic meters,Jacobian determinant of PEST flux coordinate system,``desc.compute._metric``
 ``|e_theta x e_zeta|``,:math:`|e_{\theta} \times e_{\zeta}|`,square meters,2D Jacobian determinant for constant rho surface,``desc.compute._metric``
 ``|e_zeta x e_rho|``,:math:`|e_{\zeta} \times e_{\rho}|`,square meters,2D Jacobian determinant for constant theta surface,``desc.compute._metric``
 ``|e_rho x e_theta|``,:math:`|e_{\rho} \times e_{\theta}|`,square meters,2D Jacobian determinant for constant zeta surface,``desc.compute._metric``

@@ -2446,6 +2446,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``labels``: list of strs of length 3, labels to apply to each QS error metric
 
     Returns
     -------

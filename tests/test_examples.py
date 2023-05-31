@@ -689,21 +689,41 @@ def test_NAE_QIC_solve():
     data_nae = eq.compute(["|B|_mn", "B modes"], grid=grid)
     modes = data_nae["B modes"]
     B_mn_nae = data_nae["|B|_mn"]
-    # Evaluate B on an angular grid
+
+    # make boozer angles grid and evaluate B on it
     theta = np.linspace(0, 2 * np.pi, 150)
-    phi = np.linspace(0, 2 * np.pi, qsc.nphi)
-    th, ph = np.meshgrid(theta, phi)
+    phi = np.linspace(0, 2 * np.pi / qsc.nfp, qsc.nphi)
+    grid_trans = LinearGrid(theta=theta, zeta=phi, rho=np.array(1e-6), NFP=eq.NFP)
+
+    dat_trans_nae = eq.compute(["lambda", "nu", "iota"], grid=grid_trans)
+    lam_nae = (
+        dat_trans_nae["lambda"]
+        .reshape(grid_trans.num_theta, grid_trans.num_zeta, order="F")
+        .T
+    )
+    nu_nae = (
+        dat_trans_nae["nu"]
+        .reshape(grid_trans.num_theta, grid_trans.num_zeta, order="F")
+        .T
+    )
+    iota_nae = dat_trans_nae["iota"][0]
+
+    # make grid of theta_boozer, zeta_boozer to evaluate the field on
+    th_nae, ph_nae = np.meshgrid(theta, phi)
+    th_nae += lam_nae + nu_nae * iota_nae
+    ph_nae += nu_nae
+
     B_nae = np.zeros((qsc.nphi, 150))
 
-    for i, (l, m, n) in enumerate(modes):
+    for i, (l, m, n) in enumerate(modes):  # Sum over modes
         if m >= 0 and n >= 0:
-            B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
+            B_nae += B_mn_nae[i] * np.cos(m * th_nae) * np.cos(n * ph_nae * qsc.nfp)
         elif m >= 0 and n < 0:
-            B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
+            B_nae += -B_mn_nae[i] * np.cos(m * th_nae) * np.sin(n * ph_nae * qsc.nfp)
         elif m < 0 and n >= 0:
-            B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
+            B_nae += -B_mn_nae[i] * np.sin(m * th_nae) * np.cos(n * ph_nae * qsc.nfp)
         elif m < 0 and n < 0:
-            B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
+            B_nae += B_mn_nae[i] * np.sin(m * th_nae) * np.sin(n * ph_nae * qsc.nfp)
     # Eliminate the poloidal angle to focus on the toroidal behaviour
     B_av_nae = np.mean(B_nae, axis=1)
     np.testing.assert_allclose(B_av_nae, np.ones(np.size(phi)) * qsc.B0, atol=2e-2)

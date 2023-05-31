@@ -1512,7 +1512,8 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         * ``lw``: array of line widths to use for each phi angle
         * ``marker``: str, marker style to use for the axis plotted points
         * ``size``: float, marker size to use for the axis plotted points
-        * ``label_fontsize``: float, fontsize of the x and y labels
+        * ``xlabel_fontsize``: float, fontsize of the x label
+        * ``ylabel_fontsize``: float, fontsize of the y label
         * ``legend_fontsize``: float, fontsize of the legend
 
     Returns
@@ -1550,7 +1551,9 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     lw = kwargs.pop("lw", None)
     marker = kwargs.pop("marker", "x")
     size = kwargs.pop("size", 36)
-    label_fontsize = kwargs.pop("label_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
+
     legend_fontsize = kwargs.pop("legend_fontsize", None)
 
     assert (
@@ -1619,8 +1622,8 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
                 s=size,
             )
 
-    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
+    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
     fig.legend(fontsize=legend_fontsize)
@@ -1663,11 +1666,13 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
         * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
-        * ``color``: array of colors to use for each Equilibrium
-        * ``ls``: array of line styles to use for each Equilibrium
-        * ``lw``: array of line widths to use for each Equilibrium
-        * ``label_fontsize``: float, fontsize of the x and y labels
-        * ``legend_fontsize``: float, fontsize of the legend
+        * ``color``: list of colors to use for each Equilibrium
+        * ``ls``: list of str, line styles to use for each Equilibrium
+        * ``lw``: list of floats, line widths to use for each Equilibrium
+        * ``xlabel_fontsize``: float, fontsize of the x label
+        * ``ylabel_fontsize``: float, fontsize of the y label
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
 
 
     Returns
@@ -1703,12 +1708,8 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     colors = kwargs.pop("color", None)
     ls = kwargs.pop("ls", None)
     lw = kwargs.pop("lw", None)
-    label_fontsize = kwargs.pop("label_fontsize", None)
-    legend_fontsize = kwargs.pop("legend_fontsize", None)
-
-    assert (
-        len(kwargs) == 0
-    ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     if phi is None:
         phi = 4
@@ -1769,12 +1770,17 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
             if j == 0:
                 line.set_label(labels[i])
 
-    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
-    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
+    ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=ylabel_fontsize)
     ax.tick_params(labelbottom=True, labelleft=True)
 
-    fig.legend(fontsize=legend_fontsize)
+    if any(labels) and kwargs.pop("legend", True):
+        fig.legend(**kwargs.pop("legend_kw", {}))
     fig.set_tight_layout(True)
+
+    assert (
+        len(kwargs) == 0
+    ), f"plot boundaries got unexpected keyword argument: {kwargs.keys()}"
 
     if return_data:
         return fig, ax, plot_data
@@ -2125,7 +2131,10 @@ def plot_boozer_modes(
           matplotlib)
         * ``lw``: float, linewidth
         * ``ls``: str, linestyle
-
+        * ``legend``: bool, whether to display legend or not
+        * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -2156,6 +2165,8 @@ def plot_boozer_modes(
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     linestyle = kwargs.pop("ls", "-")
     linewidth = kwargs.pop("lw", 2)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
@@ -2214,8 +2225,9 @@ def plot_boozer_modes(
     plot_data["B modes"] = modes
     plot_data["rho"] = rho
 
-    ax.set_xlabel(_AXIS_LABELS_RTZ[0])
-    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$")
+    ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$B_{M,N}$ in Boozer coordinates $(T)$", fontsize=ylabel_fontsize)
+
     if kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 
@@ -2270,6 +2282,8 @@ def plot_boozer_surface(
         * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
         * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -2305,6 +2319,8 @@ def plot_boozer_surface(
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
     transforms_compute = get_transforms(
         "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
@@ -2354,8 +2370,9 @@ def plot_boozer_surface(
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
 
-    ax.set_xlabel(r"$\zeta_{Boozer}$")
-    ax.set_ylabel(r"$\theta_{Boozer}$")
+    ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
+    ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
+
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
     fig.set_tight_layout(True)
@@ -2416,6 +2433,8 @@ def plot_qs_error(  # noqa: 16 fxn too complex
           matplotlib)
         * ``ls``: list of strs of length 3, linestyles to use for the 3 different
           qs metrics
+        * ``lw``: list of float of length 3, linewidths to use for the 3 different
+          qs metrics
         * ``color``: list of strs of length 3, colors to use for the 3 different
           qs metrics
         * ``marker``: list of strs of length 3, markers to use for the 3 different
@@ -2425,6 +2444,8 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         * ``ylabel``: str, ylabel to use for plot
         * ``legend``: bool, whether to display legend or not
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -2455,6 +2476,11 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     ls = kwargs.pop("ls", ["-", "-", "-"])
+    lw = kwargs.pop("lw", [1, 1, 1])
+    ylabel = kwargs.pop("ylabel", False)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
+    ylabel_fontsize = kwargs.pop("yxlabel_fontsize", None)
+
     colors = kwargs.pop("color", ["r", "b", "g"])
     markers = kwargs.pop("marker", ["o", "o", "o"])
     labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
@@ -2526,6 +2552,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[0 % len(colors)],
                 marker=markers[0 % len(markers)],
                 label=labels[0 % len(labels)],
+                lw=lw[0 % len(lw)],
             )
         if fC:
             ax.semilogy(
@@ -2535,6 +2562,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[1 % len(colors)],
                 marker=markers[1 % len(markers)],
                 label=labels[1 % len(labels)],
+                lw=lw[1 % len(lw)],
             )
         if fT:
             ax.semilogy(
@@ -2544,6 +2572,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[2 % len(colors)],
                 marker=markers[2 % len(markers)],
                 label=labels[2 % len(labels)],
+                lw=lw[2 % len(lw)],
             )
     else:
         if fB:
@@ -2554,6 +2583,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[0 % len(colors)],
                 marker=markers[0 % len(markers)],
                 label=labels[0 % len(labels)],
+                lw=lw[0 % len(lw)],
             )
         if fC:
             ax.plot(
@@ -2563,6 +2593,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[1 % len(colors)],
                 marker=markers[1 % len(markers)],
                 label=labels[1 % len(labels)],
+                lw=lw[1 % len(lw)],
             )
         if fT:
             ax.plot(
@@ -2572,9 +2603,13 @@ def plot_qs_error(  # noqa: 16 fxn too complex
                 c=colors[2 % len(colors)],
                 marker=markers[2 % len(markers)],
                 label=labels[2 % len(labels)],
+                lw=lw[2 % len(lw)],
             )
 
-    ax.set_xlabel(_AXIS_LABELS_RTZ[0])
+    ax.set_xlabel(_AXIS_LABELS_RTZ[0], fontsize=xlabel_fontsize)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=ylabel_fontsize)
+
     if kwargs.pop("legend", True):
         fig.legend(**kwargs.pop("legend_kw", {"loc": "center right"}))
 

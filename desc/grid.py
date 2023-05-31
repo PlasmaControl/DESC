@@ -10,6 +10,7 @@ __all__ = [
     "LinearGrid",
     "QuadratureGrid",
     "ConcentricGrid",
+    "find_least_rational_surfaces",
     "find_most_rational_surfaces",
 ]
 
@@ -1213,3 +1214,86 @@ def find_most_rational_surfaces(iota, n, atol=1e-14, itol=1e-14, eps=1e-12, **kw
     rho = _find_rho(iota, io_rational, tol=atol)
     idx = np.argsort(rho)
     return rho[idx], io_rational[idx]
+
+
+def find_most_distant(pts, n, a=None, b=None, atol=1e-14, **kwargs):
+    """Find n points in interval that are maximally distant from pts and each other.
+
+    Parameters
+    ----------
+    pts : ndarray
+        Points to avoid
+    n : int
+        Number of points to find.
+    a, b : float, optional
+        Start and end points for interval. Default is min/max of pts
+    atol : float, optional
+        Stopping tolerance for mimimization
+    """
+
+    def foo(x, xs):
+        xs = np.atleast_1d(xs)
+        d = x - xs[:, None]
+        return -np.prod(np.abs(d), axis=0).squeeze()
+
+    if a is None:
+        a = np.min(pts)
+    if b is None:
+        b = np.max(pts)
+
+    pts = list(pts)
+    nsamples = kwargs.get("nsamples", 1000)
+    x = np.linspace(a, b, nsamples)
+    out = []
+    for i in range(n):
+        y = foo(x, pts)
+        x0 = x[np.argmin(y)]
+        bracket = (max(a, x0 - 5 / nsamples), min(x0 + 5 / nsamples, b))
+        c = optimize.minimize_scalar(
+            foo, bracket=bracket, bounds=(a, b), args=(pts,), options={"xatol": atol}
+        ).x
+        pts.append(c)
+        out.append(c)
+    return np.array(out)
+
+
+def find_least_rational_surfaces(
+    iota, n, nrational=100, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs
+):
+    """Find "least rational" surfaces for given iota profile.
+
+    By least rational we mean points farthest in iota from the nrational lowest
+    order rational surfaces and each other.
+
+    Parameters
+    ----------
+    iota : Profile
+        iota profile to search
+    n : integer
+        number of approximately irrational surfaces to find
+    nrational : int, optional
+        number of lowest order rational surfaces to avoid.
+    atol : float, optional
+        Stopping tolerance for mimimization
+    itol : float, optional
+        tolerance for rounding float to nearest int
+    eps : float, optional
+        amount to dislace points to avoid duplicates
+
+    Returns
+    -------
+    rho : ndarray
+        locations of least rational surfaces
+    io : ndarray
+        values of iota at least rational surfaces
+    rho_rat : ndarray
+        rho values of lowest order rational surfaces
+    io_rat : ndarray
+        iota values at lowest order rational surfaces
+    """
+    rho_rat, io_rat = find_most_rational_surfaces(
+        iota, nrational, atol, itol, eps, **kwargs
+    )
+    io = find_most_distant(io_rat, n, tol=atol, **kwargs)
+    rho = _find_rho(iota, io, tol=atol)
+    return rho, io

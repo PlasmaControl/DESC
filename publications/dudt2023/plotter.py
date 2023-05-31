@@ -8,6 +8,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import desc.io
 from desc.basis import DoubleFourierSeries
 from desc.compute.utils import compress
+from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
@@ -18,16 +19,128 @@ plt.rcParams["font.size"] = 14
 green = "#1b9e77"
 orange = "#d95f02"
 purple = "#7570b3"
+pink = "#e7298a"
 colormap = "plasma"
 
 save = False
 
-eq_pol = desc.io.load("publications/dudt2023/poloidal.h5")
-eq_tor = desc.io.load("publications/dudt2023/toroidal.h5")
-eq_hel = desc.io.load("publications/dudt2023/helical.h5")
-eq_pol_qs = desc.io.load("publications/dudt2023/poloidal_qs.h5")
-eq_tor_qs = desc.io.load("publications/dudt2023/toroidal_qs.h5")
-eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")
+eq_pol = desc.io.load("publications/dudt2023/poloidal.h5")[-1]
+eq_tor = desc.io.load("publications/dudt2023/toroidal.h5")[-1]
+eq_hel = desc.io.load("publications/dudt2023/helical.h5")[-1]
+eq_pol_qs = desc.io.load("publications/dudt2023/poloidal_qs.h5")[-1]
+eq_tor_qs = desc.io.load("publications/dudt2023/toroidal_qs.h5")[-1]
+eq_hel_qs = desc.io.load("publications/dudt2023/helical_qs.h5")[-1]
+
+# model ===============================================================================
+
+helicity = (0, 1)
+iota = 0.25
+well_l = np.array([0.8, 0.9, 1.1, 1.2])  # 0, sin, 0, const, 0, cos
+omni_lmn = np.array([0, -np.pi / 8, 0, np.pi / 8, 0, np.pi / 4])
+eq = Equilibrium(iota=np.array([iota]), well_l=well_l, omni_lmn=omni_lmn)
+z = np.linspace(0, np.pi / 2, num=well_l.size)
+grid = LinearGrid(theta=100, zeta=101, endpoint=True)
+data = eq.compute(["|B|_omni", "|B|(eta,alpha)"], grid=grid, helicity=helicity)
+eta = data["eta"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
+theta = (
+    data["theta_B(eta,alpha)"]
+    .reshape((grid.num_theta, grid.num_zeta), order="F")
+    .squeeze()
+)
+zeta = (
+    data["zeta_B(eta,alpha)"]
+    .reshape((grid.num_theta, grid.num_zeta), order="F")
+    .squeeze()
+)
+B = data["|B|_omni"].reshape((grid.num_theta, grid.num_zeta), order="F").squeeze()
+fig, (ax0, ax1, ax2) = plt.subplots(
+    ncols=3, figsize=(18, 6), sharex=False, sharey=False
+)
+# plot a
+ax0.plot(
+    eta[:, 0],
+    B[:, 0],
+    color=purple,
+    linestyle="-",
+    lw=6,
+    label=r"spline interpolation",
+)
+ax0.plot(
+    z,
+    well_l,
+    color=orange,
+    linestyle="",
+    marker="o",
+    ms=12,
+    label=r"$B(\eta)$ parameters",
+)
+ax0.set_xlim([-np.pi / 2, np.pi / 2])
+ax0.set_xticks([-np.pi / 2, -np.pi / 3, -np.pi / 6, 0, np.pi / 6, np.pi / 3, np.pi / 2])
+ax0.set_xticklabels(
+    [r"$-\pi/2$", r"$-\pi/3$", r"$-\pi/6$", r"$0$", r"$\pi/6$", r"$\pi/3$", r"$\pi/2$"]
+)
+ax0.set_xlabel(r"$\eta$")
+ax0.set_ylabel(r"$|\mathbf{B}|$")
+ax0.legend(loc="upper center")
+# plot b
+ax1.plot(zeta[:, 0], B[:, 0], color=green, lw=6, label=r"$\alpha=0$")
+ax1.plot(zeta[:, 25], B[:, 25], color=orange, lw=6, label=r"$\alpha=\pi/2$")
+ax1.plot(zeta[:, 50], B[:, 50], color=purple, lw=6, label=r"$\alpha=\pi$")
+ax1.plot(zeta[:, 75], B[:, 75], color=pink, lw=6, label=r"$\alpha=3\pi/2$")
+ax1.set_xlim([0, 2 * np.pi])
+ax1.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+ax1.set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+ax1.set_xlabel(r"$h$")
+ax1.set_ylabel(r"$|\mathbf{B}|$")
+ax1.legend(loc="upper center")
+# plot c
+theta3 = np.vstack((theta - 2 * np.pi, theta, theta + 2 * np.pi))
+zeta3 = np.tile(zeta, (3, 1))
+B3 = np.tile(B, (3, 1))
+div = make_axes_locatable(ax2)
+im2 = ax2.contour(zeta3, theta3, B3, norm=Normalize(), levels=20, cmap=colormap)
+cax = div.append_axes("right", size="5%", pad=0.05)
+cbar = fig.colorbar(im2, cax=cax, ticks=[1.0, 1.2, 1.4, 1.6, 1.8, 2.0])
+cbar.update_ticks()
+arr = np.linspace(0, 2 * np.pi)
+ax2.plot(arr, iota * arr + 0, color=green, linestyle=":", lw=6, label=r"$\alpha=0$")
+ax2.plot(
+    arr,
+    iota * arr + np.pi / 2,
+    color=orange,
+    linestyle=":",
+    lw=6,
+    label=r"$\alpha=\pi/2$",
+)
+ax2.plot(
+    arr,
+    iota * arr + np.pi,
+    color=purple,
+    linestyle=":",
+    lw=6,
+    label=r"$\alpha=\pi$",
+)
+ax2.plot(
+    arr,
+    iota * arr + 3 * np.pi / 2,
+    color=pink,
+    linestyle=":",
+    lw=6,
+    label=r"$\alpha=3\pi/2$",
+)
+ax2.set_xlim([0, 2 * np.pi])
+ax2.set_ylim([0, 2 * np.pi])
+ax2.set_xticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+ax2.set_xticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+ax2.set_yticks([0, np.pi / 2, np.pi, 3 * np.pi / 2, 2 * np.pi])
+ax2.set_yticklabels([r"$0$", r"$\pi/2$", r"$\pi$", r"$3\pi/2$", r"$2\pi$"])
+ax2.set_xlabel(r"$\zeta_B$")
+ax2.set_ylabel(r"$\theta_B$")
+fig.tight_layout()
+plt.show()
+if save:
+    plt.savefig("publications/dudt2023/model.png")
+    plt.savefig("publications/dudt2023/model.eps")
 
 # boundaries ==========================================================================
 
@@ -160,13 +273,13 @@ ax[0, 0].set_title(r"$M=0,~N=1$")
 ax[0, 0].set_xlim([0, 2 * np.pi])
 ax[0, 0].set_ylim([0, 2 * np.pi])
 ax[0, 0].text(
-   0.05,
-   0.95,
-   r"QI",
-   transform=ax[0, 0].transAxes,
-   fontsize=14,
-   verticalalignment="top",
-   bbox=props,
+    0.05,
+    0.95,
+    r"QI",
+    transform=ax[0, 0].transAxes,
+    fontsize=14,
+    verticalalignment="top",
+    bbox=props,
 )
 # quasi-symmetric
 data = eq_pol_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
@@ -192,13 +305,13 @@ ax[1, 0].set_ylabel(r"$\theta_{Boozer}$")
 ax[1, 0].set_xlim([0, 2 * np.pi])
 ax[1, 0].set_ylim([0, 2 * np.pi])
 ax[1, 0].text(
-   0.05,
-   0.95,
-   r"QP",
-   transform=ax[1, 0].transAxes,
-   fontsize=14,
-   verticalalignment="top",
-   bbox=props,
+    0.05,
+    0.95,
+    r"QP",
+    transform=ax[1, 0].transAxes,
+    fontsize=14,
+    verticalalignment="top",
+    bbox=props,
 )
 # helical
 grid = LinearGrid(M=32, N=32, NFP=5, sym=False, rho=1.0)
@@ -238,13 +351,13 @@ ax[0, 1].set_title(r"$M=1,~N=5$")
 ax[0, 1].set_xlim([0, 2 * np.pi / 5])
 ax[0, 1].set_ylim([0, 2 * np.pi])
 ax[0, 1].text(
-   0.05,
-   0.95,
-   r"OH",
-   transform=ax[0, 1].transAxes,
-   fontsize=14,
-   verticalalignment="top",
-   bbox=props,
+    0.05,
+    0.95,
+    r"OH",
+    transform=ax[0, 1].transAxes,
+    fontsize=14,
+    verticalalignment="top",
+    bbox=props,
 )
 # quasi-symmetric
 data = eq_hel_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
@@ -269,13 +382,13 @@ ax[1, 1].set_xlabel(r"$\zeta_{Boozer}$")
 ax[1, 1].set_xlim([0, 2 * np.pi / 5])
 ax[1, 1].set_ylim([0, 2 * np.pi])
 ax[1, 1].text(
-   0.05,
-   0.95,
-   r"QH",
-   transform=ax[1, 1].transAxes,
-   fontsize=14,
-   verticalalignment="top",
-   bbox=props,
+    0.05,
+    0.95,
+    r"QH",
+    transform=ax[1, 1].transAxes,
+    fontsize=14,
+    verticalalignment="top",
+    bbox=props,
 )
 # toroidal
 grid = LinearGrid(M=32, N=32, NFP=1, sym=False, rho=1.0)
@@ -315,13 +428,13 @@ ax[0, 2].set_title(r"$M=1,~N=0$")
 ax[0, 2].set_xlim([0, 2 * np.pi])
 ax[0, 2].set_ylim([0, 2 * np.pi])
 ax[0, 2].text(
-   0.05,
-   0.95,
-   r"OT",
-   transform=ax[0, 2].transAxes,
-   fontsize=14,
-   verticalalignment="top",
-   bbox=props,
+    0.05,
+    0.95,
+    r"OT",
+    transform=ax[0, 2].transAxes,
+    fontsize=14,
+    verticalalignment="top",
+    bbox=props,
 )
 # quasi-symmetric
 data = eq_tor_qs.compute("|B|_mn", M_booz=16, N_booz=16, grid=grid)
@@ -346,13 +459,13 @@ ax[1, 2].set_xlabel(r"$\zeta_{Boozer}$")
 ax[1, 2].set_xlim([0, 2 * np.pi])
 ax[1, 2].set_ylim([0, 2 * np.pi])
 ax[1, 2].text(
-   0.05,
-   0.95,
-   r"QA",
-   transform=ax[1, 2].transAxes,
-   fontsize=14,
-   verticalalignment="top",
-   bbox=props,
+    0.05,
+    0.95,
+    r"QA",
+    transform=ax[1, 2].transAxes,
+    fontsize=14,
+    verticalalignment="top",
+    bbox=props,
 )
 fig.tight_layout()
 plt.show()
@@ -370,15 +483,18 @@ eps_tor = np.load("publications/dudt2023/toroidal.npy")
 eps_pol_qs = np.load("publications/dudt2023/poloidal_qs.npy")
 eps_hel_qs = np.load("publications/dudt2023/helical_qs.npy")
 eps_tor_qs = np.load("publications/dudt2023/toroidal_qs.npy")
+eps_w7x = np.load("publications/dudt2023/w7x.npy")
 ax.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="QI")
 ax.semilogy(s, eps_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
 ax.semilogy(s, eps_hel, color=orange, linestyle="-", lw=4, label="OH")
 ax.semilogy(s, eps_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
 ax.semilogy(s, eps_tor, color=green, linestyle="-", lw=4, label="OT")
 ax.semilogy(s, eps_tor_qs, color=green, linestyle=":", lw=4, label="QA")
-ax.legend(loc=(0.2, 0.7), ncol=3)
+s = np.linspace(0, 1, 201)[1:]
+ax.semilogy(s, eps_w7x, color="k", linestyle="--", lw=4, label="W7-X")
+ax.legend(loc=(0.08, 0.25), ncol=4)
 ax.set_xlim([0, 1])
-ax.set_ylim([1e-7, 1e-2])
+ax.set_ylim([1e-8, 1e-2])
 ax.set_xlabel(r"Normalized toroidal flux = $\rho^2$")
 ax.set_ylabel(r"$\epsilon_{eff}^{3/2}$")
 fig.tight_layout()

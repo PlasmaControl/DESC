@@ -37,7 +37,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    ftol = 1e-2
    xtol = 1e-6
    gtol = 1e-6
-   nfev = 100
+   maxiter = 100
 
    # solver methods
    objective         = force
@@ -149,8 +149,8 @@ Solver Tolerances
 
 - ``ftol`` (float): Solver stopping tolerance on the relative norm of dF. Default = 1e-2.
 - ``xtol`` (float): Solver stopping tolerance on the relative norm of dx. Default = 1e-6.
-- ``gtol`` (float): Solver stopping tolerance on the norm of the gradient. Default = 1e-6.
-- ``nfev`` (int): Maximum number of function evaluations. Default = 0 (None).
+- ``gtol`` (float): Solver stopping tolerance on the norm of the gradient. Default = 1e-8.
+- ``maxiter`` (int): Maximum number of optimizer iterations. Default = 100.
 
 These arguments are also passed as arrays for each iteration, with the same notation as the other continuation parameters.
 In this example, the same values are being used for all 7 iterations.

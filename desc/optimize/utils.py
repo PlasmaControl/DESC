@@ -119,34 +119,34 @@ def chol(A):
     return L
 
 
-def evaluate_quadratic_form_hess(x, f, g, H, scale=None):
+def evaluate_quadratic_form_hess(H, g, x, diag=None):
     """Compute values of a quadratic function arising in trust region subproblem.
 
-    The function is 0.5 * x.T * H * x + g.T * x + f.
+    The function is 0.5 * x.T * (H + diag) * x + g.T * x.
 
     Parameters
     ----------
-    x : ndarray, shape(n,)
-        position where to evaluate quadratic form
-    f : float
-        constant term
-    g : ndarray, shape(n,)
-        Gradient, defines the linear term.
     H : ndarray
         Hessian matrix
-    scale : ndarray, shape(n,)
-        scaling to apply. Scales hess -> scale*hess*scale, g-> scale*g
+    g : ndarray, shape(n,)
+        Gradient, defines the linear term.
+    x : ndarray, shape(n,)
+        position where to evaluate quadratic form
+    diag : ndarray, shape (n,), optional
+        Addition diagonal part, affects the quadratic term.
+        If None, assumed to be 0.
 
     Returns
     -------
     values : float
         Value of the function.
     """
-    scale = scale if scale is not None else 1
-    q = (x * scale) @ H @ (x * scale)
-    l = jnp.dot(scale * g, x)
+    q = x @ H @ x
+    if diag is not None:
+        q += jnp.sum(diag * x**2, axis=-1)
+    l = jnp.dot(g, x)
 
-    return f + l + 1 / 2 * q
+    return l + 1 / 2 * q
 
 
 def evaluate_quadratic_form_jac(J, g, s, diag=None):
@@ -181,29 +181,30 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
         Js = J.dot(s.T)
         q = jnp.sum(Js**2, axis=0)
         if diag is not None:
-            q += jnp.sum(diag * s**2, axis=1)
+            q += jnp.sum(diag * s**2, axis=-1)
 
     l = jnp.dot(s, g)
 
     return 0.5 * q + l
 
 
-def print_header_nonlinear():
+def print_header_nonlinear(constrained=False):
     """Print a pretty header."""
-    print(
-        "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
-            "Iteration",
-            "Total nfev",
-            "Cost",
-            "Cost reduction",
-            "Step norm",
-            "Optimality",
-        )
+    s = "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
+        "Iteration",
+        "Total nfev",
+        "Cost",
+        "Cost reduction",
+        "Step norm",
+        "Optimality",
     )
+    if constrained:
+        s += "{:^24}".format("Constraint violation")
+    print(s)
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality
+    iteration, nfev, cost, cost_reduction, step_norm, optimality, constr_violation=None
 ):
     """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
@@ -235,12 +236,12 @@ def print_iteration_nonlinear(
         optimality = " " * 15
     else:
         optimality = "{:^15.2e}".format(optimality)
-
-    print(
-        "{}{}{}{}{}{}".format(
-            iteration, nfev, cost, cost_reduction, step_norm, optimality
-        )
+    s = "{}{}{}{}{}{}".format(
+        iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
+    if constr_violation is not None:
+        s += "{:^24.2e}".format(constr_violation)
+    print(s)
 
 
 STATUS_MESSAGES = {
@@ -286,8 +287,9 @@ def check_termination(
     ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
+    ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 
-    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
+    if ctol_satisfied and any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
         message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:
@@ -324,7 +326,9 @@ def check_termination(
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(
+        scale_inv < np.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
+    )
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
@@ -334,14 +338,16 @@ def compute_jac_scale(A, prev_scale_inv=None):
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(
+        scale_inv < np.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
+    )
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
     return 1 / scale_inv, scale_inv
 
 
-def f_where_x(x, xs, fs):
+def f_where_x(x, xs, fs, dim=0):
     """Return fs where x==xs.
 
     Parameters
@@ -352,6 +358,8 @@ def f_where_x(x, xs, fs):
         list to compare x against
     fs : list of float, ndarray
         list of values to return value from
+    dim : int
+        number of dimensions the output should have
 
     Returns
     -------
@@ -366,4 +374,9 @@ def f_where_x(x, xs, fs):
     # sometimes two things are within eps of x, we want the most recent one
     if len(i) > 1:
         i = i[-1]
-    return fs[i].squeeze()
+    f = fs[i].squeeze()
+    if dim == 1:
+        f = np.atleast_1d(f)
+    if dim == 2:
+        f = np.atleast_2d(f).reshape((-1, x.size))
+    return f

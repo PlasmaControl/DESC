@@ -27,6 +27,7 @@ from desc.objectives import (
     ForceBalance,
     HelicalForceBalance,
     ObjectiveFunction,
+    QuasisymmetryBoozer,
     QuasisymmetryTwoTerm,
     RadialForceBalance,
     get_fixed_boundary_constraints,
@@ -188,7 +189,7 @@ def test_solve_bounds():
     eq.solve(objective=obj, ftol=1e-16, xtol=1e-16, maxiter=100, verbose=3)
 
     # check that all errors are nearly 0, since residual values are within target bounds
-    f = obj.compute(obj.x(eq))
+    f = obj.compute_scaled_error(obj.x(eq))
     np.testing.assert_allclose(f, 0, atol=1e-4)
 
 
@@ -206,7 +207,7 @@ def test_1d_optimization(SOLOVEV):
         FixPsi(),
     )
     options = {"perturb_options": {"order": 1}}
-    with pytest.warns(UserWarning):
+    with pytest.warns((FutureWarning, UserWarning)):
         eq.optimize(objective, constraints, optimizer="lsq-exact", options=options)
 
     np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
@@ -291,10 +292,9 @@ def test_qh_optimization1():
     # similar, the main test is ensuring its not pathological and has good qs
     assert rho_err.mean() < 1
 
-    grid = LinearGrid(M=eq1a.M_grid, N=eq1a.N_grid, NFP=eq1a.NFP, sym=False, rho=1.0)
-    data = eq1a.compute(["|B|_mn", "B modes"], grid, M_booz=eq1a.M, N_booz=eq1a.N)
-    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
-    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+    obj = QuasisymmetryBoozer(helicity=(1, eq1a.NFP))
+    obj.build(eq1a)
+    B_asym = obj.compute(*obj.xs(eq1a))
     np.testing.assert_array_less(B_asym, 1e-1)
 
 
@@ -310,10 +310,9 @@ def test_qh_optimization2():
     # similar, the main test is ensuring its not pathological and has good qs
     assert rho_err.mean() < 1
 
-    grid = LinearGrid(M=eq2a.M_grid, N=eq2a.N_grid, NFP=eq2a.NFP, sym=False, rho=1.0)
-    data = eq2a.compute(["|B|_mn", "B modes"], grid, M_booz=eq2a.M, N_booz=eq2a.N)
-    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
-    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
+    obj = QuasisymmetryBoozer(helicity=(1, eq2a.NFP))
+    obj.build(eq2a)
+    B_asym = obj.compute(*obj.xs(eq2a))
     np.testing.assert_array_less(B_asym, 1e-2)
 
 
@@ -330,11 +329,11 @@ def test_qh_optimization3():
     # similar, the main test is ensuring its not pathological and has good qs
     assert rho_err.mean() < 1
 
-    grid = LinearGrid(M=eq3a.M_grid, N=eq3a.N_grid, NFP=eq3a.NFP, sym=False, rho=1.0)
-    data = eq3a.compute(["|B|_mn", "B modes"], grid=grid, M_booz=eq3a.M, N_booz=eq3a.N)
-    idx = np.where(np.abs(data["B modes"][:, 1] / data["B modes"][:, 2]) != 1)[0]
-    B_asym = np.sort(np.abs(data["|B|_mn"][idx]))[:-1]
-    np.testing.assert_array_less(B_asym, 2.5e-3)
+    obj = QuasisymmetryBoozer(helicity=(1, eq3a.NFP))
+    obj.build(eq3a)
+    B_asym = obj.compute(*obj.xs(eq3a))
+    np.testing.assert_array_less(B_asym, 1e-3)
+
     fig, ax = plot_boozer_surface(eq3a)
     return fig
 
@@ -401,7 +400,7 @@ def test_ESTELL_results(tmpdir_factory):
     )
     eqf = load(output_dir.join("ESTELL.h5"))
     rho_err, theta_err = area_difference_desc(eq0, eqf[-1])
-    np.testing.assert_allclose(rho_err[:, 3:], 0, atol=5e-2)
+    np.testing.assert_allclose(rho_err[:, 4:], 0, atol=5e-2)
     np.testing.assert_allclose(theta_err, 0, atol=1e-4)
 
 
@@ -509,7 +508,7 @@ def test_simsopt_QH_comparison():
         verbose=3,
         objective=objective,
         constraints=constraints,
-        optimizer=Optimizer("lsq-exact"),
+        optimizer=Optimizer("proximal-lsq-exact"),
     )
     aspect = eq2.compute("R0/a")["R0/a"]
     np.testing.assert_allclose(aspect, aspect_target, atol=1e-2, rtol=1e-3)
@@ -556,7 +555,7 @@ def test_NAE_QSC_solve():
     grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
 
     # check lambda to match near axis

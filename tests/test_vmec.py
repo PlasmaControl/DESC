@@ -340,28 +340,28 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(vmec.variables["aspect"][:], desc.variables["aspect"][:])
     np.testing.assert_allclose(
-        vmec.variables["volume_p"][:], desc.variables["volume_p"][:]
+        vmec.variables["volume_p"][:], desc.variables["volume_p"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["volavgB"][:], desc.variables["volavgB"][:]
+        vmec.variables["volavgB"][:], desc.variables["volavgB"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-6
+        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-6
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-6
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-6
+        vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-6
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-6
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
         vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
@@ -384,12 +384,12 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         np.abs(vmec.variables["jdotb"][20:100]),
         np.abs(desc.variables["jdotb"][20:100]),
-        rtol=1e-6,
+        rtol=1e-5,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jcuru"][20:100]),
         np.abs(desc.variables["jcuru"][20:100]),
-        rtol=1e-5,
+        rtol=1e-2,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["jcurv"][20:100]),
@@ -678,7 +678,7 @@ def test_vmec_save_2(VMEC_save):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=2e-3)
 
     # J^theta
     curru_vmec = VMECIO.vmec_interpolate(

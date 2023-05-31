@@ -11,15 +11,23 @@ from ._equilibrium import (
 from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
 from ._geometry import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     MeanCurvature,
     PlasmaVesselDistance,
     PrincipalCurvature,
     Volume,
 )
-from ._qs import QuasisymmetryBoozer, QuasisymmetryTripleProduct, QuasisymmetryTwoTerm
+from ._qs import (
+    Isodynamicity,
+    QuasisymmetryBoozer,
+    QuasisymmetryTripleProduct,
+    QuasisymmetryTwoTerm,
+)
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
     FixAxisZ,

@@ -74,7 +74,7 @@ class TestObjectiveFunction:
     def test_objective_from_user(self):
         """Test ObjectiveFromUser for arbitrary callable."""
 
-        def myfun(data):
+        def myfun(grid, data):
             x = data["X"]
             y = data["Y"]
             r = jnp.sqrt(x**2 + y**2)

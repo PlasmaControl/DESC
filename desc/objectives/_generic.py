@@ -17,12 +17,16 @@ from .objective_funs import _Objective
 class ObjectiveFromUser(_Objective):
     """Wrap a user defined objective function.
 
-    The user supplied function should take a single argument `data`, a dictionary
-    of values with keys from the list of `variables`_. Values will be the given data
-    evaluated at this objectives `grid`.
+    The user supplied function should take two arguments: ``grid`` and ``data``.
+
+    ``grid`` is the Grid object containing the nodes where the data is computed.
+
+    ``data`` is a dictionary of values with keys from the list of `variables`_. Values
+    will be the given data evaluated at ``grid``.
 
     The function should be JAX traceable and differentiable, and should return a single
-    JAX array.
+    JAX array. The source code of the function must be visible to the ``inspect`` module
+    for parsing.
 
     .. _variables: https://desc-docs.readthedocs.io/en/stable/variables.html
 
@@ -52,6 +56,24 @@ class ObjectiveFromUser(_Objective):
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
+
+
+    Examples
+    --------
+    .. code-block:: python
+
+        from desc.compute.utils import surface_averages, compress
+        def myfun(grid, data):
+            # This will compute the flux surface average of the function
+            # R*B_T from the Grad-Shafranov equation
+            f = data['R']*data['B_phi']
+            f_fsa = surface_averages(grid, f, sqrt_g=data['sqrt_g'])
+            # this has the FSA values on the full grid, but we just want
+            # the unique values:
+            return compress(grid, f_fsa)
+
+        myobj = ObjectiveFromUser(myfun)
+
     """
 
     _scalar = False
@@ -69,7 +91,7 @@ class ObjectiveFromUser(_Objective):
         normalize=True,
         normalize_target=True,
         grid=None,
-        name="generic",
+        name="custom",
     ):
         if target is None and bounds is None:
             target = 0
@@ -119,14 +141,11 @@ class ObjectiveFromUser(_Objective):
             else:
                 dummy_data[key] = jnp.empty((grid.num_nodes, data_index[key]["dim"]))
 
+        self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
 
-        self._dim_f = jax.eval_shape(self._fun, dummy_data).size
-
-        if self._dim_f == 1:
-            self._scalar = True
-        else:
-            self._scalar = False
+        self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
+        self._scalar = self._dim_f == 1
         self._args = get_params(self._data_keys)
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
@@ -153,7 +172,7 @@ class ObjectiveFromUser(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        f = self._fun(data)
+        f = self._fun_wrapped(data)
         return f
 
 

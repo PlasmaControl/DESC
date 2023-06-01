@@ -140,9 +140,10 @@ class TestComputeUtils:
             g_size = grid.num_nodes  # not a choice; required
             # arbitrary choice, but 1 != f_size != g_size is better to test
             f_size = g_size // 2
-            g = np.cos(np.arange(g_size)) ** 2
-            f = np.sin(np.arange(f_size)) ** 2
-            q = np.outer(g, f)
+            g = np.cos(np.arange(g_size))
+            f = np.sin(np.arange(f_size))
+            # better to test when all elements have the same sign
+            q = np.abs(np.outer(g, f))
             sqrt_g = np.arange(g_size).astype(float)
 
             averages = surface_averages(grid, q, sqrt_g, surface_label)
@@ -172,9 +173,10 @@ class TestComputeUtils:
             f_size = g_size // 4
             # arbitrary choice, but f_size != v_size != g_size is better to test
             v_size = g_size // 12
-            g = np.cos(np.arange(g_size)) ** 2
-            fv = np.sin(np.arange(f_size * v_size).reshape(f_size, v_size)) ** 2
-            q = np.einsum("g,fv->gfv", g, fv)
+            g = np.cos(np.arange(g_size))
+            fv = np.sin(np.arange(f_size * v_size).reshape(f_size, v_size))
+            # better to test when all elements have the same sign
+            q = np.abs(np.einsum("g,fv->gfv", g, fv))
             sqrt_g = np.arange(g_size).astype(float)
 
             averages = surface_averages(grid, q, sqrt_g, surface_label)

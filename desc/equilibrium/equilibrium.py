@@ -930,7 +930,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol=None,
         xtol=None,
         gtol=None,
-        nfev=100,
+        maxiter=100,
         verbose=1,
         checkpoint_path=None,
     ):
@@ -955,8 +955,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol, xtol, gtol : float or array-like of float
             stopping tolerances for subproblem at each step. `None` will use defaults
             for given optimizer.
-        nfev : int or array-like of int
-            maximum number of function evaluations in each equilibrium subproblem.
+        maxiter : int or array-like of int
+            maximum number of iterations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -982,7 +982,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             ftol,
             xtol,
             gtol,
-            nfev,
+            maxiter,
             verbose,
             checkpoint_path,
         )
@@ -997,7 +997,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol=None,
         xtol=None,
         gtol=None,
-        nfev=100,
+        maxiter=100,
         verbose=1,
         checkpoint_path=None,
         **kwargs,
@@ -1022,8 +1022,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol, xtol, gtol : float
             stopping tolerances for subproblem at each step. `None` will use defaults
             for given optimizer.
-        nfev : int
-            maximum number of function evaluations in each equilibrium subproblem.
+        maxiter : int
+            maximum number of iterations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -1056,7 +1056,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             ftol,
             xtol,
             gtol,
-            nfev,
+            maxiter,
             verbose,
             checkpoint_path,
             **kwargs,

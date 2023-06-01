@@ -63,10 +63,12 @@ def _B_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "iota", "lambda_z"],
+    data=["B0", "iota", "lambda_z", "omega_z"],
 )
 def _B_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["B^theta"] = data["B0"] * (data["iota"] - data["lambda_z"])
+    data["B^theta"] = data["B0"] * (
+        (1 + data["omega_z"]) * data["iota"] - data["lambda_z"]
+    )
     return data
 
 
@@ -81,10 +83,12 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "lambda_t"],
+    data=["B0", "iota", "lambda_t", "omega_t"],
 )
 def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["B^zeta"] = data["B0"] * (1 + data["lambda_t"])
+    data["B^zeta"] = data["B0"] * (
+        1 + data["lambda_t"] - data["omega_t"] * data["iota"]
+    )
     return data
 
 
@@ -196,12 +200,16 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_r", "iota", "iota_r", "lambda_z", "lambda_rz"],
+    data=["B0", "B0_r", "iota", "iota_r", "lambda_z", "lambda_rz", "omega_z", "omega_rz"],
 )
 def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
-    data["B^theta_r"] = data["B0_r"] * (data["iota"] - data["lambda_z"]) + data[
-        "B0"
-    ] * (data["iota_r"] - data["lambda_rz"])
+    data["B^theta_r"] = data["B0_r"] * (
+        (1 + data["omega_z"]) * data["iota"] - data["lambda_z"]
+    ) + data["B0"] * (
+        data["omega_rz"] * data["iota"]
+        + (1 + data["omega_z"]) * data["iota_r"]
+        - data["lambda_rz"]
+    )
     return data
 
 
@@ -217,11 +225,15 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_r", "lambda_t", "lambda_rt"],
+    data=["B0", "B0_r", "iota", "iota_r", "lambda_t", "lambda_rt", "omega_t", "omega_rt"],
 )
 def _B_sup_zeta_r(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_r"] = (
-        data["B0_r"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_rt"]
+    data["B^zeta_r"] = data["B0_r"] * (
+        1 + data["lambda_t"] - data["omega_t"] * data["iota"]
+    ) + data["B0"] * (
+        data["lambda_rt"]
+        - data["omega_rt"] * data["iota"]
+        - data["omega_t"] * data["iota_r"]
     )
     return data
 

@@ -460,6 +460,30 @@ class PlasmaVesselDistance(_Objective):
             name=name,
         )
 
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
+
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
 

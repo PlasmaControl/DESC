@@ -1265,6 +1265,9 @@ def find_least_rational_surfaces(
     By least rational we mean points farthest in iota from the nrational lowest
     order rational surfaces and each other.
 
+    Note: May not work as expected for non-monotonic profiles with duplicate rational
+    surfaces. (generally only 1 of each rational is found)
+
     Parameters
     ----------
     iota : Profile
@@ -1294,6 +1297,7 @@ def find_least_rational_surfaces(
     rho_rat, io_rat = find_most_rational_surfaces(
         iota, nrational, atol, itol, eps, **kwargs
     )
-    io = find_most_distant(io_rat, n, tol=atol, **kwargs)
+    a, b = iota([0.0, 1.0])
+    io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
     rho = _find_rho(iota, io, tol=atol)
     return rho, io

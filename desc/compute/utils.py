@@ -640,6 +640,7 @@ def line_integrals(
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
+        The first dimension of the array should have size grid.num_nodes.
     line_label : str
         The coordinate curve of rho, theta, or zeta to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
@@ -653,6 +654,7 @@ def line_integrals(
     -------
     integrals : ndarray
         Line integrals of q over curves covering the given surface.
+        The returned array has the same shape as the input.
 
     """
     assert (
@@ -697,6 +699,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
+        The first dimension of the array should have size grid.num_nodes.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
@@ -704,6 +707,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     -------
     integrals : ndarray
         Surface integrals of q over each surface in grid.
+        The returned array has the same shape as the input.
 
     """
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
@@ -773,8 +777,8 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     # dimensions, the second must hold g. We may choose which of the first and
     # third dimensions hold f and v. The choice below transposes `integrands` to
     # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
-    # integration is potentially faster since numpy likely optimizes large
-    # matrix products.
+    # integration is in theory faster since numpy optimizes large matrix
+    # products. However, timing results showed no difference.
     axis_to_move = (integrands.ndim == 3) * 2  # interpolates (3, 2, 1) ↦ (2, 0, 0)
     integrals = jnp.moveaxis(
         masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
@@ -797,7 +801,8 @@ def surface_averages(
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to average.
+        Quantity to integrate.
+        The first dimension of the array should have size grid.num_nodes.
     sqrt_g : ndarray
         Coordinate system Jacobian determinant; see data_index["sqrt(g)"].
     surface_label : str
@@ -810,6 +815,7 @@ def surface_averages(
     -------
     averages : ndarray
         Surface averages of q over each surface in grid.
+        The returned array has the same shape as the input.
 
     """
     q = jnp.atleast_1d(q)
@@ -838,6 +844,7 @@ def surface_max(grid, x, surface_label="rho"):
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         Quantity to find max.
+        The array should have size grid.num_nodes.
     surface_label : str
         The surface label of rho, theta, or zeta to compute max over.
 
@@ -845,6 +852,7 @@ def surface_max(grid, x, surface_label="rho"):
     -------
     maxs : ndarray
         Maximum of x over each surface in grid.
+        The returned array has the same shape as the input.
 
     """
     return -surface_min(grid, -x, surface_label)
@@ -859,6 +867,7 @@ def surface_min(grid, x, surface_label="rho"):
         Collocation grid containing the nodes to evaluate at.
     x : ndarray
         Quantity to find min.
+        The array should have size grid.num_nodes.
     surface_label : str
         The surface label of rho, theta, or zeta to compute min over.
 
@@ -866,6 +875,7 @@ def surface_min(grid, x, surface_label="rho"):
     -------
     mins : ndarray
         Minimum of x over each surface in grid.
+        The returned array has the same shape as the input.
 
     """
     unique_size, inverse_idx, _, _ = _get_grid_surface(grid, surface_label)

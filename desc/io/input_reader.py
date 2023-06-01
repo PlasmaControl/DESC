@@ -170,7 +170,7 @@ class InputReader:
             "ftol": np.atleast_1d(None),
             "xtol": np.atleast_1d(None),
             "gtol": np.atleast_1d(None),
-            "nfev": np.atleast_1d(None),
+            "maxiter": np.atleast_1d(None),
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -339,7 +339,18 @@ class InputReader:
                 flag = True
             match = re.search(r"nfev", argument, re.IGNORECASE)
             if match:
-                inputs["nfev"] = np.array([None if i == 0 else int(i) for i in numbers])
+                warnings.warn(
+                    DeprecationWarning("nfev is deprecated, please use maxiter instead")
+                )
+                inputs["maxiter"] = np.array(
+                    [None if i == 0 else int(i) for i in numbers]
+                )
+                flag = True
+            match = re.search(r"maxiter", argument, re.IGNORECASE)
+            if match:
+                inputs["maxiter"] = np.array(
+                    [None if i == 0 else int(i) for i in numbers]
+                )
                 flag = True
 
             # solver methods
@@ -581,7 +592,7 @@ class InputReader:
             "ftol",
             "xtol",
             "gtol",
-            "nfev",
+            "maxiter",
         ]
         arr_len = 0
         for a in arrs:
@@ -704,7 +715,7 @@ class InputReader:
             )
 
         f.write("\n# solver tolerances\n")
-        for key in ["ftol", "xtol", "gtol", "nfev"]:
+        for key in ["ftol", "xtol", "gtol", "maxiter"]:
             inputs_not_None = []
             for inp in inputs:
                 if inp[key] is not None:
@@ -830,7 +841,7 @@ class InputReader:
             "ftol": None,
             "xtol": None,
             "gtol": None,
-            "nfev": None,
+            "maxiter": None,
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",

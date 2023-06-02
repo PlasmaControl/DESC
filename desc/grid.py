@@ -188,8 +188,8 @@ class Grid(IOAble):
 
         """
         nodes = np.atleast_2d(nodes).reshape((-1, 3)).astype(float)
-        nodes[nodes[:, 1] > 2 * np.pi, 1] %= 2 * np.pi
-        nodes[nodes[:, 2] > 2 * np.pi / self.NFP, 2] %= 2 * np.pi / self.NFP
+        #nodes[nodes[:, 1] > 2 * np.pi, 1] %= 2 * np.pi
+        #nodes[nodes[:, 2] > 2 * np.pi / self.NFP, 2] %= 2 * np.pi / self.NFP
         spacing = (  # make weights sum to 4pi^2
             np.ones_like(nodes) * np.array([1, 2 * np.pi, 2 * np.pi]) / nodes.shape[0]
         )

@@ -533,8 +533,6 @@ class GXWrapper(_Objective):
                 #node_pattern=eq.node_pattern,
             )
 
-            #grid_1d = LinearGrid(L = 500, theta=0, zeta=0)
-            #data = eq.compute('iota',grid=grid_1d)
             data = eq.compute('iota')
             rhoa = eq.compute('rho')
             iotad = data['iota']
@@ -543,18 +541,12 @@ class GXWrapper(_Objective):
             #get coordinate system
             rho = np.sqrt(self.psi)
             iota = fi(rho)
-            #print("IOTA IS " + str(iota))
-#            zeta = np.linspace(-np.pi*self.npol/np.abs(iota),np.pi*self.npol/np.abs(iota),2*self.nzgrid+1)
-#            thetas = self.alpha*np.ones(len(zeta)) + np.abs(iota)*zeta
-            zeta = np.linspace(-np.pi*self.npol/iota,np.pi*self.npol/iota,2*self.nzgrid+1)
+            zeta = np.linspace(-np.pi*self.npol/np.abs(iota),np.pi*self.npol/np.abs(iota),2*self.nzgrid+1)
             thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
 
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
             coords = eq.compute_theta_coords(c)
-            print("rhoa is " + str(rhoa))
-            print("thetas is " + str(thetas))
-            print("zeta is " + str(zeta))
             self.grid = Grid(coords)
 
         self._dim_f = 1
@@ -682,11 +674,9 @@ class GXWrapper(_Objective):
         #calculate bmag
         modB = data['|B|']
         bmag = modB/Bref
-        print("bmag is " + str(bmag))
 
         #calculate gradpar and grho
         gradpar = Lref*data['B^zeta']/modB
-        print("gradpar is " + str(gradpar))
         grho = data['|grad(rho)|']*Lref
 
         #calculate grad_psi and grad_alpha
@@ -709,14 +699,10 @@ class GXWrapper(_Objective):
         #calculate gds*
         x = Lref * rho
         shat = -x/iotas * shear[0]/Lref
-        print("iota is " + str(iotas))
-        print("shear is " + str(shear[0]/(2*np.sqrt(self.psi))))
         gds2 = grad_alpha**2 * Lref**2 *self.psi
         #gds21 with negative sign?
         gds21 = shat/Bref * grad_psi_dot_grad_alpha
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
-        print("Lref is " + str(Lref))
-        print("Bref is " + str(Bref))
 
         #calculate gbdrift0 and cvdrift0
         B_t = data['B_theta']
@@ -775,7 +761,7 @@ class GXWrapper(_Objective):
         path_in_new = self.path_in + '_' + t + '.in'
         self.write_geo(path_geo_new)
         self.write_input(path_in_old,path_geo_old,path_in_new,path_geo_new)
-        
+        #self.write_nc(t) 
         
         #Bash app to run the gx executable
         @bash_app(executors=['jvp_threads'])
@@ -912,17 +898,9 @@ class GXWrapper(_Objective):
 
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         geo_array_gx = np.zeros(len(geo_array))
-#        for i in range(len(geo_array)):
-#            geo_array_gx[i] = geo_array[i]
-        #geo_array_gx = geo_array.copy()
-#        print("len of geo_array_gx is " + str(len(geo_array_gx)))
-#        print("len of uniform grid is " + str(len(uniform_grid)))
         f = interp1d(zgrid,geo_array,kind='cubic')
-        
-#        print("zgrid is " + str(zgrid))
-#        print("uniform grid is " + str(uniform_grid))
 
-        for i in range(len(uniform_grid)-1):
+        for i in range(len(uniform_grid)):
             geo_array_gx[i] = f(np.round(uniform_grid[i],5))
 
         return geo_array_gx
@@ -978,6 +956,39 @@ class GXWrapper(_Objective):
             self.cvdrift_gx = -self.cvdrift_gx
             self.cvdrift0_gx = -self.cvdrift0_gx
 
+    def write_nc(self,t):
+        f = 'geo_' + str(t) + '.nc'
+        ncfile = nc.Dataset(f,mode='w',format='NETCDF4_CLASSIC')
+        geo_dim = ncfile.createDimension('dim', len(self.bmag_gx))
+        shat_dim = ncfile.createDimension('shat_dim',1)
+
+        bmag = ncfile.createVariable('bmag', np.float64, ('dim',))
+        grho = ncfile.createVariable('grho', np.float64, ('dim',))
+        gds2 = ncfile.createVariable('gds2', np.float64, ('dim',))
+        gds21 = ncfile.createVariable('gds21', np.float64, ('dim',))
+        gds22 = ncfile.createVariable('gds22', np.float64, ('dim',))
+        gbdrift = ncfile.createVariable('gbdrift', np.float64, ('dim',))
+        gbdrift0 = ncfile.createVariable('gbdrift0', np.float64, ('dim',))
+        cvdrift = ncfile.createVariable('cvdrift', np.float64, ('dim',))
+        cvdrift0 = ncfile.createVariable('cvdrift0', np.float64, ('dim',))
+        gradpar = ncfile.createVariable('gradpar', np.float64, ('dim',))
+        shat = ncfile.createVariable('shat',np.float64,('shat_dim',))
+
+        bmag[:] = self.bmag_gx
+        grho[:] = self.grho_gx
+        gds2[:] = self.gds2_gx
+        gds21[:] = self.gds21_gx
+        gds22[:] = self.gds22_gx
+        gbdrift[:] = self.gbdrift_gx
+        gbdrift0[:] = self.gbdrift0_gx
+        cvdrift[:] = self.cvdrift_gx
+        cvdrift0[:] = self.cvdrift0_gx
+        gradpar[:] = self.gradpar_gx
+        shat[:] = self.shat
+
+
+        ncfile.close()
+
 
     def write_geo(self,path_geo):
         nperiod = 1
@@ -1021,7 +1032,8 @@ class GXWrapper(_Objective):
 
     def run_gx(self,t):
         fs = open('stdout.out_' + str(t),'w')
-        path = '/home/pk2354/src/gx/'
+#        path = '/home/pk2354/src/gx/'
+        path = '/home/pk2354/gx_latest/'
         #path_in = '/scratch/gpfs/pk2354/DESC/GX/gx_nl_' + t + '.in'
         path_in = self.path_in + "_" + str(t) + '.in'
         cmd = ['srun', '-N', '1', '-t', '00:10:00', '--ntasks=1', '--gpus-per-task=1', '--exact','--overcommit',path+'./gx',path_in]

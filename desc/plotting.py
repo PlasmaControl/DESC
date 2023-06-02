@@ -2307,11 +2307,11 @@ def plot_boozer_surface(
             "N": 6 * eq.N + 1,
             "NFP": eq.NFP,
             "endpoint": False,
-            "rho": np.array([0.25])
+            "rho": np.array([0.5])
         }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
-        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True, "rho": np.array([0.25])}
+        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True, "rho": np.array([0.5])}
         grid_plot = _get_grid(**grid_kwargs)
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)

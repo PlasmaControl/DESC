@@ -866,7 +866,7 @@ def surface_averages(
             grid, denominator, surface_label
         )
     else:
-        # Then normal behavior where q.shape == integrands.shape.
+        # Then normal behavior where q.shape == integrals.shape.
         averages = (
             surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
         ).T

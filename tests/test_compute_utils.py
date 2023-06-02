@@ -33,6 +33,9 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
+        The first dimension of the array should have size grid.num_nodes.
+        If the intention is to integrate a function-valued integrand, then
+        the second dimension of the array should hold the function to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
@@ -40,6 +43,7 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
     -------
     integrals : ndarray
         Surface integrals of q over each surface in grid.
+        The returned array has shape (grid.num_surface_label, *q.shape[1:]).
 
     """
     _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)

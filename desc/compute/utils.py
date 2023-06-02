@@ -641,6 +641,8 @@ def line_integrals(
     q : ndarray
         Quantity to integrate.
         The first dimension of the array should have size grid.num_nodes.
+        If the intention is to integrate a function-valued integrand, then
+        the second dimension of the array should hold the function to integrate.
     line_label : str
         The coordinate curve of rho, theta, or zeta to compute the integration over.
         To clarify, a theta (poloidal) curve is the intersection of a
@@ -660,7 +662,8 @@ def line_integrals(
             q.shape == (grid.num_nodes, function.size, v.size),
         where the third dimension is optional, then
             integrals.shape == (function.size, v.size, grid.num_surface_label)
-        Otherwise, integrals.shape == q.shape
+        Otherwise, integrals.shape == q.shape.
+
     """
     assert (
         line_label != fix_surface[0]
@@ -720,7 +723,8 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
             q.shape == (grid.num_nodes, function.size, v.size),
         where the third dimension is optional, then
             integrals.shape == (function.size, v.size, grid.num_surface_label)
-        Otherwise, integrals.shape == q.shape
+        Otherwise, integrals.shape == q.shape.
+
     """
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
         warnings.warn(
@@ -841,7 +845,8 @@ def surface_averages(
             q.shape == (grid.num_nodes, function.size, v.size),
         where the third dimension is optional, then
             averages.shape == (function_.size, v.size, grid.num_surface_label)
-        Otherwise, averages.shape == q.shape
+        Otherwise, averages.shape == q.shape.
+
     """
     q = jnp.atleast_1d(q)
     sqrt_g = jnp.atleast_1d(sqrt_g)

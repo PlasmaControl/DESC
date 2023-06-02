@@ -853,17 +853,19 @@ def surface_averages(
 
     if denominator is None:
         if sqrt_g.size == 1:
-            denominator = (
-                4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi
-            ) * sqrt_g
+            denominator = jnp.array(
+                (4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi) * sqrt_g
+            )
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
     if q.ndim > 1 and q.shape[1] == grid.num_nodes:
         # Then we integrated a function-valued integrand. Our expected use case
         # is for this to work as a coordinate transformation.
         # So surface_integrals(q) has shape (f.size, v.size, grid.num_surface_label).
-        averages = surface_integrals(grid, (sqrt_g * q.T).T, surface_label) / compress(
-            grid, denominator, surface_label
+        if denominator.size > 1:
+            denominator = compress(grid, denominator, surface_label)
+        averages = (
+            surface_integrals(grid, (sqrt_g * q.T).T, surface_label) / denominator
         )
     else:
         # Then normal behavior where q.shape == integrals.shape.

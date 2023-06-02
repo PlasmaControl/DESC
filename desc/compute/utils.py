@@ -654,8 +654,13 @@ def line_integrals(
     -------
     integrals : ndarray
         Line integrals of q over curves covering the given surface.
-        The returned array has the same shape as the input.
-
+        The first dimension of the returned array always has size grid.num_nodes.
+        When q is a function-valued integrand with function_size equal
+        to grid.num_nodes, that is, when
+            q.shape == (grid.num_nodes, function.size, v.size),
+        where the third dimension is optional, then
+            integrals.shape == (function.size, v.size, grid.num_surface_label)
+        Otherwise, integrals.shape == q.shape
     """
     assert (
         line_label != fix_surface[0]
@@ -700,6 +705,8 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     q : ndarray
         Quantity to integrate.
         The first dimension of the array should have size grid.num_nodes.
+        If the intention is to integrate a function-valued integrand, then
+        the second dimension of the array should hold the function to integrate.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
@@ -707,8 +714,13 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     -------
     integrals : ndarray
         Surface integrals of q over each surface in grid.
-        The returned array has the same shape as the input.
-
+        The first dimension of the returned array always has size grid.num_nodes.
+        When q is a function-valued integrand with function_size equal
+        to grid.num_nodes, that is, when
+            q.shape == (grid.num_nodes, function.size, v.size),
+        where the third dimension is optional, then
+            integrals.shape == (function.size, v.size, grid.num_surface_label)
+        Otherwise, integrals.shape == q.shape
     """
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
         warnings.warn(
@@ -783,6 +795,12 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     integrals = jnp.moveaxis(
         masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
     )
+    if integrands.ndim >= 2 and integrands.shape[1] == grid.num_nodes:
+        # Then we integrated a function-valued integrand. Our expected use case
+        # is for this to work as a coordinate transformation. Instead of
+        # expanding, we return the shape (f.size, v.size, unique_size).
+        # Here, f.size is grid.num_nodes.
+        return jnp.moveaxis(integrals, 0, -1)
     return expand(grid, integrals, surface_label)
 
 
@@ -803,6 +821,8 @@ def surface_averages(
     q : ndarray
         Quantity to integrate.
         The first dimension of the array should have size grid.num_nodes.
+        If the intention is to integrate a function-valued integrand, then
+        the second dimension of the array should hold the function to integrate.
     sqrt_g : ndarray
         Coordinate system Jacobian determinant; see data_index["sqrt(g)"].
     surface_label : str
@@ -815,8 +835,13 @@ def surface_averages(
     -------
     averages : ndarray
         Surface averages of q over each surface in grid.
-        The returned array has the same shape as the input.
-
+        The first dimension of the returned array always has size grid.num_nodes.
+        When q is a function-valued integrand with function_size equal
+        to grid.num_nodes, that is, when
+            q.shape == (grid.num_nodes, function.size, v.size),
+        where the third dimension is optional, then
+            averages.shape == (function_.size, v.size, grid.num_surface_label)
+        Otherwise, averages.shape == q.shape
     """
     q = jnp.atleast_1d(q)
     sqrt_g = jnp.atleast_1d(sqrt_g)
@@ -828,10 +853,18 @@ def surface_averages(
             ) * sqrt_g
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
-
-    averages = (
-        surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
-    ).T
+    if q.ndim >= 2 and q.shape[1] == grid.num_nodes:
+        # Then we integrated a function-valued integrand. Our expected use case
+        # is for this to work as a coordinate transformation.
+        # So surface_integrals(q) has shape (f.size, v.size, grid.num_surface_label).
+        averages = surface_integrals(grid, (sqrt_g * q.T).T, surface_label) / compress(
+            grid, denominator, surface_label
+        )
+    else:
+        # Then normal behavior where q.shape == integrands.shape.
+        averages = (
+            surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
+        ).T
     return averages
 
 

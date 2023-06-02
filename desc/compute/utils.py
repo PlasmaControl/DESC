@@ -799,7 +799,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
     integrals = jnp.moveaxis(
         masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
     )
-    if integrands.ndim >= 2 and integrands.shape[1] == grid.num_nodes:
+    if integrands.ndim > 1 and integrands.shape[1] == grid.num_nodes:
         # Then we integrated a function-valued integrand. Our expected use case
         # is for this to work as a coordinate transformation. Instead of
         # expanding, we return the shape (f.size, v.size, unique_size).
@@ -858,7 +858,7 @@ def surface_averages(
             ) * sqrt_g
         else:
             denominator = surface_integrals(grid, sqrt_g, surface_label)
-    if q.ndim >= 2 and q.shape[1] == grid.num_nodes:
+    if q.ndim > 1 and q.shape[1] == grid.num_nodes:
         # Then we integrated a function-valued integrand. Our expected use case
         # is for this to work as a coordinate transformation.
         # So surface_integrals(q) has shape (f.size, v.size, grid.num_surface_label).

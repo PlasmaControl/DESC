@@ -89,6 +89,8 @@ Grid
     desc.grid.LinearGrid
     desc.grid.QuadratureGrid
     desc.grid.ConcentricGrid
+    desc.grid.find_least_rational_surfaces
+    desc.grid.find_most_rational_surfaces
 
 IO
 ***
@@ -111,6 +113,7 @@ Objective Functions
 
     desc.objectives.AspectRatio
     desc.objectives.BootstrapRedlConsistency
+    desc.objectives.BScaleLength
     desc.objectives.CurrentDensity
     desc.objectives.Elongation
     desc.objectives.Energy
@@ -142,6 +145,7 @@ Objective Functions
     desc.objectives.MagneticWell
     desc.objectives.MeanCurvature
     desc.objectives.MercierStability
+    desc.objectives.ObjectiveFromUser
     desc.objectives.ObjectiveFunction
     desc.objectives.PlasmaVesselDistance
     desc.objectives.PrincipalCurvature

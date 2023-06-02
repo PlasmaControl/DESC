@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
+from desc.backend import jnp
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -26,6 +27,7 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     MercierStability,
+    ObjectiveFromUser,
     ObjectiveFunction,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -68,6 +70,23 @@ class TestObjectiveFunction:
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_objective_from_user(self):
+        """Test ObjectiveFromUser for arbitrary callable."""
+
+        def myfun(grid, data):
+            x = data["X"]
+            y = data["Y"]
+            r = jnp.sqrt(x**2 + y**2)
+            return r
+
+        eq = Equilibrium()
+        grid = LinearGrid(2, 2, 2)
+        objective = ObjectiveFromUser(myfun, eq=eq, grid=grid)
+        R1 = objective.compute(*objective.xs(eq))
+        R2 = eq.compute("R", grid=grid)["R"]
+        np.testing.assert_allclose(R1, R2)
 
     @pytest.mark.unit
     def test_volume(self):

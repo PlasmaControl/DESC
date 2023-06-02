@@ -799,8 +799,8 @@ class PrincipalCurvature(_Objective):
 class BScaleLength(_Objective):
     """Target a particular value for the magnetic field scale length.
 
-    The magnetic field scale length, defined as √2 |B| / |∇ 𝐁|, is a length scale over
-    which the magnetic field varies. It can be a useful proxy for coil complexity,
+    The magnetic field scale length, defined as √2 ||B|| / ||∇ 𝐁||, is a length scale
+    over which the magnetic field varies. It can be a useful proxy for coil complexity,
     as short length scales require complex coils that are close to the plasma surface.
 
     Parameters

@@ -34,13 +34,25 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
     q : ndarray
         Quantity to integrate.
         The first dimension of the array should have size ``grid.num_nodes``.
+
+        When ``q`` is 1-dimensional, the intention is to integrate,
+        over the domain parameterized by rho, theta, and zeta,
+        a scalar function over the previously mentioned domain.
+
+        When ``q`` is 2-dimensional, the intention is to integrate,
+        over the domain parameterized by rho, theta, and zeta,
+        a vector-valued function over the previously mentioned domain.
+
+        When ``q`` is 2-dimensional, the intention is to integrate,
+        over the domain parameterized by rho, theta, and zeta,
+        a matrix-valued function over the previously mentioned domain.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
     Returns
     -------
     integrals : ndarray
-        Surface integrals of the input over each surface in grid.
+        Surface integral of the input over each surface in the grid.
         The returned array has the same shape as the input.
         The output may be broadcast in the same way as the input.
 

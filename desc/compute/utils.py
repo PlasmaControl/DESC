@@ -642,15 +642,15 @@ def line_integrals(
         Quantity to integrate.
         The first dimension of the array should have size ``grid.num_nodes``.
 
-        When ``q`` is 1-dimensional, the intention is to average,
+        When ``q`` is 1-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a scalar function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to average,
+        When ``q`` is 2-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a vector-valued function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to average,
+        When ``q`` is 2-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a matrix-valued function over the previously mentioned domain.
     line_label : str
@@ -714,15 +714,15 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         Quantity to integrate.
         The first dimension of the array should have size ``grid.num_nodes``.
 
-        When ``q`` is 1-dimensional, the intention is to average,
+        When ``q`` is 1-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a scalar function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to average,
+        When ``q`` is 2-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a vector-valued function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to average,
+        When ``q`` is 2-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a matrix-valued function over the previously mentioned domain.
     surface_label : str
@@ -865,11 +865,11 @@ def surface_integral_transforms(grid, q=jnp.array([1.0]), surface_label="rho"):
         The surface label of rho, theta, or zeta to compute the integration over.
         These correspond to the domain parameters discussed in this method's
         description. In particular, ``surface_label`` names u_1.
+
     Returns
     -------
     integral_transforms : ndarray
         Surface integral transform of the input over each surface in grid.
-
         Reusing the terminology in the description for the input ``q``:
         If ``q`` is two-dimensional, the returned array has shape
         (grid.num_surface_label, f.size).

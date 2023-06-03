@@ -7,7 +7,16 @@ from scipy import special
 from desc.basis import FourierZernikeBasis
 from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
-from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
+from desc.grid import (
+    ConcentricGrid,
+    Grid,
+    LinearGrid,
+    QuadratureGrid,
+    dec_to_cf,
+    find_least_rational_surfaces,
+    find_most_rational_surfaces,
+)
+from desc.profiles import PowerSeriesProfile
 from desc.transform import Transform
 
 
@@ -830,3 +839,29 @@ class TestGrid:
                     sym=sym[i],
                 )
             )
+
+
+@pytest.mark.unit
+def test_find_most_rational_surfaces():
+    """Test finding the most rational surfaces and their locations."""
+    # simple test, linear iota going from 1 to 3
+    iota = PowerSeriesProfile([1, 2])
+    rho, io = find_most_rational_surfaces(iota, 5)
+    np.testing.assert_allclose(rho, np.linspace(0, 1, 5), atol=1e-14, rtol=0)
+    np.testing.assert_allclose(io, np.linspace(1, 3, 5), atol=1e-14, rtol=0)
+
+
+@pytest.mark.unit
+def test_find_least_rational_surfaces():
+    """Test finding the least rational surfaces and their locations."""
+    # simple test, linear iota going from 1 to 3
+    iota = PowerSeriesProfile([1, 2])
+    rhor, ior = find_most_rational_surfaces(iota, 10)
+    rho, io = find_least_rational_surfaces(iota, 10)
+    # to compare how rational/irrational things are, we use the length of the
+    # continued fraction. Not a great test due to rounding errors, but seems to work
+    lio = [len(dec_to_cf(i)) for i in io]
+    lior = [len(dec_to_cf(i)) for i in ior]
+    max_rational = max(lior)
+
+    assert np.all(np.array(lio) > max_rational)

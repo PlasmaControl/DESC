@@ -103,7 +103,7 @@ def _mnsc_to_modes_x(xm, xn, s, c):
         smodes = np.vstack(
             [-np.ones_like(xm_no_0), xm_no_0, xn_no_0]
         ).T  # index out m=n=0
-        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0]).T)
+        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0], axis=0).T)
     else:  # no need to index out m=n=0 bc is not in the basis
         smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
 

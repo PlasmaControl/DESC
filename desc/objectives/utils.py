@@ -1,6 +1,7 @@
 """Functions for getting common objectives and constraints."""
 
 import numpy as np
+from jax import lax
 from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
@@ -389,7 +390,14 @@ def jax_softmax(arr, alpha):
     -------
     softmax: float, the soft-maximum of the array.
     """
-    return logsumexp(arr * alpha) / alpha
+    arr_times_alpha = alpha * arr
+    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
+    return lax.cond(
+        jnp.any(min_val < 1),
+        lambda arr_times_alpha: logsumexp(arr_times_alpha / min_val) / alpha * min_val,
+        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
+        arr_times_alpha,
+    )
 
 
 def jax_softmin(arr, alpha):

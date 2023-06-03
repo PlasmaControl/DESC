@@ -826,10 +826,10 @@ def surface_integral_transforms(grid, q=jnp.array([1.0]), surface_label="rho"):
     reducing ``q`` to a set of functions of at most three variables.
 
     Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
-    For every surface of constant u_1 in the domain, this method integrates the
-    kernel function, denoted K_{u_1}, that evaluates the transform
-    T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects away the parameters
-    u_2 and u_3 via an integration of K_{u_1} over the surface of constant u_1.
+    For every surface of constant u_1 in the domain, this method evaluates the
+    transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects away the
+    parameters u_2 and u_3 via an integration of the given kernel function
+    K_{u_1} over the corresponding surface of constant u_1.
 
     Each element along the first dimension of the returned array stores
     T_{u_1} for a particular surface of constant u_1 in the given grid.

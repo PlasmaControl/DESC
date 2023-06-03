@@ -33,17 +33,16 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
         Quantity to integrate.
-        The first dimension of the array should have size grid.num_nodes.
-        If the intention is to integrate a function-valued integrand, then
-        the second dimension of the array should hold the function to integrate.
+        The first dimension of the array should have size ``grid.num_nodes``.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
 
     Returns
     -------
     integrals : ndarray
-        Surface integrals of q over each surface in grid.
-        The returned array has shape (grid.num_surface_label, *q.shape[1:]).
+        Surface integrals of the input over each surface in grid.
+        The returned array has the same shape as the input.
+        The output may be broadcast in the same way as the input.
 
     """
     _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
@@ -140,7 +139,7 @@ class TestComputeUtils:
         In particular, tests surface averages of a function-valued integrand.
         """
 
-        def test_f_size_neq_g_size(surface_label, grid):
+        def test(surface_label, grid):
             g_size = grid.num_nodes  # not a choice; required
             f_size = g_size // 10 + (g_size < 10)
             g = np.cos(np.arange(g_size))
@@ -160,43 +159,17 @@ class TestComputeUtils:
                 compress(grid, averages, surface_label), desired, err_msg=surface_label
             )
 
-        def test_f_size_eq_g_size(surface_label, grid):
-            """In this case, we don't expand in surface_integrals."""
-            g_size = grid.num_nodes  # not a choice; required
-            f_size = g_size
-            g = np.cos(np.arange(g_size))
-            f = np.sin(np.arange(f_size))
-            # better to test when all elements have the same sign
-            q = np.abs(np.outer(g, f))
-            sqrt_g = np.arange(g_size).astype(float)
-
-            averages = surface_averages(grid, q, sqrt_g, surface_label)
-            assert averages.shape == (
-                f_size,
-                {"rho": grid.num_rho, "theta": grid.num_theta, "zeta": grid.num_zeta}[
-                    surface_label
-                ],
-            ), surface_label
-
-            desired = benchmark_surface_integrals(
-                grid, (sqrt_g * q.T).T, surface_label
-            ).T / benchmark_surface_integrals(grid, sqrt_g, surface_label)
-            np.testing.assert_allclose(averages, desired, err_msg=surface_label)
-
         cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
         lg = LinearGrid(L=L, M=M, N=N, sym=True, NFP=NFP, endpoint=True)
-        test_f_size_neq_g_size("rho", cg)
-        test_f_size_neq_g_size("theta", lg)
-        test_f_size_neq_g_size("zeta", cg)
-        test_f_size_eq_g_size("zeta", cg)
-        test_f_size_eq_g_size("zeta", cg)
-        test_f_size_eq_g_size("zeta", cg)
+        test("rho", cg)
+        test("theta", lg)
+        test("zeta", cg)
 
     @pytest.mark.unit
     def test_surface_averages_vector_functions(self):
         """Test surface averages of vector-valued, function-valued integrands."""
 
-        def test_f_size_neq_g_size(surface_label, grid):
+        def test(surface_label, grid):
             g_size = grid.num_nodes  # not a choice; required
             f_size = g_size // 10 + (g_size < 10)
             # arbitrary choice, but f_size != v_size != g_size is better to test
@@ -218,43 +191,11 @@ class TestComputeUtils:
                 compress(grid, averages, surface_label), desired, err_msg=surface_label
             )
 
-        def test_f_size_eq_g_size(surface_label, grid):
-            """In this case, we don't expand in surface_integrals."""
-            g_size = grid.num_nodes  # not a choice; required
-            # arbitrary choice, but v_size != f_size != g_size is better to test
-            f_size = g_size
-            # arbitrary choice, but f_size != v_size != g_size is better to test
-            v_size = 3 + (g_size == 3)
-            g = np.cos(np.arange(g_size))
-            fv = np.sin(np.arange(f_size * v_size).reshape(f_size, v_size))
-            # better to test when all elements have the same sign
-            q = np.abs(np.einsum("g,fv->gfv", g, fv))
-            sqrt_g = np.arange(g_size).astype(float)
-
-            averages = surface_averages(grid, q, sqrt_g, surface_label)
-            assert averages.shape == (
-                f_size,
-                v_size,
-                {"rho": grid.num_rho, "theta": grid.num_theta, "zeta": grid.num_zeta}[
-                    surface_label
-                ],
-            ), surface_label
-
-            desired = benchmark_surface_integrals(
-                grid, (sqrt_g * q.T).T, surface_label
-            ).transpose(1, 2, 0) / benchmark_surface_integrals(
-                grid, sqrt_g, surface_label
-            )
-            np.testing.assert_allclose(averages, desired, err_msg=surface_label)
-
         cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
         lg = LinearGrid(L=L, M=M, N=N, sym=True, NFP=NFP, endpoint=True)
-        test_f_size_neq_g_size("rho", cg)
-        test_f_size_neq_g_size("theta", lg)
-        test_f_size_neq_g_size("zeta", cg)
-        test_f_size_eq_g_size("zeta", cg)
-        test_f_size_eq_g_size("zeta", cg)
-        test_f_size_eq_g_size("zeta", cg)
+        test("rho", cg)
+        test("theta", lg)
+        test("zeta", cg)
 
     @pytest.mark.unit
     def test_surface_area(self):

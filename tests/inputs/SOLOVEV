@@ -15,7 +15,7 @@ N_grid =  0
 ftol = 1e-15
 xtol = 1e-08
 gtol = 1e-08
-nfev = 50
+maxiter = 50
 
 # solver methods
 optimizer         = scipy-trust-exact

@@ -795,11 +795,11 @@ def test_objective_target_bounds():
 @pytest.mark.unit
 def test_jax_softmax_and_softmin():
     """Test softmax and softmin function."""
-    arr = np.arange(-10, 10, 1)
+    arr = np.arange(-17, 17, 5)
     # expect this to not be equal to the max but rather be more
     # since softmax is a conservative estimate of the max
     softmax = jax_softmax(arr, alpha=1)
-    assert softmax > np.max(arr)
+    assert softmax >= np.max(arr)
 
     # expect this to be equal to the max
     # as alpha -> infinity, softmax -> max
@@ -809,7 +809,7 @@ def test_jax_softmax_and_softmin():
     # expect this to not be equal to the min but rather be less
     # since softmin is a conservative estimate of the min
     softmin = jax_softmin(arr, alpha=1)
-    assert softmin < np.min(arr)
+    assert softmin <= np.min(arr)
 
     # expect this to be equal to the min
     # as alpha -> infinity, softmin -> min

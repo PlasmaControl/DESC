@@ -10,8 +10,8 @@ from desc.compute.utils import (
     expand,
     line_integrals,
     surface_averages,
-    surface_integrals,
     surface_integral_transform,
+    surface_integrals,
     surface_max,
     surface_min,
 )

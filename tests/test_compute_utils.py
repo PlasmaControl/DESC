@@ -44,7 +44,7 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
         over the domain parameterized by rho, theta, and zeta,
         a vector-valued function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to integrate,
+        When ``q`` is 3-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a matrix-valued function over the previously mentioned domain.
     surface_label : str

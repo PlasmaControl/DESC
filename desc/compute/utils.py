@@ -654,7 +654,7 @@ def line_integrals(
         over the domain parameterized by rho, theta, and zeta,
         a vector-valued function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to integrate,
+        When ``q`` is 3-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a matrix-valued function over the previously mentioned domain.
     line_label : str
@@ -730,7 +730,7 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
         over the domain parameterized by rho, theta, and zeta,
         a vector-valued function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to integrate,
+        When ``q`` is 3-dimensional, the intention is to integrate,
         over the domain parameterized by rho, theta, and zeta,
         a matrix-valued function over the previously mentioned domain.
     surface_label : str
@@ -856,7 +856,7 @@ def surface_averages(
         over the domain parameterized by rho, theta, and zeta,
         a vector-valued function over the previously mentioned domain.
 
-        When ``q`` is 2-dimensional, the intention is to average,
+        When ``q`` is 3-dimensional, the intention is to average,
         over the domain parameterized by rho, theta, and zeta,
         a matrix-valued function over the previously mentioned domain.
     sqrt_g : ndarray
@@ -965,6 +965,10 @@ def surface_integral_transform(grid, q=jnp.array([1.0]), surface_label="rho"):
         transform for a particular surface.
 
     """
+    # Note that expansion should not occur here. The typical use case of this
+    # method is to transform into the computational domain, so the second
+    # dimension is expected to have size grid.num_nodes and broadcast with
+    # quantities in data_index.
     return surface_integrals(grid, q, surface_label, expand_out=False)
 
 

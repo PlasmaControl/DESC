@@ -613,7 +613,11 @@ def cumtrapz(y, x=None, dx=1.0, axis=-1, initial=None):
 
 
 def line_integrals(
-    grid, q=jnp.array([1.0]), line_label="theta", fix_surface=("rho", 1.0)
+    grid,
+    q=jnp.array([1.0]),
+    line_label="theta",
+    fix_surface=("rho", 1.0),
+    expand_out=True,
 ):
     """Compute line integrals over curves covering the given surface.
 
@@ -661,13 +665,17 @@ def line_integrals(
         A tuple of the form: label, value.
         ``fix_surface`` label should differ from ``line_label``.
         By default, ``fix_surface`` is chosen to be the flux surface at rho=1.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
 
     Returns
     -------
     integrals : ndarray
         Line integrals of the input over curves covering the given surface.
-        The returned array has the same shape as the input.
-        The output may be broadcast in the same way as the input.
+        By default, the returned array has the same shape as the input.
 
     """
     assert (
@@ -694,10 +702,10 @@ def line_integrals(
     mask = grid.nodes[:, column_id] == fix_surface[1]
     q_prime = (mask * jnp.atleast_1d(q).T / grid.spacing[:, column_id]).T
     (surface_label,) = labels.keys() - {line_label, fix_surface[0]}
-    return surface_integrals(grid, q_prime, surface_label)
+    return surface_integrals(grid, q_prime, surface_label, expand_out)
 
 
-def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
+def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=True):
     """Compute the surface integral of a quantity for all surfaces in the grid.
 
     Notes
@@ -727,20 +735,19 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho"):
         a matrix-valued function over the previously mentioned domain.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
 
     Returns
     -------
     integrals : ndarray
         Surface integral of the input over each surface in the grid.
-        The returned array has the same shape as the input.
-        The output may be broadcast in the same way as the input.
+        By default, the returned array has the same shape as the input.
 
     """
-    return expand(grid, _surface_integrals(grid, q, surface_label), surface_label)
-
-
-def _surface_integrals(grid, q, surface_label):
-    # See docstring of surface_integrals or surface_integral_transforms.
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
         warnings.warn(
             colored(
@@ -815,75 +822,16 @@ def _surface_integrals(grid, q, surface_label):
     integrals = jnp.moveaxis(
         masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
     )
-    return integrals
-
-
-def surface_integral_transforms(grid, q=jnp.array([1.0]), surface_label="rho"):
-    """Compute the integral transform of a kernel over each surface in the grid.
-
-    Given a set of kernel functions in ``q``, each parameterized by at most
-    five variables, this method computes an integral transform,
-    reducing ``q`` to a set of functions of at most three variables.
-
-    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
-    For every surface of constant u_1 in the domain, this method evaluates the
-    transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects away the
-    parameters u_2 and u_3 via an integration of the given kernel function
-    K_{u_1} over the corresponding surface of constant u_1.
-
-    Each element along the first dimension of the returned array stores
-    T_{u_1} for a particular surface of constant u_1 in the given grid.
-    The order is sorted in increasing order of the values which specify u_1.
-
-    Notes
-    -----
-        It is assumed that the integration surface has area 4π^2 when the
-        surface label is rho and area 2π when the surface label is theta or
-        zeta. You may want to multiply the input by the surface area Jacobian.
-
-    Parameters
-    ----------
-    grid : Grid
-        Collocation grid containing the nodes to evaluate at.
-    q : ndarray
-        Quantity to integrate.
-
-        The first dimension of ``q`` should always discretize some function, g,
-        over the domain, and therefore, have size ``grid.num_nodes``.
-        The second dimension should always discretize some scalar function,
-        f, over the codomain, and therefore, have size that matches the number
-        of points at which the output integral transform is evaluated at.
-
-        If ``q`` is two-dimensional, then g is a scalar function.
-        The input should have shape (g.size, f.size).
-
-        If ``q`` is three-dimensional, then g is a vector-valued function.
-        The components of the vector should be stored along the third dimension.
-        The input should have shape (g.size, f.size, v.size), where v.size
-        is the number of components of vectors in the image of g.
-    surface_label : str
-        The surface label of rho, theta, or zeta to compute the integration over.
-        These correspond to the domain parameters discussed in this method's
-        description. In particular, ``surface_label`` names u_1.
-
-    Returns
-    -------
-    integral_transforms : ndarray
-        Surface integral transform of the input over each surface in grid.
-        Reusing the terminology in the description for the input ``q``:
-        If ``q`` is two-dimensional, the returned array has shape
-        (grid.num_surface_label, f.size).
-        If ``q`` is three-dimensional, the returned array has shape
-        (grid.num_surface_label, f.size, v.size).
-        In either case, each element along the first axis stores the integral
-        transform for a particular surface.
-
-    """
-    return _surface_integrals(grid, q, surface_label)
+    return expand(grid, integrals, surface_label) if expand_out else integrals
 
 
 def surface_averages(
-    grid, q, sqrt_g=jnp.array([1.0]), surface_label="rho", denominator=None
+    grid,
+    q,
+    sqrt_g=jnp.array([1.0]),
+    surface_label="rho",
+    denominator=None,
+    expand_out=True,
 ):
     """Compute the surface average of a quantity for all surfaces in the grid.
 
@@ -916,31 +864,108 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        Volume enclosed by the surfaces, derivative wrt the surface label.
         This can optionally be supplied to avoid redundant computations.
+        Volume enclosed by the surfaces, derivative wrt the surface label.
+        This array should succeed broadcasting with arrays of size
+        ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
+        is true (false).
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
 
     Returns
     -------
     averages : ndarray
         Surface average of the input over each surface in the grid.
-        The returned array has the same shape as the input.
-        The output may be broadcast in the same way as the input.
+        By default, the returned array has the same shape as the input.
 
     """
     q = jnp.atleast_1d(q)
     sqrt_g = jnp.atleast_1d(sqrt_g)
-
-    if denominator is None:
+    given_denominator = denominator is not None
+    if not given_denominator:
         if sqrt_g.size == 1:
             denominator = (
                 4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi
             ) * sqrt_g
         else:
-            denominator = _surface_integrals(grid, sqrt_g, surface_label)
-    averages = (
-        _surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T / denominator
-    ).T
-    return expand(grid, averages, surface_label)
+            denominator = surface_integrals(grid, sqrt_g, surface_label, False)
+    # minor memory optimization to call expand() at most once
+    numerator = surface_integrals(
+        grid, (sqrt_g * q.T).T, surface_label, expand_out and given_denominator
+    )
+    averages = (numerator.T / denominator).T
+    return (
+        expand(grid, averages, surface_label)
+        if expand_out and not given_denominator
+        else averages
+    )
+
+
+def surface_integral_transform(grid, q=jnp.array([1.0]), surface_label="rho"):
+    """Compute the integral transform of a kernel over each surface in the grid.
+
+    Given a set of kernel functions in ``q``, each parameterized by at most
+    five variables, this method computes an integral transform,
+    reducing ``q`` to a set of functions of at most three variables.
+
+    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
+    For every surface of constant u_1 in the domain, this method evaluates the
+    transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects away the
+    parameters u_2 and u_3 via an integration of the given kernel function
+    K_{u_1} over the corresponding surface of constant u_1.
+
+    Each element along the first dimension of the returned array stores
+    T_{u_1} for a particular surface of constant u_1 in the given grid.
+    The order is sorted in increasing order of the values which specify u_1.
+
+    Notes
+    -----
+        It is assumed that the integration surface has area 4π^2 when the
+        surface label is rho and area 2π when the surface label is theta or
+        zeta. You may want to multiply the input by the surface area Jacobian.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    q : ndarray
+        Quantity to integrate.
+
+        The first dimension of ``q`` should always discretize some function, g,
+        over the domain, and therefore, have size ``grid.num_nodes``.
+        The second dimension should always discretize some scalar function,
+        f, over the codomain, and therefore, have size that matches the desired
+        number of points at which the output integral transform is evaluated.
+
+        If ``q`` is two-dimensional, then g is a scalar function.
+        The input should have shape (g.size, f.size).
+
+        If ``q`` is three-dimensional, then g is a vector-valued function.
+        The components of the vector should be stored along the third dimension.
+        The input should have shape (g.size, f.size, v.size), where v.size
+        is the number of components of any vector in the image of g.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute the integration over.
+        These correspond to the domain parameters discussed in this method's
+        description. In particular, ``surface_label`` names u_1.
+
+    Returns
+    -------
+    integrals : ndarray
+        Surface integral transform of the input over each surface in grid.
+        Reusing the terminology in the description for the input ``q``:
+        If ``q`` is two-dimensional, the returned array has shape
+        (grid.num_surface_label, f.size).
+        If ``q`` is three-dimensional, the returned array has shape
+        (grid.num_surface_label, f.size, v.size).
+        In either case, each element along the first axis stores the integral
+        transform for a particular surface.
+
+    """
+    return surface_integrals(grid, q, surface_label, expand_out=False)
 
 
 def surface_max(grid, x, surface_label="rho"):

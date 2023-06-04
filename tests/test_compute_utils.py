@@ -11,6 +11,7 @@ from desc.compute.utils import (
     line_integrals,
     surface_averages,
     surface_integrals,
+    surface_integral_transform,
     surface_max,
     surface_min,
 )
@@ -53,8 +54,6 @@ def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
     -------
     integrals : ndarray
         Surface integral of the input over each surface in the grid.
-        The returned array has the same shape as the input.
-        The output may be broadcast in the same way as the input.
 
     """
     _, _, spacing, has_endpoint_dupe = _get_grid_surface(grid, surface_label)
@@ -95,11 +94,16 @@ class TestComputeUtils:
         """
 
         def test(surface_label, grid):
-            # enforce r is a surface function via compression
-            r = compress(
-                grid, np.random.random_sample(size=grid.num_nodes), surface_label
+            r = np.random.random_sample(
+                size={
+                    "rho": grid.num_rho,
+                    "theta": grid.num_theta,
+                    "zeta": grid.num_zeta,
+                }[surface_label]
             )
-            s = compress(grid, expand(grid, r, surface_label), surface_label)
+            expanded = expand(grid, r, surface_label)
+            assert expanded.size == grid.num_nodes
+            s = compress(grid, expanded, surface_label)
             np.testing.assert_allclose(r, s, err_msg=surface_label)
 
         lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
@@ -123,14 +127,18 @@ class TestComputeUtils:
 
         def test_b_theta(surface_label, grid, eq):
             q = eq.compute("B_theta", grid=grid)["B_theta"]
-            integrals = surface_integrals(grid, q, surface_label)
-            assert integrals.shape == q.shape, surface_label
+            integrals = surface_integrals(grid, q, surface_label, expand_out=False)
+            assert (
+                integrals.size
+                == {
+                    "rho": grid.num_rho,
+                    "theta": grid.num_theta,
+                    "zeta": grid.num_zeta,
+                }[surface_label]
+            )
             desired = benchmark_surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(
-                compress(grid, integrals, surface_label),
-                desired,
-                atol=1e-16,
-                err_msg=surface_label,
+                integrals, desired, atol=1e-16, err_msg=surface_label
             )
 
         eq = get("W7-X")
@@ -145,31 +153,29 @@ class TestComputeUtils:
                 test_b_theta(label, cg_sym, eq)
 
     @pytest.mark.unit
-    def test_surface_averages_vectors(self):
-        """Test surface averages of vector-valued integrands.
-
-        In particular, tests surface averages of a function-valued integrand.
-        """
+    def test_surface_integral_transform(self):
+        """Test surface integrals of vector-valued integrands."""
 
         def test(surface_label, grid):
-            g_size = grid.num_nodes  # not a choice; required
-            f_size = g_size // 10 + (g_size < 10)
-            g = np.cos(np.arange(g_size))
-            f = np.sin(np.arange(f_size))
+            ints = np.arange(grid.num_nodes)
             # better to test when all elements have the same sign
-            q = np.abs(np.outer(g, f))
-            sqrt_g = np.arange(g_size).astype(float)
+            q = np.abs(np.outer(np.cos(ints), np.sin(ints)))
+            # This q represents the kernel function
+            # K_{u_1} = |cos(x(u_1, u_2, u_3)) * sin(x(u_4, u_5, u_6))|
+            # The first dimension of q varies the domain u_1, u_2, and u_3
+            # and the second dimension varies the codomain u_4, u_5, u_6.
+            integrals = surface_integral_transform(grid, q, surface_label)
+            assert integrals.shape == (
+                {
+                    "rho": grid.num_rho,
+                    "theta": grid.num_theta,
+                    "zeta": grid.num_zeta,
+                }[surface_label],
+                grid.num_nodes,
+            ), surface_label
 
-            averages = surface_averages(grid, q, sqrt_g, surface_label)
-            assert averages.shape == q.shape == (g_size, f_size), surface_label
-
-            desired = (
-                benchmark_surface_integrals(grid, (sqrt_g * q.T).T, surface_label).T
-                / benchmark_surface_integrals(grid, sqrt_g, surface_label)
-            ).T
-            np.testing.assert_allclose(
-                compress(grid, averages, surface_label), desired, err_msg=surface_label
-            )
+            desired = benchmark_surface_integrals(grid, q, surface_label)
+            np.testing.assert_allclose(integrals, desired, err_msg=surface_label)
 
         cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
         lg = LinearGrid(L=L, M=M, N=N, sym=True, NFP=NFP, endpoint=True)
@@ -220,7 +226,9 @@ class TestComputeUtils:
         """
 
         def test(surface_label, grid):
-            areas = surface_integrals(grid, surface_label=surface_label)
+            areas = surface_integrals(
+                grid, surface_label=surface_label, expand_out=False
+            )
             correct_area = 4 * np.pi**2 if surface_label == "rho" else 2 * np.pi
             np.testing.assert_allclose(areas, correct_area, err_msg=surface_label)
 
@@ -283,17 +291,26 @@ class TestComputeUtils:
         def test(grid):
             def rho_line_integrals(fix_theta_val):
                 return line_integrals(
-                    grid, line_label="rho", fix_surface=("theta", fix_theta_val)
+                    grid,
+                    line_label="rho",
+                    fix_surface=("theta", fix_theta_val),
+                    expand_out=False,
                 )
 
             def theta_line_integrals(fix_zeta_val):
                 return line_integrals(
-                    grid, line_label="theta", fix_surface=("zeta", fix_zeta_val)
+                    grid,
+                    line_label="theta",
+                    fix_surface=("zeta", fix_zeta_val),
+                    expand_out=False,
                 )
 
             def zeta_line_integrals(fix_rho_val):
                 return line_integrals(
-                    grid, line_label="zeta", fix_surface=("rho", fix_rho_val)
+                    grid,
+                    line_label="zeta",
+                    fix_surface=("rho", fix_rho_val),
+                    expand_out=False,
                 )
 
             if not isinstance(grid, ConcentricGrid):
@@ -343,7 +360,7 @@ class TestComputeUtils:
         """
         eq = get("W7-X")
         grid = ConcentricGrid(L=L, M=M, N=N, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute("|B|_t", grid=grid)
+        data = eq.compute(["|B|", "|B|_t", "sqrt(g)"], grid=grid)
         a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
         b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
         a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
@@ -355,7 +372,7 @@ class TestComputeUtils:
         eq = get("W7-X")
         rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        data = eq.compute("|B|", grid=grid)
+        data = eq.compute(["|B|", "sqrt(g)"], grid=grid)
 
         np.testing.assert_allclose(
             surface_averages(grid, data["|B|"], data["sqrt(g)"]),

@@ -1,7 +1,7 @@
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import compress, cross, dot, line_integrals, surface_integrals
+from .utils import cross, dot, line_integrals, surface_integrals
 
 
 @register_compute_fun(
@@ -197,27 +197,22 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     max_rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0]
-    P = (
-        compress(  # perimeter
+    P = (  # perimeter
+        line_integrals(
             transforms["grid"],
-            line_integrals(
-                transforms["grid"],
-                jnp.sqrt(data["g_tt"]),
-                line_label="theta",
-                fix_surface=("rho", max_rho),
-            ),
-            surface_label="zeta",
+            jnp.sqrt(data["g_tt"]),
+            line_label="theta",
+            fix_surface=("rho", max_rho),
+            expand_out=False,
         )
         / max_rho
     )
-    A = compress(  # surface area
+    # surface area
+    A = surface_integrals(
         transforms["grid"],
-        surface_integrals(
-            transforms["grid"],
-            jnp.abs(data["sqrt(g)"] / data["R"]),
-            surface_label="zeta",
-        ),
+        jnp.abs(data["sqrt(g)"] / data["R"]),
         surface_label="zeta",
+        expand_out=False,
     )
     # derived from Ramanujan approximation for the perimeter of an ellipse
     a = (  # semi-major radius

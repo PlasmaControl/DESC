@@ -845,7 +845,7 @@ def surface_averages(
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
     q : ndarray
-        Quantity to integrate.
+        Quantity to average.
         The first dimension of the array should have size ``grid.num_nodes``.
 
         When ``q`` is 1-dimensional, the intention is to average,
@@ -970,6 +970,37 @@ def surface_integral_transform(grid, q=jnp.array([1.0]), surface_label="rho"):
     # dimension is expected to have size grid.num_nodes and broadcast with
     # quantities in data_index.
     return surface_integrals(grid, q, surface_label, expand_out=False)
+
+
+def surface_integral_transform_map(grid, surface_label="rho"):
+    """Returns the map for surface_integral_transform() of the given grid."""
+    # Copied from surface_integrals().
+    if surface_label == "theta" and isinstance(grid, ConcentricGrid):
+        warnings.warn(
+            colored(
+                "Integrals over constant theta surfaces are poorly defined for "
+                + "ConcentricGrid.",
+                "yellow",
+            )
+        )
+    unique_size, inverse_idx, spacing, has_endpoint_dupe = _get_grid_surface(
+        grid, surface_label
+    )
+    # Todo: Define masks as a sparse matrix once sparse matrices are
+    #       are no longer experimental in jax.
+    masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
+    if has_endpoint_dupe:
+        masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
+    spacing = jnp.prod(spacing, axis=1)
+
+    def _surface_integral_transform(q):
+        integrands = (spacing * jnp.nan_to_num(q).T).T
+        axis_to_move = (integrands.ndim == 3) * 2
+        return jnp.moveaxis(
+            masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
+        )
+
+    return _surface_integral_transform
 
 
 def surface_max(grid, x, surface_label="rho"):

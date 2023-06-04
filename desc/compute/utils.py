@@ -994,10 +994,11 @@ def surface_integral_transform_map(grid, surface_label="rho"):
     spacing = jnp.prod(spacing, axis=1)
 
     def _surface_integral_transform(q):
-        integrands = (spacing * jnp.nan_to_num(q).T).T
-        axis_to_move = (integrands.ndim == 3) * 2
+        axis_to_move = (q.ndim == 3) * 2
         return jnp.moveaxis(
-            masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
+            masks @ jnp.moveaxis((spacing * jnp.nan_to_num(q).T).T, axis_to_move, 0),
+            0,
+            axis_to_move,
         )
 
     return _surface_integral_transform

@@ -642,11 +642,10 @@ class GXWrapper(_Objective):
         iota = iotas * np.ones(len(zeta))
         shear = shears * np.ones(len(zeta))
         thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
-
+        
         rhoa = rho*np.ones(len(zeta))
         c = np.vstack([rhoa,thetas,zeta]).T
         coords = self.eq.compute_theta_coords(c,L_lmn=L_lmn,tol=1e-10,maxiter=50)
-        print("coords are " + str(coords))
         th = coords[:,1]
 
         if self._profiles_eq["iota"] is None:
@@ -662,16 +661,11 @@ class GXWrapper(_Objective):
         )
 
         psib = data_eq['psi'][-1]
-        if psib < 0:
-            sgn = False
-            psib = np.abs(psib)
-        else:
-            sgn = True
-        
+        print("SIGN OF PSI IS " + str(psib/np.abs(psib)))
         
         #normalizations       
         Lref = data_eq['a']
-        Bref = 2*psib/Lref**2
+        Bref = 2*np.abs(psib)/Lref**2
 
         #calculate bmag
         modB = data['|B|']
@@ -684,12 +678,9 @@ class GXWrapper(_Objective):
         #calculate grad_psi and grad_alpha
         grad_psi = 2*psib*rho
         lmbda = data['lambda']
-        print("thetas is " + str(thetas))
-        print("true thetas is " + str(th + lmbda))
         lmbda_r = data['lambda_r']
         lmbda_t = data['lambda_t']
         lmbda_z = data['lambda_z']
-        #iota_data = self.eq.compute('iota')
        
         grad_alpha_r = (lmbda_r - zeta*shear)
         grad_alpha_t = (1 + lmbda_t)
@@ -705,7 +696,7 @@ class GXWrapper(_Objective):
         shat = -x/iotas * shear[0]/Lref
         gds2 = grad_alpha**2 * Lref**2 *self.psi
         #gds21 with negative sign?
-        gds21 = shat/Bref * grad_psi_dot_grad_alpha
+        gds21 = -shat/Bref * grad_psi_dot_grad_alpha
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
 
         #calculate gbdrift0 and cvdrift0
@@ -716,7 +707,7 @@ class GXWrapper(_Objective):
         jac = data['sqrt(g)']
         #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
         #gbdrift0 with negative sign?
-        gbdrift0 = shat * 2 / modB**3 / rho*(B_t*dB_z + B_z*dB_t)*psib/jac * 2 * rho
+        gbdrift0 = -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z + B_z*dB_t)*psib/jac * 2 * rho
         cvdrift0 = gbdrift0
 
         #calculate gbdrift and cvdrift
@@ -746,7 +737,7 @@ class GXWrapper(_Objective):
 
         #iota = iota_data['iota'][0]
         gbdrift_norm = 2*Bref*Lref**2/modB**3*rho
-        gbdrift = gbdrift_norm/jac*(B_r*dB_t*(lmbda_z - iota) + B_t*dB_z*(lmbda_r - zeta*shear[0]) + B_z*dB_r*(1+lmbda_t) - B_z*dB_t*(lmbda_r - zeta*shear[0]) - B_t*dB_r*(lmbda_z - iota) - B_r*dB_z*(1+lmbda_t))
+        gbdrift = -psib/np.abs(psib) * gbdrift_norm/jac*(B_r*dB_t*(lmbda_z - iota) + B_t*dB_z*(lmbda_r - zeta*shear[0]) + B_z*dB_r*(1+lmbda_t) - B_z*dB_t*(lmbda_r - zeta*shear[0]) - B_t*dB_r*(lmbda_z - iota) - B_r*dB_z*(1+lmbda_t))
         Bsa = 1/jac * (B_z*(1+lmbda_t) - B_t*(lmbda_z - iota))
         p_r = data['p_r']
         cvdrift = gbdrift + 2*Bref*Lref**2/modB**2 * rho*mu_0/modB**2*p_r*Bsa
@@ -756,7 +747,7 @@ class GXWrapper(_Objective):
         self.iota = iota
 
 
-        self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn)
+        self.get_gx_arrays(zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0)
         #t = str(time.time())
         t = str(self.t)
         path_geo_old = self.path_geo + '.out'
@@ -914,7 +905,7 @@ class GXWrapper(_Objective):
 
         return geo_array_gx
 
-    def get_gx_arrays(self,zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0,sgn):
+    def get_gx_arrays(self,zeta,bmag,grho,gradpar,gds2,gds21,gds22,gbdrift,gbdrift0,cvdrift,cvdrift0):
         dzeta = zeta[1] - zeta[0]
         dzeta_pi = np.pi / self.nzgrid
         index_of_middle = self.nzgrid
@@ -924,10 +915,7 @@ class GXWrapper(_Objective):
         z_on_theta_grid = np.zeros(2*self.nzgrid+1)
         self.uniform_zgrid = np.zeros(2*self.nzgrid+1)
 
-        gradpar_temp = np.copy(gradpar)
-        
-        print("gradpar_temp is " + str(gradpar_temp))
-
+        gradpar_temp = np.copy(gradpar) 
         for i in range(2*self.nzgrid - 1):
             gradpar_half_grid[i] = 0.5*(np.abs(gradpar_temp[i]) + np.abs(gradpar_temp[i+1]))    
         gradpar_half_grid[2*self.nzgrid - 1] = gradpar_half_grid[0]
@@ -935,9 +923,6 @@ class GXWrapper(_Objective):
         for i in range(2*self.nzgrid):
             temp_grid[i+1] = temp_grid[i] + dzeta * (1 / np.abs(gradpar_half_grid[i]))
         
-        print("temp grid is " + str(temp_grid))
-        print("gradpar half grid is " + str(gradpar_half_grid))
-
         for i in range(2*self.nzgrid+1):
             z_on_theta_grid[i] = temp_grid[i] - temp_grid[index_of_middle]
         desired_gradpar = np.pi/np.abs(z_on_theta_grid[0])
@@ -961,13 +946,6 @@ class GXWrapper(_Objective):
         self.cvdrift_gx = self.interp_to_new_grid(cvdrift,z_on_theta_grid,self.uniform_zgrid)
         self.cvdrift0_gx = self.interp_to_new_grid(cvdrift0,z_on_theta_grid,self.uniform_zgrid)
         self.gradpar_gx = gradpar_temp
-
-        if sgn:
-            self.gds21_gx = -self.gds21_gx
-            self.gbdrift_gx = -self.gbdrift_gx
-            self.gbdrift0_gx = -self.gbdrift0_gx
-            self.cvdrift_gx = -self.cvdrift_gx
-            self.cvdrift0_gx = -self.cvdrift0_gx
 
     def write_nc(self,t):
         f = 'geo_' + str(t) + '.nc'
@@ -1020,7 +998,7 @@ class GXWrapper(_Objective):
 
         f.write("\ngds21 gds22 tgrid")
         for i in range(len(self.uniform_zgrid)):
-            f.write("\n"+str(-self.gds21_gx[i])+" "+str(self.gds22_gx[i])+  " " + str(self.uniform_zgrid[i]))
+            f.write("\n"+str(self.gds21_gx[i])+" "+str(self.gds22_gx[i])+  " " + str(self.uniform_zgrid[i]))
 
         f.write("\ncvdrift0 gbdrift0 tgrid")
         for i in range(len(self.uniform_zgrid)):

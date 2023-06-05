@@ -1074,9 +1074,13 @@ def surface_integrals_transform(grid, surface_label="rho"):
 
         The first dimension of ``q`` should always discretize some function, g,
         over the domain, and therefore, have size ``grid.num_nodes``.
-        The second dimension should always discretize some function, f, over the
+        The second dimension should discretize some function, f, over the
         codomain, and therefore, have size that matches the desired number of
         points at which the output is evaluated.
+        If the integrand is vector-valued then the third dimension should
+        hold the components.
+        This method can also be used to compute the output one point at a time.
+        In this case, the second dimension may hold the vector components.
 
         Input
         -----

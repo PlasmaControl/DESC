@@ -10,8 +10,8 @@ from desc.compute.utils import (
     expand,
     line_integrals,
     surface_averages,
-    surface_integral_transform,
     surface_integrals,
+    surface_integrals_transform,
     surface_max,
     surface_min,
 )
@@ -20,7 +20,7 @@ from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
 def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
-    """Compute the surface integral of a quantity for all surfaces in the grid.
+    """Compute a surface integral for each surface in the grid.
 
     Notes
     -----
@@ -153,8 +153,8 @@ class TestComputeUtils:
                 test_b_theta(label, cg_sym, eq)
 
     @pytest.mark.unit
-    def test_surface_integral_transform(self):
-        """Test surface integrals of vector-valued integrands."""
+    def test_surface_integrals_transform(self):
+        """Test surface integral of a kernel function."""
 
         def test(surface_label, grid):
             ints = np.arange(grid.num_nodes)
@@ -164,7 +164,7 @@ class TestComputeUtils:
             # K_{u_1} = |cos(x(u_1, u_2, u_3)) * sin(x(u_4, u_5, u_6))|
             # The first dimension of q varies the domain u_1, u_2, and u_3
             # and the second dimension varies the codomain u_4, u_5, u_6.
-            integrals = surface_integral_transform(grid, q, surface_label)
+            integrals = surface_integrals_transform(grid, surface_label)(q)
             assert integrals.shape == (
                 {
                     "rho": grid.num_rho,

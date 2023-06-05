@@ -692,7 +692,7 @@ def line_integrals(
         )
     # Generate a new quantity q_prime which is zero everywhere
     # except on the fixed surface, on which q_prime takes the value of q.
-    # Then forward the computation to surface_integrals.
+    # Then forward the computation to surface_integrals().
     # The differential element of the line integral, denoted dl,
     # should correspond to the line label's spacing.
     # The differential element of the surface integral is
@@ -706,7 +706,7 @@ def line_integrals(
 
 
 def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=True):
-    """Compute the surface integral of a quantity for all surfaces in the grid.
+    """Compute a surface integral for each surface in the grid.
 
     Notes
     -----
@@ -748,6 +748,31 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
         By default, the returned array has the same shape as the input.
 
     """
+    return surface_integrals_map(grid, surface_label, expand_out)(q)
+
+
+def surface_integrals_map(grid, surface_label="rho", expand_out=True):
+    """Returns a method to compute any surface integral for each surface in the grid.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute the integration over.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
+
+    Returns
+    -------
+    function : callable
+        Method to compute any surface integral of the input ``q`` over each
+        surface in the grid with code: ``function(q)``.
+
+    """
     if surface_label == "theta" and isinstance(grid, ConcentricGrid):
         warnings.warn(
             colored(
@@ -786,43 +811,79 @@ def surface_integrals(grid, q=jnp.array([1.0]), surface_label="rho", expand_out=
         # combining the indices corresponding to the integrands of the duplicated
         # surface, so that the duplicate surface is treated as one, like in the
         # previous paragraph.
+    spacing = jnp.prod(spacing, axis=1)
 
-    integrands = (jnp.prod(spacing, axis=1) * jnp.nan_to_num(q).T).T
-    # `integrands` may have shape (g.size, f.size, v.size), where
-    #     g is the grid function depending on the integration variables
-    #     f is a function which may be independent of the integration variables
-    #     v is the vector of components of f (or, equivalently, of g).
-    # The intention is to integrate `integrands` which is a
-    #     vector-valued            (with v.size components)
-    #     function-valued          (with image size of f.size)
-    #     function over the grid   (with domain size of g.size = grid.num_nodes)
-    # over each surface in the grid.
-    #
-    # The distinction between f and v is semantic.
-    # We may alternatively consider an `integrands` of shape (g.size, f.size) to
-    # represent a vector-valued (with f.size components) function over the grid.
-    # Likewise, we may alternatively consider an `integrands` of shape
-    # (g.size, v.size) to represent a function-valued (with image size v.size)
-    # function over the grid. When `integrands` has dimension one, it is a
-    # scalar function over the grid. That is, a
-    #     vector-valued            (with 1 component),
-    #     function-valued          (with image size of 1)
-    #     function over the grid   (with domain size of g.size = grid.num_nodes)
-    #
-    # The integration is performed by applying `masks`, the surface
-    # integral operator, to `integrands`. This operator hits the matrix formed
-    # by the last two dimensions of `integrands`, for every element along the
-    # previous dimension of `integrands`. Therefore, when `integrands` has three
-    # dimensions, the second must hold g. We may choose which of the first and
-    # third dimensions hold f and v. The choice below transposes `integrands` to
-    # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
-    # integration is in theory faster since numpy optimizes large matrix
-    # products. However, timing results showed no difference.
-    axis_to_move = (integrands.ndim == 3) * 2
-    integrals = jnp.moveaxis(
-        masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
-    )
-    return expand(grid, integrals, surface_label) if expand_out else integrals
+    def _surface_integrals(q=jnp.array([1.0])):
+        """Compute a surface integral for each surface in the grid.
+
+        Notes
+        -----
+            It is assumed that the integration surface has area 4π^2 when the
+            surface label is rho and area 2π when the surface label is theta or
+            zeta. You may want to multiply the input by the surface area Jacobian.
+
+        Parameters
+        ----------
+        q : ndarray
+            Quantity to integrate.
+            The first dimension of the array should have size ``grid.num_nodes``.
+
+            When ``q`` is 1-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            a scalar function over the previously mentioned domain.
+
+            When ``q`` is 2-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            a vector-valued function over the previously mentioned domain.
+
+            When ``q`` is 3-dimensional, the intention is to integrate,
+            over the domain parameterized by rho, theta, and zeta,
+            a matrix-valued function over the previously mentioned domain.
+
+        Returns
+        -------
+        integrals : ndarray
+            Surface integral of the input over each surface in the grid.
+
+        """
+        integrands = (spacing * jnp.nan_to_num(q).T).T
+        # `integrands` may have shape (g.size, f.size, v.size), where
+        #     g is the grid function depending on the integration variables
+        #     f is a function which may be independent of the integration variables
+        #     v is the vector of components of f (or, equivalently, of g).
+        # The intention is to integrate `integrands` which is a
+        #     vector-valued            (with v.size components)
+        #     function-valued          (with image size of f.size)
+        #     function over the grid   (with domain size of g.size = grid.num_nodes)
+        # over each surface in the grid.
+
+        # The distinction between f and v is semantic.
+        # We may alternatively consider an `integrands` of shape (g.size, f.size) to
+        # represent a vector-valued (with f.size components) function over the grid.
+        # Likewise, we may alternatively consider an `integrands` of shape
+        # (g.size, v.size) to represent a function-valued (with image size v.size)
+        # function over the grid. When `integrands` has dimension one, it is a
+        # scalar function over the grid. That is, a
+        #     vector-valued            (with 1 component),
+        #     function-valued          (with image size of 1)
+        #     function over the grid   (with domain size of g.size = grid.num_nodes)
+
+        # The integration is performed by applying `masks`, the surface
+        # integral operator, to `integrands`. This operator hits the matrix formed
+        # by the last two dimensions of `integrands`, for every element along the
+        # previous dimension of `integrands`. Therefore, when `integrands` has three
+        # dimensions, the second must hold g. We may choose which of the first and
+        # third dimensions hold f and v. The choice below transposes `integrands` to
+        # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
+        # integration is in theory faster since numpy optimizes large matrix
+        # products. However, timing results showed no difference.
+        axis_to_move = (integrands.ndim == 3) * 2
+        integrals = jnp.moveaxis(
+            masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
+        )
+        return expand(grid, integrals, surface_label) if expand_out else integrals
+
+    return _surface_integrals
 
 
 def surface_averages(
@@ -833,7 +894,7 @@ def surface_averages(
     denominator=None,
     expand_out=True,
 ):
-    """Compute the surface average of a quantity for all surfaces in the grid.
+    """Compute a surface average for each surface in the grid.
 
     Notes
     -----
@@ -882,71 +943,149 @@ def surface_averages(
         By default, the returned array has the same shape as the input.
 
     """
-    q = jnp.atleast_1d(q)
-    sqrt_g = jnp.atleast_1d(sqrt_g)
-    given_denominator = denominator is not None
-    if not given_denominator:
-        if sqrt_g.size == 1:
-            denominator = (
-                4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi
-            ) * sqrt_g
-        else:
-            denominator = surface_integrals(grid, sqrt_g, surface_label, False)
-    # minor memory optimization to call expand() at most once
-    numerator = surface_integrals(
-        grid, (sqrt_g * q.T).T, surface_label, expand_out and given_denominator
-    )
-    averages = (numerator.T / denominator).T
-    return (
-        expand(grid, averages, surface_label)
-        if expand_out and not given_denominator
-        else averages
-    )
+    return surface_averages_map(grid, surface_label, expand_out)(q, sqrt_g, denominator)
 
 
-def surface_integral_transform(grid, q=jnp.array([1.0]), surface_label="rho"):
-    """Compute the integral transform of a kernel over each surface in the grid.
-
-    Given a set of kernel functions in ``q``, each parameterized by at most
-    five variables, this method computes an integral transform,
-    reducing ``q`` to a set of functions of at most three variables.
-
-    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
-    For every surface of constant u_1 in the domain, this method evaluates the
-    transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects away the
-    parameters u_2 and u_3 via an integration of the given kernel function
-    K_{u_1} over the corresponding surface of constant u_1.
-
-    Each element along the first dimension of the returned array stores
-    T_{u_1} for a particular surface of constant u_1 in the given grid.
-    The order is sorted in increasing order of the values which specify u_1.
-
-    Notes
-    -----
-        It is assumed that the integration surface has area 4π^2 when the
-        surface label is rho and area 2π when the surface label is theta or
-        zeta. You may want to multiply the input by the surface area Jacobian.
+def surface_averages_map(grid, surface_label="rho", expand_out=True):
+    """Returns a method to compute any surface average for each surface in the grid.
 
     Parameters
     ----------
     grid : Grid
         Collocation grid containing the nodes to evaluate at.
-    q : ndarray
-        Quantity to integrate.
+    surface_label : str
+        The surface label of rho, theta, or zeta to compute the average over.
+    expand_out : bool
+        Whether to expand the output array so that the output has the same
+        shape as the input. Defaults to true so that the output may be
+        broadcast in the same way as the input. Setting to false will save
+        memory.
 
-        The first dimension of ``q`` should always discretize some function, g,
-        over the domain, and therefore, have size ``grid.num_nodes``.
-        The second dimension should always discretize some scalar function,
-        f, over the codomain, and therefore, have size that matches the desired
-        number of points at which the output integral transform is evaluated.
+    Returns
+    -------
+    function : callable
+        Method to compute any surface average of the input ``q`` and optionally
+        the volume Jacobian ``sqrt_g``  over each surface in the grid with code:
+        ``function(q, sqrt_g)``.
 
-        If ``q`` is two-dimensional, then g is a scalar function.
-        The input should have shape (g.size, f.size).
+    """
+    compute_surface_integrals = surface_integrals_map(grid, surface_label, False)
 
-        If ``q`` is three-dimensional, then g is a vector-valued function.
-        The components of the vector should be stored along the third dimension.
-        The input should have shape (g.size, f.size, v.size), where v.size
-        is the number of components of any vector in the image of g.
+    def _surface_averages(q, sqrt_g=jnp.array([1.0]), denominator=None):
+        """Compute a surface average for each surface in the grid.
+
+        Notes
+        -----
+            Implements the flux-surface average formula given by equation 4.9.11 in
+            W.D. D'haeseleer et al. (1991) doi:10.1007/978-3-642-75595-8.
+
+        Parameters
+        ----------
+        q : ndarray
+            Quantity to average.
+            The first dimension of the array should have size ``grid.num_nodes``.
+
+            When ``q`` is 1-dimensional, the intention is to average,
+            over the domain parameterized by rho, theta, and zeta,
+            a scalar function over the previously mentioned domain.
+
+            When ``q`` is 2-dimensional, the intention is to average,
+            over the domain parameterized by rho, theta, and zeta,
+            a vector-valued function over the previously mentioned domain.
+
+            When ``q`` is 3-dimensional, the intention is to average,
+            over the domain parameterized by rho, theta, and zeta,
+            a matrix-valued function over the previously mentioned domain.
+        sqrt_g : ndarray
+            Coordinate system Jacobian determinant; see ``data_index["sqrt(g)"]``.
+        denominator : ndarray
+            This can optionally be supplied to avoid redundant computations.
+            Volume enclosed by the surfaces, derivative wrt the surface label.
+            This array should succeed broadcasting with arrays of size
+            ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
+            is true (false).
+
+        Returns
+        -------
+        averages : ndarray
+            Surface average of the input over each surface in the grid.
+
+        """
+        q = jnp.atleast_1d(q)
+        sqrt_g = jnp.atleast_1d(sqrt_g)
+        numerator = compute_surface_integrals((sqrt_g * q.T).T)
+        # minor memory optimization to call expand() at most once
+        if denominator is None:
+            # skip integration if constant
+            denominator = (
+                (4 * jnp.pi**2 if surface_label == "rho" else 2 * jnp.pi) * sqrt_g
+                if sqrt_g.size == 1
+                else compute_surface_integrals(sqrt_g)
+            )
+            averages = (numerator.T / denominator).T
+            if expand_out:
+                averages = expand(grid, averages, surface_label)
+        else:
+            if expand_out:
+                # implies denominator given with size grid.num_nodes
+                numerator = expand(grid, numerator, surface_label)
+            averages = (numerator.T / denominator).T
+        return averages
+
+    return _surface_averages
+
+
+def surface_integrals_transform(grid, surface_label="rho"):
+    """Returns a method to compute a surface integral for each surface in the grid.
+
+    The returned method takes an array input ``q`` and returns an array
+    output ``integrals``.
+
+    Given a set of kernel functions in ``q``, each parameterized by at most
+    five variables, the returned method computes an integral transform,
+    reducing ``q`` to a set of functions of at most three variables.
+
+    Define the domain D = u_1 × u_2 × u_3 and the codomain C = u_4 × u_5 × u_6.
+    For every surface of constant u_1 in the domain, the returned method
+    evaluates the transform T_{u_1}: (u_2 × u_3) × C → C, where T_{u_1} projects
+    away the parameters u_2 and u_3 via an integration of the given kernel
+    function K_{u_1} over the corresponding surface of constant u_1.
+
+    The first dimension of ``q`` should always discretize some function, g,
+    over the domain, and therefore, have size ``grid.num_nodes``.
+    The second dimension should always discretize some scalar function,
+    f, over the codomain, and therefore, have size that matches the desired
+    number of points at which the output integral transform is evaluated.
+
+    If ``q`` is two-dimensional, then g is a scalar function.
+    The input should have shape (g.size, f.size).
+    If ``q`` is three-dimensional, then g is a vector-valued function.
+    The components of the vector should be stored along the third dimension.
+    The input should have shape (g.size, f.size, v.size), where v.size
+    is the number of components of any vector in the image of g.
+
+    Each element along the first dimension of the returned array, ``integrals``,
+    stores T_{u_1} for a particular surface of constant u_1 in the given grid.
+    The order is sorted in increasing order of the values which specify u_1.
+
+    If ``q`` is two-dimensional, the returned array has shape
+    (grid.num_surface_label, f.size).
+    If ``q`` is three-dimensional, the returned array has shape
+    (grid.num_surface_label, f.size, v.size).
+    In either case, each element along the first axis stores the integral
+    transform for a particular surface.
+
+    Notes
+    -----
+        It is assumed that the integration surface has area 4π^2 when the
+        surface label is rho and area 2π when the surface label is theta or
+        zeta. You may want to multiply the input ``q`` by the surface area
+        Jacobian.
+
+    Parameters
+    ----------
+    grid : Grid
+        Collocation grid containing the nodes to evaluate at.
     surface_label : str
         The surface label of rho, theta, or zeta to compute the integration over.
         These correspond to the domain parameters discussed in this method's
@@ -954,54 +1093,20 @@ def surface_integral_transform(grid, q=jnp.array([1.0]), surface_label="rho"):
 
     Returns
     -------
-    integrals : ndarray
-        Surface integral transform of the input over each surface in grid.
-        Reusing the terminology in the description for the input ``q``:
-        If ``q`` is two-dimensional, the returned array has shape
-        (grid.num_surface_label, f.size).
-        If ``q`` is three-dimensional, the returned array has shape
-        (grid.num_surface_label, f.size, v.size).
-        In either case, each element along the first axis stores the integral
-        transform for a particular surface.
+    function : callable
+        Method to compute a surface integral transform of the input ``q`` over
+        each surface in the grid with code: ``function(q)``.
 
     """
-    # Note that expansion should not occur here. The typical use case of this
-    # method is to transform into the computational domain, so the second
-    # dimension is expected to have size grid.num_nodes and broadcast with
-    # quantities in data_index.
-    return surface_integrals(grid, q, surface_label, expand_out=False)
-
-
-def surface_integral_transform_map(grid, surface_label="rho"):
-    """Returns the map for surface_integral_transform() of the given grid."""
-    # Copied from surface_integrals().
-    if surface_label == "theta" and isinstance(grid, ConcentricGrid):
-        warnings.warn(
-            colored(
-                "Integrals over constant theta surfaces are poorly defined for "
-                + "ConcentricGrid.",
-                "yellow",
-            )
-        )
-    unique_size, inverse_idx, spacing, has_endpoint_dupe = _get_grid_surface(
-        grid, surface_label
-    )
-    # Todo: Define masks as a sparse matrix once sparse matrices are
-    #       are no longer experimental in jax.
-    masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
-    if has_endpoint_dupe:
-        masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
-    spacing = jnp.prod(spacing, axis=1)
-
-    def _surface_integral_transform(q):
-        axis_to_move = (q.ndim == 3) * 2
-        return jnp.moveaxis(
-            masks @ jnp.moveaxis((spacing * jnp.nan_to_num(q).T).T, axis_to_move, 0),
-            0,
-            axis_to_move,
-        )
-
-    return _surface_integral_transform
+    # Although this method seems to duplicate surface_integrals(), they require
+    # different algorithms. We can rely on surface_integrals() for the
+    # computation because its current implementation is flexible enough to
+    # implement both algorithms.
+    # Expansion should not occur here. The typical use case of this method is to
+    # transform into the computational domain, so the second dimension will
+    # typically have size grid.num_nodes to broadcast with quantities in
+    # data_index.
+    return surface_integrals_map(grid, surface_label, expand_out=False)
 
 
 def surface_max(grid, x, surface_label="rho"):

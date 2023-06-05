@@ -5,7 +5,7 @@ import pytest
 from scipy import special
 
 from desc.basis import FourierZernikeBasis
-from desc.compute.utils import compress, surface_averages
+from desc.compute.utils import surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import (
     ConcentricGrid,
@@ -711,7 +711,7 @@ class TestGrid:
 
             # compute average for each surface in grid
             values = transform.transform(coeffs)
-            numerical_avg = compress(grid, surface_averages(grid, values))
+            numerical_avg = surface_averages(grid, values, expand_out=False)
             if isinstance(grid, ConcentricGrid):
                 # values closest to axis are never accurate enough
                 numerical_avg = numerical_avg[1:]
@@ -766,7 +766,7 @@ class TestGrid:
                 dr[-1] = 1 - (r_unique[-2] + r_unique[-1]) / 2
             else:
                 dr = 1 / grid.num_rho
-            expected_integral = np.sum(dr * compress(grid, function_of_rho))
+            expected_integral = np.sum(dr * function_of_rho[grid.unique_rho_idx])
             true_integral = np.log(1.35 / 0.35)
             midpoint_rule_error_bound = np.max(dr) ** 2 / 24 * (2 / 0.35**3)
             right_riemann_error_bound = dr * (1 / 0.35 - 1 / 1.35)

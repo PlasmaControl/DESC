@@ -541,12 +541,12 @@ class GXWrapper(_Objective):
             #get coordinate system
             rho = np.sqrt(self.psi)
             iota = fi(rho)
-            zeta = np.linspace(-np.pi*self.npol/np.abs(iota),np.pi*self.npol/np.abs(iota),2*self.nzgrid+1)
+            zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
             thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
 
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
-            coords = eq.compute_theta_coords(c)
+            coords = eq.compute_theta_coords(c,tol=1e-10,maxiter=50)
             self.grid = Grid(coords)
 
         self._dim_f = 1
@@ -638,14 +638,16 @@ class GXWrapper(_Objective):
         iotas = fi(np.sqrt(self.psi))
         shears = fs(np.sqrt(self.psi))
 
-        zeta = np.linspace(-np.pi*self.npol/np.abs(iotas),np.pi*self.npol/np.abs(iotas),2*self.nzgrid+1)
+        zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iotas),(np.pi*self.npol-self.alpha)/np.abs(iotas),2*self.nzgrid+1)
         iota = iotas * np.ones(len(zeta))
         shear = shears * np.ones(len(zeta))
         thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
 
         rhoa = rho*np.ones(len(zeta))
         c = np.vstack([rhoa,thetas,zeta]).T
-        coords = self.eq.compute_theta_coords(c,L_lmn=L_lmn)
+        coords = self.eq.compute_theta_coords(c,L_lmn=L_lmn,tol=1e-10,maxiter=50)
+        print("coords are " + str(coords))
+        th = coords[:,1]
 
         if self._profiles_eq["iota"] is None:
             self.grid = Grid(coords)
@@ -682,6 +684,8 @@ class GXWrapper(_Objective):
         #calculate grad_psi and grad_alpha
         grad_psi = 2*psib*rho
         lmbda = data['lambda']
+        print("thetas is " + str(thetas))
+        print("true thetas is " + str(th + lmbda))
         lmbda_r = data['lambda_r']
         lmbda_t = data['lambda_t']
         lmbda_z = data['lambda_z']
@@ -899,9 +903,14 @@ class GXWrapper(_Objective):
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         geo_array_gx = np.zeros(len(geo_array))
         f = interp1d(zgrid,geo_array,kind='cubic')
-
-        for i in range(len(uniform_grid)):
-            geo_array_gx[i] = f(np.round(uniform_grid[i],5))
+        
+        for i in range(len(uniform_grid)-1):
+            if uniform_grid[i] > zgrid[-1]:
+                geo_array_gx[i] = geo_array_gx[i-1]
+            else:
+                geo_array_gx[i] = f(np.round(uniform_grid[i],5))
+        
+        geo_array_gx[-1] = geo_array[-1]
 
         return geo_array_gx
 
@@ -916,6 +925,8 @@ class GXWrapper(_Objective):
         self.uniform_zgrid = np.zeros(2*self.nzgrid+1)
 
         gradpar_temp = np.copy(gradpar)
+        
+        print("gradpar_temp is " + str(gradpar_temp))
 
         for i in range(2*self.nzgrid - 1):
             gradpar_half_grid[i] = 0.5*(np.abs(gradpar_temp[i]) + np.abs(gradpar_temp[i+1]))    
@@ -923,7 +934,9 @@ class GXWrapper(_Objective):
 
         for i in range(2*self.nzgrid):
             temp_grid[i+1] = temp_grid[i] + dzeta * (1 / np.abs(gradpar_half_grid[i]))
-
+        
+        print("temp grid is " + str(temp_grid))
+        print("gradpar half grid is " + str(gradpar_half_grid))
 
         for i in range(2*self.nzgrid+1):
             z_on_theta_grid[i] = temp_grid[i] - temp_grid[index_of_middle]

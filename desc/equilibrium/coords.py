@@ -80,6 +80,7 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
     theta_star_k = nodes[:, 1] + lmbda
     err = theta_star - theta_star_k
     noconverge = jnp.abs(err) > tol
+    print("K IS " + str(k))
     nodes = jnp.where(noconverge[:, np.newaxis], jnp.nan, nodes)
 
     return nodes

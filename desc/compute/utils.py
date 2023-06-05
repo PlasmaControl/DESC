@@ -850,7 +850,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # `integrands` may have shape (g.size, f.size, v.size), where
         #     g is the grid function depending on the integration variables
         #     f is a function which may be independent of the integration variables
-        #     v is the vector of components of f (or, equivalently, of g).
+        #     v is the vector of components of f (or g).
         # The intention is to integrate `integrands` which is a
         #     vector-valued            (with v.size components)
         #     function-valued          (with image size of f.size)
@@ -1050,35 +1050,6 @@ def surface_integrals_transform(grid, surface_label="rho"):
     away the parameters u_2 and u_3 via an integration of the given kernel
     function K_{u_1} over the corresponding surface of constant u_1.
 
-    Input to returned method
-    ------------------------
-        The first dimension of ``q`` should always discretize some function, g,
-        over the domain, and therefore, have size ``grid.num_nodes``.
-        The second dimension should always discretize some function, f, over the
-        codomain, and therefore, have size that matches the desired number of
-        points at which the output is evaluated.
-
-        If ``q`` is two-dimensional, then g is a scalar function.
-        The input should have shape (g.size, f.size).
-        If ``q`` is three-dimensional, then g (and therefore also f) is a
-        vector-valued function.
-        The components of the vector should be stored along the third dimension.
-        The input should have shape (g.size, f.size, v.size), where v.size
-        is the number of components of the vectors.
-
-    Output of returned method
-    -------------------------
-        Each element along the first dimension of the returned array, stores
-        T_{u_1} for a particular surface of constant u_1 in the given grid.
-        The order is sorted in increasing order of the values which specify u_1.
-
-        If ``q`` is two-dimensional, the returned array has shape
-        (grid.num_surface_label, f.size).
-        If ``q`` is three-dimensional, the returned array has shape
-        (grid.num_surface_label, f.size, v.size).
-        In either case, each element along the first axis stores the integral
-        transform for a particular surface.
-
     Notes
     -----
         It is assumed that the integration surface has area 4π^2 when the
@@ -1098,8 +1069,42 @@ def surface_integrals_transform(grid, surface_label="rho"):
     Returns
     -------
     function : callable
-        Method to compute a surface integral transform of the input ``q`` over
+        Method to compute any surface integral transform of the input ``q`` over
         each surface in the grid with code: ``function(q)``.
+
+        The first dimension of ``q`` should always discretize some function, g,
+        over the domain, and therefore, have size ``grid.num_nodes``.
+        The second dimension should always discretize some function, f, over the
+        codomain, and therefore, have size that matches the desired number of
+        points at which the output is evaluated.
+
+        Input
+        -----
+        If ``q`` is one-dimensional, then g and f are scalar functions, and f
+        has been evaluated at only one point.
+        If ``q`` is two-dimensional, then either
+        1) g and f are scalar function, so the input should have shape
+        (g.size, f.size).
+        2) g (or f) is a vector-valued function, and f has been evaluated at
+        only one point, so the input should have shape (g.size, v.size) where
+        v.size is the number of elements in the vector.
+        If ``q`` is three-dimensional, then g (or f) is a vector-valued
+        function. The components of the vector should be stored along the third
+        dimension. Then the input should have shape (g.size, f.size, v.size).
+
+        Output
+        ------
+        Each element along the first dimension of the returned array, stores
+        T_{u_1} for a particular surface of constant u_1 in the given grid.
+        The order is sorted in increasing order of the values which specify u_1.
+
+        If ``q`` is two-dimensional, the returned array has shape
+        (grid.num_surface_label, (f or v).size), depending on whether f or v is
+        the relevant label.
+        If ``q`` is three-dimensional, the returned array has shape
+        (grid.num_surface_label, f.size, v.size).
+        In either case, each element along the first axis stores the integral
+        transform for a particular surface.
 
     """
     # Although this method seems to duplicate surface_integrals(), they require

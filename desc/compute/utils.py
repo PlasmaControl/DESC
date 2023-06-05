@@ -1014,7 +1014,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
         q = jnp.atleast_1d(q)
         sqrt_g = jnp.atleast_1d(sqrt_g)
         numerator = compute_surface_integrals((sqrt_g * q.T).T)
-        # minor memory optimization to call expand() at most once
+        # memory optimization to call expand() at most once
         if denominator is None:
             # skip integration if constant
             denominator = (
@@ -1074,27 +1074,31 @@ def surface_integrals_transform(grid, surface_label="rho"):
 
         The first dimension of ``q`` should always discretize some function, g,
         over the domain, and therefore, have size ``grid.num_nodes``.
-        The second dimension should discretize some function, f, over the
+        The second dimension may discretize some function, f, over the
         codomain, and therefore, have size that matches the desired number of
         points at which the output is evaluated.
-        If the integrand is vector-valued then the third dimension should
-        hold the components.
+        If the integrand is vector-valued then the third dimension may
+        hold the components of size v.size.
+
         This method can also be used to compute the output one point at a time.
-        In this case, the second dimension may hold the vector components.
+        In this case, ``q`` will be at most two-dimensional, and the second
+        dimension may hold the vector components.
+
+        There is technically no difference between the labels f and v, so their
+        roles may be swapped if this is more convenient.
 
         Input
         -----
-        If ``q`` is one-dimensional, then g and f are scalar functions, and f
-        has been evaluated at only one point.
+        If ``q`` is one-dimensional, then it should have shape
+        (``grid.num_nodes``, ).
         If ``q`` is two-dimensional, then either
-        1) g and f are scalar function, so the input should have shape
-        (g.size, f.size).
-        2) g (or f) is a vector-valued function, and f has been evaluated at
-        only one point, so the input should have shape (g.size, v.size) where
-        v.size is the number of elements in the vector.
-        If ``q`` is three-dimensional, then g (or f) is a vector-valued
-        function. The components of the vector should be stored along the third
-        dimension. Then the input should have shape (g.size, f.size, v.size).
+            1) g and f are scalar functions, so the input should have shape
+               (``grid.num_nodes``, f.size).
+            2) g (or f) is a vector-valued function, and f has been evaluated at
+               only one point, so the input should have shape
+               (``grid.num_nodes``, v.size).
+        If ``q`` is three-dimensional, then it should have shape
+        (``grid.num_nodes``, f.size, v.size).
 
         Output
         ------
@@ -1102,23 +1106,23 @@ def surface_integrals_transform(grid, surface_label="rho"):
         T_{u_1} for a particular surface of constant u_1 in the given grid.
         The order is sorted in increasing order of the values which specify u_1.
 
+        If ``q`` is one-dimensional, the returned array has shape
+        (grid.num_surface_label, ).
         If ``q`` is two-dimensional, the returned array has shape
         (grid.num_surface_label, (f or v).size), depending on whether f or v is
         the relevant label.
         If ``q`` is three-dimensional, the returned array has shape
         (grid.num_surface_label, f.size, v.size).
-        In either case, each element along the first axis stores the integral
-        transform for a particular surface.
 
     """
-    # Although this method seems to duplicate surface_integrals(), they require
-    # different algorithms. We can rely on surface_integrals() for the
-    # computation because its current implementation is flexible enough to
-    # implement both algorithms.
+    # Although this method seems to duplicate surface_integrals(), the
+    # intentions of these methods may be to implement different algorithms.
+    # We can rely on surface_integrals() for the computation because its current
+    # implementation is flexible enough to implement both algorithms.
     # Expansion should not occur here. The typical use case of this method is to
-    # transform into the computational domain, so the second dimension will
-    # typically have size grid.num_nodes to broadcast with quantities in
-    # data_index.
+    # transform into the computational domain, so the second dimension that
+    # discretizes f over the codomain will typically have size grid.num_nodes
+    # to broadcast with quantities in data_index.
     return surface_integrals_map(grid, surface_label, expand_out=False)
 
 

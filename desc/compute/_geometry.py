@@ -105,6 +105,7 @@ def _A(params, transforms, profiles, data, **kwargs):
             transforms["grid"],
             jnp.abs(data["sqrt(g)"] / data["R"]),
             surface_label="zeta",
+            expand_out=False,
         )
     )
     return data

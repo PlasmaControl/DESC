@@ -395,9 +395,12 @@ class PlasmaVesselDistance(_Objective):
     points on surface corresponding to the grid that the plasma-vessel distance
     is evaluated at, which can cause cusps or regions of very large curvature.
 
-    NOTE: When use_softmin=True, ensure that alpha*values passed in is
-    at least >1, otherwise the softmin can return inaccurate approximations
-    of the minimum.
+    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    at least >1, otherwise the softmin will return inaccurate approximations
+    of the minimum. Will automatically multiply array values by 2 / min_val if the min
+    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmin, which can cause inaccurate mins or even incorrect
+    signs of the softmin versus the actual min.
 
     Parameters
     ----------
@@ -426,7 +429,11 @@ class PlasmaVesselDistance(_Objective):
         Collocation grid containing the nodes to evaluate plasma geometry at.
     use_softmin: Bool, use softmin or hard min.
     alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
-        approximates the hardmin. softmin -> hardmin as alpha -> infinity
+        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
+        if alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
+        than this minimum value will make the softmin a more accurate approximation
+        of the true min.
     name : str
         Name of the objective function.
     """

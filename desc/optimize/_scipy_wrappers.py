@@ -100,7 +100,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
     """
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
-    options.setdefault("maxiter", np.iinfo(np.int32).max)
+    options.setdefault("maxiter", stoptol["maxiter"])
     options.setdefault("disp", False)
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
     if isinstance(x_scale, str) and x_scale == "auto":
@@ -456,7 +456,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
             ftol=EPS,
             xtol=EPS,
             gtol=EPS,
-            max_nfev=np.iinfo(np.int32).max,
+            max_nfev=stoptol["max_nfev"],
             verbose=0,
             **options,
         )
@@ -561,7 +561,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
 
     """
     options = {} if options is None else options
-    options.setdefault("maxiter", np.iinfo(np.int32).max)
+    options.setdefault("maxiter", stoptol["max_nfev"])
     options.setdefault("disp", False)
     fun, grad, hess = objective.compute_scalar, objective.grad, objective.hess
 

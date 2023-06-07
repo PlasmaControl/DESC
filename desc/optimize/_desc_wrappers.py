@@ -48,7 +48,7 @@ def _optimize_desc_aug_lagrangian(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -142,7 +142,7 @@ def _optimize_desc_aug_lagrangian_least_squares(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -234,7 +234,7 @@ def _optimize_desc_least_squares(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -333,7 +333,7 @@ def _optimize_desc_fmin_scalar(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -416,7 +416,7 @@ def _optimize_desc_stochastic(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver

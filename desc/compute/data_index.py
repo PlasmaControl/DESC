@@ -15,7 +15,7 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
-    limit_data=None,
+    axis_limit_data=None,
     **kwargs
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -47,7 +47,7 @@ def register_compute_fun(
         a flux function, etc.
     data : list of str
         Names of other items in the data index needed to compute qty.
-    limit_data : list of str
+    axis_limit_data : list of str
         Names of other items in the data index needed to compute axis limit of qty.
 
     Notes
@@ -60,7 +60,7 @@ def register_compute_fun(
         "transforms": transforms,
         "profiles": profiles,
         "data": data,
-        "limit_data": [] if limit_data is None else limit_data,
+        "axis_limit_data": [] if axis_limit_data is None else axis_limit_data,
         "kwargs": list(kwargs.values()),
     }
 

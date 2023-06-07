@@ -116,7 +116,7 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
             )
             if transforms["grid"].axis.size:
                 data = _compute(
-                    data_index[name]["dependencies"]["limit_data"],
+                    data_index[name]["dependencies"]["axis_limit_data"],
                     params=params,
                     transforms=transforms,
                     profiles=profiles,
@@ -158,7 +158,7 @@ def get_data_deps(keys, has_axis):
         for dep in deps:
             out += _get_deps_1_key(dep)
         if has_axis:
-            axis_limit_deps = data_index[key]["dependencies"]["limit_data"]
+            axis_limit_deps = data_index[key]["dependencies"]["axis_limit_data"]
             out += axis_limit_deps.copy()  # to be safe
             for dep in axis_limit_deps:
                 out += _get_deps_1_key(dep)
@@ -372,7 +372,7 @@ def has_dependencies(qty, params, transforms, profiles, data):
     """
     return (
         _has_data(qty, data)
-        and (not transforms["grid"].axis.size or _has_limit_data(qty, data))
+        and (not transforms["grid"].axis.size or _has_axis_limit_data(qty, data))
         and _has_params(qty, params)
         and _has_profiles(qty, profiles)
         and _has_transforms(qty, transforms)
@@ -384,8 +384,8 @@ def _has_data(qty, data):
     return all(d in data for d in deps)
 
 
-def _has_limit_data(qty, data):
-    deps = data_index[qty]["dependencies"]["limit_data"]
+def _has_axis_limit_data(qty, data):
+    deps = data_index[qty]["dependencies"]["axis_limit_data"]
     return all(d in data for d in deps)
 
 

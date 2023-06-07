@@ -479,7 +479,7 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     profiles=["iota", "current"],
     coordinates="r",
     data=["psi_r", "iota_0_num", "iota_0_den"],
-    limit_data=["psi_rr"],
+    axis_limit_data=["psi_rr"],
 )
 def _iota(params, transforms, profiles, data, **kwargs):
     # The rotational transform is computed from the toroidal current profile using
@@ -631,7 +631,14 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)"],
-    limit_data=["lambda_rt", "g_tt_rr", "g_tz_r", "g_tz_rr", "sqrt(g)_r", "sqrt(g)_rr"],
+    axis_limit_data=[
+        "lambda_rt",
+        "g_tt_rr",
+        "g_tz_r",
+        "g_tz_rr",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
 )
 def _iota_0_num(params, transforms, profiles, data, **kwargs):
     num = (
@@ -763,7 +770,7 @@ def _iota_0_num_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["g_tt", "sqrt(g)"],
-    limit_data=["g_tt_rr", "sqrt(g)_r"],
+    axis_limit_data=["g_tt_rr", "sqrt(g)_r"],
 )
 def _iota_0_den(params, transforms, profiles, data, **kwargs):
     den = data["g_tt"] / data["sqrt(g)"]

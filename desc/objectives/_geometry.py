@@ -390,6 +390,7 @@ class PlasmaVesselDistance(_Objective):
     plasma grid. For dense grids, this will approximate the global min, but in general
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
+
     NOTE: for best results, use this objective in combination with either MeanCurvature
     or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
     points on surface corresponding to the grid that the plasma-vessel distance

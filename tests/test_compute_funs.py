@@ -1116,7 +1116,11 @@ def test_compute_everything():
     eq = Equilibrium(1, 1, 1)
     grid = LinearGrid(1, 1, 1)
     for key in data_index.keys():
-        data = eq.compute(key, grid=grid)
+        try:
+            data = eq.compute(key, grid=grid)
+        except ValueError:
+            print(key)
+            assert False
         assert key in data
 
 

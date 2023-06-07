@@ -2160,7 +2160,7 @@ def plot_boozer_modes(
     for i, r in enumerate(rho):
         grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         transforms = get_transforms(
-            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+            "|B|_mn", grid.axis.size, eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -2306,11 +2306,22 @@ def plot_boozer_surface(
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     title_font_size = kwargs.pop("title_font_size", None)
 
+    # Todo: review this please
     transforms_compute = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn",
+        has_axis=grid_compute.axis.size,
+        eq=eq,
+        grid=grid_compute,
+        M_booz=M_booz,
+        N_booz=N_booz,
     )
     transforms_plot = get_transforms(
-        "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
+        "|B|_mn",
+        has_axis=grid_plot.axis.size,
+        eq=eq,
+        grid=grid_plot,
+        M_booz=M_booz,
+        N_booz=N_booz,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -2474,7 +2485,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
-                "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
+                "|B|_mn", grid.axis.size, eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
             )
             if i == 0:  # only need to do this once for the first rho surface
                 matrix, modes, idx = ptolemy_linear_transform(

@@ -352,7 +352,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", grid.axis.size, eq=eq, grid=grid)
     data = compute_fun(
         "sqrt(g)_PEST",
         params={

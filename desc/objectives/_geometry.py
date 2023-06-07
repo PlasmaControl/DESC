@@ -94,15 +94,17 @@ class AspectRatio(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -215,15 +217,17 @@ class Elongation(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["a_major/a_minor"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -336,15 +340,17 @@ class Volume(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["V"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -383,7 +389,7 @@ class Volume(_Objective):
 
 
 class PlasmaVesselDistance(_Objective):
-    """Target the distance between the plasma and a surounding surface.
+    """Target the distance between the plasma and a surrounding surface.
 
     Computes the minimum distance from each point on the surface grid to a point on the
     plasma grid. For dense grids, this will approximate the global min, but in general
@@ -480,7 +486,10 @@ class PlasmaVesselDistance(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
-        self._args = get_params(self._data_keys)
+        # Todo: review this please
+        self._args = get_params(
+            self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -490,8 +499,20 @@ class PlasmaVesselDistance(_Objective):
         self._surface_coords = self._surface.compute_coordinates(
             grid=surface_grid, basis="xyz"
         )
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=plasma_grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=plasma_grid)
+        # Todo: review this please
+        self._profiles = get_profiles(
+            self._data_keys,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            eq=eq,
+            grid=plasma_grid,
+        )
+        # Todo: review this please
+        self._transforms = get_transforms(
+            self._data_keys,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+            eq=eq,
+            grid=plasma_grid,
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -617,15 +638,17 @@ class MeanCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -750,15 +773,17 @@ class PrincipalCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1", "curvature_k2"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -878,15 +903,17 @@ class BScaleLength(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:

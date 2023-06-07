@@ -56,12 +56,31 @@ from .utils import (
 # import the compute module.
 def _build_data_index():
     for key in data_index.keys():
-        full = {}
-        full["data"] = get_data_deps(key)
-        full["transforms"] = get_derivs(key)
-        full["params"] = get_params(key)
-        full["profiles"] = get_profiles(key)
+        full = {
+            "data": get_data_deps(key, False),
+            "transforms": get_derivs(key, False),
+            "params": get_params(key, False),
+            "profiles": get_profiles(key, False),
+        }
         data_index[key]["full_dependencies"] = full
+
+        full_and_axis_data = get_data_deps(key, True)
+        if len(full["data"]) >= len(full_and_axis_data):
+            # Then this quantity lacks dependencies that would only be required
+            # to evaluate this quantity's limit at the magnetic axis.
+            full_and_axis = full
+        else:
+            full_and_axis = {
+                "data": full_and_axis_data,
+                "transforms": get_derivs(key, True),
+                "params": get_params(key, True),
+                "profiles": get_profiles(key, True),
+            }
+            for _key, val in full_and_axis.items():
+                if len(full[_key]) >= len(val):
+                    # one is a deep copy of the other; dereference to save memory
+                    full_and_axis[_key] = full[_key]
+        data_index[key]["full_and_axis_dependencies"] = full_and_axis
 
 
 _build_data_index()

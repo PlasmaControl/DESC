@@ -15,6 +15,7 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    limit_data=None,
     **kwargs
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -45,7 +46,9 @@ def register_compute_fun(
         Coordinate dependency. IE, "rtz" for a function of rho, theta, zeta, or "r" for
         a flux function, etc.
     data : list of str
-        Names of other items in the data index needed to compute qty
+        Names of other items in the data index needed to compute qty.
+    limit_data : list of str
+        Names of other items in the data index needed to compute axis limit of qty.
 
     Notes
     -----
@@ -57,6 +60,7 @@ def register_compute_fun(
         "transforms": transforms,
         "profiles": profiles,
         "data": data,
+        "limit_data": [] if limit_data is None else limit_data,
         "kwargs": list(kwargs.values()),
     }
 

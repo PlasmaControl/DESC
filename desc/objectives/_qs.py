@@ -117,7 +117,7 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         self._data_keys = ["|B|_mn"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         assert grid.sym is False
         assert grid.num_rho == 1
@@ -127,9 +127,10 @@ class QuasisymmetryBoozer(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
         self._transforms = get_transforms(
             self._data_keys,
+            grid.axis.size,
             eq=eq,
             grid=grid,
             M_booz=M_booz,
@@ -303,15 +304,17 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -461,15 +464,17 @@ class QuasisymmetryTripleProduct(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -601,15 +606,17 @@ class Isodynamicity(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(
+            self._data_keys, grid.axis.size, eq=eq, grid=grid
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:

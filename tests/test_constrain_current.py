@@ -17,9 +17,9 @@ class _ExactValueProfile:
     def __init__(self, eq, grid):
         self.eq = eq
         self.grid = grid
-        self.transforms = get_transforms("current_rr", eq=eq, grid=grid)
-        self.profiles = get_profiles("current_rr", eq=eq, grid=grid)
-        self.params = get_params("current_rr", eq=eq)
+        self.transforms = get_transforms("current_rr", grid.axis.size, eq=eq, grid=grid)
+        self.profiles = get_profiles("current_rr", grid.axis.size, eq=eq, grid=grid)
+        self.params = get_params("current_rr", grid.axis.size, eq=eq)
 
     def compute(self, params, dr, *args, **kwargs):
         if dr == 0:
@@ -90,7 +90,7 @@ class TestConstrainCurrent:
                 "c_l": None,
                 "Psi": eq.Psi,
             }
-            transforms = get_transforms("iota_rr", eq=eq, grid=grid)
+            transforms = get_transforms("iota_rr", grid.axis.size, eq=eq, grid=grid)
             profiles = {"iota": None, "current": _ExactValueProfile(eq, grid)}
             # compute rotational transform from the above current profile, which
             # is monkey patched to return a surface average of B_theta in amps
@@ -105,9 +105,9 @@ class TestConstrainCurrent:
             # if the equilibrium fixes iota)
             benchmark_data = compute_fun(
                 ["iota", "iota_r", "iota_rr"],
-                params=get_params("iota_rr", eq=eq),
+                params=get_params("iota_rr", grid.axis.size, eq=eq),
                 transforms=transforms,
-                profiles=get_profiles("iota_rr", eq=eq, grid=grid),
+                profiles=get_profiles("iota_rr", grid.axis.size, eq=eq, grid=grid),
             )
             np.testing.assert_allclose(data["iota"], benchmark_data["iota"])
             np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])

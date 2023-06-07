@@ -191,6 +191,7 @@ class TestObjectiveFunction:
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
             "|B|_mn",
+            has_axis=grid.axis.size,
             eq=eq,
             grid=grid,
             M_booz=M_booz,
@@ -248,7 +249,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
-        """Test grid compatability with QS objectives."""
+        """Test grid compatibility with QS objectives."""
         eq = get("QAS")
 
         # symmetric grid

@@ -244,8 +244,27 @@ _kernel_biot_savart.ndim = 3
 _kernel_biot_savart.keys = ["R", "zeta", "Z", "K_vc"]
 
 
+def _kernel_biot_savart_A(eval_data, src_data):
+    # K  / |r|
+    src_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([src_data["R"], src_data["zeta"], src_data["Z"]]).T)
+    )
+    eval_x = jnp.atleast_2d(
+        rpz2xyz(jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T)
+    )
+    dx = eval_x[:, None] - src_x[None]
+    K = rpz2xyz_vec(src_data["K_vc"], phi=src_data["zeta"])
+    r = jnp.linalg.norm(dx, axis=-1)[:, :, None]
+    return 1e-7 * jnp.where(r < np.finfo(r.dtype).eps, 0, K / r)
+
+
+_kernel_biot_savart_A.ndim = 3
+_kernel_biot_savart_A.keys = ["R", "zeta", "Z", "K_vc"]
+
+
 kernels = {
     "1_over_r": _kernel_1_over_r,
     "nr_over_r3": _kernel_nr_over_r3,
     "biot_savart": _kernel_biot_savart,
+    "biot_savart_A": _kernel_biot_savart_A,
 }

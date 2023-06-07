@@ -40,50 +40,13 @@ def ptolemy_identity_fwd(m_0, n_0, s, c):
         Spectral coefficients in the double Fourier basis.
 
     """
-    s = np.atleast_2d(s)
-    c = np.atleast_2d(c)
-
-    M = int(np.max(np.abs(m_0)))
-    N = int(np.max(np.abs(n_0)))
-
-    mn_1 = np.array(
-        [[m - M, n - N] for n in range(2 * N + 1) for m in range(2 * M + 1)]
-    )
-    m_1 = mn_1[:, 0]
-    n_1 = mn_1[:, 1]
-    x = np.zeros((s.shape[0], m_1.size))
-
-    for k in range(len(m_0)):
-        # sin(m*theta)*cos(n*phi)  # noqa: E800
-        sin_mn_1 = np.where((mn_1 == [-np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1))[0][
-            0
-        ]
-        # cos(m*theta)*sin(n*phi)  # noqa: E800
-        sin_mn_2 = np.where((mn_1 == [np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1))[0][
-            0
-        ]
-        # cos(m*theta)*cos(n*phi)  # noqa: E800
-        cos_mn_1 = np.where((mn_1 == [np.abs(m_0[k]), np.abs(n_0[k])]).all(axis=1))[0][
-            0
-        ]
-        # sin(m*theta)*sin(n*phi)  # noqa: E800
-        cos_mn_2 = np.where((mn_1 == [-np.abs(m_0[k]), -np.abs(n_0[k])]).all(axis=1))[
-            0
-        ][0]
-
-        if np.sign(m_0[k]) != 0:
-            x[:, sin_mn_1] += s[:, k]
-        x[:, cos_mn_1] += c[:, k]
-        if np.sign(n_0[k]) > 0:
-            x[:, sin_mn_2] -= s[:, k]
-            if np.sign(m_0[k]) != 0:
-                x[:, cos_mn_2] += c[:, k]
-        elif np.sign(n_0[k]) < 0:
-            x[:, sin_mn_2] += s[:, k]
-            if np.sign(m_0[k]) != 0:
-                x[:, cos_mn_2] -= c[:, k]
-
-    return m_1, n_1, x
+    s, c = map(np.atleast_2d, (s, c))
+    m_0, n_0 = map(np.atleast_1d, (m_0, n_0))
+    vmec_modes, x = _mnsc_to_modes_x(m_0, n_0, s, c)
+    desc_modes = _desc_modes_from_vmec_modes(vmec_modes)
+    A, _ = ptolemy_linear_transform(desc_modes, vmec_modes)
+    y = np.linalg.solve(A, x.T).T
+    return desc_modes[:, 1], desc_modes[:, 2], y
 
 
 def ptolemy_identity_rev(m_1, n_1, x):
@@ -120,116 +83,194 @@ def ptolemy_identity_rev(m_1, n_1, x):
 
     """
     x = np.atleast_2d(x)
-
-    M = int(np.max(np.abs(m_1)))
-    N = int(np.max(np.abs(n_1)))
-
-    mn_0 = np.array([[m, n - N] for m in range(M + 1) for n in range(2 * N + 1)])
-    mn_0 = mn_0[N:, :]
-    m_0 = mn_0[:, 0]
-    n_0 = mn_0[:, 1]
-
-    s = np.zeros((x.shape[0], m_0.size))
-    c = np.zeros_like(s)
-
-    for k in range(len(m_1)):
-        # (|m|*theta + |n|*phi)
-        idx_pos = np.where((mn_0 == [np.abs(m_1[k]), -np.abs(n_1[k])]).all(axis=1))[0]
-        # (|m|*theta - |n|*phi)
-        idx_neg = np.where((mn_0 == [np.abs(m_1[k]), np.abs(n_1[k])]).all(axis=1))[0]
-
-        # if m == 0 and n != 0, p = 0; otherwise p = 1
-        p = int(bool(m_1[k])) ** int(bool(n_1[k]))
-
-        if sign(m_1[k]) * sign(n_1[k]) < 0:
-            # sin_mn terms
-            if idx_pos.size:
-                s[:, idx_pos[0]] += x[:, k] / (2**p)
-            if idx_neg.size:
-                s[:, idx_neg[0]] += x[:, k] / (2**p) * sign(n_1[k])
-        else:
-            # cos_mn terms
-            if idx_pos.size:
-                c[:, idx_pos[0]] += x[:, k] / (2**p) * sign(n_1[k])
-            if idx_neg.size:
-                c[:, idx_neg[0]] += x[:, k] / (2**p)
-
-    return m_0, n_0, s, c
+    m_1, n_1 = map(np.atleast_1d, (m_1, n_1))
+    desc_modes = np.vstack([np.zeros_like(m_1), m_1, n_1]).T
+    A, vmec_modes = ptolemy_linear_transform(desc_modes)
+    y = (A @ x.T).T
+    xm, xn, s, c = _modes_x_to_mnsc(vmec_modes, y)
+    return xm, xn, s, c
 
 
-def ptolemy_linear_transform(basis, helicity=None):
+def _mnsc_to_modes_x(xm, xn, s, c):
+    """Convert from arrays of m, n, smn, cmn to [cos/sin, m, n] and x coeffs."""
+    cmodes = np.vstack([np.ones_like(xm), xm, xn]).T
+
+    mode_idx_00 = np.where(np.logical_and(xm == 0, xn == 0))
+    if mode_idx_00[0].size:  # there is a 00 mode, get rid of it for the sin
+        xm_no_0 = np.delete(xm, mode_idx_00[0][0])
+        xn_no_0 = np.delete(xn, mode_idx_00[0][0])
+
+        smodes = np.vstack(
+            [-np.ones_like(xm_no_0), xm_no_0, xn_no_0]
+        ).T  # index out m=n=0
+        s = np.atleast_2d(np.delete(s.T, mode_idx_00[0][0], axis=0).T)
+    else:  # no need to index out m=n=0 bc is not in the basis
+        smodes = np.vstack([-np.ones_like(xm), xm, xn]).T
+
+    vmec_modes = np.vstack([cmodes, smodes])
+    idx = np.lexsort(vmec_modes.T[np.array([0, 2, 1])])
+    x = np.concatenate([c.T, s.T]).T
+    vmec_modes = vmec_modes[idx]
+    x = (x.T[idx]).T
+    return vmec_modes, x
+
+
+def _modes_x_to_mnsc(vmec_modes, x):
+    """Convert from [cos/sin, m, n] and x coeffs to arrays of m, n, smn, cmn."""
+    cmask = vmec_modes[:, 0] == 1
+    smask = vmec_modes[:, 0] == -1
+    _, xm, xn = vmec_modes[cmask].T
+    if not np.any(cmask):  #  there are no cos modes, so use smask to get modenumbers
+        _, xm, xn = vmec_modes[smask].T
+        # concatenate the 0,0 mode
+        xm = np.insert(xm, 0, 0)
+        xn = np.insert(xn, 0, 0)
+
+    c = (x.T[cmask]).T
+    s = (x.T[smask]).T
+    if not len(s.T):
+        s = np.zeros_like(c)
+    elif len(s.T):  # if there are sin terms, add a zero for the m=n=0 mode
+        s = np.concatenate([np.zeros_like(s.T[:1]), s.T]).T
+    if not len(c.T):
+        c = np.zeros_like(s)
+    assert len(s.T) == len(c.T)
+    return xm, xn, s, c
+
+
+def _vmec_modes_from_desc_modes(desc_modes):
+    """Finds the VMEC modes corresponding to a given set of DESC modes.
+
+    input order: [l,m,n]
+    output order : [+1 for cos/-1 for sin, m, n]
+    """
+    vmec_modes = np.vstack(
+        [
+            sign(desc_modes[:, 2]) * sign(desc_modes[:, 1]),
+            abs(desc_modes[:, 1]),
+            desc_modes[:, 2],
+        ]
+    ).T
+    vmec_modes[vmec_modes[:, 1] == 0, 2] = abs(vmec_modes[vmec_modes[:, 1] == 0, 2])
+    vmec_modes = vmec_modes[np.lexsort(vmec_modes.T[np.array([0, 2, 1])])]
+    return vmec_modes
+
+
+def _desc_modes_from_vmec_modes(vmec_modes):
+    """Finds the DESC modes corresponding to a given set of VMEC modes.
+
+    input order: [+1 for cos/-1 for sin, m, n]
+    output order : [l,m,n]
+    """
+    desc_modes = np.vstack(
+        [
+            np.zeros(len(vmec_modes)),
+            sign(vmec_modes[:, 2]) * vmec_modes[:, 0] * vmec_modes[:, 1],
+            vmec_modes[:, 2],
+        ]
+    ).T
+    desc_modes[desc_modes[:, 1] == 0, 2] *= vmec_modes[desc_modes[:, 1] == 0, 0]
+    desc_modes = desc_modes[np.lexsort(desc_modes.T[np.array([1, 0, 2])])]
+    return desc_modes
+
+
+def ptolemy_linear_transform(desc_modes, vmec_modes=None, helicity=None, NFP=None):
     """Compute linear trasformation matrix equivalent to reverse Ptolemy's identity.
 
     Parameters
     ----------
-    basis : DoubleFourierBasis
-        Basis of the double-Fourier series.
+    desc_modes : ndarray, shape(num_modes, 3)
+        Mode numbers [l,m,n] of the double-Fourier series.
+    vmec_modes : ndarray, shape(num_modes,3), optional
+        Desired order of modes of the double-angle basis.
+        First column: +1/-1 for cos/sin term.
+        Second column: poloidal mode number m (range 0 to M).
+        Third column: toroidal mode number n (range -N to N).
+        If None, determined automatically.
     helicity : tuple, optional
         Type of quasi-symmetry, specified as (M, N).
+    NFP: int
+        Number of field periods for helicity.
 
     Returns
     -------
     matrix : ndarray
         Transform matrix such that M*a=b, where a are the double-Fourier coefficients
         and b are the double-angle coefficients.
-    modes : ndarray, shape(num_modes,3)
+    vmec_modes : ndarray, shape(num_modes,3)
         Modes of the double-angle basis. First column: +1/-1 for cos/sin term.
-        Second column: poloidal mode number m (range 0 to basis.M).
-        Third column: toroidal mode number n (range -basis.N to basis.N).
+        Second column: poloidal mode number m (range 0 to M).
+        Third column: toroidal mode number n (range -N to N).
     idx : ndarray
         The indices of the rows of `modes` that correspond to non-quasi-symmetric modes.
         Only returned if helicity is specified.
 
     """
-    mn = np.array(
-        [[m, n - basis.N] for m in range(basis.M + 1) for n in range(2 * basis.N + 1)]
-    )[basis.N + 1 :, :]
-    matrix = np.zeros((2 * mn.shape[0] + 1,))
-    matrix[mn.shape[0]] = 1  # cos(0*t-0*z) mode
-    modes = np.array([[1, 0, 0]])
+    if vmec_modes is None:
+        vmec_modes = _vmec_modes_from_desc_modes(desc_modes)
 
-    # build matrix from forward Ptolemy identity
-    for i, (m, n) in enumerate(mn):
-        temp = np.zeros((mn.shape[0],))
-        temp[i] = 1
-        mm, nn, row = ptolemy_identity_fwd(
-            mn[:, 0], mn[:, 1], temp, np.zeros_like(temp)
-        )
-        matrix = np.vstack((matrix, row))
-        modes = np.vstack((modes, [-1, m, n]))
-        mm, nn, row = ptolemy_identity_fwd(
-            mn[:, 0], mn[:, 1], np.zeros_like(temp), temp
-        )
-        matrix = np.vstack((matrix, row))
-        modes = np.vstack((modes, [1, m, n]))
-    matrix = (matrix.T / np.sum(np.abs(matrix), axis=1)).T
+    cs, m1, n1 = vmec_modes.T
+    _, m2, n2 = desc_modes.T
 
-    # delete non-stellarator-symmetric modes
-    if basis.sym == "cos":
-        idx = np.nonzero(sign(mm) * sign(nn) - 1)[0]
-        matrix = np.delete(matrix[::2, :], idx, axis=1)
-        modes = modes[::2, :]
-    elif basis.sym == "sin":
-        idx = np.nonzero(sign(mm) * sign(nn) + 1)[0]
-        matrix = np.delete(matrix[1::2, :], idx, axis=1)
-        modes = modes[1::2, :]
+    # some logical masking for different patterns of m,n
+    idx_smn_m1 = (cs == -1) * (n1 < 0) * (m1 == m2[:, None]) * (n1 == n2[:, None])
+    idx_smn_m2 = (cs == -1) * (n1 < 0) * (m1 == -m2[:, None]) * (n1 == -n2[:, None])
+    idx_smn_p1 = (cs == -1) * (n1 > 0) * (m1 == m2[:, None]) * (n1 == -n2[:, None])
+    idx_smn_p2 = (cs == -1) * (n1 > 0) * (m1 == -m2[:, None]) * (n1 == n2[:, None])
+    idx_cmn_m1 = (cs == 1) * (n1 < 0) * (m1 == -m2[:, None]) * (n1 == n2[:, None])
+    idx_cmn_m2 = (cs == 1) * (n1 < 0) * (m1 == m2[:, None]) * (n1 == -n2[:, None])
+    idx_cmn_p1 = (cs == 1) * (n1 > 0) * (m1 == -m2[:, None]) * (n1 == -n2[:, None])
+    idx_cmn_p2 = (cs == 1) * (n1 > 0) * (m1 == m2[:, None]) * (n1 == n2[:, None])
+    m_zero = (m1 == 0) * (m2[:, None] == 0)
+    n_zero = (n1 == 0) * (n2[:, None] == 0)
+    both_zero = m_zero * n_zero
+    either_zero = m_zero + n_zero
+
+    mat = np.zeros((len(desc_modes), len(vmec_modes)))
+    # pattern for m!=0, n!=0:
+    # vmec smn- = 1/2 desc m,n + 1/2 desc -m,-n
+    # vmec smn+ = -1/2 desc m,-n + 1/2 desc -m,n
+    # vmec cmn- = -1/2 desc -m,n + 1/2 desc m,-n
+    # vmec cmn+ = 1/2 desc -m,-n + 1/2 desc m,n
+    mat[idx_smn_m1] = 0.5
+    mat[idx_smn_m2] = 0.5
+    mat[idx_smn_p1] = -0.5
+    mat[idx_smn_p2] = 0.5
+    mat[idx_cmn_m1] = -0.5
+    mat[idx_cmn_m2] = 0.5
+    mat[idx_cmn_p1] = 0.5
+    mat[idx_cmn_p2] = 0.5
+    # above stuff is wrong when m or n is 0 so reset those
+    mat[either_zero] = 0
+    # for m=0, cos terms get +1 where n1==n2
+    mat[m_zero * (n1 == n2[:, None]) * (cs == 1)] = 1
+    # and sin terms get -1 where n1==-n2
+    mat[m_zero * (n1 == -n2[:, None]) * (cs == -1)] = -1
+    # for n=0, sin terms get +1 where n1==-n2
+    mat[n_zero * (m1 == -m2[:, None]) * (cs == -1)] = 1
+    # and cos terms get 1 where n1==n2
+    mat[n_zero * (m1 == m2[:, None]) * (cs == 1)] = 1
+    # m=n=0 is always 1
+    mat[both_zero] = 1
+    matrix = mat.T
 
     # indices of non-quasi-symmetric modes
     if helicity is not None:
+        assert NFP is not None, "NFP must be supplied when specifying helicity"
         assert isinstance(helicity, tuple) and len(helicity) == 2
         M = np.abs(helicity[0])
-        N = np.abs(helicity[1]) / basis.NFP * sign(np.prod(helicity))
-        idx = np.ones((modes.shape[0],), bool)
+        N = np.abs(helicity[1]) / NFP * sign(np.prod(helicity))
+        idx = np.ones((vmec_modes.shape[0],), bool)
         idx[0] = False  # m=0,n=0 mode
         if N == 0:
-            idx_MN = np.nonzero(modes[:, 2] == 0)[0]
+            idx_MN = np.nonzero(vmec_modes[:, 2] == 0)[0]
         else:
-            idx_MN = np.nonzero(np.logical_and(modes[:, 1] == M, modes[:, 2] == N))[0]
+            idx_MN = np.nonzero(vmec_modes[:, 1] * N == vmec_modes[:, 2] * M)[0]
         idx[idx_MN] = False
 
-        return matrix, modes, idx
+        return matrix, vmec_modes, idx
 
-    return matrix, modes
+    return matrix, vmec_modes
 
 
 def fourier_to_zernike(m, n, x_mn, basis):

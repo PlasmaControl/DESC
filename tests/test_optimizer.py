@@ -3,22 +3,37 @@
 import numpy as np
 import pytest
 from numpy.random import default_rng
-from scipy.optimize import BFGS, rosen, rosen_der
+from scipy.optimize import BFGS, least_squares, rosen, rosen_der
 
 import desc.examples
 from desc.backend import jit, jnp
 from desc.derivatives import Derivative
+from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
 from desc.objectives import (
+    AspectRatio,
+    Energy,
     FixBoundaryR,
     FixBoundaryZ,
+    FixCurrent,
     FixIota,
     FixPressure,
     FixPsi,
     ForceBalance,
+    MeanCurvature,
     ObjectiveFunction,
+    Volume,
 )
 from desc.objectives.objective_funs import _Objective
-from desc.optimize import Optimizer, fmintr, lsqtr, sgd
+from desc.optimize import (
+    LinearConstraintProjection,
+    Optimizer,
+    ProximalProjection,
+    fmintr,
+    lsqtr,
+    optimizers,
+    sgd,
+)
 
 
 @jit
@@ -85,7 +100,6 @@ class TestFmin:
             ftol=0,
             xtol=0,
             gtol=1e-12,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -99,13 +113,31 @@ class TestFmin:
             x0,
             scalar_grad,
             scalar_hess,
-            verbose=1,
+            verbose=3,
             method="subspace",
             x_scale="hess",
             ftol=0,
             xtol=0,
             gtol=1e-12,
-            options={"ga_accept_threshold": 1},
+        )
+        np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_convex_full_hess_exact(self):
+        """Test minimizing rosenbrock function using exact method with full hess."""
+        x0 = np.ones(2)
+
+        out = fmintr(
+            scalar_fun,
+            x0,
+            scalar_grad,
+            scalar_hess,
+            verbose=3,
+            method="exact",
+            x_scale="hess",
+            ftol=0,
+            xtol=0,
+            gtol=1e-12,
         )
         np.testing.assert_allclose(out["x"], SCALAR_FUN_SOLN, atol=1e-8)
 
@@ -122,13 +154,12 @@ class TestFmin:
             x0,
             rosen_der,
             hess="bfgs",
-            verbose=1,
+            verbose=3,
             method="dogleg",
-            x_scale=1,
+            x_scale="hess",
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
-            options={"ga_accept_threshold": 0},
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -145,13 +176,34 @@ class TestFmin:
             x0,
             rosen_der,
             hess=BFGS(),
-            verbose=1,
+            verbose=3,
             method="subspace",
             x_scale=1,
             ftol=1e-8,
             xtol=1e-8,
             gtol=1e-8,
-            options={"ga_accept_threshold": 0},
+        )
+        np.testing.assert_allclose(out["x"], true_x)
+
+    @pytest.mark.slow
+    @pytest.mark.unit
+    def test_rosenbrock_bfgs_exact(self):
+        """Test minimizing rosenbrock function using exact method with BFGS hess."""
+        rando = default_rng(seed=4)
+
+        x0 = rando.random(7)
+        true_x = np.ones(7)
+        out = fmintr(
+            rosen,
+            x0,
+            rosen_der,
+            hess=BFGS(),
+            verbose=3,
+            method="exact",
+            x_scale=1,
+            ftol=1e-8,
+            xtol=1e-8,
+            gtol=1e-8,
         )
         np.testing.assert_allclose(out["x"], true_x)
 
@@ -202,7 +254,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
-            verbose=0,
+            verbose=3,
             x_scale=1,
             tr_method="cho",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -213,7 +265,7 @@ class TestLSQTR:
             res,
             p0,
             jac,
-            verbose=0,
+            verbose=3,
             x_scale=1,
             tr_method="svd",
             options={"initial_trust_radius": 0.15, "max_trust_radius": 0.25},
@@ -264,6 +316,7 @@ def test_overstepping():
         def build(self, eq, *args, **kwargs):
 
             # objective = just shift x by a lil bit
+            self._args = ["R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "c_l", "Psi"]
             self._x0 = (
                 np.concatenate(
                     [
@@ -284,16 +337,15 @@ def test_overstepping():
             self._set_derivatives()
             self._built = True
 
-        def compute(self, R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, Psi):
-            x = jnp.concatenate(
-                [R_lmn, Z_lmn, L_lmn, p_l, i_l, c_l, jnp.atleast_1d(Psi)]
-            )
+        def compute(self, *args, **kwargs):
+            params = self._parse_args(*args, **kwargs)
+            x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
             return x - self._x0
 
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac = lambda x: objective._jac(x) + 1e2 * (
+    objective.jac_scaled = lambda x: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
     )
 
@@ -351,8 +403,8 @@ def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
     constraints = (
-        FixBoundaryR(fixed_boundary=True),
-        FixBoundaryZ(fixed_boundary=True),
+        FixBoundaryR(),
+        FixBoundaryZ(),
         FixPressure(),
         FixIota(),
         FixPsi(),
@@ -362,11 +414,314 @@ def test_maxiter_1_and_0_solve():
     eq = desc.examples.get("SOLOVEV")
     for opt in ["lsq-exact", "dogleg-bfgs"]:
         eq, result = eq.solve(
-            maxiter=1, constraints=constraints, objective=obj, optimizer=opt
+            maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
-        assert result["nfev"] <= 2
+        assert result["nit"] == 1
     for opt in ["lsq-exact", "dogleg-bfgs"]:
         eq, result = eq.solve(
-            maxiter=0, constraints=constraints, objective=obj, optimizer=opt
+            maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
-        assert result["nfev"] <= 1
+        assert result["nit"] == 0
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_scipy_fail_message():
+    """Test that scipy fail message does not cause an error (see PR #434)."""
+    constraints = (
+        FixBoundaryR(),
+        FixBoundaryZ(),
+        FixPressure(),
+        FixCurrent(),
+        FixPsi(),
+    )
+    objectives = ForceBalance()
+    obj = ObjectiveFunction(objectives)
+    eq = Equilibrium()
+    # should fail on maxiter, and should NOT throw an error
+    for opt in ["scipy-trf"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            verbose=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
+    objectives = Energy()
+    obj = ObjectiveFunction(objectives)
+    for opt in ["scipy-trust-exact"]:
+        eq, result = eq.solve(
+            maxiter=3,
+            verbose=3,
+            constraints=constraints,
+            objective=obj,
+            optimizer=opt,
+            ftol=1e-12,
+            xtol=1e-12,
+            gtol=1e-12,
+        )
+        assert "Maximum number of iterations has been exceeded" in result["message"]
+
+
+@pytest.mark.unit
+def test_not_implemented_error():
+    """Test NotImplementedError."""
+    with pytest.raises(NotImplementedError):
+        Optimizer("not-a-method")
+
+
+@pytest.mark.unit
+def test_wrappers():
+    """Tests for using wrapped objectives."""
+    eq = desc.examples.get("SOLOVEV")
+    con = (
+        FixBoundaryR(),
+        FixBoundaryZ(),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+    con_nl = (ForceBalance(),)
+    obj = ForceBalance()
+    with pytest.raises(AssertionError):
+        _ = LinearConstraintProjection(obj, con)
+    with pytest.raises(ValueError):
+        _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
+    ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    assert ob.built
+
+    np.testing.assert_allclose(
+        ob.compute_scaled(ob.x(eq)), obj.compute_scaled(*obj.xs(eq))
+    )
+    np.testing.assert_allclose(
+        ob.compute_unscaled(ob.x(eq)), obj.compute_unscaled(*obj.xs(eq))
+    )
+    np.testing.assert_allclose(ob.target_scaled, obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.bounds_scaled[0], obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.bounds_scaled[1], obj.target / obj.normalization)
+    np.testing.assert_allclose(ob.weights, obj.weight)
+
+    con = (
+        FixBoundaryR(),
+        FixBoundaryZ(),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+    con_nl = (ForceBalance(),)
+    obj = ForceBalance()
+    with pytest.raises(AssertionError):
+        _ = ProximalProjection(obj, con[0])
+    with pytest.raises(AssertionError):
+        _ = ProximalProjection(ObjectiveFunction(con[0]), con[1])
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con[1]))
+    with pytest.raises(ValueError):
+        _ = ProximalProjection(
+            ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl)
+        )
+    ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
+    assert ob.built
+
+    np.testing.assert_allclose(
+        ob.compute_scaled(ob.x(eq)), con[0].compute_scaled(*con[0].xs(eq))
+    )
+    np.testing.assert_allclose(
+        ob.compute_unscaled(ob.x(eq)), con[0].compute_unscaled(*con[0].xs(eq))
+    )
+    np.testing.assert_allclose(ob.target_scaled, con[0].target / con[0].normalization)
+    np.testing.assert_allclose(
+        ob.bounds_scaled[0], con[0].target / con[0].normalization
+    )
+    np.testing.assert_allclose(
+        ob.bounds_scaled[1], con[0].target / con[0].normalization
+    )
+    np.testing.assert_allclose(ob.weights, con[0].weight)
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_all_optimizers():
+    """Just tests that the optimizers run without error, eg tests for the wrappers."""
+    eq = desc.examples.get("SOLOVEV")
+    fobj = ObjectiveFunction(ForceBalance())
+    eobj = ObjectiveFunction(Energy())
+    fobj.build(eq)
+    eobj.build(eq)
+    constraints = (
+        FixBoundaryR(),
+        FixBoundaryZ(),
+        FixIota(),
+        FixPressure(),
+        FixPsi(),
+    )
+
+    for opt in optimizers:
+        print("TESTING ", opt)
+        if optimizers[opt]["scalar"]:
+            obj = eobj
+        else:
+            obj = fobj
+        eq.solve(
+            objective=obj,
+            constraints=constraints,
+            optimizer=opt,
+            verbose=3,
+            copy=True,
+            maxiter=5,
+        )
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_scipy_constrained_solve():
+    """Tests that the scipy constrained optimizer does something.
+
+    This isn't that great of a test, since trust-constr and SLSQP don't work well on
+    badly scaled problems like ours. Also usually you'd need to run for way longer,
+    since stopping them early might return a point worse than you started with...
+    """
+    eq = desc.examples.get("DSHAPE")
+    # increase pressure so no longer in force balance
+    eq.p_l *= 1.1
+    eq._node_pattern = "quad"
+
+    constraints = (
+        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(),  # fix Z shape but not R
+        FixPressure(),  # fix pressure profile
+        FixIota(),  # fix rotational transform profile
+        FixPsi(),  # fix total toroidal magnetic flux
+    )
+    # some random constraints to keep the shape from getting wacky
+    V = eq.compute("V")["V"]
+    Vbounds = (0.95 * V, 1.05 * V)
+    AR = eq.compute("R0/a")["R0/a"]
+    ARbounds = (0.95 * AR, 1.05 * AR)
+    H = eq.compute(
+        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H"]
+    Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
+    constraints += (
+        Volume(bounds=Vbounds),
+        AspectRatio(bounds=ARbounds),
+        MeanCurvature(bounds=Hbounds),
+    )
+    obj = ObjectiveFunction(ForceBalance())
+    eq2, result = eq.optimize(
+        objective=obj,
+        constraints=constraints,
+        optimizer="scipy-trust-constr",
+        maxiter=50,
+        verbose=1,
+        x_scale="auto",
+        copy=True,
+        options={
+            "disp": 1,
+            "verbose": 3,
+            "initial_barrier_parameter": 1e-4,
+        },
+    )
+    V2 = eq2.compute("V")["V"]
+    AR2 = eq2.compute("R0/a")["R0/a"]
+    H2 = eq2.compute(
+        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H"]
+
+    assert ARbounds[0] < AR2 < ARbounds[1]
+    assert Vbounds[0] < V2 < Vbounds[1]
+    assert np.all(Hbounds[0] < H2)
+    assert np.all(H2 < Hbounds[1])
+    assert eq2.is_nested()
+
+
+@pytest.mark.unit
+def test_solve_with_x_scale():
+    """Make sure we can manually specify x_scale when solving/optimizing."""
+    # basically just tests that it runs without error
+    eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
+    scale = jnp.concatenate(
+        [
+            (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.Z_basis.modes[:, :2]).sum(axis=1) + 1),
+            (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
+            jnp.ones(eq.p_l.size + eq.c_l.size + eq.Rb_lmn.size + eq.Zb_lmn.size + 1),
+        ]
+    )
+    eq.solve(x_scale=scale)
+    assert eq.is_nested()
+
+
+@pytest.mark.unit
+def test_bounded_optimization():
+    """Test that our bounded optimizers are as good as scipy."""
+    p = np.array([1.0, 2.0, 3.0, 4.0, 1.0, 2.0])
+    x = np.linspace(-1, 1, 100)
+    y = vector_fun(x, p)
+
+    def fun(p):
+        return vector_fun(x, p) - y
+
+    rando = default_rng(seed=5)
+    p0 = p + 0.25 * (rando.random(p.size) - 0.5)
+
+    jac = Derivative(fun, 0, "fwd")
+
+    def sfun(x):
+        f = fun(x)
+        return 1 / 2 * f.dot(f)
+
+    def grad(x):
+        f = fun(x)
+        J = jac(x)
+        return f.dot(J)
+
+    def hess(x):
+        J = jac(x)
+        return J.T @ J
+
+    bounds = (2, np.inf)
+    p0 = np.clip(p0, *bounds)
+
+    out1 = lsqtr(
+        fun,
+        p0,
+        jac,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=3,
+        x_scale=1,
+        tr_method="svd",
+    )
+    out2 = fmintr(
+        sfun,
+        p0,
+        grad,
+        hess,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=3,
+        x_scale=1,
+    )
+    out3 = least_squares(
+        fun,
+        p0,
+        jac,
+        bounds=bounds,
+        xtol=1e-14,
+        ftol=1e-14,
+        gtol=1e-8,
+        verbose=2,
+        x_scale=1,
+    )
+
+    np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-06, atol=1e-06)
+    np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-06, atol=1e-06)

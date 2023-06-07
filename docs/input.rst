@@ -37,7 +37,7 @@ DESC can also accept VMEC input files, which are converted to DESC inputs as exp
    ftol = 1e-2
    xtol = 1e-6
    gtol = 1e-6
-   nfev = 100
+   maxiter = 100
 
    # solver methods
    objective         = force
@@ -101,8 +101,8 @@ Spectral Resolution
 - ``M_pol`` (int): Maximum poloidal mode number for the Fourier-Zernike basis, :math:`M`. Required.
 - ``N_tor`` (int): Maximum toroidal mode number for the Fourier-Zernike basis, :math:`N`. Default = 0.
 - ``L_grid`` (int): Radial resolution of nodes in collocation grid. Default = ``M_grid`` if ``spectral_indexing = ANSI``, or ``2*M_grid`` if ``spectral_indexing = Fringe``.
-- ``M_grid`` (int): Poloidal resolution of nodes in collocation grid. Default = ``round(1.5*M_pol)``.
-- ``N_grid`` (int): Toroidal resolution of nodes in collocation grid. Default = ``round(1.5*N_tor)``.
+- ``M_grid`` (int): Poloidal resolution of nodes in collocation grid. Default = ``2*M_pol``.
+- ``N_grid`` (int): Toroidal resolution of nodes in collocation grid. Default = ``2*N_tor``.
 
 When ``M_grid = M_pol`` the number of collocation nodes in each toroidal cross-section is equal to the number of Zernike polynomial in the basis set.
 When ``N_grid = N_tor`` the number of nodes with unique toroidal angles is equal to the number of terms in the toroidal Fourier series.
@@ -134,6 +134,9 @@ These arguments are also passed as arrays for each iteration, with the same nota
 This example will start by solving a vacuum tokamak, then perturb the pressure profile to solve a finite-beta tokamak, and finally perturb the boundary to solve the finite-beta stellarator.
 If only one value is given, as with ``pert_order`` in this example, that value will be used for all iterations.
 
+If ``pres_ratio`` and ``bdry_ratio`` are not present in the input file, and only 1 set of resolutions are specified,
+an adaptive automatic continuation method will be used.
+
 Solver Tolerances
 *****************
 
@@ -146,8 +149,8 @@ Solver Tolerances
 
 - ``ftol`` (float): Solver stopping tolerance on the relative norm of dF. Default = 1e-2.
 - ``xtol`` (float): Solver stopping tolerance on the relative norm of dx. Default = 1e-6.
-- ``gtol`` (float): Solver stopping tolerance on the norm of the gradient. Default = 1e-6.
-- ``nfev`` (int): Maximum number of function evaluations. Default = 0 (None).
+- ``gtol`` (float): Solver stopping tolerance on the norm of the gradient. Default = 1e-8.
+- ``maxiter`` (int): Maximum number of optimizer iterations. Default = 100.
 
 These arguments are also passed as arrays for each iteration, with the same notation as the other continuation parameters.
 In this example, the same values are being used for all 7 iterations.
@@ -347,9 +350,7 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
 
 .. code-block:: text
 
-   # This DESC input file was auto generated from the VMEC input file
-   # /home/dpanici/DESC/examples/VMEC/input.HELIOTRON
-   # on 09/20/2022 at 21:30:42.
+   # This DESC input file was auto generated from a VMEC input file
    # For details on the various options see https://desc-docs.readthedocs.io/en/stable/input.html
 
    # global parameters
@@ -358,23 +359,17 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
    Psi = 1.00000000
 
    # spectral resolution
-   L_rad = 6, 6, 6, 6, 6, 6, 6
-   M_pol = 6, 6, 6, 6, 6, 6, 6
-   N_tor = 0, 0, 0, 3, 3, 3, 3
-   L_grid = 12, 12, 12, 12, 12, 12, 12
-   M_grid = 12, 12, 12, 12, 12, 12, 12
-   N_grid = 0, 0, 0, 6, 6, 6, 6
+   L_rad = 6
+   M_pol = 6
+   N_tor = 3
+   L_grid = 12
+   M_grid = 12
+   N_grid = 6
 
    # continuation parameters
-   bdry_ratio = 0, 0, 0, 0.25, 0.5, 0.75, 1.0
-   pres_ratio = 0, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0
-   pert_order = 1, 2, 2, 2, 2, 2, 2
+   pert_order = 2.0
 
    # solver tolerances
-   ftol = 0.01, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01
-   xtol = 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06
-   gtol = 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06, 1e-06
-   nfev = 50, 50, 50, 50, 50, 50, 50
 
    # solver methods
    optimizer = lsq-exact
@@ -383,29 +378,27 @@ The DESC input file will be this, titled ``input.HELIOTRON_desc``:
    spectral_indexing = ansi
    node_pattern = jacobi
 
-   # pressure and rotational transform profiles
+   # pressure and rotational transform/current profiles
    l:   0	p =   1.80000000E+04	i =   1.00000000E+00
    l:   2	p =  -3.60000000E+04	i =   1.50000000E+00
    l:   4	p =   1.80000000E+04	i =   0.00000000E+00
 
    # fixed-boundary surface shape
-   l:   0	m:   0	n:   0	R1 =   1.00000000E+01	Z1 =   0.00000000E+00
-   l:   0	m:   1	n:   0	R1 =  -1.00000000E+00	Z1 =   0.00000000E+00
-   l:   0	m:   0	n:   1	R1 =   0.00000000E+00	Z1 =   0.00000000E+00
-   l:   0	m:   1	n:   1	R1 =  -3.00000000E-01	Z1 =   0.00000000E+00
    l:   0	m:  -1	n:  -1	R1 =   3.00000000E-01	Z1 =   0.00000000E+00
    l:   0	m:  -1	n:   0	R1 =   0.00000000E+00	Z1 =   1.00000000E+00
-   l:   0	m:   0	n:  -1	R1 =   0.00000000E+00	Z1 =   0.00000000E+00
    l:   0	m:  -1	n:   1	R1 =   0.00000000E+00	Z1 =  -3.00000000E-01
+   l:   0	m:   0	n:  -1	R1 =   0.00000000E+00	Z1 =   0.00000000E+00
+   l:   0	m:   0	n:   0	R1 =   1.00000000E+01	Z1 =   0.00000000E+00
+   l:   0	m:   0	n:   1	R1 =   0.00000000E+00	Z1 =   0.00000000E+00
    l:   0	m:   1	n:  -1	R1 =   0.00000000E+00	Z1 =  -3.00000000E-01
+   l:   0	m:   1	n:   0	R1 =  -1.00000000E+00	Z1 =   0.00000000E+00
+   l:   0	m:   1	n:   1	R1 =  -3.00000000E-01	Z1 =   0.00000000E+00
 
    # magnetic axis initial guess
    n:   0	R0 =   1.00000000E+01	Z0 =   0.00000000E+00
 
 
 You can see that the main elements of the input file are present here.
-DESC automatically adds default continuation parameters to a converted VMEC solution which are conservative, to robustly solve strongly shaped equilibria.
-These options may be tweaked to get better performance.
 See the example DESC input files on the github repository to see typical choices of solver options for some common equilibria, as well as the `arxiv publication on the DESC perturbation and continuation methods <https://arxiv.org/abs/2203.15927>`_ .
 
 Some general considerations

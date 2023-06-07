@@ -15,31 +15,43 @@ from .objective_funs import _Objective
 
 
 class ForceBalance(_Objective):
-    """Radial and helical MHD force balance.
+    r"""Radial and helical MHD force balance.
 
-    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
-    f_rho = F_rho |grad(rho)| dV  (N)
+    Given force densities:
 
-    F_helical = sqrt(g) J^rho
-    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_helical = F_helical |e^helical| dV  (N)
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    Fₕₑₗᵢ √g J^ρ
+
+    and helical basis vector:
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    Minimizes the magnitude of the forces:
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -49,24 +61,28 @@ class ForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Total force: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="force",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -86,7 +102,7 @@ class ForceBalance(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -94,7 +110,7 @@ class ForceBalance(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -104,14 +120,16 @@ class ForceBalance(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = 2 * self.grid.num_nodes
+        self._dim_f = 2 * grid.num_nodes
         self._data_keys = [
             "F_rho",
             "|grad(rho)|",
@@ -126,8 +144,8 @@ class ForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -152,13 +170,21 @@ class ForceBalance(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -174,21 +200,20 @@ class ForceBalance(_Objective):
             profiles=self._profiles,
         )
         fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * self.grid.weights
+        fr = fr * data["sqrt(g)"] * self._transforms["grid"].weights
 
         fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * self.grid.weights
+        fb = fb * data["sqrt(g)"] * self._transforms["grid"].weights
 
-        f = jnp.concatenate([fr, fb])
-        return self._shift_scale(f)
+        return jnp.concatenate([fr, fb])
 
 
 class ForceBalanceAnisotropic(_Objective):
     """Force balance for anisotropic pressure equilibria.
 
-    F = (1-beta_a)JxB - 1/mu0 (B.grad(beta_a))B - beta_a grad(B^2/2mu0) - grad(p_perp)
+    F =  (1−βₐ)J × B − 1/μ₀ (B ⋅ ∇ βₐ)B − βₐ ∇(B²/2μ₀) − ∇(p_⊥)
 
-    where beta_a is the anisotropy term: beta_a = mu0 (p_|| - p_perp)/B^2
+    where βₐ is the anisotropy term: βₐ = μ₀ (p_∥ − p_⊥)/B²
 
     Parameters
     ----------
@@ -215,6 +240,7 @@ class ForceBalanceAnisotropic(_Objective):
     _scalar = False
     _linear = False
     _units = "(N)"
+    _equilibrium = True
     _print_value_fmt = "Total force: {:10.3e} "
 
     def __init__(
@@ -341,27 +367,31 @@ class ForceBalanceAnisotropic(_Objective):
 
 
 class RadialForceBalance(_Objective):
-    """Radial MHD force balance.
+    r"""Radial MHD force balance.
 
-    F_rho = sqrt(g) (B^zeta J^theta - B^theta J^zeta) - grad(p)
-    f_rho = F_rho |grad(rho)| dV  (N)
+    Fᵨ = √g (B^ζ J^θ - B^θ J^ζ) - ∇ p
+
+    fᵨ = Fᵨ ||∇ ρ|| dV  (N)
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+       Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -371,24 +401,28 @@ class RadialForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Radial force: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="radial force",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -408,7 +442,7 @@ class RadialForceBalance(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -416,7 +450,7 @@ class RadialForceBalance(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -426,14 +460,16 @@ class RadialForceBalance(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
         self._args = get_params(self._data_keys)
 
@@ -442,8 +478,8 @@ class RadialForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -468,13 +504,21 @@ class RadialForceBalance(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -490,34 +534,37 @@ class RadialForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return f * data["sqrt(g)"] * self._transforms["grid"].weights
 
 
 class HelicalForceBalance(_Objective):
-    """Helical MHD force balance.
+    r"""Helical MHD force balance.
 
-    F_helical = sqrt(g) J^rho
-    e^helical = -B^zeta grad(theta) + B^theta grad(zeta)
-    f_helical = F_helical |e^helical| dV  (N)
+    Fₕₑₗᵢ √g J^ρ
+
+    𝐞ʰᵉˡⁱ = −B^ζ ∇ θ + B^θ ∇ ζ
+
+    fₕₑₗᵢ = Fₕₑₗᵢ ||𝐞ʰᵉˡⁱ|| dV  (N)
 
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -527,24 +574,28 @@ class HelicalForceBalance(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(N)"
     _print_value_fmt = "Helical force: {:10.3e}, "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="helical force",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -564,7 +615,7 @@ class HelicalForceBalance(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -572,7 +623,7 @@ class HelicalForceBalance(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -582,14 +633,16 @@ class HelicalForceBalance(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = self.grid.num_nodes
+        self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
         self._args = get_params(self._data_keys)
 
@@ -598,8 +651,8 @@ class HelicalForceBalance(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -624,13 +677,21 @@ class HelicalForceBalance(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -646,9 +707,7 @@ class HelicalForceBalance(_Objective):
             profiles=self._profiles,
         )
         f = data["F_helical"] * data["|e^helical|"]
-        f = f * data["sqrt(g)"] * self.grid.weights
-
-        return self._shift_scale(f)
+        return f * data["sqrt(g)"] * self._transforms["grid"].weights
 
 
 class Energy(_Objective):
@@ -661,17 +720,20 @@ class Energy(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
         This will default to a QuadratureGrid
@@ -685,13 +747,15 @@ class Energy(_Objective):
     _io_attrs_ = _Objective._io_attrs_ + ["gamma"]
     _scalar = True
     _linear = False
+    _equilibrium = True
     _units = "(J)"
     _print_value_fmt = "Total MHD energy: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
@@ -699,12 +763,14 @@ class Energy(_Objective):
         gamma=0,
         name="energy",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         self.gamma = gamma
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -724,7 +790,7 @@ class Energy(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -740,7 +806,7 @@ class Energy(_Objective):
                         "yellow",
                     )
                 )
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -751,12 +817,14 @@ class Energy(_Objective):
                 )
 
             else:
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
         self._dim_f = 1
         self._data_keys = ["W"]
@@ -767,8 +835,8 @@ class Energy(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -792,13 +860,21 @@ class Energy(_Objective):
         L_lmn : ndarray
             Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
         p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+            Spectral coefficients of p(rho) -- pressure profile (Pa).
         i_l : ndarray
             Spectral coefficients of iota(rho) -- rotational transform profile.
         c_l : ndarray
-            Spectral coefficients of I(rho) -- toroidal current profile.
+            Spectral coefficients of I(rho) -- toroidal current profile (A).
         Psi : float
             Total toroidal magnetic flux within the last closed flux surface (Wb).
+        Te_l : ndarray
+            Spectral coefficients of Te(rho) -- electron temperature profile (eV).
+        ne_l : ndarray
+            Spectral coefficients of ne(rho) -- electron density profile (1/m^3).
+        Ti_l : ndarray
+            Spectral coefficients of Ti(rho) -- ion temperature profile (eV).
+        Zeff_l : ndarray
+            Spectral coefficients of Zeff(rho) -- effective atomic number profile.
 
         Returns
         -------
@@ -814,7 +890,7 @@ class Energy(_Objective):
             profiles=self._profiles,
             gamma=self._gamma,
         )
-        return self._shift_scale(data["W"])
+        return data["W"]
 
     @property
     def gamma(self):
@@ -836,17 +912,20 @@ class CurrentDensity(_Objective):
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
-        Target value(s) of the objective.
+        Target value(s) of the objective. Only used if bounds is None.
         len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
     weight : float, ndarray, optional
         Weighting to apply to the Objective, relative to other Objectives.
         len(weight) must be equal to Objective.dim_f
     normalize : bool
         Whether to compute the error in physical units or non-dimensionalize.
     normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
+        Whether target and bounds should be normalized before comparing to computed
+        values. If `normalize` is `True` and the target is in physical units,
+        this should also be set to True.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -856,24 +935,28 @@ class CurrentDensity(_Objective):
 
     _scalar = False
     _linear = False
+    _equilibrium = True
     _units = "(A*m)"
     _print_value_fmt = "Total current density: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="current density",
     ):
-
-        self.grid = grid
+        if target is None and bounds is None:
+            target = 0
+        self._grid = grid
         super().__init__(
             eq=eq,
             target=target,
+            bounds=bounds,
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
@@ -893,7 +976,7 @@ class CurrentDensity(_Objective):
             Level of output.
 
         """
-        if self.grid is None:
+        if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
                 "cheb1",
@@ -901,7 +984,7 @@ class CurrentDensity(_Objective):
                 "ocs",
                 "linear",
             ]:
-                self.grid = ConcentricGrid(
+                grid = ConcentricGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
@@ -911,14 +994,16 @@ class CurrentDensity(_Objective):
                     node_pattern=eq.node_pattern,
                 )
             elif eq.node_pattern == "quad":
-                self.grid = QuadratureGrid(
+                grid = QuadratureGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                 )
+        else:
+            grid = self._grid
 
-        self._dim_f = 3 * self.grid.num_nodes
+        self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
         self._args = get_params(self._data_keys)
 
@@ -927,8 +1012,8 @@ class CurrentDensity(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -972,9 +1057,8 @@ class CurrentDensity(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * self.grid.weights
-        jt = data["J^theta"] * data["sqrt(g)"] * self.grid.weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * self.grid.weights
+        jr = data["J^rho"] * data["sqrt(g)"] * self._transforms["grid"].weights
+        jt = data["J^theta"] * data["sqrt(g)"] * self._transforms["grid"].weights
+        jz = data["J^zeta"] * data["sqrt(g)"] * self._transforms["grid"].weights
 
-        f = jnp.concatenate([jr, jt, jz])
-        return self._shift_scale(f)
+        return jnp.concatenate([jr, jt, jz])

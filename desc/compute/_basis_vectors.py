@@ -557,6 +557,32 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_PEST",
+    label="\\mathbf{e}_{\\theta_{PEST}}",
+    units="m",
+    units_long="meters",
+    description="Covariant straight field line poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "0",
+        "R_t",
+        "Z_t",
+        "lambda_t",
+    ],
+)
+def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
+    dt_dv = 1 / (1 + data["lambda_t"])
+    data["e_theta_PEST"] = jnp.array(
+        [data["R_t"] * dt_dv, data["0"], data["Z_t"] * dt_dv]
+    ).T
+    return data
+
+
+@register_compute_fun(
     name="e^rho",
     label="\\mathbf{e}^{\\rho}",
     units="m^{-1}",
@@ -607,4 +633,62 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
     data["e^zeta"] = (cross(data["e_rho"], data["e_theta"]).T / data["sqrt(g)"]).T
+    return data
+
+
+@register_compute_fun(
+    name="b",
+    label="\\hat{b}",
+    units="~",
+    units_long="None",
+    description="Unit vector along magnetic field",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B"],
+)
+def _b(params, transforms, profiles, data, **kwargs):
+    data["b"] = (data["B"].T / jnp.linalg.norm(data["B"], axis=-1)).T
+    return data
+
+
+@register_compute_fun(
+    name="n",
+    label="\\hat{n}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to flux surface",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho"],
+)
+def _n(params, transforms, profiles, data, **kwargs):
+    data["n"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"], axis=-1)).T
+    return data
+
+
+@register_compute_fun(
+    name="grad(alpha)",
+    label="\\nabla \\alpha",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Unit vector normal to flux surface",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta", "e^zeta", "alpha_r", "alpha_t", "alpha_z"],
+)
+def _grad_alpha(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)"] = (
+        data["alpha_r"] * data["e^rho"].T
+        + data["alpha_t"] * data["e^theta"].T
+        + data["alpha_z"] * data["e^zeta"].T
+    ).T
     return data

@@ -18,6 +18,7 @@ dependencies:
     - nvgpu
     # testing and benchmarking
     - qsc
+    - qicna @ git+https://github.com/rogeriojorge/pyQIC/
 
   # building the docs
   - nbsphinx > 0.8.5
@@ -34,7 +35,6 @@ dependencies:
   - flake8-isort >=5.0.0, <= 6.0.0
 
   # testing and benchmarking
-  - codecov
   - markupsafe = 2.0.1
   - nbmake
   - pytest >= 5.0.0

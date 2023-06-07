@@ -163,14 +163,14 @@ class InputReader:
             "L_grid": np.atleast_1d(None),
             "M_grid": np.atleast_1d(0),
             "N_grid": np.atleast_1d(0),
-            "pres_ratio": np.atleast_1d(1.0),
-            "curr_ratio": np.atleast_1d(1.0),
-            "bdry_ratio": np.atleast_1d(1.0),
-            "pert_order": np.atleast_1d(1),
+            "pres_ratio": np.atleast_1d(None),
+            "curr_ratio": np.atleast_1d(None),
+            "bdry_ratio": np.atleast_1d(None),
+            "pert_order": np.atleast_1d(2),
             "ftol": np.atleast_1d(None),
             "xtol": np.atleast_1d(None),
             "gtol": np.atleast_1d(None),
-            "nfev": np.atleast_1d(None),
+            "maxiter": np.atleast_1d(None),
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -339,7 +339,18 @@ class InputReader:
                 flag = True
             match = re.search(r"nfev", argument, re.IGNORECASE)
             if match:
-                inputs["nfev"] = np.array([None if i == 0 else int(i) for i in numbers])
+                warnings.warn(
+                    DeprecationWarning("nfev is deprecated, please use maxiter instead")
+                )
+                inputs["maxiter"] = np.array(
+                    [None if i == 0 else int(i) for i in numbers]
+                )
+                flag = True
+            match = re.search(r"maxiter", argument, re.IGNORECASE)
+            if match:
+                inputs["maxiter"] = np.array(
+                    [None if i == 0 else int(i) for i in numbers]
+                )
                 flag = True
 
             # solver methods
@@ -581,7 +592,7 @@ class InputReader:
             "ftol",
             "xtol",
             "gtol",
-            "nfev",
+            "maxiter",
         ]
         arr_len = 0
         for a in arrs:
@@ -625,22 +636,26 @@ class InputReader:
                 else:
                     inputs_ii[key] = inputs[key]
             # apply pressure ratio
-            inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
+            if inputs_ii["pres_ratio"] is not None:
+                inputs_ii["pressure"][:, 1] *= inputs_ii["pres_ratio"]
             # apply current ratio
-            if "current" in inputs_ii:
+            if "current" in inputs_ii and inputs_ii["curr_ratio"] is not None:
                 inputs_ii["current"][:, 1] *= inputs_ii["curr_ratio"]
+            else:
+                del inputs_ii["curr_ratio"]
             # apply boundary ratio
             bdry_factor = np.where(
-                inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1
+                inputs_ii["surface"][:, 2] != 0, inputs_ii["bdry_ratio"], 1.0
             )
-            inputs_ii["surface"][:, 3] *= bdry_factor
-            inputs_ii["surface"][:, 4] *= bdry_factor
+            if inputs_ii["bdry_ratio"] is not None:
+                inputs_ii["surface"][:, 3] *= bdry_factor
+                inputs_ii["surface"][:, 4] *= bdry_factor
             inputs_list.append(inputs_ii)
 
         return inputs_list
 
     @staticmethod
-    def write_desc_input(filename, inputs, header=""):
+    def write_desc_input(filename, inputs, header=""):  # noqa: C901 - fxn too complex
         """Generate a DESC input file from a dictionary of parameters.
 
         Parameters
@@ -685,21 +700,33 @@ class InputReader:
 
         f.write("\n# continuation parameters\n")
         for key in ["bdry_ratio", "pres_ratio", "curr_ratio", "pert_order"]:
+            inputs_not_None = []
+            for inp in inputs:
+                if inp.get(key) is not None:
+                    inputs_not_None.append(inp)
+            if not inputs_not_None:  # an  empty list evals to False
+                continue  # don't write line if all input tolerance are None
+
             f.write(
-                key + " = {} \n".format(", ".join([str(inp[key]) for inp in inputs]))
+                key
+                + " = {} \n".format(
+                    ", ".join([str(float(inp[key])) for inp in inputs_not_None])
+                )
             )
 
         f.write("\n# solver tolerances\n")
-        for key in ["ftol", "xtol", "gtol", "nfev"]:
+        for key in ["ftol", "xtol", "gtol", "maxiter"]:
+            inputs_not_None = []
+            for inp in inputs:
+                if inp[key] is not None:
+                    inputs_not_None.append(inp)
+            if not inputs_not_None:  # an  empty list evals to False
+                continue  # don't write line if all input tolerance are None
+
             f.write(
                 key
                 + " = {}\n".format(
-                    ", ".join(
-                        [
-                            str(inp[key]) if inp[key] is not None else str(0)
-                            for inp in inputs
-                        ]
-                    )
+                    ", ".join([str(inp[key]) for inp in inputs_not_None])
                 )
             )
 
@@ -807,14 +834,14 @@ class InputReader:
             "L_grid": None,
             "M_grid": 0,
             "N_grid": 0,
-            "pres_ratio": 1.0,
-            "curr_ratio": 1.0,
-            "bdry_ratio": 1.0,
-            "pert_order": 1,
+            "pres_ratio": None,
+            "curr_ratio": None,
+            "bdry_ratio": None,
+            "pert_order": 2,
             "ftol": None,
             "xtol": None,
             "gtol": None,
-            "nfev": None,
+            "maxiter": None,
             "objective": "force",
             "optimizer": "lsq-exact",
             "spectral_indexing": "ansi",
@@ -831,16 +858,97 @@ class InputReader:
         pres_scale = 1.0
         curr_tor = None
 
-        for line in vmec_file:
+        # find start of namelist (&INDATA)
+        vmeclines = vmec_file.readlines()
+        for i, line in enumerate(vmeclines):
+            if line.find("&INDATA") != -1:
+                start_ind = i
+                continue
+            elif line.find("&") != -1:  # only care about the INDATA section
+                end_ind = i
+                break
+            elif i == len(vmeclines) - 1:
+                end_ind = i
+        vmeclines = vmeclines[start_ind + 1 : end_ind]
+
+        ## Loop which makes multi-line inputs a single line
+        vmeclines_no_multiline = []
+        for line in vmeclines:
+            comment = line.find("!")
+            line = (line.strip() + " ")[0:comment].strip()
+            equal_ind = line.find("=")
+
+            # ignore blank lines or leftover comment !'s
+            if line.isspace() or line == "" or line == r"!":
+                continue
+            if equal_ind != -1:
+                vmeclines_no_multiline.append(line)
+            else:  # is a multi-line input,append the line to the previous
+                vmeclines_no_multiline[-1] += " " + line
+
+        ## remove duplicate lines
+        vmec_no_multiline_no_duplicates = []
+        already_read_names = []
+        already_read = False
+
+        # it is easiest to find first instances of something, but
+        # we want to keep only the last instance of each duplicate
+        # as that is the behavior VMEC has,
+        # so we will read through the lines reversed
+        vmeclines_no_multiline.reverse()
+
+        for line in vmeclines_no_multiline:
+            comment = line.find("!")
+            line = (line.strip() + " ")[0:comment].strip()
+            equal_ind = line.find("=")
+
+            # ignore blank lines or leftover comment !'s
+            if line.isspace() or line == "" or line == r"!":
+                continue
+            if equal_ind != -1:
+                # add name of variable to already_read_names
+                input_name = line[0:equal_ind].strip()
+                if input_name not in already_read_names:
+                    already_read_names.append(input_name)
+                    vmec_no_multiline_no_duplicates.append(line)
+                    already_read = False
+                else:
+                    warnings.warn(
+                        colored(
+                            f"Detected multiple inputs for {input_name}! "
+                            + "DESC will default to using the last one.",
+                            "yellow",
+                        )
+                    )
+                    already_read = True
+            # make sure if it is a duplicate line,
+            # to skip the multi-line associated with it
+            elif not already_read:
+                # is a multi-line input,append the line to the previous
+                vmec_no_multiline_no_duplicates[-1] += " " + line
+
+        # undo the reverse so the file we write looks as expected
+        vmec_no_multiline_no_duplicates.reverse()
+
+        ## read the inputs for use in DESC
+        for line in vmec_no_multiline_no_duplicates:
             comment = line.find("!")
             command = (line.strip() + " ")[0:comment]
-
             # global parameters
             if re.search(r"LFREEB\s*=\s*T", command, re.IGNORECASE):
-                warnings.warn(colored("Using free-boundary mode!", "yellow"))
+                warnings.warn(
+                    colored(
+                        "Using free-boundary mode! DESC will run as fixed-boundary.",
+                        "yellow",
+                    )
+                )
             if re.search(r"LRFP\s*=\s*T", command, re.IGNORECASE):
                 warnings.warn(
-                    colored("Using poloidal flux instead of toroidal flux!", "yellow")
+                    colored(
+                        "Using poloidal flux instead of toroidal flux! "
+                        + " DESC will read as toroidal flux.",
+                        "yellow",
+                    )
                 )
             match = re.search(r"LASYM\s*=\s*[TF]", command, re.IGNORECASE)
             if match:
@@ -909,7 +1017,11 @@ class InputReader:
                     if re.search(r"\d", x)
                 ]
                 if numbers[0] != 0:
-                    warnings.warn(colored("GAMMA is not 0.0", "yellow"))
+                    warnings.warn(
+                        colored(
+                            "GAMMA is not 0.0, DESC will set this to 0.0.", "yellow"
+                        )
+                    )
             match = re.search(r"BLOAT\s*=\s*" + num_form, command, re.IGNORECASE)
             if match:
                 numbers = [
@@ -1026,7 +1138,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] += numbers[k]
+                        inputs["axis"][idx[0], 1] = numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1041,11 +1153,12 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                for k in range(len(numbers)):
+                # ignore the n=0 since it should always be zero for sin terms
+                for k in range(1, len(numbers)):
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 1] += -numbers[k]
+                        inputs["axis"][idx[0], 1] = -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1064,7 +1177,7 @@ class InputReader:
                     n = k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] += numbers[k]
+                        inputs["axis"][idx[0], 2] = numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1079,11 +1192,12 @@ class InputReader:
                     for x in re.findall(num_form, match.group(0))
                     if re.search(r"\d", x)
                 ]
-                for k in range(len(numbers)):
+                # ignore the n=0 since it should always be zero for sin terms
+                for k in range(1, len(numbers)):
                     n = -k
                     idx = np.where(inputs["axis"][:, 0] == n)[0]
                     if np.size(idx):
-                        inputs["axis"][idx[0], 2] += -numbers[k]
+                        inputs["axis"][idx[0], 2] = -numbers[k]
                     else:
                         inputs["axis"] = np.pad(
                             inputs["axis"], ((0, 1), (0, 0)), mode="constant"
@@ -1339,49 +1453,7 @@ class InputReader:
 
         vmec_file.close()
 
-        # default continuation stuff
-        res_step = 6
-        pres_step = 1 / 2
-        bdry_step = 1 / 4
-
-        # first we solve vacuum until we reach full L,M
-        # then pressure
-        # then 3d shaping
-        res_steps = max(inputs["L"] // res_step, 1)
-        pres_steps = (
-            0 if (inputs["pressure"][:, 1] == 0).all() else int(np.ceil(1 / pres_step))
-        )
-        bdry_steps = 0 if inputs["N"] == 0 else int(np.ceil(1 / bdry_step))
-
-        total_steps = res_steps + pres_steps + bdry_steps
-        inputs_arr = [inputs.copy() for _ in range(total_steps)]
-        for i in range(total_steps):
-            if i < res_steps:
-                inputs_arr[i]["L"] = min((i + 1) * res_step, inputs["L"])
-                inputs_arr[i]["L_grid"] = 2 * inputs_arr[i]["L"]
-                inputs_arr[i]["N"] = 0
-                inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = 0
-                inputs_arr[i]["curr_ratio"] = 0
-                if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0
-                else:
-                    inputs_arr[i]["bdry_ratio"] = 1
-            elif i < (res_steps + pres_steps):
-                inputs_arr[i]["N"] = 0
-                inputs_arr[i]["N_grid"] = 0
-                inputs_arr[i]["pres_ratio"] = (i - res_steps + 1) * pres_step
-                inputs_arr[i]["curr_ratio"] = (i - res_steps + 1) * pres_step
-                inputs_arr[i]["pert_order"] = 2
-                if bdry_steps != 0:
-                    inputs_arr[i]["bdry_ratio"] = 0
-                else:
-                    inputs_arr[i]["bdry_ratio"] = 1
-            else:
-                inputs_arr[i]["pert_order"] = 2
-                inputs_arr[i]["bdry_ratio"] = (
-                    i - res_steps - pres_steps + 1
-                ) * bdry_step
+        inputs_arr = [inputs]
 
         return inputs_arr
 

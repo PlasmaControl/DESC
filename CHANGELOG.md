@@ -1,6 +1,82 @@
 Changelog
 =========
 
+v0.8.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.1...v0.8.2)
+
+
+New Features
+- New compute functions for derivatives of contravariant metric tensor elements, eg, for Laplace's equation.
+- New objective `Isodynamic` for penalizing *local* radial drifts, not just the bounce average as in QI
+- `solve_continuation_automatic` now uses adaptive step sizing for perturbations in the event of a solution becoming unnested.
+
+Minor changes
+- Now uses `jnp` for perturbations rather than `np` which should be significantly faster, especially on GPU
+- The `fixed_boundary` flag has been removed from `FixBoundaryR` and `FixBoundaryZ` constraints. It is now detected automatically based on the objective and optimizer.
+- Plotting normalized force error now always uses the gradient of magnetic pressure to normalize, even at finite beta. The old behavior can be recovered by passing `norm_name="<|grad(p)|>_vol"` to the relevant plotting function.
+
+Bug Fixes
+- Fixed minor bug with symmetric grids that caused end points to be double counted
+- Fixed bug causing `NFP` of curves to not be updated correctly when the equilibrium changed
+- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid 
+
+
+v0.8.1
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.0...v0.8.1)
+
+Minor Changes
+* Include near-axis verification checks in NAE-constrained equilibrium example notebook
+
+Bug Fixes
+* Fix read-the-docs build error
+* Add missing classes to API docs
+* fix error in fix axis util function 
+* Add missing attributes to new classes added in `v0.8.0`
+
+
+v0.8.0
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.2...v0.8.0)
+
+New Features
+- Add profiles for kinetic quantities to `Equilibrium`
+- Add compute functions and objectives for the bootstrap current for stellarators near quasisymmetry.
+- Added ability to solve equilibria with the axis held fixed, or by constraining the O(rho) behavior from a near axis expansion.
+- New objective for penalizing plasma-vessel distance
+- All objectives now have a `bounds` argument, and the loss will be zero if within bounds.
+- Added compute functions for field line quantities such as field line label `alpha`, unit vector `b`, field line curvature `kappa` etc.
+- Add compute functions for covariant components of current.
+- `Equilibrium.compute` will now automatically use the correct grids for surface and volume averages.
+- Added a number of fields to VMEC output from DESC equilibria.
+
+Minor Changes
+- Improved handling of indefinite hessian matrices in `fmintr`
+
+Bug Fixes
+- Fix issue with composite profiles parsing parameters incorrectly
+- Loading an equilibrium from VMEC now uses spline profiles to ensure consistency, as VMEC does not always save the input profile
+
+
+v0.7.2
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
+
+What's Changed
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+symmetric due to different Fourier series conventions.
+* Improve speed of functions for converting between VMEC and DESC Fourier representations.
+* Add objectives for penalizing strong shaping.
+    - `MeanCurvature` targets values for the mean curvature of the flux surfaces
+    (average of principal curvatures)
+    - `PrincipalCurvature` penalizes the largest magnitude of the principal curvatures
+* Improve default tolerances when converting input file from VMEC to DESC
+
 v0.7.1
 ------
 

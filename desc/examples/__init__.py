@@ -5,18 +5,26 @@ import os
 import desc.io
 
 
+def listall():
+    """Return a list of examples that DESC has."""
+    here = os.path.abspath(os.path.dirname(__file__))
+    h5s = [f for f in os.listdir(here) if f.endswith(".h5")]
+    names_stripped = [f.replace("_output.h5", "") for f in h5s]
+    return names_stripped
+
+
 def get(name, data=None):
     """Get example equilibria and data.
 
     Returns a solved equilibrium or selected attributes for one of several examples.
 
-    Examples include: SOLOVEV, DSHAPE, DSHAPE_current, HELIOTRON, ATF, ESTELL,
-    WISTELL-A, ARIES-CS, QAS, NCSX, W7-X
+    A full list of valid names can be found with ``desc.examples.listall()``
 
     Parameters
     ----------
-    name : str
-        Name of the example equilibrium to load from, should be one from list above.
+    name : str (case insensitive)
+        Name of the example equilibrium to load from, should be one from
+        ``desc.examples.listall()``.
     data : {None, "all", "boundary", "pressure", "iota", "current"}
         Data to return. None returns the final solved equilibrium. "all" returns the
         intermediate solutions from the continuation method as an EquilibriaFamily.
@@ -30,12 +38,21 @@ def get(name, data=None):
 
     """
     assert data in {None, "all", "boundary", "pressure", "iota", "current"}
-    here = os.path.abspath(os.path.dirname(__file__)) + "/"
-    path = here + name + "_output.h5"
-    if os.path.exists(path):
-        eqf = desc.io.load(path)
-    else:
-        raise ValueError("example {} not found".format(path))
+    here = os.path.abspath(os.path.dirname(__file__))
+    h5s = [f for f in os.listdir(here) if f.endswith(".h5")]
+    h5s_lower = [f.lower() for f in h5s]
+    filename = name.lower() + "_output.h5"
+    try:
+        idx = h5s_lower.index(filename)
+    except ValueError as e:
+        raise ValueError(
+            "example {} not found, should be one of {}".format(name, listall())
+        ) from e
+    path = here + "/" + h5s[idx]
+    assert os.path.exists(path)
+
+    eqf = desc.io.load(path)
+
     if data is None:
         return eqf[-1]
     if data == "all":

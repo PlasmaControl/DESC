@@ -29,10 +29,10 @@ class TestVMECIO:
         a2 = 1
         a3 = 2
 
-        m_0 = np.array([0, 0, 1, 1, 1])
-        n_0 = np.array([0, 1, -1, 0, 1])
-        s = np.array([0, a0, a1, a3, 0])
-        c = np.array([a0, 0, a2, 0, a3])
+        m_0 = np.array([0, 1, 1, 1, 0])
+        n_0 = np.array([1, -1, 0, 1, 0])
+        s = np.array([a0, a1, a3, 0, 0])
+        c = np.array([0, a2, 0, a3, a0])
 
         # a0*sin(-z) + a1*sin(t+z) + a3*sin(t)                          # noqa: E800
         #    = -a0*sin(z) + a1*sin(t)*cos(z) + a1*cos(t)*sin(z) + a3*sin(t)
@@ -44,6 +44,33 @@ class TestVMECIO:
         x_correct = np.array([[a3 - a2, -a0, a1, a3, a0, 0, a1, 0, a2 + a3]])
 
         m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
+        np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
+        np.testing.assert_allclose(x, x_correct, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_ptolemy_identity_fwd_sin_series(self):
+        """Tests forward implementation of Ptolemy's identity for sin only."""
+        a1 = -1
+
+        m_0 = np.array([1, 1])
+        n_0 = np.array([-1, 1])
+        s = np.array([[a1, 0]])
+        c = np.array([[0, 0]])
+
+        m_1, n_1, x = ptolemy_identity_fwd(m_0, n_0, s, c)
+
+        print(m_1)
+        print(n_1)
+        print(x)
+
+        #  a1*sin(t+z)  # noqa: E800
+        # = a1*sin(t)*cos(z) + a1*cos(t)*sin(z) # noqa: E800
+
+        m_1_correct = np.array([-1, 1, -1, 1])
+        n_1_correct = np.array([-1, -1, 1, 1])
+        x_correct = np.array([[0, a1, a1, 0]])
 
         np.testing.assert_allclose(m_1, m_1_correct, atol=1e-8)
         np.testing.assert_allclose(n_1, n_1_correct, atol=1e-8)
@@ -79,6 +106,30 @@ class TestVMECIO:
         np.testing.assert_allclose(c, c_correct, atol=1e-8)
 
     @pytest.mark.unit
+    def test_ptolemy_identity_rev_sin_sym(self):
+        """Tests reverse implementation of Ptolemy's identity for sin series."""
+        a1 = -1
+
+        m_1 = np.array([-1, 1])
+        n_1 = np.array([1, -1])
+        x = np.array([[a1, a1]])
+
+        # a1*sin(t)*cos(z) + a1*cos(t)*sin(z)    # noqa: E800
+        #   = a1*sin(t+z)
+
+        m_0_correct = np.array([0, 1, 1])
+        n_0_correct = np.array([0, -1, 1])
+        s_correct = np.array([[0, a1, 0]])
+        c_correct = np.array([[0, 0, 0]])
+
+        m_0, n_0, s, c = ptolemy_identity_rev(m_1, n_1, x)
+
+        np.testing.assert_allclose(m_0, m_0_correct, atol=1e-8)
+        np.testing.assert_allclose(n_0, n_0_correct, atol=1e-8)
+        np.testing.assert_allclose(s, s_correct, atol=1e-8)
+        np.testing.assert_allclose(c, c_correct, atol=1e-8)
+
+    @pytest.mark.unit
     def test_ptolemy_identities_inverse(self):
         """Tests that forward and reverse Ptolemy's identities are inverses."""
         basis = DoubleFourierSeries(4, 3, sym=False)
@@ -96,7 +147,9 @@ class TestVMECIO:
     def test_ptolemy_linear_transform(self):
         """Tests Ptolemy basis linear transformation utility function."""
         basis = DoubleFourierSeries(M=4, N=3, sym=False)
-        matrix, modes = ptolemy_linear_transform(basis)
+        matrix, modes, idx = ptolemy_linear_transform(
+            basis.modes, helicity=(1, 1), NFP=1
+        )
 
         x_correct = np.random.rand(basis.num_modes)
         x_transformed = matrix @ x_correct
@@ -116,6 +169,19 @@ class TestVMECIO:
             modes[::2, 1], modes[::2, 2], x_sin, x_cos
         )
         np.testing.assert_allclose(x_original, np.atleast_2d(x_correct))
+
+        sym_modes = np.array(
+            [
+                [1, 0, 0],
+                [-1, 1, 1],
+                [1, 1, 1],
+                [-1, 2, 2],
+                [1, 2, 2],
+                [-1, 3, 3],
+                [1, 3, 3],
+            ]
+        )
+        np.testing.assert_allclose(modes[~idx], sym_modes)
 
     @pytest.mark.unit
     def test_fourier_to_zernike(self):
@@ -198,7 +264,6 @@ def test_load_then_save(TmpDir):
 
     eq = VMECIO.load(input_path, profile="current")
     assert eq.iota is None
-    np.testing.assert_allclose(eq.current.params, 0)
     eq = VMECIO.load(input_path, profile="iota")
     assert eq.current is None
     VMECIO.save(eq, output_path)
@@ -307,6 +372,9 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(vmec.variables["pres"][:], desc.variables["pres"][:])
     np.testing.assert_allclose(vmec.variables["mass"][:], desc.variables["mass"][:])
     np.testing.assert_allclose(vmec.variables["iotaf"][:], desc.variables["iotaf"][:])
+    np.testing.assert_allclose(
+        vmec.variables["q_factor"][:], desc.variables["q_factor"][:]
+    )
     np.testing.assert_allclose(vmec.variables["iotas"][:], desc.variables["iotas"][:])
     np.testing.assert_allclose(vmec.variables["phi"][:], desc.variables["phi"][:])
     np.testing.assert_allclose(vmec.variables["phipf"][:], desc.variables["phipf"][:])
@@ -323,17 +391,36 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(vmec.variables["aspect"][:], desc.variables["aspect"][:])
     np.testing.assert_allclose(
-        vmec.variables["volume_p"][:], desc.variables["volume_p"][:]
-    )
-    # raxis_cc & zaxis_cs excluded b/c VMEC saves initial guess, not final solution
-    np.testing.assert_allclose(
-        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
+        vmec.variables["volume_p"][:], desc.variables["volume_p"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:], rtol=5e-3
+        vmec.variables["volavgB"][:], desc.variables["volavgB"][:], rtol=1e-5
     )
     np.testing.assert_allclose(
-        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
+        vmec.variables["betatotal"][:], desc.variables["betatotal"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betapol"][:], desc.variables["betapol"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["betator"][:], desc.variables["betator"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["ctor"][:], desc.variables["ctor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor"][:], desc.variables["rbtor"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rbtor0"][:], desc.variables["rbtor0"][:], rtol=1e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["b0"][:], desc.variables["b0"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["bdotb"][20:100]),
+        np.abs(desc.variables["bdotb"][20:100]),
+        rtol=1e-6,
     )
     np.testing.assert_allclose(
         np.abs(vmec.variables["buco"][20:100]),
@@ -343,6 +430,21 @@ def test_vmec_save_1(VMEC_save):
     np.testing.assert_allclose(
         np.abs(vmec.variables["bvco"][20:100]),
         np.abs(desc.variables["bvco"][20:100]),
+        rtol=3e-2,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jdotb"][20:100]),
+        np.abs(desc.variables["jdotb"][20:100]),
+        rtol=1e-5,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jcuru"][20:100]),
+        np.abs(desc.variables["jcuru"][20:100]),
+        rtol=1e-2,
+    )
+    np.testing.assert_allclose(
+        np.abs(vmec.variables["jcurv"][20:100]),
+        np.abs(desc.variables["jcurv"][20:100]),
         rtol=3e-2,
     )
     np.testing.assert_allclose(
@@ -359,6 +461,21 @@ def test_vmec_save_1(VMEC_save):
     )
     np.testing.assert_allclose(
         vmec.variables["DMerc"][20:100], desc.variables["DMerc"][20:100], rtol=5e-2
+    )
+    np.testing.assert_allclose(
+        vmec.variables["raxis_cc"][:], desc.variables["raxis_cc"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zaxis_cs"][:], desc.variables["zaxis_cs"][:], rtol=5e-5
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rmin_surf"][:], desc.variables["rmin_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["rmax_surf"][:], desc.variables["rmax_surf"][:], rtol=5e-3
+    )
+    np.testing.assert_allclose(
+        vmec.variables["zmax_surf"][:], desc.variables["zmax_surf"][:], rtol=5e-3
     )
 
 
@@ -612,7 +729,7 @@ def test_vmec_save_2(VMEC_save):
         s=grid.nodes[:, 0],
         sym=False,
     )
-    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=1e-3)
+    np.testing.assert_allclose(bsubs_vmec, bsubs_desc, rtol=1e-2, atol=2e-3)
 
     # J^theta
     curru_vmec = VMECIO.vmec_interpolate(

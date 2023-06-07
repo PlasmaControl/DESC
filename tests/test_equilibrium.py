@@ -2,15 +2,18 @@
 
 import os
 import pickle
+import warnings
 
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
+from desc.objectives import get_equilibrium_objective
 
 from .utils import area_difference, compute_coords
 
@@ -96,6 +99,28 @@ def test_compute_flux_coords(DSHAPE_current):
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
 
 
+@pytest.mark.unit
+def test_map_coordinates():
+    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
+    eq = desc.examples.get("DSHAPE")
+
+    inbasis = ["alpha", "phi", "rho"]
+    outbasis = ["rho", "theta_sfl", "zeta"]
+
+    rho = np.linspace(0.01, 0.99, 200)
+    theta = np.linspace(0, np.pi, 200, endpoint=False)
+    zeta = np.linspace(0, np.pi, 200, endpoint=False)
+
+    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    out_data = eq.compute(outbasis, grid=grid)
+    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+
+    out = eq.map_coordinates(in_coords, inbasis, outbasis)
+    np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve
@@ -124,7 +149,7 @@ def test_continuation_resolution(tmpdir_factory):
     input_filename = os.path.join(exec_dir, input_path)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    with pytest.warns(UserWarning):
+    with pytest.warns((UserWarning, DeprecationWarning)):
         main(args)
 
 
@@ -169,8 +194,7 @@ def test_resolution():
     eq1.L = 2
     eq1.M = 3
     eq1.N = 4
-    with pytest.warns(UserWarning):
-        eq1.NFP = 5
+    eq1.NFP = 5
     assert eq1.R_basis.L == 2
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
@@ -231,3 +255,14 @@ def test_equilibriafamily_constructor():
 
     with pytest.raises(TypeError):
         _ = EquilibriaFamily(4, 5, 6)
+
+
+@pytest.mark.unit
+def test_change_NFP():
+    """Test that changing the eq NFP correctly changes everything."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        eq = desc.examples.get("HELIOTRON")
+        eq.change_resolution(NFP=4)
+        obj = get_equilibrium_objective()
+        obj.build(eq)

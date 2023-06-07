@@ -2,9 +2,9 @@
 
 import numpy as np
 
-from desc.backend import block_diag, jnp, put
+from desc.backend import jnp, put
 from desc.compute import arg_order
-from desc.utils import svd_inv_null
+from desc.utils import Index, flatten_list, svd_inv_null
 
 from ._equilibrium import (
     CurrentDensity,
@@ -14,19 +14,30 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    BoundaryRSelfConsistency,
+    BoundaryZSelfConsistency,
     FixAnisotropy,
+    FixAtomicNumber,
+    FixAxisR,
+    FixAxisZ,
     FixBoundaryR,
     FixBoundaryZ,
     FixCurrent,
+    FixElectronDensity,
+    FixElectronTemperature,
+    FixIonTemperature,
     FixIota,
     FixLambdaGauge,
     FixPressure,
     FixPsi,
 )
+from .nae_utils import make_RZ_cons_1st_order
 from .objective_funs import ObjectiveFunction
 
 
-def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
+def get_fixed_boundary_constraints(
+    profiles=True, iota=True, kinetic=False, normalize=True
+):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
@@ -35,6 +46,8 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to add constraints to fix kinetic profiles or pressure
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -45,20 +58,24 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
 
     """
     constraints = (
-        FixBoundaryR(
-            fixed_boundary=True, normalize=normalize, normalize_target=normalize
-        ),
-        FixBoundaryZ(
-            fixed_boundary=True, normalize=normalize, normalize_target=normalize
-        ),
-        FixLambdaGauge(normalize=normalize, normalize_target=normalize),
+        FixBoundaryR(normalize=normalize, normalize_target=normalize),
+        FixBoundaryZ(normalize=normalize, normalize_target=normalize),
         FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (
-            FixPressure(normalize=normalize, normalize_target=normalize),
-            FixAnisotropy(normalize=normalize, normalize_target=normalize),
-        )
+        if kinetic:
+            constraints += (
+                FixElectronDensity(normalize=normalize, normalize_target=normalize),
+                FixElectronTemperature(normalize=normalize, normalize_target=normalize),
+                FixIonTemperature(normalize=normalize, normalize_target=normalize),
+                FixAtomicNumber(normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixPressure(normalize=normalize, normalize_target=normalize),
+                FixAnisotropy(normalize=normalize, normalize_target=normalize),
+            )
+
         if iota:
             constraints += (FixIota(normalize=normalize, normalize_target=normalize),)
         else:
@@ -68,12 +85,102 @@ def get_fixed_boundary_constraints(profiles=True, iota=True, normalize=True):
     return constraints
 
 
+def maybe_add_self_consistency(constraints):
+    """Add self consistency constraints if needed."""
+
+    def _is_any_instance(things, cls):
+        return any([isinstance(t, cls) for t in things])
+
+    if not _is_any_instance(constraints, BoundaryRSelfConsistency):
+        constraints += (BoundaryRSelfConsistency(),)
+    if not _is_any_instance(constraints, BoundaryZSelfConsistency):
+        constraints += (BoundaryZSelfConsistency(),)
+    if not _is_any_instance(constraints, FixLambdaGauge):
+        constraints += (FixLambdaGauge(),)
+    return constraints
+
+
+def get_fixed_axis_constraints(profiles=True, iota=True):
+    """Get the constraints necessary for a fixed-axis equilibrium problem.
+
+    Parameters
+    ----------
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-axis problems.
+
+    """
+    constraints = (
+        FixAxisR(),
+        FixAxisZ(),
+        FixLambdaGauge(),
+        FixPsi(),
+    )
+    if profiles:
+        constraints += (FixPressure(),)
+
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
+    return constraints
+
+
+def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
+    """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
+
+    Parameters
+    ----------
+    desc_eq : Equilibrium
+        Equilibrium to constrain behavior of
+        (assumed to be a fit from the NAE equil using .from_near_axis()).
+    qsc_eq : Qsc
+        Qsc object defining the near-axis equilibrium to constrain behavior to.
+    profiles : bool
+        Whether to also return constraints to fix input profiles.
+    iota : bool
+        Whether to add FixIota or FixCurrent as a constraint.
+    order : int
+        order (in rho) of near-axis behavior to constrain
+
+    Returns
+    -------
+    constraints, tuple of _Objectives
+        A list of the linear constraints used in fixed-axis problems.
+    """
+
+    constraints = (
+        FixAxisR(),
+        FixAxisZ(),
+        FixPsi(),
+    )
+    if profiles:
+        constraints += (FixPressure(),)
+
+        if iota:
+            constraints += (FixIota(),)
+        else:
+            constraints += (FixCurrent(),)
+    if order >= 1:  # first order constraints
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+    if order >= 2:  # 2nd order constraints
+        raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
+
+    return constraints
+
+
 def get_equilibrium_objective(mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
     ----------
-    mode : {"force", "forces", "energy", "vacuum"}
+    mode : one of {"force", "forces", "energy", "vacuum"}
         which objective to return. "force" computes force residuals on unified grid.
         "forces" uses two different grids for radial and helical forces. "energy" is
         for minimizing MHD energy. "vacuum" directly minimizes current density.
@@ -84,7 +191,6 @@ def get_equilibrium_objective(mode="force", normalize=True):
     -------
     objective, ObjectiveFunction
         An objective function with default force balance objectives.
-
     """
     if mode == "energy":
         objectives = Energy(normalize=normalize, normalize_target=normalize)
@@ -102,7 +208,7 @@ def get_equilibrium_objective(mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):
+def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -121,14 +227,12 @@ def factorize_linear_constraints(constraints, objective_args):
     -------
     xp : ndarray
         particular solution to Ax=b
-    A : dict of ndarray
-        Individual constraint matrices, keyed by argument
-    Ainv : dict of ndarray
-        Individual pseudoinverses of constraint matrices
-    b : dict of ndarray
-        Individual rhs vectors
+    A : ndarray ndarray
+        Combined constraint matrix, such that A @ x[unfixed_idx] == b
+    b : list of ndarray
+        Combined rhs vector
     Z : ndarray
-        Null space operator for full combined A
+        Null space operator for full combined A such that A @ Z == 0
     unfixed_idx : ndarray
         indices of x that correspond to non-fixed values
     project, recover : function
@@ -144,58 +248,70 @@ def factorize_linear_constraints(constraints, objective_args):
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
-    for arg in objective_args:
+    for arg in args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
 
-    A = {}
-    b = {}
-    Ainv = {}
+    A = []
+    b = []
     xp = jnp.zeros(dim_x)  # particular solution to Ax=b
-    constraint_args = []  # all args used in constraints
-    unfixed_args = []  # subset of constraint args for unfixed objectives
 
     # linear constraint matrices for each objective
-    for obj in constraints:
-        if len(obj.args) > 1:
-            raise ValueError("Linear constraints must have only 1 argument.")
-        arg = obj.args[0]
-        if arg not in objective_args:
-            continue
-        constraint_args.append(arg)
-        if obj.fixed and obj.dim_f == obj.dimensions[obj.target_arg]:
-            # if all coefficients are fixed the constraint matrices are not needed
-            xp = put(xp, x_idx[obj.target_arg], obj.target)
-        else:
-            unfixed_args.append(arg)
-            A_ = obj.derivatives["jac"][arg](jnp.zeros(obj.dimensions[arg]))
-            # using obj.compute instead of obj.target to allow for correct scale/weight
-            b_ = -obj.compute(jnp.zeros(obj.dimensions[arg]))
-            if A_.shape[0]:
-                Ainv_, Z_ = svd_inv_null(A_)
-            else:
-                Ainv_ = A_.T
-            A[arg] = A_
-            b[arg] = b_
-            # need to undo scaling here to work with perturbations
-            Ainv[arg] = Ainv_ * obj.weight / obj.normalization
-
-    # catch any arguments that are not constrained
-    for arg in x_idx.keys():
-        if arg not in constraint_args:
-            unfixed_args.append(arg)
-            A[arg] = jnp.zeros((1, constraints[0].dimensions[arg]))
-            b[arg] = jnp.zeros((1,))
-
-    # full A matrix for all unfixed constraints
-    if len(A):
-        unfixed_idx = jnp.concatenate(
-            [x_idx[arg] for arg in arg_order if arg in A.keys()]
+    for obj_ind, obj in enumerate(constraints):
+        if obj.bounds is not None:
+            raise ValueError("Linear constraints must use target instead of bounds.")
+        A_ = {
+            arg: obj.derivatives["jac_scaled"][arg](
+                *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
+            )
+            for arg in args
+        }
+        # using obj.compute instead of obj.target to allow for correct scale/weight
+        b_ = -obj.compute_scaled_error(
+            *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
         )
-        A_full = block_diag(*[A[arg] for arg in arg_order if arg in A.keys()])
-        b_full = jnp.concatenate([b[arg] for arg in arg_order if arg in b.keys()])
+        A.append(A_)
+        b.append(b_)
+
+    A_full = jnp.vstack([jnp.hstack([Ai[arg] for arg in args]) for Ai in A])
+    b_full = jnp.concatenate(b)
+    # fixed just means there is a single element in A, so A_ij*x_j = b_i
+    fixed_rows = np.where(np.count_nonzero(A_full, axis=1) == 1)[0]
+    # indices of x that are fixed = cols of A where rows have 1 nonzero val.
+    _, fixed_idx = np.where(A_full[fixed_rows])
+    unfixed_rows = np.setdiff1d(np.arange(A_full.shape[0]), fixed_rows)
+    unfixed_idx = np.setdiff1d(np.arange(xp.size), fixed_idx)
+    if len(fixed_rows):
+        # something like 0.5 x1 = 2 is the same as x1 = 4
+        b_full = put(
+            b_full, fixed_rows, b_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)
+        )
+        A_full = put(
+            A_full,
+            Index[fixed_rows, :],
+            A_full[fixed_rows] / np.sum(A_full[fixed_rows], axis=1)[:, None],
+        )
+        xp = put(xp, fixed_idx, b_full[fixed_rows])
+        # some values might be fixed, but they still show up in other constraints
+        # this is where the fixed cols have >1 nonzero val
+        # for fixed variables, we delete that row and col of A, but that means
+        # we need to subtract the fixed value from b so that the equation is balanced.
+        # eg 2 x1 + 3 x2 + 1 x3= 4 ;    4 x1 = 2
+        # combining gives 3 x2 + 1 x3 = 3, with x1 now removed
+        b_full = put(
+            b_full,
+            unfixed_rows,
+            b_full[unfixed_rows]
+            - A_full[unfixed_rows][:, fixed_idx] @ b_full[fixed_rows],
+        )
+    A_full = A_full[unfixed_rows][:, unfixed_idx]
+    b_full = b_full[unfixed_rows]
+    if A_full.size:
         Ainv_full, Z = svd_inv_null(A_full)
-        xp = put(xp, unfixed_idx, Ainv_full @ b_full)
+    else:
+        Ainv_full = A_full.T
+        Z = np.eye(A_full.shape[1])
+    xp = put(xp, unfixed_idx, Ainv_full @ b_full)
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
@@ -210,16 +326,19 @@ def factorize_linear_constraints(constraints, objective_args):
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        arg = con.args[0]
-        if arg not in objective_args:
-            continue
-        res = con.compute(**xp_dict)
-        if not np.allclose(res, 0):
-            raise ValueError(
-                f"Incompatible constraints detected, cannot satisfy constraint {con}"
-            )
+        res = con.compute_scaled_error(**xp_dict)
+        x = np.concatenate([xp_dict[arg] for arg in con.args])
+        # stuff like density is O(1e19) so need some adjustable tolerance here.
+        atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
+        np.testing.assert_allclose(
+            res,
+            0,
+            atol=atol,
+            err_msg="Incompatible constraints detected, cannot satisfy "
+            + f"constraint {con}",
+        )
 
-    return xp, A, Ainv, b, Z, unfixed_idx, project, recover
+    return xp, A_full, b_full, Z, unfixed_idx, project, recover
 
 
 def align_jacobian(Fx, objective_f, objective_g):
@@ -252,3 +371,27 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def combine_args(*objectives):
+    """Given ObjectiveFunctions, modify all to take the same state vector.
+
+    The new state vector will be a combination of all arguments taken by any objective.
+
+    Parameters
+    ----------
+    objectives : ObjectiveFunction
+        ObjectiveFunctions to modify.
+
+    Returns
+    -------
+    objectives : ObjectiveFunction
+        Original ObjectiveFunctions modified to take the same state vector.
+    """
+    args = flatten_list([obj.args for obj in objectives])
+    args = [arg for arg in arg_order if arg in args]
+
+    for obj in objectives:
+        obj.set_args(*args)
+
+    return objectives

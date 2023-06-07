@@ -11,7 +11,15 @@ from termcolor import colored
 from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
-from desc.compute.utils import compress, get_params, get_profiles, get_transforms
+from desc.compute import data_index
+from desc.compute.utils import (
+    compress,
+    expand,
+    get_data_deps,
+    get_params,
+    get_profiles,
+    get_transforms,
+)
 from desc.geometry import (
     FourierRZCurve,
     FourierRZToroidalSurface,
@@ -20,11 +28,18 @@ from desc.geometry import (
 )
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
-from desc.profiles import PowerSeriesProfile, Profile, SplineProfile
+from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.utils import copy_coeffs
 
-from .coords import compute_flux_coords, compute_theta_coords, is_nested, to_sfl
+from .coords import (
+    compute_flux_coords,
+    compute_theta_coords,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
+from .utils import parse_profile
 
 
 class _Configuration(IOAble, ABC):
@@ -47,16 +62,31 @@ class _Configuration(IOAble, ABC):
     N : int (optional)
         Toroidal resolution. Default surface.N or 0
     pressure : Profile or ndarray shape(k,2) (optional)
-        Pressure profile or array of mode numbers and spectral coefficients.
+        Pressure (Pa) profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero pressure
     anisotropy : Profile or ndarray
         Anisotropic pressure profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero anisotropic pressure.
     iota : Profile or ndarray shape(k,2) (optional)
-        Rotational transform profile or array of mode numbers and spectral coefficients
+        Rotational transform profile or array of mode numbers and spectral coefficients.
+        Cannot specify both iota and current.
     current : Profile or ndarray shape(k,2) (optional)
-        Toroidal current profile or array of mode numbers and spectral coefficients
+        Toroidal current (A) profile or array of mode numbers and spectral coefficients.
         Default is a PowerSeriesProfile with zero toroidal current
+    electron_temperature : Profile or ndarray shape(k,2) (optional)
+        Electron temperature (eV) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding density.
+        Cannot specify both kinetic profiles and pressure.
+    electron_density : Profile or ndarray shape(k,2) (optional)
+        Electron density (m^-3) profile or array of mode numbers and spectral
+        coefficients. Must be supplied with corresponding temperature.
+        Cannot specify both kinetic profiles and pressure.
+    ion_temperature : Profile or ndarray shape(k,2) (optional)
+        Ion temperature (eV) profile or array of mode numbers and spectral coefficients.
+        Default is to assume electrons and ions have the same temperature.
+    atomic_number : Profile or ndarray shape(k,2) (optional)
+        Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
+        coefficients. Default is 1
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -93,6 +123,10 @@ class _Configuration(IOAble, ABC):
         "_iota",
         "_current",
         "_anisotropy",
+        "_electron_temperature",
+        "_electron_density",
+        "_ion_temperature",
+        "_atomic_number",
         "_spectral_indexing",
         "_bdry_mode",
     ]
@@ -105,9 +139,13 @@ class _Configuration(IOAble, ABC):
         M=None,
         N=None,
         pressure=None,
-        anisotropy=None,
         iota=None,
         current=None,
+        electron_temperature=None,
+        electron_density=None,
+        ion_temperature=None,
+        atomic_number=None,
+        anisotropy=None,
         surface=None,
         axis=None,
         sym=None,
@@ -315,61 +353,54 @@ class _Configuration(IOAble, ABC):
         self._anisotropy = None
         self._iota = None
         self._current = None
+        self._electron_temperature = None
+        self._electron_density = None
+        self._ion_temperature = None
+        self._atomic_number = None
 
-        # pressure
-        if isinstance(pressure, Profile):
-            self._pressure = pressure
-        elif isinstance(pressure, (np.ndarray, jnp.ndarray)):
-            self._pressure = PowerSeriesProfile(
-                modes=pressure[:, 0], params=pressure[:, 1], name="pressure"
-            )
-        elif pressure is None:
-            self._pressure = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="pressure"
-            )
-        else:
-            raise TypeError("Got unknown pressure profile {}".format(pressure))
-
-        # anisotropy
-        if isinstance(anisotropy, Profile):
-            self._anisotropy = anisotropy
-        elif isinstance(anisotropy, (np.ndarray, jnp.ndarray)):
-            self._anisotropy = PowerSeriesProfile(
-                modes=anisotropy[:, 0], params=anisotropy[:, 1], name="anisotropy"
-            )
-        elif anisotropy is not None:
-            raise TypeError("Got unknown anisotropy profile {}".format(anisotropy))
-
-        # default profile
-        if iota is None and current is None:
-            self._current = PowerSeriesProfile(
-                modes=np.array([0]), params=np.array([0]), name="current"
-            )
-        elif iota is not None and current is not None:
+        if current is not None and iota is not None:
             raise ValueError("Cannot specify both iota and current profiles.")
-
-        # iota
-        if isinstance(iota, Profile):
-            self.iota = iota
-        elif isinstance(iota, (np.ndarray, jnp.ndarray)):
-            self._iota = PowerSeriesProfile(
-                modes=iota[:, 0], params=iota[:, 1], name="iota"
+        if current is None and iota is None:
+            current = 0
+        use_kinetic = any(
+            [electron_temperature is not None, electron_density is not None]
+        )
+        if ((pressure is not None) or (anisotropy is not None)) and use_kinetic:
+            raise ValueError("Cannot specify both pressure and kinetic profiles.")
+        if use_kinetic and (electron_temperature is None or electron_density is None):
+            raise ValueError(
+                "Must give at least electron temperature and density to use "
+                + "kinetic profiles."
             )
-        elif iota is not None:
-            raise TypeError("Got unknown iota profile {}".format(iota))
+        if use_kinetic and atomic_number is None:
+            atomic_number = 1
+        if use_kinetic and ion_temperature is None:
+            ion_temperature = electron_temperature
+        if not use_kinetic and pressure is None:
+            pressure = 0
 
-        # current
-        if isinstance(current, Profile):
-            self.current = current
-        elif isinstance(current, (np.ndarray, jnp.ndarray)):
-            self._current = PowerSeriesProfile(
-                modes=current[:, 0], params=current[:, 1], name="current"
-            )
-        elif current is not None:
-            raise TypeError("Got unknown current profile {}".format(current))
+        self._electron_temperature = parse_profile(
+            electron_temperature, "electron temperature"
+        )
+        self._electron_density = parse_profile(electron_density, "electron density")
+        self._ion_temperature = parse_profile(ion_temperature, "ion temperature")
+        self._atomic_number = parse_profile(atomic_number, "atomic number")
+        self._pressure = parse_profile(pressure, "pressure")
+        self._anisotropy = parse_profile(anisotropy, "anisotropy")
+        self._iota = parse_profile(iota, "iota")
+        self._current = parse_profile(current, "current")
 
         # ensure profiles have the right resolution
-        for profile in ["pressure", "anisotropy", "iota", "current"]:
+        for profile in [
+            "pressure",
+            "iota",
+            "current",
+            "electron_temperature",
+            "electron_density",
+            "ion_temperature",
+            "atomic_number",
+            "anisotropy",
+        ]:
             p = getattr(self, profile)
             if hasattr(p, "change_resolution"):
                 p.change_resolution(max(p.basis.L, self.L))
@@ -525,14 +556,19 @@ class _Configuration(IOAble, ABC):
         self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
 
-        if L_change and hasattr(self.pressure, "change_resolution"):
-            self.pressure.change_resolution(L=max(L, self.pressure.basis.L))
-        if L_change and hasattr(self.anisotropy, "change_resolution"):
-            self.anisotropy.change_resolution(L=max(L, self.anisotropy.basis.L))
-        if L_change and hasattr(self.iota, "change_resolution"):
-            self.iota.change_resolution(L=max(L, self.iota.basis.L))
-        if L_change and hasattr(self.current, "change_resolution"):
-            self.current.change_resolution(L=max(L, self.current.basis.L))
+        for profile in [
+            "pressure",
+            "iota",
+            "current",
+            "electron_temperature",
+            "electron_density",
+            "ion_temperature",
+            "atomic_number",
+            "anisotropy",
+        ]:
+            p = getattr(self, profile)
+            if hasattr(p, "change_resolution") and L_change:
+                p.change_resolution(max(p.basis.L, self.L))
 
         self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
 
@@ -835,30 +871,32 @@ class _Configuration(IOAble, ABC):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        self._axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP)
+        self._axis = FourierRZCurve(
+            R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym
+        )
         return self._axis
 
     @property
     def pressure(self):
-        """Profile: Pressure profile."""
+        """Profile: Pressure (Pa) profile."""
         return self._pressure
 
     @pressure.setter
     def pressure(self, new):
-        if isinstance(new, Profile):
-            self._pressure = new
-        else:
-            raise TypeError(
-                f"pressure profile should be of type Profile or a subclass, got {new} "
-            )
+        self._pressure = parse_profile(new, "pressure")
 
     @property
     def p_l(self):
         """ndarray: Coefficients of pressure profile."""
-        return self.pressure.params
+        return np.empty(0) if self.pressure is None else self.pressure.params
 
     @p_l.setter
     def p_l(self, p_l):
+        if self.pressure is None:
+            raise ValueError(
+                "Attempt to set pressure on an equilibrium "
+                + "with fixed kinetic profiles"
+            )
         self.pressure.params = p_l
 
     @property
@@ -868,21 +906,122 @@ class _Configuration(IOAble, ABC):
 
     @anisotropy.setter
     def anisotropy(self, new):
-        if isinstance(new, Profile):
-            self._anisotropy = new
-        else:
-            raise TypeError(
-                f"anisotropy should be of type Profile or a subclass, got {new} "
-            )
+        self._anisotropy = parse_profile(new, "anisotropy")
 
     @property
     def a_lmn(self):
         """ndarray: Coefficients of anisotropy profile."""
-        return self.anisotropy.params
+        return np.empty(0) if self.anisotropy is None else self.anisotropy.params
 
     @a_lmn.setter
     def a_lmn(self, a_lmn):
+        if self.anisotropy is None:
+            raise ValueError(
+                "Attempt to set anisotropy on an equilibrium " + "without profile"
+            )
         self.anisotropy.params = a_lmn
+
+    @property
+    def electron_temperature(self):
+        """Profile: Electron temperature (eV) profile."""
+        return self._electron_temperature
+
+    @electron_temperature.setter
+    def electron_temperature(self, new):
+        self._electron_temperature = parse_profile(new, "electron temperature")
+
+    @property
+    def Te_l(self):
+        """ndarray: Coefficients of electron temperature profile."""
+        return (
+            np.empty(0)
+            if self.electron_temperature is None
+            else self.electron_temperature.params
+        )
+
+    @Te_l.setter
+    def Te_l(self, Te_l):
+        if self.electron_temperature is None:
+            raise ValueError(
+                "Attempt to set electron temperature on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.electron_temperature.params = Te_l
+
+    @property
+    def electron_density(self):
+        """Profile: Electron density (m^-3) profile."""
+        return self._electron_density
+
+    @electron_density.setter
+    def electron_density(self, new):
+        self._electron_density = parse_profile(new, "electron density")
+
+    @property
+    def ne_l(self):
+        """ndarray: Coefficients of electron density profile."""
+        return (
+            np.empty(0)
+            if self.electron_density is None
+            else self.electron_density.params
+        )
+
+    @ne_l.setter
+    def ne_l(self, ne_l):
+        if self.electron_density is None:
+            raise ValueError(
+                "Attempt to set electron density on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.electron_density.params = ne_l
+
+    @property
+    def ion_temperature(self):
+        """Profile: ion temperature (eV) profile."""
+        return self._ion_temperature
+
+    @ion_temperature.setter
+    def ion_temperature(self, new):
+        self._ion_temperature = parse_profile(new, "ion temperature")
+
+    @property
+    def Ti_l(self):
+        """ndarray: Coefficients of ion temperature profile."""
+        return (
+            np.empty(0) if self.ion_temperature is None else self.ion_temperature.params
+        )
+
+    @Ti_l.setter
+    def Ti_l(self, Ti_l):
+        if self.ion_temperature is None:
+            raise ValueError(
+                "Attempt to set ion temperature on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.ion_temperature.params = Ti_l
+
+    @property
+    def atomic_number(self):
+        """Profile: Effective atomic number (Z_eff) profile."""
+        return self._atomic_number
+
+    @atomic_number.setter
+    def atomic_number(self, new):
+        self._atomic_number = parse_profile(new, "atomic number")
+
+    @property
+    def Zeff_l(self):
+        """ndarray: Coefficients of effective atomic number profile."""
+        return np.empty(0) if self.atomic_number is None else self.atomic_number.params
+
+    @Zeff_l.setter
+    def Zeff_l(self, Zeff_l):
+        if self.atomic_number is None:
+            raise ValueError(
+                "Attempt to set atomic number on an equilibrium "
+                + "with fixed pressure"
+            )
+        self.atomic_number.params = Zeff_l
 
     @property
     def iota(self):
@@ -891,12 +1030,7 @@ class _Configuration(IOAble, ABC):
 
     @iota.setter
     def iota(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._iota = new
-        else:
-            raise TypeError(
-                f"iota profile should be of type Profile or a subclass, got {new} "
-            )
+        self._iota = parse_profile(new, "iota")
 
     @property
     def i_l(self):
@@ -919,12 +1053,7 @@ class _Configuration(IOAble, ABC):
 
     @current.setter
     def current(self, new):
-        if isinstance(new, Profile) or (new is None):
-            self._current = new
-        else:
-            raise TypeError(
-                f"current profile should be of type Profile or a subclass, got {new} "
-            )
+        self._current = parse_profile(new, "current")
 
     @property
     def c_l(self):
@@ -990,17 +1119,68 @@ class _Configuration(IOAble, ABC):
             Computed quantity and intermediate variables.
 
         """
-        # TODO: default to returning just desired qty? options to return_all?
-        # TODO: use get_params method? need to break up compute functions first
+        if isinstance(names, str):
+            names = [names]
         if grid is None:
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+
         if params is None:
             params = get_params(names, eq=self)
         if profiles is None:
             profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
             transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
 
+        # To avoid the issue of using the wrong grid for surface and volume averages,
+        # we first figure out what needed qtys are flux functions or volume integrals
+        # and compute those first on a full grid
+        deps = list(set(get_data_deps(names) + names))
+        dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
+        dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
+
+        if len(dep0d):
+            grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
+            data0d = compute_fun(
+                dep0d,
+                params=params,
+                transforms=get_transforms(dep0d, eq=self, grid=grid0d, **kwargs),
+                profiles=get_profiles(dep0d, eq=self, grid=grid0d),
+                data=None,
+                **kwargs,
+            )
+            # these should all be 0d quantities so don't need to compress/expand
+            data0d = {key: val for key, val in data0d.items() if key in dep0d}
+            data.update(data0d)
+
+        if len(dep1d):
+            grid1d = LinearGrid(
+                rho=grid.nodes[grid.unique_rho_idx, 0],
+                M=self.M_grid,
+                N=self.N_grid,
+                NFP=self.NFP,
+                sym=self.sym,
+            )
+            data1d = compute_fun(
+                dep1d,
+                params=params,
+                transforms=get_transforms(dep1d, eq=self, grid=grid1d, **kwargs),
+                profiles=get_profiles(dep1d, eq=self, grid=grid1d),
+                data=None,
+                **kwargs,
+            )
+            # need to make this data broadcastable with the data on the original grid
+            data1d = {
+                key: expand(grid, compress(grid1d, val))
+                for key, val in data1d.items()
+                if key in dep1d
+            }
+            data.update(data1d)
+
+        # TODO: we can probably reduce the number of deps computed here if some are only
+        # needed as inputs for 0d and 1d qtys, unless the user asks for them
+        # specifically?
         data = compute_fun(
             names,
             params=params,
@@ -1011,6 +1191,41 @@ class _Configuration(IOAble, ABC):
         )
         return data
 
+    def map_coordinates(
+        self, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6
+    ):
+        """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+
+        First solves for the computational coordinates that correspond to inbasis, then
+        evaluates outbasis at those locations.
+
+        NOTE: this function cannot currently be JIT compiled or differentiated with AD.
+
+        Parameters
+        ----------
+        coords : ndarray, shape(k,3)
+            2D array of input coordinates. Each row is a different
+            point in space.
+        inbasis, outbasis : tuple of str
+            Labels for input and output coordinates, eg ("R", "phi", "Z") or
+            ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
+            Labels should be the same as the compute function data key.
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            Maximum number of Newton iterations
+        rhomin : float
+            Minimum allowable value of rho (to avoid singularity at rho=0)
+
+        Returns
+        -------
+        coords : ndarray, shape(k,3)
+            Coordinates in outbasis. If Newton method doesn't converge for
+            a given coordinate nan will be returned for those values
+
+        """
+        return map_coordinates(self, coords, inbasis, outbasis, tol, maxiter, rhomin)
+
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find geometric theta for given straight field line theta.
 
@@ -1018,7 +1233,7 @@ class _Configuration(IOAble, ABC):
         ----------
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            coordinate.
+            point in space.
         L_lmn : ndarray
             spectral coefficients for lambda. Defaults to eq.L_lmn
         tol : float
@@ -1044,7 +1259,7 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2D array of real space coordinates [R,phi,Z]. Each row is a different
-            coordinate.
+            point in space.
         R_lmn, Z_lmn : ndarray
             spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
         tol : float
@@ -1066,7 +1281,7 @@ class _Configuration(IOAble, ABC):
             self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -1082,8 +1297,8 @@ class _Configuration(IOAble, ABC):
         grid  :  Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn : ndarray, optional
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, L_lmn : ndarray, optional
+            spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1093,7 +1308,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
 
     def to_sfl(
         self,

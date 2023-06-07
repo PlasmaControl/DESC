@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
-from desc.equilibrium import EquilibriaFamily
+from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.objectives import (
     ForceBalance,
@@ -30,11 +30,12 @@ def test_perturbation_orders(SOLOVEV):
     tr_ratio = [0.01, 0.25, 0.25]
     dp = np.zeros_like(eq.p_l)
     dp[np.array([0, 2])] = 8e3 * np.array([1, -1])
+    deltas = {"p_l": dp}
     eq0 = perturb(
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=0,
         verbose=2,
@@ -44,7 +45,7 @@ def test_perturbation_orders(SOLOVEV):
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=1,
         verbose=2,
@@ -54,7 +55,7 @@ def test_perturbation_orders(SOLOVEV):
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=2,
         verbose=2,
@@ -64,7 +65,7 @@ def test_perturbation_orders(SOLOVEV):
         eq,
         objective,
         constraints,
-        dp=dp,
+        deltas,
         tr_ratio=tr_ratio,
         order=3,
         verbose=2,
@@ -94,6 +95,29 @@ def test_perturbation_orders(SOLOVEV):
     assert f2 < f1
     assert f3 < f2
     assert fS < f3
+
+
+@pytest.mark.unit
+def test_perturb_with_float_without_error():
+    """Test that perturb works without error if only a single float is passed."""
+    # PR #
+    # fixed bug where np.concatenate( [float] ) was called resulting in error that
+    # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
+    eq = Equilibrium()
+    objective = get_equilibrium_objective()
+    constraints = get_fixed_boundary_constraints(iota=False)
+
+    # perturb Psi with a float
+    deltas = {"Psi": float(eq.Psi)}
+    eq = perturb(
+        eq,
+        objective,
+        constraints,
+        deltas,
+        order=0,
+        verbose=2,
+        copy=True,
+    )
 
 
 @pytest.mark.unit

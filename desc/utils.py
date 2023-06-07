@@ -1,8 +1,10 @@
 """Utility functions, independent of the rest of DESC."""
 
 import warnings
+from itertools import combinations_with_replacement, permutations
 
 import numpy as np
+from scipy.special import factorial
 from termcolor import colored
 
 
@@ -409,6 +411,45 @@ def svd_inv_null(A):
     return Ainv, Z
 
 
+def combination_permutation(m, n, equals=True):
+    """Compute all m-tuples of non-negative ints that sum to less than or equal to n.
+
+    Parameters
+    ----------
+    m : int
+        Size of tuples. IE, number of items being combined.
+    n : int
+        Maximum sum
+    equals : bool
+        If True, return only where sum == n, else retun where sum <= n
+
+    Returns
+    -------
+    out : ndarray
+        m tuples that sum to n, or less than n if equals=False
+    """
+    out = []
+    combos = combinations_with_replacement(range(n + 1), m)
+    for combo in list(combos):
+        perms = set(permutations(combo))
+        for perm in list(perms):
+            out += [perm]
+    out = np.array(out)
+    if equals:
+        out = out[out.sum(axis=-1) == n]
+    else:
+        out = out[out.sum(axis=-1) <= n]
+    return out
+
+
+def multinomial_coefficients(m, n):
+    """Number of ways to place n objects into m bins."""
+    k = combination_permutation(m, n)
+    num = factorial(n)
+    den = factorial(k).prod(axis=-1)
+    return num / den
+
+
 def is_broadcastable(shp1, shp2):
     """Determine if 2 shapes will broadcast without error.
 
@@ -428,3 +469,8 @@ def is_broadcastable(shp1, shp2):
         else:
             return False
     return True
+
+
+def get_instance(things, cls):
+    """Get thing from a collection of things that is the instance of a given class."""
+    return [t for t in things if isinstance(t, cls)][0]

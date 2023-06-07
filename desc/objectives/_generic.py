@@ -146,9 +146,9 @@ class ObjectiveFromUser(_Objective):
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._args = get_params(self._data_keys)
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._args = get_params(self._data_keys, grid.axis.size)
+        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, grid.axis.size, eq=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):

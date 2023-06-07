@@ -26,7 +26,7 @@ def _solve_axisym(
     ftol=None,
     xtol=None,
     gtol=None,
-    nfev=100,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
 ):
@@ -146,7 +146,7 @@ def _solve_axisym(
                 xtol=xtol,
                 gtol=gtol,
                 verbose=verbose,
-                maxiter=nfev,
+                maxiter=maxiter,
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
@@ -183,7 +183,7 @@ def _solve_axisym(
                 ftol,
                 xtol,
                 gtol,
-                nfev,
+                maxiter,
                 verbose,
                 checkpoint_path,
             )
@@ -201,7 +201,7 @@ def _add_pressure(
     ftol=None,
     xtol=None,
     gtol=None,
-    nfev=100,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
 ):
@@ -274,7 +274,7 @@ def _add_pressure(
                 xtol=xtol,
                 gtol=gtol,
                 verbose=verbose,
-                maxiter=nfev,
+                maxiter=maxiter,
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
@@ -313,7 +313,7 @@ def _add_pressure(
                 ftol,
                 xtol,
                 gtol,
-                nfev,
+                maxiter,
                 verbose,
                 checkpoint_path,
             )
@@ -331,7 +331,7 @@ def _add_shaping(
     ftol=None,
     xtol=None,
     gtol=None,
-    nfev=100,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
 ):
@@ -405,7 +405,7 @@ def _add_shaping(
                 xtol=xtol,
                 gtol=gtol,
                 verbose=verbose,
-                maxiter=nfev,
+                maxiter=maxiter,
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
@@ -444,7 +444,7 @@ def _add_shaping(
                 ftol,
                 xtol,
                 gtol,
-                nfev,
+                maxiter,
                 verbose,
                 checkpoint_path,
             )
@@ -460,7 +460,7 @@ def solve_continuation_automatic(  # noqa: C901
     ftol=None,
     xtol=None,
     gtol=None,
-    nfev=100,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
     **kwargs,
@@ -485,8 +485,8 @@ def solve_continuation_automatic(  # noqa: C901
     ftol, xtol, gtol : float
         stopping tolerances for subproblem at each step. `None` will use defaults
         for given optimizer.
-    nfev : int
-        maximum number of function evaluations in each equilibrium subproblem.
+    maxiter : int
+        maximum number of iterations in each equilibrium subproblem.
     verbose : integer
         * 0: no output
         * 1: summary of each iteration
@@ -533,7 +533,7 @@ def solve_continuation_automatic(  # noqa: C901
         ftol,
         xtol,
         gtol,
-        nfev,
+        maxiter,
         verbose,
         checkpoint_path,
     )
@@ -548,7 +548,7 @@ def solve_continuation_automatic(  # noqa: C901
         ftol,
         xtol,
         gtol,
-        nfev,
+        maxiter,
         verbose,
         checkpoint_path,
     )
@@ -563,7 +563,7 @@ def solve_continuation_automatic(  # noqa: C901
         ftol,
         xtol,
         gtol,
-        nfev,
+        maxiter,
         verbose,
         checkpoint_path,
     )
@@ -596,7 +596,7 @@ def solve_continuation(  # noqa: C901
     ftol=None,
     xtol=None,
     gtol=None,
-    nfev=100,
+    maxiter=100,
     verbose=1,
     checkpoint_path=None,
 ):
@@ -621,8 +621,8 @@ def solve_continuation(  # noqa: C901
     ftol, xtol, gtol : float or array-like of float
         stopping tolerances for subproblem at each step. `None` will use defaults
         for given optimizer.
-    nfev : int or array-like of int
-        maximum number of function evaluations in each equilibrium subproblem.
+    maxiter : int or array-like of int
+        maximum number of iterations in each equilibrium subproblem.
     verbose : integer
         * 0: no output
         * 1: summary of each iteration
@@ -645,8 +645,8 @@ def solve_continuation(  # noqa: C901
 
     timer = Timer()
     timer.start("Total time")
-    pert_order, ftol, xtol, gtol, nfev, _ = np.broadcast_arrays(
-        pert_order, ftol, xtol, gtol, nfev, eqfam
+    pert_order, ftol, xtol, gtol, maxiter, _ = np.broadcast_arrays(
+        pert_order, ftol, xtol, gtol, maxiter, eqfam
     )
     if isinstance(eqfam, (list, tuple)):
         eqfam = EquilibriaFamily(*eqfam)
@@ -738,7 +738,7 @@ def solve_continuation(  # noqa: C901
                 xtol=xtol[ii],
                 gtol=gtol[ii],
                 verbose=verbose,
-                maxiter=nfev[ii],
+                maxiter=maxiter[ii],
             )
 
         if not eqi.is_nested(msg="manual"):

@@ -147,8 +147,8 @@ def get_data_deps(keys, has_axis):
 
     def _get_deps_1_key(key):
         if has_axis:
-            if "full_and_axis_dependencies" in data_index[key]:
-                return data_index[key]["full_and_axis_dependencies"]["data"]
+            if "full_with_axis_dependencies" in data_index[key]:
+                return data_index[key]["full_with_axis_dependencies"]["data"]
         elif "full_dependencies" in data_index[key]:
             return data_index[key]["full_dependencies"]["data"]
         deps = data_index[key]["dependencies"]["data"]
@@ -187,8 +187,8 @@ def get_derivs(keys, has_axis):
 
     def _get_derivs_1_key(key):
         if has_axis:
-            if "full_and_axis_dependencies" in data_index[key]:
-                return data_index[key]["full_and_axis_dependencies"]["transforms"]
+            if "full_with_axis_dependencies" in data_index[key]:
+                return data_index[key]["full_with_axis_dependencies"]["transforms"]
         elif "full_dependencies" in data_index[key]:
             return data_index[key]["full_dependencies"]["transforms"]
         deps = [key] + get_data_deps(key, has_axis)

@@ -9,9 +9,11 @@ from desc.grid import LinearGrid
 
 
 class TestLimits:
+    """Tests for compute functions evaluated at limits."""
+
     @pytest.mark.unit
     def test_b_mag_fsa(self):
-        """Test that the limit at rho=0 axis is computed accurately."""
+        """Test continuity of <|B|>. Failure indicates B0 limit is wrong."""
 
         def test(eq, expected_at_axis):
             delta = 1e-3

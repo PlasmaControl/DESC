@@ -64,23 +64,25 @@ def _build_data_index():
         }
         data_index[key]["full_dependencies"] = full
 
-        full_and_axis_data = get_data_deps(key, True)
-        if len(full["data"]) >= len(full_and_axis_data):
+        full_with_axis_data = get_data_deps(key, True)
+        if len(full["data"]) >= len(full_with_axis_data):
             # Then this quantity lacks dependencies that would only be required
             # to evaluate this quantity's limit at the magnetic axis.
-            full_and_axis = full
+            full_with_axis = full
         else:
-            full_and_axis = {
-                "data": full_and_axis_data,
+            full_with_axis = {
+                "data": full_with_axis_data,
                 "transforms": get_derivs(key, True),
                 "params": get_params(key, True),
                 "profiles": get_profiles(key, True),
             }
-            for _key, val in full_and_axis.items():
+            for _key, val in full_with_axis.items():
+                if _key == "transforms":
+                    continue
                 if len(full[_key]) >= len(val):
                     # one is a deep copy of the other; dereference to save memory
-                    full_and_axis[_key] = full[_key]
-        data_index[key]["full_and_axis_dependencies"] = full_and_axis
+                    full_with_axis[_key] = full[_key]
+        data_index[key]["full_with_axis_dependencies"] = full_with_axis
 
 
 _build_data_index()

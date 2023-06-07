@@ -152,13 +152,16 @@ def get_data_deps(keys, has_axis):
         elif "full_dependencies" in data_index[key]:
             return data_index[key]["full_dependencies"]["data"]
         deps = data_index[key]["dependencies"]["data"]
-        if has_axis:
-            deps += data_index[key]["dependencies"]["limit_data"]
         if len(deps) == 0:
             return deps
-        out = deps.copy()
+        out = deps.copy()  # to avoid modifying the data_index
         for dep in deps:
             out += _get_deps_1_key(dep)
+        if has_axis:
+            axis_limit_deps = data_index[key]["dependencies"]["limit_data"]
+            out += axis_limit_deps.copy()  # to be safe
+            for dep in axis_limit_deps:
+                out += _get_deps_1_key(dep)
         return sorted(list(set(out)))
 
     out = []

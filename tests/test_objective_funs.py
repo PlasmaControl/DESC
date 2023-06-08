@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
+from desc.backend import jnp
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -17,6 +18,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     Energy,
     ForceBalance,
@@ -25,6 +27,7 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     MercierStability,
+    ObjectiveFromUser,
     ObjectiveFunction,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -66,6 +69,23 @@ class TestObjectiveFunction:
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_objective_from_user(self):
+        """Test ObjectiveFromUser for arbitrary callable."""
+
+        def myfun(grid, data):
+            x = data["X"]
+            y = data["Y"]
+            r = jnp.sqrt(x**2 + y**2)
+            return r
+
+        eq = Equilibrium()
+        grid = LinearGrid(2, 2, 2)
+        objective = ObjectiveFromUser(myfun, eq=eq, grid=grid)
+        R1 = objective.compute(*objective.xs(eq))
+        R2 = eq.compute("R", grid=grid)["R"]
+        np.testing.assert_allclose(R1, R2)
 
     @pytest.mark.unit
     def test_volume(self):
@@ -504,6 +524,51 @@ def test_principal_curvature():
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()
+
+
+@pytest.mark.unit
+def test_field_scale_length():
+    """Test for B field scale length objective function."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[
+            5,
+            1,
+        ],
+        Z_lmn=[
+            -1,
+        ],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[
+            [-1, 0],
+        ],
+        NFP=1,
+    )
+    surf2 = FourierRZToroidalSurface(
+        R_lmn=[
+            10,
+            2,
+        ],
+        Z_lmn=[
+            -2,
+        ],
+        modes_R=[[0, 0], [1, 0]],
+        modes_Z=[
+            [-1, 0],
+        ],
+        NFP=1,
+    )
+    eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
+    eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
+    eq1.solve()
+    eq2.solve()
+
+    obj1 = BScaleLength(eq=eq1, normalize=False)
+    obj2 = BScaleLength(eq=eq2, normalize=False)
+
+    L1 = obj1.compute_unscaled(*obj1.xs(eq1))
+    L2 = obj2.compute_unscaled(*obj2.xs(eq2))
+
+    np.testing.assert_array_less(L1, L2)
 
 
 @pytest.mark.unit

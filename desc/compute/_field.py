@@ -67,7 +67,7 @@ def _B_sup_rho(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_theta(params, transforms, profiles, data, **kwargs):
     data["B^theta"] = data["B0"] * (
-        (1 + data["omega_z"]) * data["iota"] - data["lambda_z"]
+        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
 
@@ -87,7 +87,7 @@ def _B_sup_theta(params, transforms, profiles, data, **kwargs):
 )
 def _B_sup_zeta(params, transforms, profiles, data, **kwargs):
     data["B^zeta"] = data["B0"] * (
-        1 + data["lambda_t"] - data["omega_t"] * data["iota"]
+        -data["iota"] * data["omega_t"] + data["lambda_t"] + 1
     )
     return data
 
@@ -193,22 +193,34 @@ def _B0_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} B^{\\theta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant poloidal component of magnetic field, derivative wrt "
-    + "radial coordinate",
+    description=(
+        "Contravariant poloidal component of magnetic field, derivative wrt radial"
+        " coordinate"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_r", "iota", "iota_r", "lambda_z", "lambda_rz", "omega_z", "omega_rz"],
+    data=[
+        "B0",
+        "B0_r",
+        "iota",
+        "iota_r",
+        "lambda_rz",
+        "lambda_z",
+        "omega_rz",
+        "omega_z",
+    ],
 )
 def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
-    data["B^theta_r"] = data["B0_r"] * (
-        (1 + data["omega_z"]) * data["iota"] - data["lambda_z"]
-    ) + data["B0"] * (
-        data["omega_rz"] * data["iota"]
-        + (1 + data["omega_z"]) * data["iota_r"]
+    data["B^theta_r"] = data["B0"] * (
+        data["iota"] * data["omega_rz"]
+        + data["iota_r"] * data["omega_z"]
+        + data["iota_r"]
         - data["lambda_rz"]
+    ) + data["B0_r"] * (
+        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
 
@@ -218,23 +230,32 @@ def _B_sup_theta_r(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho} B^{\\zeta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant toroidal component of magnetic field, derivative wrt "
-    + "radial coordinate",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative wrt radial"
+        " coordinate"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_r", "iota", "iota_r", "lambda_t", "lambda_rt", "omega_t", "omega_rt"],
+    data=[
+        "B0",
+        "B0_r",
+        "iota",
+        "iota_r",
+        "lambda_rt",
+        "lambda_t",
+        "omega_rt",
+        "omega_t",
+    ],
 )
 def _B_sup_zeta_r(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_r"] = data["B0_r"] * (
-        1 + data["lambda_t"] - data["omega_t"] * data["iota"]
-    ) + data["B0"] * (
-        data["lambda_rt"]
-        - data["omega_rt"] * data["iota"]
-        - data["omega_t"] * data["iota_r"]
-    )
+    data["B^zeta_r"] = data["B0"] * (
+        -data["iota"] * data["omega_rt"]
+        - data["iota_r"] * data["omega_t"]
+        + data["lambda_rt"]
+    ) + data["B0_r"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     return data
 
 
@@ -293,19 +314,22 @@ def _B0_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} B^{\\theta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant poloidal component of magnetic field, derivative wrt "
-    + "poloidal angle",
+    description=(
+        "Contravariant poloidal component of magnetic field, derivative wrt poloidal"
+        " coordinate"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_t", "iota", "lambda_z", "lambda_tz"],
+    data=["B0", "B0_t", "iota", "lambda_tz", "lambda_z", "omega_tz", "omega_z"],
 )
 def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
-    data["B^theta_t"] = (
-        data["B0_t"] * (data["iota"] - data["lambda_z"])
-        - data["B0"] * data["lambda_tz"]
+    data["B^theta_t"] = data["B0"] * (
+        data["iota"] * data["omega_tz"] - data["lambda_tz"]
+    ) + data["B0_t"] * (
+        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
 
@@ -315,19 +339,21 @@ def _B_sup_theta_t(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant toroidal component of magnetic field, derivative wrt "
-    + "poloidal angle",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative wrt poloidal"
+        " coordinate"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_t", "lambda_t", "lambda_tt"],
+    data=["B0", "B0_t", "iota", "lambda_t", "lambda_tt", "omega_t", "omega_tt"],
 )
 def _B_sup_zeta_t(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_t"] = (
-        data["B0_t"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_tt"]
-    )
+    data["B^zeta_t"] = data["B0"] * (
+        -data["iota"] * data["omega_tt"] + data["lambda_tt"]
+    ) + data["B0_t"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     return data
 
 
@@ -386,19 +412,22 @@ def _B0_z(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant poloidal component of magnetic field, derivative wrt "
-    + "toroidal angle",
+    description=(
+        "Contravariant poloidal component of magnetic field, derivative wrt toroidal"
+        " coordinate"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_z", "iota", "lambda_z", "lambda_zz"],
+    data=["B0", "B0_z", "iota", "lambda_z", "lambda_zz", "omega_z", "omega_zz"],
 )
 def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
-    data["B^theta_z"] = (
-        data["B0_z"] * (data["iota"] - data["lambda_z"])
-        - data["B0"] * data["lambda_zz"]
+    data["B^theta_z"] = data["B0"] * (
+        data["iota"] * data["omega_zz"] - data["lambda_zz"]
+    ) + data["B0_z"] * (
+        data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"]
     )
     return data
 
@@ -408,19 +437,21 @@ def _B_sup_theta_z(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant toroidal component of magnetic field, derivative wrt "
-    + "toroidal angle",
+    description=(
+        "Contravariant toroidal component of magnetic field, derivative wrt toroidal"
+        " coordinate"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_z", "lambda_t", "lambda_tz"],
+    data=["B0", "B0_z", "iota", "lambda_t", "lambda_tz", "omega_t", "omega_tz"],
 )
 def _B_sup_zeta_z(params, transforms, profiles, data, **kwargs):
-    data["B^zeta_z"] = (
-        data["B0_z"] * (1 + data["lambda_t"]) + data["B0"] * data["lambda_tz"]
-    )
+    data["B^zeta_z"] = data["B0"] * (
+        -data["iota"] * data["omega_tz"] + data["lambda_tz"]
+    ) + data["B0_z"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     return data
 
 
@@ -485,9 +516,11 @@ def _B0_rr(params, transforms, profiles, data, **kwargs):
     name="B^theta_rr",
     label="\\partial_{\\rho\\rho} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
-    description="Contravariant poloidal component of magnetic field, second derivative "
-    + "wrt radial coordinate",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant poloidal component of magnetic field, second derivative wrt"
+        " radial and radial coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -500,16 +533,34 @@ def _B0_rr(params, transforms, profiles, data, **kwargs):
         "iota",
         "iota_r",
         "iota_rr",
-        "lambda_z",
-        "lambda_rz",
         "lambda_rrz",
+        "lambda_rz",
+        "lambda_z",
+        "omega_rrz",
+        "omega_rz",
+        "omega_z",
     ],
 )
 def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     data["B^theta_rr"] = (
-        data["B0_rr"] * (data["iota"] - data["lambda_z"])
-        + 2 * data["B0_r"] * (data["iota_r"] - data["lambda_rz"])
-        + data["B0"] * (data["iota_rr"] - data["lambda_rrz"])
+        data["B0"]
+        * (
+            data["iota"] * data["omega_rrz"]
+            + 2 * data["iota_r"] * data["omega_rz"]
+            + data["iota_rr"] * data["omega_z"]
+            + data["iota_rr"]
+            - data["lambda_rrz"]
+        )
+        + 2
+        * data["B0_r"]
+        * (
+            data["iota"] * data["omega_rz"]
+            + data["iota_r"] * data["omega_z"]
+            + data["iota_r"]
+            - data["lambda_rz"]
+        )
+        + data["B0_rr"]
+        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
 
@@ -518,21 +569,48 @@ def _B_sup_theta_rr(params, transforms, profiles, data, **kwargs):
     name="B^zeta_rr",
     label="\\partial_{\\rho\\rho} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
-    description="Contravariant toroidal component of magnetic field, second derivative "
-    + "wrt radial coordinate",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, second derivative wrt"
+        " radial and radial coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_r", "B0_rr", "lambda_t", "lambda_rt", "lambda_rrt"],
+    data=[
+        "B0",
+        "B0_r",
+        "B0_rr",
+        "iota",
+        "iota_r",
+        "iota_rr",
+        "lambda_rrt",
+        "lambda_rt",
+        "lambda_t",
+        "omega_rrt",
+        "omega_rt",
+        "omega_t",
+    ],
 )
 def _B_sup_zeta_rr(params, transforms, profiles, data, **kwargs):
     data["B^zeta_rr"] = (
-        data["B0_rr"] * (1 + data["lambda_t"])
-        + 2 * data["B0_r"] * data["lambda_rt"]
-        + data["B0"] * data["lambda_rrt"]
+        -data["B0"]
+        * (
+            data["iota"] * data["omega_rrt"]
+            + 2 * data["iota_r"] * data["omega_rt"]
+            + data["iota_rr"] * data["omega_t"]
+            - data["lambda_rrt"]
+        )
+        - 2
+        * data["B0_r"]
+        * (
+            data["iota"] * data["omega_rt"]
+            + data["iota_r"] * data["omega_t"]
+            - data["lambda_rt"]
+        )
+        + data["B0_rr"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -603,20 +681,34 @@ def _B0_tt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta\\theta} B^{\\theta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant poloidal component of magnetic field, second "
-    + "derivative wrt poloidal angle",
+    description=(
+        "Contravariant poloidal component of magnetic field, second derivative wrt"
+        " poloidal and poloidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_t", "B0_tt", "iota", "lambda_z", "lambda_tz", "lambda_ttz"],
+    data=[
+        "B0",
+        "B0_t",
+        "B0_tt",
+        "iota",
+        "lambda_ttz",
+        "lambda_tz",
+        "lambda_z",
+        "omega_ttz",
+        "omega_tz",
+        "omega_z",
+    ],
 )
 def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     data["B^theta_tt"] = (
-        data["B0_tt"] * (data["iota"] - data["lambda_z"])
-        - 2 * data["B0_t"] * data["lambda_tz"]
-        - data["B0"] * data["lambda_ttz"]
+        data["B0"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
+        + 2 * data["B0_t"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["B0_tt"]
+        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
 
@@ -626,20 +718,33 @@ def _B_sup_theta_tt(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta\\theta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant toroidal component of magnetic field, second "
-    + "derivative wrt poloidal angle",
+    description=(
+        "Contravariant toroidal component of magnetic field, second derivative wrt"
+        " poloidal and poloidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_t", "B0_tt", "lambda_t", "lambda_tt", "lambda_ttt"],
+    data=[
+        "B0",
+        "B0_t",
+        "B0_tt",
+        "iota",
+        "lambda_t",
+        "lambda_tt",
+        "lambda_ttt",
+        "omega_t",
+        "omega_tt",
+        "omega_ttt",
+    ],
 )
 def _B_sup_zeta_tt(params, transforms, profiles, data, **kwargs):
     data["B^zeta_tt"] = (
-        data["B0_tt"] * (1 + data["lambda_t"])
-        + 2 * data["B0_t"] * data["lambda_tt"]
-        + data["B0"] * data["lambda_ttt"]
+        -data["B0"] * (data["iota"] * data["omega_ttt"] - data["lambda_ttt"])
+        - 2 * data["B0_t"] * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        + data["B0_tt"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -710,20 +815,34 @@ def _B0_zz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant poloidal component of magnetic field, second "
-    + "derivative wrt toroidal angle",
+    description=(
+        "Contravariant poloidal component of magnetic field, second derivative wrt"
+        " toroidal and toroidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_z", "B0_zz", "iota", "lambda_z", "lambda_zz", "lambda_zzz"],
+    data=[
+        "B0",
+        "B0_z",
+        "B0_zz",
+        "iota",
+        "lambda_z",
+        "lambda_zz",
+        "lambda_zzz",
+        "omega_z",
+        "omega_zz",
+        "omega_zzz",
+    ],
 )
 def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     data["B^theta_zz"] = (
-        data["B0_zz"] * (data["iota"] - data["lambda_z"])
-        - 2 * data["B0_z"] * data["lambda_zz"]
-        - data["B0"] * data["lambda_zzz"]
+        data["B0"] * (data["iota"] * data["omega_zzz"] - data["lambda_zzz"])
+        + 2 * data["B0_z"] * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        + data["B0_zz"]
+        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
 
@@ -733,20 +852,33 @@ def _B_sup_theta_zz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\zeta\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant toroidal component of magnetic field, second "
-    + "derivative wrt toroidal angle",
+    description=(
+        "Contravariant toroidal component of magnetic field, second derivative wrt"
+        " toroidal and toroidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B0", "B0_z", "B0_zz", "lambda_t", "lambda_tz", "lambda_tzz"],
+    data=[
+        "B0",
+        "B0_z",
+        "B0_zz",
+        "iota",
+        "lambda_t",
+        "lambda_tz",
+        "lambda_tzz",
+        "omega_t",
+        "omega_tz",
+        "omega_tzz",
+    ],
 )
 def _B_sup_zeta_zz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_zz"] = (
-        data["B0_zz"] * (1 + data["lambda_t"])
-        + 2 * data["B0_z"] * data["lambda_tz"]
-        + data["B0"] * data["lambda_tzz"]
+        -data["B0"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
+        - 2 * data["B0_z"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["B0_zz"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -821,9 +953,11 @@ def _B0_rt(params, transforms, profiles, data, **kwargs):
     name="B^theta_rt",
     label="\\partial_{\\rho\\theta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
-    description="Contravariant poloidal component of magnetic field, second "
-    + "derivative wrt radial coordinate and poloidal angle",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant poloidal component of magnetic field, second derivative wrt"
+        " radial and poloidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -832,22 +966,38 @@ def _B0_rt(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "B0_r",
-        "B0_t",
         "B0_rt",
+        "B0_t",
         "iota",
         "iota_r",
-        "lambda_z",
+        "lambda_rtz",
         "lambda_rz",
         "lambda_tz",
-        "lambda_rtz",
+        "lambda_z",
+        "omega_rtz",
+        "omega_rz",
+        "omega_tz",
+        "omega_z",
     ],
 )
 def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     data["B^theta_rt"] = (
-        data["B0_rt"] * (data["iota"] - data["lambda_z"])
-        - data["B0_r"] * data["lambda_tz"]
-        + data["B0_t"] * (data["iota_r"] - data["lambda_rz"])
-        - data["B0"] * data["lambda_rtz"]
+        data["B0"]
+        * (
+            data["iota"] * data["omega_rtz"]
+            + data["iota_r"] * data["omega_tz"]
+            - data["lambda_rtz"]
+        )
+        + data["B0_r"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["B0_t"]
+        * (
+            data["iota"] * data["omega_rz"]
+            + data["iota_r"] * data["omega_z"]
+            + data["iota_r"]
+            - data["lambda_rz"]
+        )
+        + data["B0_rt"]
+        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
 
@@ -856,9 +1006,11 @@ def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     name="B^zeta_rt",
     label="\\partial_{\\rho\\theta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
-    description="Contravariant toroidal component of magnetic field, second "
-    + "derivative wrt radial coordinate and poloidal angle",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, second derivative wrt"
+        " radial and poloidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -867,20 +1019,36 @@ def _B_sup_theta_rt(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "B0_r",
-        "B0_t",
         "B0_rt",
-        "lambda_t",
-        "lambda_tt",
+        "B0_t",
+        "iota",
+        "iota_r",
         "lambda_rt",
         "lambda_rtt",
+        "lambda_t",
+        "lambda_tt",
+        "omega_rt",
+        "omega_rtt",
+        "omega_t",
+        "omega_tt",
     ],
 )
 def _B_sup_zeta_rt(params, transforms, profiles, data, **kwargs):
     data["B^zeta_rt"] = (
-        data["B0_rt"] * (1 + data["lambda_t"])
-        + data["B0_r"] * data["lambda_tt"]
-        + data["B0_t"] * data["lambda_rt"]
-        + data["B0"] * data["lambda_rtt"]
+        -data["B0"]
+        * (
+            data["iota"] * data["omega_rtt"]
+            + data["iota_r"] * data["omega_tt"]
+            - data["lambda_rtt"]
+        )
+        - data["B0_r"] * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        - data["B0_t"]
+        * (
+            data["iota"] * data["omega_rt"]
+            + data["iota_r"] * data["omega_t"]
+            - data["lambda_rt"]
+        )
+        + data["B0_rt"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -962,8 +1130,10 @@ def _B0_tz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant poloidal component of magnetic field, second "
-    + "derivative wrt poloidal and toroidal angles",
+    description=(
+        "Contravariant poloidal component of magnetic field, second derivative wrt"
+        " poloidal and toroidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -972,21 +1142,26 @@ def _B0_tz(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "B0_t",
-        "B0_z",
         "B0_tz",
+        "B0_z",
         "iota",
-        "lambda_z",
-        "lambda_zz",
         "lambda_tz",
         "lambda_tzz",
+        "lambda_z",
+        "lambda_zz",
+        "omega_tz",
+        "omega_tzz",
+        "omega_z",
+        "omega_zz",
     ],
 )
 def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     data["B^theta_tz"] = (
-        data["B0_tz"] * (data["iota"] - data["lambda_z"])
-        - data["B0_t"] * data["lambda_zz"]
-        - data["B0_z"] * data["lambda_tz"]
-        - data["B0"] * data["lambda_tzz"]
+        data["B0"] * (data["iota"] * data["omega_tzz"] - data["lambda_tzz"])
+        + data["B0_t"] * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        + data["B0_z"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        + data["B0_tz"]
+        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
 
@@ -996,8 +1171,10 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\theta\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
-    description="Contravariant toroidal component of magnetic field, second "
-    + "derivative wrt poloidal and toroidal angles",
+    description=(
+        "Contravariant toroidal component of magnetic field, second derivative wrt"
+        " poloidal and toroidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -1006,20 +1183,25 @@ def _B_sup_theta_tz(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "B0_t",
-        "B0_z",
         "B0_tz",
+        "B0_z",
+        "iota",
         "lambda_t",
         "lambda_tt",
-        "lambda_tz",
         "lambda_ttz",
+        "lambda_tz",
+        "omega_t",
+        "omega_tt",
+        "omega_ttz",
+        "omega_tz",
     ],
 )
 def _B_sup_zeta_tz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_tz"] = (
-        data["B0_tz"] * (1 + data["lambda_t"])
-        + data["B0_t"] * data["lambda_tz"]
-        + data["B0_z"] * data["lambda_tt"]
-        + data["B0"] * data["lambda_ttz"]
+        -data["B0"] * (data["iota"] * data["omega_ttz"] - data["lambda_ttz"])
+        - data["B0_t"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        - data["B0_z"] * (data["iota"] * data["omega_tt"] - data["lambda_tt"])
+        + data["B0_tz"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 
@@ -1100,9 +1282,11 @@ def _B0_rz(params, transforms, profiles, data, **kwargs):
     name="B^theta_rz",
     label="\\partial_{\\rho\\zeta} B^{\\theta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
-    description="Contravariant poloidal component of magnetic field, second "
-    + "derivative wrt radial coordinate and toroidal angle",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant poloidal component of magnetic field, second derivative wrt"
+        " radial and toroidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -1111,22 +1295,38 @@ def _B0_rz(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "B0_r",
-        "B0_z",
         "B0_rz",
+        "B0_z",
         "iota",
         "iota_r",
-        "lambda_z",
         "lambda_rz",
-        "lambda_zz",
         "lambda_rzz",
+        "lambda_z",
+        "lambda_zz",
+        "omega_rz",
+        "omega_rzz",
+        "omega_z",
+        "omega_zz",
     ],
 )
 def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     data["B^theta_rz"] = (
-        data["B0_rz"] * (data["iota"] - data["lambda_z"])
-        - data["B0_r"] * data["lambda_zz"]
-        + data["B0_z"] * (data["iota_r"] - data["lambda_rz"])
-        - data["B0"] * data["lambda_rzz"]
+        data["B0"]
+        * (
+            data["iota"] * data["omega_rzz"]
+            + data["iota_r"] * data["omega_zz"]
+            - data["lambda_rzz"]
+        )
+        + data["B0_r"] * (data["iota"] * data["omega_zz"] - data["lambda_zz"])
+        + data["B0_z"]
+        * (
+            data["iota"] * data["omega_rz"]
+            + data["iota_r"] * data["omega_z"]
+            + data["iota_r"]
+            - data["lambda_rz"]
+        )
+        + data["B0_rz"]
+        * (data["iota"] * data["omega_z"] + data["iota"] - data["lambda_z"])
     )
     return data
 
@@ -1135,9 +1335,11 @@ def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     name="B^zeta_rz",
     label="\\partial_{\\rho\\zeta} B^{\\zeta}",
     units="T \\cdot m^{-1}",
-    units_long="Tesla / meters",
-    description="Contravariant toroidal component of magnetic field, second "
-    + "derivative wrt radial coordinate and toroidal angle",
+    units_long="Tesla / meter",
+    description=(
+        "Contravariant toroidal component of magnetic field, second derivative wrt"
+        " radial and toroidal coordinates"
+    ),
     dim=1,
     params=[],
     transforms={},
@@ -1146,20 +1348,36 @@ def _B_sup_theta_rz(params, transforms, profiles, data, **kwargs):
     data=[
         "B0",
         "B0_r",
-        "B0_z",
         "B0_rz",
-        "lambda_t",
+        "B0_z",
+        "iota",
+        "iota_r",
         "lambda_rt",
-        "lambda_tz",
         "lambda_rtz",
+        "lambda_t",
+        "lambda_tz",
+        "omega_rt",
+        "omega_rtz",
+        "omega_t",
+        "omega_tz",
     ],
 )
 def _B_sup_zeta_rz(params, transforms, profiles, data, **kwargs):
     data["B^zeta_rz"] = (
-        data["B0_rz"] * (1 + data["lambda_t"])
-        + data["B0_r"] * data["lambda_tz"]
-        + data["B0_z"] * data["lambda_rt"]
-        + data["B0"] * data["lambda_rtz"]
+        -data["B0"]
+        * (
+            data["iota"] * data["omega_rtz"]
+            + data["iota_r"] * data["omega_tz"]
+            - data["lambda_rtz"]
+        )
+        - data["B0_r"] * (data["iota"] * data["omega_tz"] - data["lambda_tz"])
+        - data["B0_z"]
+        * (
+            data["iota"] * data["omega_rt"]
+            + data["iota_r"] * data["omega_t"]
+            - data["lambda_rt"]
+        )
+        + data["B0_rz"] * (-data["iota"] * data["omega_t"] + data["lambda_t"] + 1)
     )
     return data
 

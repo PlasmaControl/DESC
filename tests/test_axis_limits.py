@@ -28,6 +28,7 @@ class TestAxisLimits:
         assert "B0" in data and "psi_r" in data and "sqrt(g)" in data
         # assert axis limit dependencies are in data
         assert "psi_rr" in data and "sqrt(g)_r" in data
+        assert np.isfinite(data["B0"]).all()
 
     @pytest.mark.unit
     def test_b_mag_fsa(self):

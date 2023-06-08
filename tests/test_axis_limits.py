@@ -4,12 +4,30 @@ import numpy as np
 import pytest
 
 from desc.compute.utils import compress, surface_averages
+from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
 
-class TestLimits:
+class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
+
+    @pytest.mark.unit
+    def test_compute_axis_limit_api(self):
+        """Test that axis limit dependencies are computed only when necessary."""
+        eq = Equilibrium()
+        grid = LinearGrid(L=2, M=2, N=2, axis=False)
+        assert not grid.axis.size
+        data = eq.compute("B0", grid=grid)
+        assert "B0" in data and "psi_r" in data and "sqrt(g)" in data
+        # assert axis limit dependencies are not in data
+        assert "psi_rr" not in data and "sqrt(g)_r" not in data
+        grid = LinearGrid(L=2, M=2, N=2, axis=True)
+        assert grid.axis.size
+        data = eq.compute("B0", grid=grid)
+        assert "B0" in data and "psi_r" in data and "sqrt(g)" in data
+        # assert axis limit dependencies are in data
+        assert "psi_rr" in data and "sqrt(g)_r" in data
 
     @pytest.mark.unit
     def test_b_mag_fsa(self):

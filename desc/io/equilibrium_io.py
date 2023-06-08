@@ -4,15 +4,21 @@ import copy
 import os
 import pickle
 import pydoc
-from abc import ABC
+import types
+from abc import ABC, ABCMeta
 
 import h5py
 from termcolor import colored
 
+from desc.backend import register_pytree_node
 from desc.utils import equals
 
 from .hdf5_io import hdf5Reader, hdf5Writer
 from .pickle_io import PickleReader, PickleWriter
+
+# strings and functions can't be args to jitted functions, and ints/bools are pretty
+# much always flags or array sizes which also need to be a compile time constant
+UNJITABLE = (str, types.FunctionType, bool, int)
 
 
 def load(load_from, file_format=None):
@@ -71,7 +77,55 @@ def load(load_from, file_format=None):
     return obj
 
 
-class IOAble(ABC):
+# this gets used as a metaclass, to ensure that all of the subclasses that
+# inherit from IOAble get properly registered with JAX.
+# subclasses can define their own tree_flatten and tree_unflatten methods to override
+# default behavior
+class _AutoRegisterPytree(type):
+    def __init__(cls, *args, **kwargs):
+        def _generic_tree_flatten(obj):
+            """Convert DESC objects to JAX pytrees."""
+            if hasattr(obj, "tree_flatten"):
+                # use subclass method
+                return obj.tree_flatten()
+
+            children = {
+                key: val
+                for key, val in obj.__dict__.items()
+                if not isinstance(val, UNJITABLE)
+            }
+            aux_data = tuple(
+                [
+                    (key, val)
+                    for key, val in obj.__dict__.items()
+                    if isinstance(val, UNJITABLE)
+                ]
+            )
+            return ((children,), aux_data)
+
+        def _generic_tree_unflatten(aux_data, children):
+            """Recreate a DESC object from JAX pytree."""
+            if hasattr(cls, "tree_unflatten"):
+                # use subclass method
+                return cls.tree_unflatten(aux_data, children)
+
+            obj = cls.__new__(cls)
+            obj.__dict__.update(children[0])
+            for kv in aux_data:
+                setattr(obj, kv[0], kv[1])
+            return obj
+
+        register_pytree_node(cls, _generic_tree_flatten, _generic_tree_unflatten)
+        super().__init__(*args, **kwargs)
+
+
+# need this for inheritance to work correctly between the metaclass and ABC
+# https://stackoverflow.com/questions/57349105/python-abc-inheritance-with-specified-metaclass
+class _CombinedMeta(_AutoRegisterPytree, ABCMeta):
+    pass
+
+
+class IOAble(ABC, metaclass=_CombinedMeta):
     """Abstract Base Class for savable and loadable objects.
 
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.

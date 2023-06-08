@@ -63,8 +63,6 @@ def get_fixed_boundary_constraints(
         FixBoundaryR(normalize=normalize, normalize_target=normalize),
         FixBoundaryZ(normalize=normalize, normalize_target=normalize),
         FixBoundaryW(normalize=normalize, normalize_target=normalize),
-        FixLambdaGauge(normalize=normalize, normalize_target=normalize),
-        FixOmegaGauge(normalize=normalize, normalize_target=normalize),
         FixPsi(normalize=normalize, normalize_target=normalize),
     )
     if profiles:

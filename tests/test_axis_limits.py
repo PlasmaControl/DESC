@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
+import desc.io
 from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
-import desc.io
 
 
 class TestAxisLimits:

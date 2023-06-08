@@ -729,6 +729,8 @@ class PowerSeriesProfile(Profile):
         if params is None:
             params = self.params
         transform = self._get_transform(grid)
+        if (dt != 0) or (dz != 0):
+            return jnp.zeros(transform.grid.num_nodes)
         return transform.transform(params, dr=dr, dt=dt, dz=dz)
 
     @classmethod

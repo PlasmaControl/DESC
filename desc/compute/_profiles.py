@@ -518,10 +518,13 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _beta_a(params, transforms, profiles, data, **kwargs):
-    data["beta_a"] = profiles["anisotropy"].compute(params["a_lmn"], dr=0)
+    if profiles["anisotropy"] is not None:
+        data["beta_a"] = profiles["anisotropy"].compute(params["a_lmn"], dr=0)
+    else:
+        data["beta_a"] = jnp.nan * data["0"]
     return data
 
 
@@ -536,10 +539,13 @@ def _beta_a(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _beta_a_r(params, transforms, profiles, data, **kwargs):
-    data["beta_a_r"] = profiles["anisotropy"].compute(params["a_lmn"], dr=1)
+    if profiles["anisotropy"] is not None:
+        data["beta_a_r"] = profiles["anisotropy"].compute(params["a_lmn"], dr=1)
+    else:
+        data["beta_a_r"] = jnp.nan * data["0"]
     return data
 
 
@@ -554,10 +560,13 @@ def _beta_a_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _beta_a_t(params, transforms, profiles, data, **kwargs):
-    data["beta_a_t"] = profiles["anisotropy"].compute(params["a_lmn"], dt=1)
+    if profiles["anisotropy"] is not None:
+        data["beta_a_t"] = profiles["anisotropy"].compute(params["a_lmn"], dt=1)
+    else:
+        data["beta_a_t"] = jnp.nan * data["0"]
     return data
 
 
@@ -572,10 +581,13 @@ def _beta_a_t(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=["anisotropy"],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _beta_a_z(params, transforms, profiles, data, **kwargs):
-    data["beta_a_z"] = profiles["anisotropy"].compute(params["a_lmn"], dz=1)
+    if profiles["anisotropy"] is not None:
+        data["beta_a_z"] = profiles["anisotropy"].compute(params["a_lmn"], dz=1)
+    else:
+        data["beta_a_z"] = jnp.nan * data["0"]
     return data
 
 

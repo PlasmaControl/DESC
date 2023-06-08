@@ -36,7 +36,7 @@ from .objective_funs import ObjectiveFunction
 
 
 def get_fixed_boundary_constraints(
-    profiles=True, iota=True, kinetic=False, normalize=True
+    profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
 ):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
@@ -48,6 +48,8 @@ def get_fixed_boundary_constraints(
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
         Whether to add constraints to fix kinetic profiles or pressure
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -73,8 +75,11 @@ def get_fixed_boundary_constraints(
         else:
             constraints += (
                 FixPressure(normalize=normalize, normalize_target=normalize),
-                FixAnisotropy(normalize=normalize, normalize_target=normalize),
             )
+            if anisotropy:
+                constraints += FixAnisotropy(
+                    normalize=normalize, normalize_target=normalize
+                )
 
         if iota:
             constraints += (FixIota(normalize=normalize, normalize_target=normalize),)

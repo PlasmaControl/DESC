@@ -77,6 +77,9 @@ class Equilibrium(_Configuration, IOAble):
     atomic_number : Profile or ndarray shape(k,2) (optional)
         Effective atomic number (Z_eff) profile or ndarray of mode numbers and spectral
         coefficients. Default is 1
+    anisotropy : Profile or ndarray
+        Anisotropic pressure profile or array of mode numbers and spectral coefficients.
+        Default is a PowerSeriesProfile with zero anisotropic pressure.
     surface: Surface or ndarray shape(k,5) (optional)
         Fixed boundary surface shape, as a Surface object or array of
         spectral mode numbers and coefficients of the form [l, m, n, R, Z].
@@ -117,6 +120,7 @@ class Equilibrium(_Configuration, IOAble):
         electron_density=None,
         ion_temperature=None,
         atomic_number=None,
+        anisotropy=None,
         surface=None,
         axis=None,
         sym=None,
@@ -137,6 +141,7 @@ class Equilibrium(_Configuration, IOAble):
             electron_density,
             ion_temperature,
             atomic_number,
+            anisotropy,
             surface,
             axis,
             sym,

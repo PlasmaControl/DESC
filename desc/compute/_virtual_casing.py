@@ -126,7 +126,7 @@ def _A_vc(params, transforms, profiles, data, **kwargs):
             A1i = mu_0 / (4 * jnp.pi) * jnp.sum(integrand1 * dS[:, None], axis=0)
             A2i = mu_0 / (4 * jnp.pi) * jnp.sum(integrand2 * dS[:, None], axis=0)
             Areg1 = put(Areg1, i, A1i.squeeze())
-            Areg1 = put(Areg2, i, A2i.squeeze())
+            Areg2 = put(Areg2, i, A2i.squeeze())
             return Areg1, Areg2
 
         A1 = jnp.zeros_like(Areg1)

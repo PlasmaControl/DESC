@@ -8,9 +8,15 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
+from ._generic import (
+    GenericObjective,
+    ObjectiveFromUser,
+    RotationalTransform,
+    ToroidalCurrent,
+)
 from ._geometry import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     MeanCurvature,
     PlasmaVesselDistance,

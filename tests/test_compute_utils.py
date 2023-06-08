@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 
+import desc.io
 from desc.compute.utils import (
     _get_grid_surface,
     compress,
@@ -12,7 +13,6 @@ from desc.compute.utils import (
     surface_max,
     surface_min,
 )
-from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
@@ -95,35 +95,30 @@ class TestComputeUtils:
         should also be done on grids with duplicate nodes (e.g. endpoint=True).
         """
 
-        def test_B_theta(surface_label, grid, eq):
-            q = eq.compute("B_theta", grid=grid)["B_theta"]
+        def test(surface_label, grid):
+            q = np.random.random_sample(size=grid.num_nodes)
             integrals_1 = benchmark_surface_integrals(grid, q, surface_label)
             integrals_2 = compress(
                 grid, surface_integrals(grid, q, surface_label), surface_label
             )
-            np.testing.assert_allclose(
-                integrals_1, integrals_2, atol=1e-16, err_msg=surface_label
-            )
+            np.testing.assert_allclose(integrals_1, integrals_2, err_msg=surface_label)
 
         nrho = 13
         ntheta = 11
         nzeta = 9
-        eq = get("W7-X")
-        lg = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=eq.NFP, endpoint=False)
-        lg_endpoint = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=eq.NFP, endpoint=True)
+        NFP = 5
+        lg = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=NFP, endpoint=False)
+        lg_endpoint = LinearGrid(L=nrho, M=ntheta, N=nzeta, NFP=NFP, endpoint=True)
         cg_sym = ConcentricGrid(
-            L=(nrho + ntheta) // 2,
-            M=(nrho + ntheta) // 2,
-            N=nzeta,
-            NFP=eq.NFP,
-            sym=True,
+            L=(nrho + ntheta) // 2, M=(nrho + ntheta) // 2, N=nzeta, NFP=NFP, sym=True
         )
+
         for label in ("rho", "theta", "zeta"):
-            test_B_theta(label, lg, eq)
-            test_B_theta(label, lg_endpoint, eq)
+            test(label, lg)
+            test(label, lg_endpoint)
             if label != "theta":
                 # theta integrals are poorly defined on concentric grids
-                test_B_theta(label, cg_sym, eq)
+                test(label, cg_sym)
 
     @pytest.mark.unit
     def test_surface_area_unweighted(self):
@@ -204,56 +199,82 @@ class TestComputeUtils:
                 test(label, cg_sym)
 
     @pytest.mark.unit
-    def test_surface_area_weighted(self):
+    @pytest.mark.solve
+    def test_surface_area_weighted(self, DSHAPE_current, HELIOTRON_vac):
         """Test that rho surface integral(dt*dz*sqrt(g)) are monotonic wrt rho."""
-        eq = get("W7-X")
-        grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=eq.sym)
-        sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
-        areas = compress(grid, surface_integrals(grid, sqrt_g))
-        np.testing.assert_allclose(areas, np.sort(areas))
+
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=True)
+            sqrt_g = np.abs(eq.compute("sqrt(g)", grid=grid)["sqrt(g)"])
+            areas = compress(grid, surface_integrals(grid, sqrt_g))
+            np.testing.assert_allclose(areas, np.sort(areas))
+
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
-    def test_surface_averages_identity_op(self):
+    @pytest.mark.solve
+    def test_surface_averages_identity_op(self, DSHAPE_current, HELIOTRON_vac):
         """Test that surface averages of flux functions are identity operations."""
-        eq = get("W7-X")
-        grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute("p", grid=grid)
-        data = eq.compute("sqrt(g)", grid=grid, data=data)
-        pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
-        np.testing.assert_allclose(data["p"], pressure_average)
+
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=True)
+            data = eq.compute("p", grid=grid)
+            data = eq.compute("sqrt(g)", grid=grid, data=data)
+            pressure_average = surface_averages(grid, data["p"], data["sqrt(g)"])
+            np.testing.assert_allclose(data["p"], pressure_average)
+
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
-    def test_surface_averages_homomorphism(self):
+    @pytest.mark.solve
+    def test_surface_averages_homomorphism(self, DSHAPE_current, HELIOTRON_vac):
         """Test that surface averages of flux functions are additive homomorphisms.
 
         Meaning average(a + b) = average(a) + average(b).
         """
-        eq = get("W7-X")
-        grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=eq.sym)
-        data = eq.compute("|B|_t", grid=grid)
-        a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
-        b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
-        a_plus_b = surface_averages(grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"])
-        np.testing.assert_allclose(a_plus_b, a + b)
+
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+            grid = ConcentricGrid(L=11, M=11, N=9, NFP=eq.NFP, sym=True)
+            data = eq.compute("|B|_t", grid=grid)
+            a = surface_averages(grid, data["|B|"], data["sqrt(g)"])
+            b = surface_averages(grid, data["|B|_t"], data["sqrt(g)"])
+            a_plus_b = surface_averages(
+                grid, data["|B|"] + data["|B|_t"], data["sqrt(g)"]
+            )
+            np.testing.assert_allclose(a_plus_b, a + b)
+
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
-    def test_surface_averages_shortcut(self):
+    @pytest.mark.solve
+    def test_surface_averages_shortcut(self, DSHAPE_current, HELIOTRON_vac):
         """Test that surface_averages on single rho surface matches mean() shortcut."""
-        eq = get("W7-X")
-        rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        data = eq.compute("|B|", grid=grid)
 
-        np.testing.assert_allclose(
-            surface_averages(grid, data["|B|"], data["sqrt(g)"]),
-            np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
-            err_msg="average with sqrt(g) fail",
-        )
-        np.testing.assert_allclose(
-            surface_averages(grid, data["|B|"]),
-            np.mean(data["|B|"]),
-            err_msg="average without sqrt(g) fail",
-        )
+        def test(stellarator):
+            eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
+            rho = np.array((1 - 1e-4) * np.random.default_rng().random() + 1e-4)
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
+            data = eq.compute("|B|", grid=grid)
+
+            np.testing.assert_allclose(
+                surface_averages(grid, data["|B|"], data["sqrt(g)"]),
+                np.mean(data["sqrt(g)"] * data["|B|"]) / np.mean(data["sqrt(g)"]),
+                err_msg="average with sqrt(g) fail",
+            )
+            np.testing.assert_allclose(
+                surface_averages(grid, data["|B|"]),
+                np.mean(data["|B|"]),
+                err_msg="average without sqrt(g) fail",
+            )
+
+        test(DSHAPE_current)
+        test(HELIOTRON_vac)
 
     @pytest.mark.unit
     def test_min_max(self):

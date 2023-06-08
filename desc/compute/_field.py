@@ -33,8 +33,10 @@ from .utils import (
 def _B0(params, transforms, profiles, data, **kwargs):
     data["B0"] = data["psi_r"] / data["sqrt(g)"]
     if transforms["grid"].axis.size:
-        limit = (data["psi_rr"] / data["sqrt(g)_r"])[transforms["grid"].axis]
-        data["B0"] = put(data["B0"], transforms["grid"].axis, limit)
+        limit = data["psi_rr"] / data["sqrt(g)_r"]
+        data["B0"] = put(
+            data["B0"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 

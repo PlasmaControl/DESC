@@ -505,8 +505,10 @@ def _iota(params, transforms, profiles, data, **kwargs):
                 / (2 * jnp.pi)
                 * profiles["current"].compute(params["c_l"], dr=2)
                 / data["psi_rr"]
-            )[transforms["grid"].axis]
-            current_term = put(current_term, transforms["grid"].axis, limit)
+            )
+            current_term = put(
+                current_term, transforms["grid"].axis, limit[transforms["grid"].axis]
+            )
         data["iota"] = (current_term + data["iota_0_num"]) / data["iota_0_den"]
     return data
 
@@ -657,8 +659,10 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
         ) / data[
             "sqrt(g)_r"
         ]
-        limit = surface_averages(transforms["grid"], limit)[transforms["grid"].axis]
-        data["iota_0_num"] = put(data["iota_0_num"], transforms["grid"].axis, limit)
+        limit = surface_averages(transforms["grid"], limit)
+        data["iota_0_num"] = put(
+            data["iota_0_num"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
 
     return data
 
@@ -777,9 +781,12 @@ def _iota_0_den(params, transforms, profiles, data, **kwargs):
     data["iota_0_den"] = surface_averages(transforms["grid"], den)
 
     if transforms["grid"].axis.size:
-        limit = data["g_tt_rr"] / data["sqrt(g)_r"]
-        limit = surface_averages(transforms["grid"], limit)[transforms["grid"].axis]
-        data["iota_0_den"] = put(data["iota_0_den"], transforms["grid"].axis, limit)
+        limit = surface_averages(
+            transforms["grid"], data["g_tt_rr"] / data["sqrt(g)_r"]
+        )
+        data["iota_0_den"] = put(
+            data["iota_0_den"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
 
     return data
 

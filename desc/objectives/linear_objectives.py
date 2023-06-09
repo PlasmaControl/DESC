@@ -232,19 +232,11 @@ class AxisRSelfConsistency(_Objective):
             Level of output.
 
         """
-        R_basis = eq.R_basis
-
-        modes = eq.axis.R_basis.modes
-        if modes.size > 0:
-            ns = modes[:, 2]
-        else:
-            ns = np.array([[]], dtype=int)
-        # we need A to be M x N where N is number of modes in R_basis
-        # and M is the number of modes in the axis (that we are fixing)
-        self._A = np.zeros((ns.size, R_basis.num_modes))
+        ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
 
-        for i, (l, m, n) in enumerate(R_basis.modes):
+        for i, (l, m, n) in enumerate(eq.R_basis.modes):
             if m != 0:
                 continue
             if (l // 2) % 2 == 0:
@@ -312,19 +304,11 @@ class AxisZSelfConsistency(_Objective):
             Level of output.
 
         """
-        Z_basis = eq.Z_basis
-
-        modes = eq.axis.Z_basis.modes
-        if modes.size > 0:
-            ns = modes[:, 2]
-        else:
-            ns = np.array([[]], dtype=int)
-        # we need A to be M x N where N is number of modes in R_basis
-        # and M is the number of modes in the axis (that we are fixing)
-        self._A = np.zeros((ns.size, Z_basis.num_modes))
+        ns = eq.axis.Z_basis.modes[:, 2]
         self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
 
-        for i, (l, m, n) in enumerate(Z_basis.modes):
+        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
             if m != 0:
                 continue
             if (l // 2) % 2 == 0:
@@ -913,28 +897,28 @@ class FixAxisR(_Objective):
                     )
                 )
 
-        if modes.size > 0:
-            ns = modes[:, 2]
-        else:
-            ns = np.array([[]], dtype=int)
-        self._A = np.eye(eq.axis.R_basis.num_modes)[idx, :]
-        self._dim_f = ns.size
-
-        # use axis parameters as target if needed
-        if self._target_from_user is None:
-            self.target = np.zeros(self._dim_f)
-            for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
-                j = np.argwhere(ns == n)
-                self.target[j] = Rn
-        else:  # rearrange given target to match modes order
+        self._dim_f = idx.size
+        if self._target_from_user is not None:
             if self._modes is True or self._modes is False:
                 raise RuntimeError(
                     "Attempting to provide target for R axis modes without "
                     + "providing modes array!"
                     + "You must pass in the modes corresponding to the"
-                    + "provided target axis"
+                    + "provided target"
                 )
+            # rearrange given target to match modes order
             self.target = self._target_from_user[modes_idx]
+
+        # Ra_lmn -> Ra optimization space
+        self._A = np.eye(eq.axis.R_basis.num_modes)[idx, :]
+
+        # use surface parameters as target if needed
+        if self._target_from_user is None:
+            self.target = eq.axis.R_n[idx]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -1060,28 +1044,28 @@ class FixAxisZ(_Objective):
                     )
                 )
 
-        if modes.size > 0:
-            ns = modes[:, 2]
-        else:
-            ns = np.array([[]], dtype=int)
-        self._A = np.eye(eq.axis.Z_basis.num_modes)[idx, :]
-        self._dim_f = ns.size
-
-        # use axis parameters as target if needed
-        if self._target_from_user is None:
-            self.target = np.zeros(self._dim_f)
-            for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
-                j = np.argwhere(ns == n)
-                self.target[j] = Zn
-        else:  # rearrange given target to match modes order
+        self._dim_f = idx.size
+        if self._target_from_user is not None:
             if self._modes is True or self._modes is False:
                 raise RuntimeError(
                     "Attempting to provide target for Z axis modes without "
                     + "providing modes array!"
                     + "You must pass in the modes corresponding to the"
-                    + "provided target axis"
+                    + "provided target"
                 )
+            # rearrange given target to match modes order
             self.target = self._target_from_user[modes_idx]
+
+        # Ra_lmn -> Ra optimization space
+        self._A = np.eye(eq.axis.Z_basis.num_modes)[idx, :]
+
+        # use surface parameters as target if needed
+        if self._target_from_user is None:
+            self.target = eq.axis.Z_n[idx]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 

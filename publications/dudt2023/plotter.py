@@ -22,7 +22,7 @@ purple = "#7570b3"
 pink = "#e7298a"
 colormap = "plasma"
 
-save = False
+save = True
 
 eq_pol = desc.io.load("publications/dudt2023/poloidal.h5")[-1]
 eq_tor = desc.io.load("publications/dudt2023/toroidal.h5")[-1]
@@ -148,7 +148,7 @@ colors = [purple, orange]
 styles = ["-", "-"]
 fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(21, 7), sharex=True, sharey=True)
 # poloidal
-labels = ["QI", "QP"]
+labels = ["OP", "QP"]
 grid_ax = LinearGrid(theta=1, zeta=6, NFP=1, rho=0.0, endpoint=True)
 grid = LinearGrid(theta=100, zeta=6, NFP=1, rho=1.0, endpoint=True)
 for i, eq in enumerate((eq_pol, eq_pol_qs)):
@@ -275,7 +275,7 @@ ax[0, 0].set_ylim([0, 2 * np.pi])
 ax[0, 0].text(
     0.05,
     0.95,
-    r"QI",
+    r"OP",
     transform=ax[0, 0].transAxes,
     fontsize=14,
     verticalalignment="top",
@@ -484,7 +484,7 @@ eps_pol_qs = np.load("publications/dudt2023/poloidal_qs.npy")
 eps_hel_qs = np.load("publications/dudt2023/helical_qs.npy")
 eps_tor_qs = np.load("publications/dudt2023/toroidal_qs.npy")
 eps_w7x = np.load("publications/dudt2023/w7x.npy")
-ax.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="QI")
+ax.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="OP")
 ax.semilogy(s, eps_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
 ax.semilogy(s, eps_hel, color=orange, linestyle="-", lw=4, label="OH")
 ax.semilogy(s, eps_hel_qs, color=orange, linestyle=":", lw=4, label="QH")

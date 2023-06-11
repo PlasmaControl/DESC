@@ -776,6 +776,15 @@ class DommaschkPotentialField(ScalarPotentialField):
     """
 
     def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1.0):
+
+        assert (
+            ms.size == ls.size == a_arr.size == b_arr.size == c_arr.size == d_arr.size
+        ), "Passed in arrays must all be of the same size!"
+        assert not jnp.any(
+            jnp.logical_or(ms < 0, ls < 0)
+        ), "m and l modenumbers must be >= 0!"
+        assert jnp.isscalar(B0), "B0 should be a scalar value!"
+
         params = {}
         params["ms"] = ms
         params["ls"] = ls
@@ -985,7 +994,9 @@ def gamma_n(m, n):
     if n <= 0:
         return 0
     return (
-        alpha(m, n) / 2 * jnp.sum(jnp.array([1 / i + 1 / (m + i) for i in range(1, n)]))
+        alpha(m, n)
+        / 2
+        * jnp.sum(jnp.array([1 / i + 1 / (m + i) for i in jnp.arange(1, n)]))
     )
 
 
@@ -999,7 +1010,7 @@ def gamma_nstar(m, n):
 def CD_m_k(R, m, k):
     """Eq 31 of Dommaschk paper."""
     sum1 = 0
-    for j in range(k + 1):
+    for j in jnp.arange(k + 1):
         sum1 += (
             -(
                 alpha(m, j)
@@ -1019,7 +1030,7 @@ def CD_m_k(R, m, k):
 def CN_m_k(R, m, k):
     """Eq 32 of Dommaschk paper."""
     sum1 = 0
-    for j in range(k + 1):
+    for j in jnp.arange(k + 1):
         sum1 += (
             (
                 alpha(m, j) * (alpha(m, k - m - j) * jnp.log(R) + gamma_n(m, k - m - j))
@@ -1041,7 +1052,7 @@ def D_m_n(R, Z, m, n):
     # i.e. this is the index of k at
     # which 2k<=n, and 2(max_ind+1) would be > n and so not included in the sum
     result = 0
-    for k in range(max_ind + 1):
+    for k in jnp.arange(max_ind + 1):
         result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
     return result
 
@@ -1141,13 +1152,6 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     b_arr = jnp.atleast_1d(b_arr)
     c_arr = jnp.atleast_1d(c_arr)
     d_arr = jnp.atleast_1d(d_arr)
-
-    assert (
-        ms.size == ls.size == a_arr.size == b_arr.size == c_arr.size == d_arr.size
-    ), "Passed in arrays must all be of the same size!"
-    assert not np.any(
-        np.logical_or(ms < 0, ls < 0)
-    ), "m and l modenumbers must be >= 0!"
 
     for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
         value += V_m_l(R, phi, Z, m, l, a, b, c, d)

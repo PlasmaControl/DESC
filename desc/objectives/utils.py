@@ -30,7 +30,11 @@ from .linear_objectives import (
     FixPressure,
     FixPsi,
 )
-from .nae_utils import make_RZ_cons_1st_order, make_RZ_cons_2nd_order
+from .nae_utils import (
+    calc_zeroth_order_lambda,
+    make_RZ_cons_1st_order,
+    make_RZ_cons_2nd_order,
+)
 from .objective_funs import ObjectiveFunction
 
 
@@ -130,7 +134,9 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
     return constraints
 
 
-def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
+def get_NAE_constraints(
+    desc_eq, qsc_eq, profiles=True, iota=False, order=1, fix_lambda=False
+):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
 
     Parameters
@@ -165,6 +171,9 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
             constraints += (FixIota(),)
         else:
             constraints += (FixCurrent(),)
+    if fix_lambda:
+        L_constraints, _, _ = calc_zeroth_order_lambda(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += L_constraints
     if order >= 1:  # first order constraints
         constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
     if order == 2:  # 2nd order constraints

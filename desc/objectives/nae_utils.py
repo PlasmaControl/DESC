@@ -6,10 +6,73 @@ from desc.basis import FourierSeries
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
-from .linear_objectives import FixSumModesR, FixSumModesZ
+from .linear_objectives import FixSumModesLambda, FixSumModesR, FixSumModesZ
 
 
-def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
+def calc_zeroth_order_lambda(qsc, desc_eq):
+    """Calculate 0th order NAE lambda constraint.
+
+    Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
+
+    Parameters
+    ----------
+    qsc : Qsc equilibrium
+        Qsc object to use as the NAE constraints on the DESC equilibrium.
+    desc_eq : Equilibrium
+        desc equilibrium to constrain.
+
+    Returns
+    -------
+    Lconstraints : tuple of Objective
+        tuple of constraints of type FixSumModesLambda, which enforce
+        the axis (O(rho^0)) behavior of the equilibrium lambda coefficents
+        to match the NAE.
+    L_0_n : array
+        array of floats of the toroidal Fourier coefficients of the
+        lambda on-axis behavior dictated by the NAE
+    Lbasis : FourierSeries Basis
+        FourierSeries basis corresponding to L_0_n coefficients
+
+    """
+    phi = qsc.phi
+    dphi = phi[1] - phi[0]
+    nfp = qsc.nfp
+    if desc_eq.sym:
+        Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+    else:
+        Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+
+    grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
+    Ltrans_sin = Transform(grid, Lbasis_sin, build_pinv=True, method="auto")
+
+    # from integrating eqn A20 in
+    # Constructing stellarators with quasisymmetry to high order 2019
+    #  Landreman and Sengupta
+    nu_0 = np.cumsum(qsc.B0 / qsc.G0 * qsc.d_l_d_phi - 1) * np.ones_like(phi) * dphi
+    nu_0_n = Ltrans_sin.fit(nu_0)
+
+    Lconstraints = ()
+    # lambda = -iota_0 * nu
+    L_0_n = -qsc.iota * nu_0_n
+    for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], L_0_n):
+        sum_weights = []
+        modes = []
+        target = NAEcoeff
+        for l in range(int(desc_eq.L + 1)):
+            modes.append([l, 0, n])
+            if (l // 2) % 2 == 0:
+                sum_weights.append(1)
+            else:
+                sum_weights.append(-1)
+
+        modes = np.atleast_2d(modes)
+        Lcon = FixSumModesLambda(target=target, sum_weights=sum_weights, modes=modes)
+        Lconstraints += (Lcon,)
+
+    return Lconstraints, L_0_n, Lbasis_sin
+
+
+def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
     """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -20,6 +83,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
+    fix_lambda : bool, default False
+        whether to include first order constraints to fix the O(rho) behavior
+        of lambda. Defaults to False.
 
     Returns
     -------
@@ -38,6 +104,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
+    # TODO: implement this
+    if fix_lambda:
+        raise NotImplementedError("O(rho) lambda constraint not implemented yet!")
     phi = qsc.phi
 
     R0 = qsc.R0_func(phi)

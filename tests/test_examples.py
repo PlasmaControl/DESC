@@ -272,6 +272,7 @@ def run_qh_step(n, eq):
         verbose=3,
         copy=True,
         options={
+            "initial_trust_ratio": 1.0,  # for backwards consistency
             "perturb_options": {"verbose": 0},
             "solve_options": {"verbose": 0},
         },

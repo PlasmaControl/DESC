@@ -310,7 +310,7 @@ class Equilibrium(_Configuration, IOAble):
         r : float
             Radius of the desired boundary surface (in meters).
         L : int (optional)
-            Radial resolution. Default 2*M for `spectral_indexing`==fringe, else M
+            Radial resolution. Default 2*M for ``spectral_indexing=='fringe'``, else M
         M : int (optional)
             Poloidal resolution. Default is 8
         N : int (optional)
@@ -893,10 +893,12 @@ class EquilibriaFamily(IOAble, MutableSequence):
     ----------
     args : Equilibrium, dict or list of dict
         Should be either:
-          * An Equilibrium (or several)
-          * A dictionary of inputs (or several) to create a equilibria
-          * A single list of dictionaries, one for each equilibrium in a continuation.
-          * Nothing, to create an empty family.
+
+        * An Equilibrium (or several)
+        * A dictionary of inputs (or several) to create a equilibria
+        * A single list of dictionaries, one for each equilibrium in a continuation.
+        * Nothing, to create an empty family.
+
         For more information see inputs required by ``'Equilibrium'``.
     """
 
@@ -928,7 +930,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol=None,
         xtol=None,
         gtol=None,
-        nfev=100,
+        maxiter=100,
         verbose=1,
         checkpoint_path=None,
     ):
@@ -953,8 +955,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol, xtol, gtol : float or array-like of float
             stopping tolerances for subproblem at each step. `None` will use defaults
             for given optimizer.
-        nfev : int or array-like of int
-            maximum number of function evaluations in each equilibrium subproblem.
+        maxiter : int or array-like of int
+            maximum number of iterations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -980,7 +982,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             ftol,
             xtol,
             gtol,
-            nfev,
+            maxiter,
             verbose,
             checkpoint_path,
         )
@@ -995,7 +997,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol=None,
         xtol=None,
         gtol=None,
-        nfev=100,
+        maxiter=100,
         verbose=1,
         checkpoint_path=None,
         **kwargs,
@@ -1020,8 +1022,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol, xtol, gtol : float
             stopping tolerances for subproblem at each step. `None` will use defaults
             for given optimizer.
-        nfev : int
-            maximum number of function evaluations in each equilibrium subproblem.
+        maxiter : int
+            maximum number of iterations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -1029,15 +1031,14 @@ class EquilibriaFamily(IOAble, MutableSequence):
             * 3: as above plus detailed solver output
         checkpoint_path : str or path-like
             file to save checkpoint data (Default value = None)
-        **kwargs : control continuation step sizes
+        **kwargs : dict, optional
+            * ``mres_step``: int, default 6. The amount to increase Mpol by at each
+              continuation step
+            * ``pres_step``: float, ``0<=pres_step<=1``, default 0.5. The amount to
+              increase pres_ratio by at each continuation step
+            * ``bdry_step``: float, ``0<=bdry_step<=1``, default 0.25. The amount to
+              increase bdry_ratio by at each continuation step
 
-            Valid keyword arguments are:
-
-            mres_step: int, the amount to increase Mpol by at each continuation step
-            pres_step: float, 0<=pres_step<=1, the amount to increase pres_ratio by
-                            at each continuation step
-            bdry_step: float, 0<=bdry_step<=1, the amount to increase pres_ratio by
-                            at each continuation step
         Returns
         -------
         eqfam : EquilibriaFamily
@@ -1055,7 +1056,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             ftol,
             xtol,
             gtol,
-            nfev,
+            maxiter,
             verbose,
             checkpoint_path,
             **kwargs,

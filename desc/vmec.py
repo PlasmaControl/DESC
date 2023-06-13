@@ -15,6 +15,8 @@ from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixBoundaryR,
@@ -152,6 +154,8 @@ class VMECIO:
             FixBoundaryZ(),
             BoundaryRSelfConsistency(),
             BoundaryZSelfConsistency(),
+            AxisRSelfConsistency(),
+            AxisZSelfConsistency(),
         )
         objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
         _, _, _, _, _, project, recover = factorize_linear_constraints(

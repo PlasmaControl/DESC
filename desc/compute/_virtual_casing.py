@@ -11,7 +11,7 @@ from .utils import cross, dot
 
 @register_compute_fun(
     name="K_vc",
-    label="\\mathbf{K}_{VC} = \\mathbf{n} \\times \\mathbf{B}",
+    label="\\mathbf{K}_{VC} = \\mathbf{B} \\time \\mathbf{n}",
     units="A \\cdot m^{-1}",
     units_long="Amps / meter",
     description="Virtual casing sheet current",

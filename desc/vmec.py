@@ -14,16 +14,6 @@ from desc.compat import ensure_positive_jacobian
 from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.grid import Grid, LinearGrid
-from desc.objectives import (
-    AxisRSelfConsistency,
-    AxisZSelfConsistency,
-    BoundaryRSelfConsistency,
-    BoundaryZSelfConsistency,
-    FixBoundaryR,
-    FixBoundaryZ,
-    ObjectiveFunction,
-)
-from desc.objectives.utils import factorize_linear_constraints
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
 from desc.utils import Timer
@@ -149,21 +139,8 @@ class VMECIO:
         eq = ensure_positive_jacobian(eq)
 
         # apply boundary conditions
-        constraints = (
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            BoundaryRSelfConsistency(),
-            BoundaryZSelfConsistency(),
-            AxisRSelfConsistency(),
-            AxisZSelfConsistency(),
-        )
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
-        _, _, _, _, _, project, recover = factorize_linear_constraints(
-            constraints, objective.args
-        )
-        args = objective.unpack_state(recover(project(objective.x(eq))))
-        for key, value in args.items():
-            setattr(eq, key, value)
+        eq.surface = eq.get_surface_at(rho=1)
+        eq.axis = eq.get_axis()
 
         return eq
 

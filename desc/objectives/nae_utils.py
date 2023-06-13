@@ -104,9 +104,6 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
     """
-    # TODO: implement this
-    if fix_lambda:
-        raise NotImplementedError("O(rho) lambda constraint not implemented yet!")
     phi = qsc.phi
 
     R0 = qsc.R0_func(phi)
@@ -129,6 +126,10 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
     Y1c = qsc.Y1c_untwisted
     Y1s = qsc.Y1s_untwisted
 
+    # these are like X_l_m
+    # where l is radial order (in rho)
+    # and m is the poloidal modenumber (+m for cos(theta), -m for sin(theta))
+
     R_1_1 = X1c * (k_dot_R - k_dot_phi * dR0_dphi / R0) + Y1c * (
         tau_dot_R - tau_dot_phi * dR0_dphi / R0
     )
@@ -142,6 +143,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
     Z_1_neg1 = Y1s * (tau_dot_Z - tau_dot_phi * dZ0_dphi / R0) + X1s * (
         k_dot_Z - k_dot_phi * dZ0_dphi / R0
     )
+
+    L_1_1 = X1c * (-k_dot_phi / R0) + Y1c * (-tau_dot_phi / R0)
+    L_1_neg1 = Y1s * (-tau_dot_phi / R0) + X1s * (-k_dot_phi / R0)
 
     nfp = qsc.nfp
     if desc_eq.sym:
@@ -167,22 +171,29 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
     Z_1_1_n = Ztrans_sin.fit(Z_1_1)
     Z_1_neg1_n = Ztrans.fit(Z_1_neg1)
 
+    L_1_1_n = Ztrans_sin.fit(L_1_1)
+    L_1_neg1_n = Ztrans.fit(L_1_neg1)
+
     bases = {}
     bases["Rbasis_cos"] = Rbasis
     bases["Rbasis_sin"] = Rbasis_sin
     bases["Zbasis_cos"] = Zbasis
     bases["Zbasis_sin"] = Zbasis_sin
+    bases["Lbasis_cos"] = Zbasis  # L has same basis as Z bc has the same symmetry
+    bases["Lbasis_sin"] = Zbasis_sin
 
     coeffs = {}
     coeffs["R_1_1_n"] = R_1_1_n
     coeffs["R_1_neg1_n"] = R_1_neg1_n
     coeffs["Z_1_1_n"] = Z_1_1_n
     coeffs["Z_1_neg1_n"] = Z_1_neg1_n
+    coeffs["L_1_1_n"] = L_1_1_n
+    coeffs["L_1_neg1_n"] = L_1_neg1_n
 
     return coeffs, bases
 
 
-def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
+def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     """Create the linear constraints for constraining an eq with O(rho) NAE behavior.
 
     Parameters
@@ -205,6 +216,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         stellarator symmetric for R i.e. R(-theta,-phi) = R(theta,phi)
         and Z_1_1_n uses the Zbasis_sin as the term is cos(theta)*sin(phi)
         since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry.
+    fix_lambda : bool, default False
+        whether to include first order constraints to fix the O(rho) behavior
+        of lambda. Defaults to False.
 
     Returns
     -------
@@ -214,16 +228,26 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     Zconstraints : tuple of Objective
         tuple of constraints of type FixSumModesZ, which enforce
         the O(rho) behavior of the equilibrium Z coefficents to match the NAE.
+    Lconstraints : tuple of Objective
+        tuple of constraints of type FixSumModesLambda, which enforce
+        the O(rho) behavior of the equilibrium lambda coefficents to match the NAE.
+        Tuple is empty if fix_lambda=False.
+
     """
     # r is the ratio  r_NAE / rho_DESC
     r = np.sqrt(2 * abs(desc_eq.Psi / qsc.Bbar) / 2 / np.pi)
 
     Rconstraints = ()
     Zconstraints = ()
+    Lconstraints = ()
+
     Rbasis_cos = bases["Rbasis_cos"]
     Zbasis_cos = bases["Zbasis_cos"]
+    Lbasis_cos = bases["Lbasis_cos"]
+
     Rbasis_sin = bases["Rbasis_sin"]
     Zbasis_sin = bases["Zbasis_sin"]
+    Lbasis_sin = bases["Lbasis_sin"]
 
     # R_1_1_n
     for n, NAEcoeff in zip(Rbasis_cos.modes[:, 2], coeffs["R_1_1_n"]):
@@ -249,7 +273,21 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
         Zconstraints += (Zcon,)
-
+    if fix_lambda:
+        # L_1_neg1_n
+        for n, NAEcoeff in zip(Lbasis_cos.modes[:, 2], coeffs["L_1_neg1_n"]):
+            sum_weights = []
+            modes = []
+            target = NAEcoeff * r
+            for k in range(1, int((desc_eq.L + 1) / 2) + 1):
+                modes.append([2 * k - 1, -1, n])
+                sum_weights.append([(-1) ** k * k])
+            modes = np.atleast_2d(modes)
+            sum_weights = -np.atleast_1d(sum_weights)
+            Lcon = FixSumModesLambda(
+                target=target, sum_weights=sum_weights, modes=modes
+            )
+            Lconstraints += (Lcon,)
     # R_1_neg1_n
     for n, NAEcoeff in zip(Rbasis_sin.modes[:, 2], coeffs["R_1_neg1_n"]):
         sum_weights = []
@@ -274,11 +312,25 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
         sum_weights = -np.atleast_1d(sum_weights)
         Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
         Zconstraints += (Zcon,)
+    if fix_lambda:
+        # L_1_1_n
+        for n, NAEcoeff in zip(Lbasis_sin.modes[:, 2], coeffs["L_1_1_n"]):
+            sum_weights = []
+            modes = []
+            target = NAEcoeff * r
+            for k in range(1, int((desc_eq.L + 1) / 2) + 1):
+                modes.append([2 * k - 1, 1, n])
+                sum_weights.append([(-1) ** k * k])
+            modes = np.atleast_2d(modes)
+            sum_weights = -np.atleast_1d(sum_weights)
+            Lcon = FixSumModesLambda(
+                target=target, sum_weights=sum_weights, modes=modes
+            )
+            Lconstraints += (Lcon,)
+    return Rconstraints, Zconstraints, Lconstraints
 
-    return Rconstraints, Zconstraints
 
-
-def make_RZ_cons_1st_order(qsc, desc_eq):
+def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False):
     """Make the first order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -287,6 +339,9 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
+    fix_lambda : bool, default False
+        whether to include first order constraints to fix the O(rho) behavior
+        of lambda. Defaults to False.
 
     Returns
     -------
@@ -299,11 +354,14 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
     """
     Rconstraints = ()
     Zconstraints = ()
+    Lconstraints = ()
 
-    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq)
-    Rconstraints, Zconstraints = _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases)
+    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda)
+    Rconstraints, Zconstraints, Lconstraints = _make_RZ_cons_order_rho(
+        qsc, desc_eq, coeffs, bases, fix_lambda
+    )
 
-    return Rconstraints + Zconstraints
+    return Rconstraints + Zconstraints + Lconstraints
 
 
 """ Order (rho^2)"""

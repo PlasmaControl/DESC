@@ -172,14 +172,17 @@ def get_NAE_constraints(
         else:
             constraints += (FixCurrent(),)
     if fix_lambda:
-        L_constraints, _, _ = calc_zeroth_order_lambda(qsc=qsc_eq, desc_eq=desc_eq)
-        constraints += L_constraints
+        L_axis_constraints, _, _ = calc_zeroth_order_lambda(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += L_axis_constraints
     if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += make_RZ_cons_1st_order(
+            qsc=qsc_eq, desc_eq=desc_eq, fix_lambda=fix_lambda
+        )
     if order == 2:  # 2nd order constraints
         constraints += make_RZ_cons_2nd_order(qsc=qsc_eq, desc_eq=desc_eq)
     if order > 2:
         raise NotImplementedError("NAE constraints only implemented up to O(rho^2) ")
+
     return constraints
 
 

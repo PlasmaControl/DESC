@@ -104,7 +104,7 @@ def _A_vc(params, transforms, profiles, data, **kwargs):
             / (2 * jnp.pi)
             / NFP
         )
-        K = data["K_vc"] * data["|e_theta x e_zeta|"][:, None]
+        K = data["K_vc"] * data["|e_theta x e_zeta|"][:, None] * 4 * jnp.pi**2
 
         def body1(i, A):
             Areg1, Areg2 = A

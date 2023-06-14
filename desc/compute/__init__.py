@@ -66,12 +66,11 @@ def _build_data_index():
 
         full_with_axis_data = get_data_deps(key, True)
         if len(full["data"]) >= len(full_with_axis_data):
-            # It is possible for some quantity and all its dependencies to
-            # not depend on anything extra to evaluate its limit at the magnetic
-            # axis (e.g. the quantity rho). In this case,
-            # data_index[key]["full_dependencies"] will be identical to
-            # data_index[key]["full_with_axis_dependencies"],
-            # so we assign the same reference to avoid storing a copy.
+            # Then this quantity and all its dependencies do not need anything
+            # extra to evaluate its limit at the magnetic axis.
+            # The dependencies in the `full` dictionary and the `full_with_axis`
+            # dictionary will be identical, so we assign the same reference to
+            # avoid storing a copy.
             full_with_axis = full
         else:
             full_with_axis = {

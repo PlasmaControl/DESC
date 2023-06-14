@@ -577,7 +577,7 @@ def test_field_scale_length():
 
 
 @pytest.mark.unit
-def test_objective_print(capsys):
+def test_profile_objective_print(capsys):
     """Test that the profile objectives print correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)

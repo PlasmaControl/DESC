@@ -11,11 +11,13 @@ from ._equilibrium import (
 from ._generic import (
     GenericObjective,
     MirrorRatio,
+    ObjectiveFromUser,
     RotationalTransform,
     ToroidalCurrent,
 )
 from ._geometry import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     FluxGradient,
     MeanCurvature,

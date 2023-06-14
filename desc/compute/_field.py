@@ -3027,3 +3027,62 @@ def _kappa_n(params, transforms, profiles, data, **kwargs):
 def _kappa_g(params, transforms, profiles, data, **kwargs):
     data["kappa_g"] = dot(data["kappa"], cross(data["n"], data["b"]))
     return data
+
+
+@register_compute_fun(
+    name="grad(B)",
+    label="\\nabla \\mathbf{B}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Gradient of magnetic field vector",
+    dim=(3, 3),
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_r", "B_t", "B_z", "e^rho", "e^theta", "e^zeta"],
+)
+def _grad_B_vec(params, transforms, profiles, data, **kwargs):
+    data["grad(B)"] = (
+        (data["B_r"][:, None, :] * data["e^rho"][:, :, None])
+        + (data["B_t"][:, None, :] * data["e^theta"][:, :, None])
+        + (data["B_z"][:, None, :] * data["e^zeta"][:, :, None])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|grad(B)|",
+    label="|\\nabla \\mathbf{B}|",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Frobenius norm of gradient of magnetic field vector",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(B)"],
+)
+def _grad_B_vec_fro(params, transforms, profiles, data, **kwargs):
+    data["|grad(B)|"] = jnp.linalg.norm(data["grad(B)"], axis=(1, 2), ord="fro")
+    return data
+
+
+@register_compute_fun(
+    name="L_grad(B)",
+    label="L_{\\nabla \\mathbf{B}} = \\frac{\\sqrt{2}|B|}{|\\nabla \\mathbf{B}|}",
+    units="m",
+    units_long="meters",
+    description="Magnetic field length scale based on Frobenius norm of gradient "
+    + "of magnetic field vector",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(B)|", "|B|"],
+)
+def _L_grad_B(params, transforms, profiles, data, **kwargs):
+    data["L_grad(B)"] = jnp.sqrt(2) * data["|B|"] / data["|grad(B)|"]
+    return data

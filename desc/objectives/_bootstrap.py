@@ -68,7 +68,7 @@ class BootstrapRedlConsistency(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -78,6 +78,8 @@ class BootstrapRedlConsistency(_Objective):
         name="Bootstrap current self-consistency (Redl)",
     ):
 
+        if target is None and bounds is None:
+            target = 0
         assert (len(helicity) == 2) and (int(helicity[1]) == helicity[1])
         assert helicity[0] == 1, "Redl bootstrap current model assumes helicity[0] == 1"
         self._grid = grid
@@ -211,14 +213,14 @@ class BootstrapRedlConsistency(_Objective):
             surface_label="rho",
         )
 
-    def compute_scaled(self, *args, **kwargs):
+    def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
         w = compress(
             self._transforms["grid"],
             self._transforms["grid"].spacing[:, 0],
             surface_label="rho",
         )
-        return super().compute_scaled(*args, **kwargs) * jnp.sqrt(w)
+        return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""

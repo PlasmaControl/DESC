@@ -110,15 +110,15 @@ class VMECIO:
             inputs["sym"] = True
 
         # profiles
-        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:]))
-        pres = file.variables["presf"][:]
+        r = np.sqrt(np.linspace(0, 1, file.variables["ns"][:].filled()))
+        pres = file.variables["presf"][:].filled()
         inputs["pressure"] = SplineProfile(pres, r, name="pressure")
         if profile == "iota":
-            iota = file.variables["iotaf"][:]
+            iota = file.variables["iotaf"][:].filled()
             inputs["iota"] = SplineProfile(iota, r, name="iota")
             inputs["current"] = None
         if profile == "current":
-            curr = 2 * np.pi / mu_0 * file.variables["buco"][:]
+            curr = 2 * np.pi / mu_0 * file.variables["buco"][:].filled()
             inputs["current"] = SplineProfile(curr, r, name="current")
             inputs["iota"] = None
 

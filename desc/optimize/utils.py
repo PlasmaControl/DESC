@@ -191,22 +191,23 @@ def evaluate_quadratic_form_jac(J, g, s, diag=None):
     return 0.5 * q + l
 
 
-def print_header_nonlinear():
+def print_header_nonlinear(constrained=False):
     """Print a pretty header."""
-    print(
-        "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
-            "Iteration",
-            "Total nfev",
-            "Cost",
-            "Cost reduction",
-            "Step norm",
-            "Optimality",
-        )
+    s = "{:^15}{:^15}{:^15}{:^15}{:^15}{:^15}".format(
+        "Iteration",
+        "Total nfev",
+        "Cost",
+        "Cost reduction",
+        "Step norm",
+        "Optimality",
     )
+    if constrained:
+        s += "{:^24}".format("Constraint violation")
+    print(s)
 
 
 def print_iteration_nonlinear(
-    iteration, nfev, cost, cost_reduction, step_norm, optimality
+    iteration, nfev, cost, cost_reduction, step_norm, optimality, constr_violation=None
 ):
     """Print a line of optimizer output."""
     if iteration is None or abs(iteration) == np.inf:
@@ -238,12 +239,12 @@ def print_iteration_nonlinear(
         optimality = " " * 15
     else:
         optimality = "{:^15.2e}".format(optimality)
-
-    print(
-        "{}{}{}{}{}{}".format(
-            iteration, nfev, cost, cost_reduction, step_norm, optimality
-        )
+    s = "{}{}{}{}{}{}".format(
+        iteration, nfev, cost, cost_reduction, step_norm, optimality
     )
+    if constr_violation is not None:
+        s += "{:^24.2e}".format(constr_violation)
+    print(s)
 
 
 STATUS_MESSAGES = {
@@ -289,8 +290,9 @@ def check_termination(
     ftol_satisfied = dF < abs(ftol * F) and reduction_ratio > 0.25
     xtol_satisfied = dx_norm < xtol * (xtol + x_norm) and reduction_ratio > 0.25
     gtol_satisfied = g_norm < gtol
+    ctol_satisfied = kwargs.get("constr_violation", 0) < kwargs.get("ctol", np.inf)
 
-    if any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
+    if ctol_satisfied and any([ftol_satisfied, xtol_satisfied, gtol_satisfied]):
         message = STATUS_MESSAGES["success"]
         success = True
         if ftol_satisfied:
@@ -327,7 +329,9 @@ def check_termination(
 def compute_jac_scale(A, prev_scale_inv=None):
     """Compute scaling factor based on column norm of Jacobian matrix."""
     scale_inv = jnp.sum(A**2, axis=0) ** 0.5
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(
+        scale_inv < np.finfo(A.dtype).eps * max(A.shape), 1, scale_inv
+    )
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
@@ -337,7 +341,9 @@ def compute_jac_scale(A, prev_scale_inv=None):
 def compute_hess_scale(H, prev_scale_inv=None):
     """Compute scaling factors based on diagonal of Hessian matrix."""
     scale_inv = jnp.abs(jnp.diag(H))
-    scale_inv = jnp.where(scale_inv == 0, 1, scale_inv)
+    scale_inv = jnp.where(
+        scale_inv < np.finfo(H.dtype).eps * max(H.shape), 1, scale_inv
+    )
 
     if prev_scale_inv is not None:
         scale_inv = jnp.maximum(scale_inv, prev_scale_inv)
@@ -376,5 +382,5 @@ def f_where_x(x, xs, fs, dim=0):
     if dim == 1:
         f = np.atleast_1d(f)
     if dim == 2:
-        f = np.atleast_2d(f.T).T
+        f = np.atleast_2d(f).reshape((-1, x.size))
     return f

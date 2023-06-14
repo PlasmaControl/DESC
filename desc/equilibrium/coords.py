@@ -5,12 +5,141 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import jit, jnp, put, while_loop
+from desc.backend import fori_loop, jit, jnp, put, while_loop
 from desc.compute import compute as compute_fun
-from desc.compute import get_transforms
-from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.compute import data_index, get_transforms
+from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
 from desc.transform import Transform
 from desc.utils import Index
+
+
+def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6):
+    """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+
+    First solves for the computational coordinates that correspond to inbasis, then
+    evaluates outbasis at those locations.
+
+    NOTE: this function cannot be JIT compiled or differentiated with AD.
+
+    Parameters
+    ----------
+    eq : Equilibrium
+        Equilibrium to use
+    coords : ndarray, shape(k,3)
+        2D array of input coordinates. Each row is a different
+        point in space.
+    inbasis, outbasis : tuple of str
+        Labels for input and output coordinates, eg ("R", "phi", "Z") or
+        ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
+        same as the compute function data key
+    tol : float
+        Stopping tolerance.
+    maxiter : int > 0
+        Maximum number of Newton iterations
+    rhomin : float
+        Minimum allowable value of rho (to avoid singularity at rho=0)
+
+
+    """
+    assert (
+        np.isfinite(maxiter) and maxiter > 0
+    ), f"maxiter must be a positive integer, got {maxiter}"
+    assert np.isfinite(tol) and tol > 0, f"tol must be a positive float, got {tol}"
+
+    basis_derivs = [f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")]
+    for key in basis_derivs:
+        assert (
+            key in data_index.keys()
+        ), f"don't have recipe to compute partial derivative {key}"
+
+    # can't use AD or jit compile this because of grid stuff
+    def compute(y, basis):
+        data = eq.compute(basis, grid=Grid(y, sort=False))
+        x = jnp.stack([data[k] for k in basis], axis=-1)
+        return x
+
+    def residual(y):
+        xk = compute(y, inbasis)
+        return xk - coords
+
+    def jac(y):
+        J = compute(y, basis_derivs)
+        J = J.reshape((-1, 3, 3))
+        return J
+
+    @jit
+    def fixup(y):
+        r, t, z = y.T
+        # negative rho -> flip theta
+        t = jnp.where(r < 0, (t + np.pi) % (2 * np.pi), t % (2 * np.pi))
+        r = jnp.abs(r)
+        r = jnp.clip(r, rhomin, 1)
+        z = z % (2 * np.pi)
+        y = jnp.array([r, t, z]).T
+        return y
+
+    # use least squares to avoid singular behavior, cheap for 3x3 systems
+    lstsq = jit(
+        jnp.vectorize(
+            lambda A, b: jnp.linalg.lstsq(A, b)[0], signature="(n,n),(n)->(n)"
+        )
+    )
+
+    # nearest neighbor search on coarse grid for initial guess
+    yg = ConcentricGrid(L=eq.L_grid, M=eq.M_grid, N=int(eq.N_grid * eq.NFP)).nodes
+    xg = compute(yg, inbasis)
+    idx = jnp.zeros(len(coords)).astype(int)
+    coords = jnp.asarray(coords)
+
+    def _distance_body(i, idx):
+        distance = jnp.linalg.norm(coords[i] - xg, axis=-1)
+        k = jnp.argmin(distance)
+        idx = put(idx, i, k)
+        return idx
+
+    idx = fori_loop(0, len(coords), _distance_body, idx)
+    yk = yg[idx]
+    alpha = 0.5
+    yk = fixup(yk)
+    resk = residual(yk)
+
+    for i in range(maxiter):
+        if np.max(np.abs(resk)) < tol:
+            break
+        J = jac(yk)
+        d = lstsq(J, resk)
+        alphak = jnp.ones(yk.shape[0])
+        for j in range(10):
+            # backtracking line search
+            yt = fixup(yk - alphak[:, None] * d)
+            res = residual(yt)
+            if np.max(np.abs(res)) < np.max(np.abs(resk)):
+                yk = yt
+                resk = res
+                break
+            else:
+                # only reduce step size where needed
+                alphak = jnp.where(
+                    np.max(np.abs(res), axis=-1) > np.max(np.abs(resk), axis=-1),
+                    alpha * alphak,
+                    alphak,
+                )
+        else:
+            # if we haven't found a good step, try taking a bad one and
+            # hope the next one is better
+            yk = yt
+            resk = res
+
+    r, t, z = yk.T
+    res = jnp.max(jnp.abs(residual(yk)), axis=-1)
+    r = jnp.where(res > tol, jnp.nan, r)
+    t = jnp.where(res > tol, jnp.nan, t)
+    z = jnp.where(res > tol, jnp.nan, z)
+
+    yk = jnp.vstack([r, t, z]).T
+
+    out = compute(yk, outbasis)
+    return out
 
 
 def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
@@ -22,7 +151,7 @@ def compute_theta_coords(eq, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         Equilibrium to use
     flux_coords : ndarray, shape(k,3)
         2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-        coordinate.
+        point in space.
     L_lmn : ndarray
         spectral coefficients for lambda. Defaults to eq.L_lmn
     tol : float
@@ -96,7 +225,7 @@ def compute_flux_coords(
         Equilibrium to use
     real_coords : ndarray, shape(k,3)
         2D array of real space coordinates [R,phi,Z]. Each row is a different
-        coordinate.
+        point in space.
     R_lmn, Z_lmn : ndarray
         spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
     tol : float
@@ -185,7 +314,7 @@ def compute_flux_coords(
     return jnp.vstack([rho, theta, phi]).T
 
 
-def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
     Does so by checking coordianate Jacobian (sqrt(g)) sign.
@@ -203,8 +332,8 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
     grid  :  Grid, optional
         Grid on which to evaluate the coordinate Jacobian and check for the sign.
         (Default to QuadratureGrid with eq's current grid resolutions)
-    R_lmn, Z_lmn : ndarray, optional
-        spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+    R_lmn, Z_lmn, L_lmn : ndarray, optional
+        spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
     msg : {None, "auto", "manual"}
         Warning to throw if unnested.
 
@@ -218,21 +347,26 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, msg=None):
         R_lmn = eq.R_lmn
     if Z_lmn is None:
         Z_lmn = eq.Z_lmn
+    if L_lmn is None:
+        L_lmn = eq.L_lmn
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
     data = compute_fun(
-        "sqrt(g)",
+        "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,
             "Z_lmn": Z_lmn,
+            "L_lmn": L_lmn,
         },
         transforms=transforms,
         profiles={},  # no profiles needed
     )
 
-    nested = jnp.all(jnp.sign(data["sqrt(g)"][0]) == jnp.sign(data["sqrt(g)"]))
+    nested = jnp.all(
+        jnp.sign(data["sqrt(g)_PEST"][0]) == jnp.sign(data["sqrt(g)_PEST"])
+    )
     if not nested:
         if msg == "auto":
             warnings.warn(

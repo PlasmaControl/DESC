@@ -1,10 +1,12 @@
 """Functions for getting common objectives and constraints."""
 
 import numpy as np
+from jax import lax
+from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
 from desc.compute import arg_order
-from desc.utils import Index, svd_inv_null
+from desc.utils import Index, flatten_list, svd_inv_null
 
 from ._equilibrium import (
     CurrentDensity,
@@ -260,13 +262,15 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         if obj.bounds is not None:
             raise ValueError("Linear constraints must use target instead of bounds.")
         A_ = {
-            arg: obj.derivatives["jac"][arg](
+            arg: obj.derivatives["jac_scaled"][arg](
                 *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
             )
             for arg in args
         }
         # using obj.compute instead of obj.target to allow for correct scale/weight
-        b_ = -obj.compute_scaled(*[jnp.zeros(obj.dimensions[arg]) for arg in obj.args])
+        b_ = -obj.compute_scaled_error(
+            *[jnp.zeros(obj.dimensions[arg]) for arg in obj.args]
+        )
         A.append(A_)
         b.append(b_)
 
@@ -323,7 +327,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     # check that all constraints are actually satisfiable
     xp_dict = {arg: xp[x_idx[arg]] for arg in x_idx.keys()}
     for con in constraints:
-        res = con.compute_scaled(**xp_dict)
+        res = con.compute_scaled_error(**xp_dict)
         x = np.concatenate([xp_dict[arg] for arg in con.args])
         # stuff like density is O(1e19) so need some adjustable tolerance here.
         atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
@@ -369,3 +373,81 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def jax_softmax(arr, alpha):
+    """JAX softmax implementation.
+
+    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
+    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
+
+    Will automatically multiply array values by 2 / min_val if the min_val of
+    the array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmax, which can cause inaccurate maxes or even incorrect
+    signs of the softmax versus the actual max.
+
+    Parameters
+    ----------
+    arr: ndarray, the array which we would like to apply the softmax function to.
+    alpha: float, the parameter smoothly transitioning the function to a hardmax.
+        as alpha increases, the value returned will come closer and closer to
+        max(arr).
+
+    Returns
+    -------
+    softmax: float, the soft-maximum of the array.
+    """
+    arr_times_alpha = alpha * arr
+    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
+    return lax.cond(
+        jnp.any(min_val < 1),
+        lambda arr_times_alpha: logsumexp(
+            arr_times_alpha / min_val * 2
+        )  # adjust to make vals>1
+        / alpha
+        * min_val
+        / 2,
+        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
+        arr_times_alpha,
+    )
+
+
+def jax_softmin(arr, alpha):
+    """JAX softmin implementation, by taking negative of softmax(-arr).
+
+    Parameters
+    ----------
+    arr: ndarray, the array which we would like to apply the softmin function to.
+    alpha: float, the parameter smoothly transitioning the function to a hardmin.
+        as alpha increases, the value returned will come closer and closer to
+        min(arr).
+
+    Returns
+    -------
+    softmin: float, the soft-minimum of the array.
+    """
+    return -jax_softmax(-arr, alpha)
+
+
+def combine_args(*objectives):
+    """Given ObjectiveFunctions, modify all to take the same state vector.
+
+    The new state vector will be a combination of all arguments taken by any objective.
+
+    Parameters
+    ----------
+    objectives : ObjectiveFunction
+        ObjectiveFunctions to modify.
+
+    Returns
+    -------
+    objectives : ObjectiveFunction
+        Original ObjectiveFunctions modified to take the same state vector.
+    """
+    args = flatten_list([obj.args for obj in objectives])
+    args = [arg for arg in arg_order if arg in args]
+
+    for obj in objectives:
+        obj.set_args(*args)
+
+    return objectives

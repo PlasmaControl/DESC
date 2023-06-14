@@ -7,11 +7,7 @@ from desc.compute import arg_order
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
-    CurrentDensity,
-    ForceBalance,
-    HelicalForceBalance,
     ObjectiveFunction,
-    RadialForceBalance,
 )
 from desc.objectives.utils import (
     align_jacobian,
@@ -103,6 +99,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         # this is all args used by both constraints and objective
         self._args = [arg for arg in arg_order if arg in args]
         self._dim_f = self._objective.dim_f
+        self._dimensions = self._objective.dimensions
         self._scalar = self._objective.scalar
         self._dimensions = self._objective.dimensions
         self._objective.set_args(*self._args)
@@ -179,8 +176,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         x = self.recover(x)
         return self._objective.unpack_state(x)
 
-    def compute(self, x_reduced):
-        """Compute the objective function.
+    def compute_unscaled(self, x_reduced):
+        """Compute the unscaled form of the objective function.
 
         Parameters
         ----------
@@ -194,7 +191,43 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        f = self._objective.compute(x)
+        f = self._objective.compute_unscaled(x)
+        return f
+
+    def compute_scaled(self, x_reduced):
+        """Compute the objective function and apply weighting / normalization.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute_scaled(x)
+        return f
+
+    def compute_scaled_error(self, x_reduced):
+        """Compute the objective function and apply weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        x = self.recover(x_reduced)
+        f = self._objective.compute_scaled_error(x)
         return f
 
     def compute_scalar(self, x_reduced):
@@ -250,8 +283,8 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.hess(x)
         return self._Z.T @ df[self._unfixed_idx, :][:, self._unfixed_idx] @ self._Z
 
-    def jac(self, x_reduced):
-        """Compute Jacobian of the vector objective function.
+    def jac_unscaled(self, x_reduced):
+        """Compute Jacobian of the vector objective function without weighting / bounds.
 
         Parameters
         ----------
@@ -265,8 +298,40 @@ class LinearConstraintProjection(ObjectiveFunction):
 
         """
         x = self.recover(x_reduced)
-        df = self._objective.jac(x)
+        df = self._objective.jac_unscaled(x)
         return df[:, self._unfixed_idx] @ self._Z
+
+    def jac_scaled(self, x_reduced):
+        """Compute Jacobian of the vector objective function with weighting / bounds.
+
+        Parameters
+        ----------
+        x_reduced : ndarray
+            Reduced state vector that satisfies linear constraints.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.jac_scaled(x)
+        return df[:, self._unfixed_idx] @ self._Z
+
+    @property
+    def target_scaled(self):
+        """ndarray: target vector."""
+        return self._objective.target_scaled
+
+    @property
+    def bounds_scaled(self):
+        """tuple: lower and upper bounds for residual vector."""
+        return self._objective.bounds_scaled
+
+    @property
+    def weights(self):
+        """ndarray: weight vector."""
+        return self._objective.weights
 
 
 class ProximalProjection(ObjectiveFunction):
@@ -303,8 +368,8 @@ class ProximalProjection(ObjectiveFunction):
         constraint,
         eq=None,
         verbose=1,
-        perturb_options={},
-        solve_options={},
+        perturb_options=None,
+        solve_options=None,
     ):
         assert isinstance(objective, ObjectiveFunction), (
             "objective should be instance of ObjectiveFunction." ""
@@ -313,21 +378,15 @@ class ProximalProjection(ObjectiveFunction):
             "constraint should be instance of ObjectiveFunction." ""
         )
         for con in constraint.objectives:
-            if not isinstance(
-                con,
-                (
-                    ForceBalance,
-                    RadialForceBalance,
-                    HelicalForceBalance,
-                    CurrentDensity,
-                ),
-            ):
+            if not con._equilibrium:
                 raise ValueError(
                     "ProximalProjection method "
                     + "cannot handle general nonlinear constraint {}.".format(con)
                 )
         self._objective = objective
         self._constraint = constraint
+        solve_options = {} if solve_options is None else solve_options
+        perturb_options = {} if perturb_options is None else perturb_options
         self._objectives = [objective, constraint]
         perturb_options.setdefault("verbose", 0)
         perturb_options.setdefault("include_f", False)
@@ -408,19 +467,17 @@ class ProximalProjection(ObjectiveFunction):
         self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
         if "Rb_lmn" in self._args:
             c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
-            A = c.derivatives["jac"]["R_lmn"](
+            A = c.derivatives["jac_unscaled"]["R_lmn"](
                 *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
             )
-            A = (c.normalization * (A.T / c.weight)).T
             Ainv = np.linalg.pinv(A)
             dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdRb))
         if "Zb_lmn" in self._args:
             c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
-            A = c.derivatives["jac"]["Z_lmn"](
+            A = c.derivatives["jac_unscaled"]["Z_lmn"](
                 *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
             )
-            A = (c.normalization * (A.T / c.weight)).T
             Ainv = np.linalg.pinv(A)
             dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdZb))
@@ -444,9 +501,8 @@ class ProximalProjection(ObjectiveFunction):
 
         self._eq = eq.copy()
         self._linear_constraints = get_fixed_boundary_constraints(
-            iota=not isinstance(self._constraint.objectives[0], CurrentDensity)
-            and self._eq.iota is not None,
-            kinetic=eq.electron_temperature is not None,
+            iota=self._eq.iota is not None,
+            kinetic=self._eq.electron_temperature is not None,
         )
         self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
 
@@ -570,8 +626,8 @@ class ProximalProjection(ObjectiveFunction):
                 con.update_target(self._eq)
         return xopt, xeq
 
-    def compute(self, x):
-        """Compute the objective function.
+    def compute_scaled(self, x):
+        """Compute the objective function and apply weights/normalization.
 
         Parameters
         ----------
@@ -585,7 +641,41 @@ class ProximalProjection(ObjectiveFunction):
 
         """
         xopt, _ = self._update_equilibrium(x, store=False)
-        return self._objective.compute(xopt)
+        return self._objective.compute_scaled(xopt)
+
+    def compute_scaled_error(self, x):
+        """Compute the error between target and objective and apply weights etc.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_scaled_error(xopt)
+
+    def compute_unscaled(self, x):
+        """Compute the raw value of the objective function.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        f : ndarray
+            Objective function value(s).
+
+        """
+        xopt, _ = self._update_equilibrium(x, store=False)
+        return self._objective.compute_unscaled(xopt)
 
     def grad(self, x):
         """Compute gradient of the sum of squares of residuals.
@@ -601,12 +691,27 @@ class ProximalProjection(ObjectiveFunction):
             gradient vector.
 
         """
-        f = jnp.atleast_1d(self.compute(x))
-        J = self.jac(x)
+        f = jnp.atleast_1d(self.compute_scaled_error(x))
+        J = self.jac_scaled(x)
         return f.T @ J
 
-    def jac(self, x):
-        """Compute Jacobian of the vector objective function.
+    def jac_unscaled(self, x):
+        """Compute Jacobian of the vector objective function without weights / bounds.
+
+        Parameters
+        ----------
+        x : ndarray
+            State vector.
+
+        Returns
+        -------
+        J : ndarray
+            Jacobian matrix.
+        """
+        raise NotImplementedError("Unscaled jacobian of proximal projection is hard.")
+
+    def jac_scaled(self, x):
+        """Compute Jacobian of the vector objective function with weights / bounds.
 
         Parameters
         ----------
@@ -622,8 +727,8 @@ class ProximalProjection(ObjectiveFunction):
         xg, xf = self._update_equilibrium(x, store=True)
 
         # Jacobian matrices wrt combined state vectors
-        Fx = self._constraint.jac(xf)
-        Gx = self._objective.jac(xg)
+        Fx = self._constraint.jac_scaled(xf)
+        Gx = self._objective.jac_scaled(xg)
         Fx = align_jacobian(Fx, self._constraint, self._objective)
         Gx = align_jacobian(Gx, self._objective, self._constraint)
 
@@ -669,5 +774,20 @@ class ProximalProjection(ObjectiveFunction):
             Hessian matrix.
 
         """
-        J = self.jac(x)
+        J = self.jac_scaled(x)
         return J.T @ J
+
+    @property
+    def target_scaled(self):
+        """ndarray: target vector."""
+        return self._objective.target_scaled
+
+    @property
+    def bounds_scaled(self):
+        """tuple: lower and upper bounds for residual vector."""
+        return self._objective.bounds_scaled
+
+    @property
+    def weights(self):
+        """ndarray: weight vector."""
+        return self._objective.weights

@@ -5,11 +5,9 @@ import warnings
 import numpy as np
 
 from desc.backend import jnp
-from desc.basis import DoubleFourierSeries
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid
-from desc.interpolate import interp1d
 from desc.utils import Timer
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -720,7 +718,6 @@ class Omnigenity(_Objective):
             warnings.warn("Re-build objective after changing the helicity!")
         self._helicity = helicity
         if hasattr(self, "_print_value_fmt"):
-            units = "(T)"
             self._print_value_fmt = (
                 "Omnigenity ({},{}) error: ".format(self.helicity[0], self.helicity[1])
                 + "{:10.3e} "

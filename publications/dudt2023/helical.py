@@ -1,8 +1,7 @@
 """Omnigenity with helical contours."""
 
-from desc import set_device
-
-set_device("gpu")
+# from desc import set_device
+# set_device("gpu")
 
 import numpy as np
 from qsc import Qsc

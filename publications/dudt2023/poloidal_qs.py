@@ -1,8 +1,7 @@
 """Quasi-symmetry with poloidal contours."""
 
-from desc import set_device
-
-set_device("gpu")
+# from desc import set_device
+# set_device("gpu")
 
 import numpy as np
 from qic import Qic

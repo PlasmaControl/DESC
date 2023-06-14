@@ -13,6 +13,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+from .utils import jax_softmin
 
 
 class AspectRatio(_Objective):
@@ -396,6 +397,18 @@ class PlasmaVesselDistance(_Objective):
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
 
+    NOTE: for best results, use this objective in combination with either MeanCurvature
+    or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
+    points on surface corresponding to the grid that the plasma-vessel distance
+    is evaluated at, which can cause cusps or regions of very large curvature.
+
+    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    at least >1, otherwise the softmin will return inaccurate approximations
+    of the minimum. Will automatically multiply array values by 2 / min_val if the min
+    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmin, which can cause inaccurate mins or even incorrect
+    signs of the softmin versus the actual min.
+
     Parameters
     ----------
     surface : Surface
@@ -421,6 +434,13 @@ class PlasmaVesselDistance(_Objective):
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
+    use_softmin: Bool, use softmin or hard min.
+    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
+        if alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
+        than this minimum value will make the softmin a more accurate approximation
+        of the true min.
     name : str
         Name of the objective function.
     """
@@ -441,6 +461,8 @@ class PlasmaVesselDistance(_Objective):
         normalize_target=True,
         surface_grid=None,
         plasma_grid=None,
+        use_softmin=False,
+        alpha=1.0,
         name="plasma vessel distance",
     ):
         if target is None and bounds is None:
@@ -448,6 +470,8 @@ class PlasmaVesselDistance(_Objective):
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
+        self._use_softmin = use_softmin
+        self._alpha = alpha
         super().__init__(
             eq=eq,
             target=target,
@@ -457,6 +481,30 @@ class PlasmaVesselDistance(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -548,7 +596,10 @@ class PlasmaVesselDistance(_Objective):
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
-        return d.min(axis=0)
+        if self._use_softmin:  # do softmin
+            return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+        else:  # do hardmin
+            return d.min(axis=0)
 
 
 class MeanCurvature(_Objective):

@@ -103,7 +103,7 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
     for name in names:
         if name in data:
             continue
-        if has_dependencies(name, params, transforms, profiles, data):
+        if _has_data(name, data):
             data = data_index[name]["fun"](params, transforms, profiles, data, **kwargs)
         else:
             data = _compute(

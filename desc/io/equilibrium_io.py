@@ -8,6 +8,7 @@ import types
 from abc import ABC, ABCMeta
 
 import h5py
+import numpy as np
 from termcolor import colored
 
 from desc.backend import register_pytree_node
@@ -15,10 +16,6 @@ from desc.utils import equals
 
 from .hdf5_io import hdf5Reader, hdf5Writer
 from .pickle_io import PickleReader, PickleWriter
-
-# strings and functions can't be args to jitted functions, and ints/bools are pretty
-# much always flags or array sizes which also need to be a compile time constant
-UNJITABLE = (str, types.FunctionType, bool, int)
 
 
 def load(load_from, file_format=None):
@@ -77,6 +74,16 @@ def load(load_from, file_format=None):
     return obj
 
 
+def _unjittable(x):
+    # strings and functions can't be args to jitted functions, and ints/bools are pretty
+    # much always flags or array sizes which also need to be a compile time constant
+    if isinstance(x, (list, tuple)):
+        return any([_unjittable(y) for y in x])
+    if isinstance(x, dict):
+        return any([_unjittable(y) for y in x.values()])
+    return isinstance(x, (str, types.FunctionType, bool, int, np.int_))
+
+
 # this gets used as a metaclass, to ensure that all of the subclasses that
 # inherit from IOAble get properly registered with JAX.
 # subclasses can define their own tree_flatten and tree_unflatten methods to override
@@ -90,16 +97,10 @@ class _AutoRegisterPytree(type):
                 return obj.tree_flatten()
 
             children = {
-                key: val
-                for key, val in obj.__dict__.items()
-                if not isinstance(val, UNJITABLE)
+                key: val for key, val in obj.__dict__.items() if not _unjittable(val)
             }
             aux_data = tuple(
-                [
-                    (key, val)
-                    for key, val in obj.__dict__.items()
-                    if isinstance(val, UNJITABLE)
-                ]
+                [(key, val) for key, val in obj.__dict__.items() if _unjittable(val)]
             )
             return ((children,), aux_data)
 

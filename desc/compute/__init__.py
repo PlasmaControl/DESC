@@ -51,7 +51,7 @@ from .utils import (
 )
 
 
-# rather than having to recursively compute the full dependencies every time we
+# Rather than having to recursively compute the full dependencies every time we
 # compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
 def _build_data_index():
@@ -66,8 +66,12 @@ def _build_data_index():
 
         full_with_axis_data = get_data_deps(key, True)
         if len(full["data"]) >= len(full_with_axis_data):
-            # Then this quantity lacks dependencies that would only be required
-            # to evaluate this quantity's limit at the magnetic axis.
+            # It is possible for some quantity and all its dependencies to
+            # not depend on anything extra to evaluate its limit at the magnetic
+            # axis (e.g. the quantity rho). In this case,
+            # data_index[key]["full_dependencies"] will be identical to
+            # data_index[key]["full_with_axis_dependencies"],
+            # so we assign the same reference to avoid storing a copy.
             full_with_axis = full
         else:
             full_with_axis = {
@@ -77,10 +81,9 @@ def _build_data_index():
                 "profiles": get_profiles(key, True),
             }
             for _key, val in full_with_axis.items():
-                if _key == "transforms":
-                    continue
-                if len(full[_key]) >= len(val):
-                    # one is a deep copy of the other; dereference to save memory
+                if full[_key] == val:
+                    # Nothing extra was needed to evaluate this quantity's limit.
+                    # One is a copy of the other; dereference to save memory.
                     full_with_axis[_key] = full[_key]
         data_index[key]["full_with_axis_dependencies"] = full_with_axis
 

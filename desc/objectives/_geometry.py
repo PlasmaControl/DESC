@@ -486,7 +486,6 @@ class PlasmaVesselDistance(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
-        # Todo: review this please
         self._args = get_params(
             self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
         )
@@ -499,14 +498,12 @@ class PlasmaVesselDistance(_Objective):
         self._surface_coords = self._surface.compute_coordinates(
             grid=surface_grid, basis="xyz"
         )
-        # Todo: review this please
         self._profiles = get_profiles(
             self._data_keys,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,
             eq=eq,
             grid=plasma_grid,
         )
-        # Todo: review this please
         self._transforms = get_transforms(
             self._data_keys,
             has_axis=plasma_grid.axis.size or surface_grid.axis.size,

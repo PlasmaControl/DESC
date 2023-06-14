@@ -1135,6 +1135,8 @@ class _Configuration(IOAble, ABC):
                 NFP=self.NFP,
                 sym=self.sym,
             )
+            # Todo: Pass in data0d as a seed once there are 1d quantities that
+            #  depend on 0d quantities in data_index.
             data1d = compute_fun(
                 dep1d,
                 params=params,
@@ -1142,7 +1144,7 @@ class _Configuration(IOAble, ABC):
                     dep1d, grid1d.axis.size, eq=self, grid=grid1d, **kwargs
                 ),
                 profiles=get_profiles(dep1d, grid1d.axis.size, eq=self, grid=grid1d),
-                data=None,  # Todo: pass in data0d?
+                data=None,
                 **kwargs,
             )
             # need to make this data broadcastable with the data on the original grid

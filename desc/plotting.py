@@ -2306,7 +2306,6 @@ def plot_boozer_surface(
     N_booz = kwargs.pop("N_booz", 2 * eq.N)
     title_font_size = kwargs.pop("title_font_size", None)
 
-    # Todo: review this please
     transforms_compute = get_transforms(
         "|B|_mn",
         has_axis=grid_compute.axis.size,

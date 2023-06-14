@@ -53,7 +53,8 @@ class TestAxisLimits:
                 b_mag_fsa_no_sqrt_g[0], expected_at_axis, atol=epsilon
             )
 
-        test(get("W7-X"), 2.708108)
+        value_computed_close_to_axis = 2.708108
+        test(get("W7-X"), value_computed_close_to_axis)
 
     @pytest.mark.unit
     @pytest.mark.solve
@@ -73,5 +74,7 @@ class TestAxisLimits:
             np.testing.assert_allclose(iota[0], expected_at_axis, atol=epsilon)
 
         eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        test(eq, -0.994167)
-        test(get("QAS"), -0.360675)
+        value_computed_close_to_axis = -0.994167
+        test(eq, value_computed_close_to_axis)
+        value_computed_close_to_axis = -0.360675
+        test(get("QAS"), value_computed_close_to_axis)

@@ -194,7 +194,7 @@ def get_derivs(keys, has_axis=False):
                 return data_index[key]["full_with_axis_dependencies"]["transforms"]
         elif "full_dependencies" in data_index[key]:
             return data_index[key]["full_dependencies"]["transforms"]
-        deps = [key] + get_data_deps(key, has_axis)
+        deps = [key] + get_data_deps(key, has_axis=has_axis)
         derivs = {}
         for dep in deps:
             for key, val in data_index[dep]["dependencies"]["transforms"].items():

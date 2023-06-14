@@ -586,7 +586,6 @@ class Omnigenity(_Objective):
         well_weight=1,
         name="omnigenity",
     ):
-
         assert len(helicity) == 2
         assert (int(helicity[0]) == helicity[0]) and (int(helicity[1]) == helicity[1])
         self._grid = grid
@@ -651,7 +650,9 @@ class Omnigenity(_Objective):
             timer.disp("Precomputing transforms")
 
         if self._normalize:
-            self._normalization = jnp.mean(eq.well_l[:eq.M_well])  # average |B| on axis
+            self._normalization = jnp.mean(
+                eq.well_l[: eq.M_well]
+            )  # average |B| on axis
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
@@ -721,9 +722,7 @@ class Omnigenity(_Objective):
         if hasattr(self, "_print_value_fmt"):
             units = "(T)"
             self._print_value_fmt = (
-                "Omnigenity ({},{}) error: ".format(
-                    self.helicity[0], self.helicity[1]
-                )
+                "Omnigenity ({},{}) error: ".format(self.helicity[0], self.helicity[1])
                 + "{:10.3e} "
             )
 

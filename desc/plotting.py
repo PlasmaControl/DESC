@@ -2307,18 +2307,10 @@ def plot_boozer_surface(
     title_font_size = kwargs.pop("title_font_size", None)
 
     transforms_compute = get_transforms(
-        "|B|_mn",
-        eq=eq,
-        grid=grid_compute,
-        M_booz=M_booz,
-        N_booz=N_booz,
+        "|B|_mn", eq=eq, grid=grid_compute, M_booz=M_booz, N_booz=N_booz
     )
     transforms_plot = get_transforms(
-        "|B|_mn",
-        eq=eq,
-        grid=grid_plot,
-        M_booz=M_booz,
-        N_booz=N_booz,
+        "|B|_mn", eq=eq, grid=grid_plot, M_booz=M_booz, N_booz=N_booz
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

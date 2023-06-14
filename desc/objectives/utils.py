@@ -315,7 +315,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = jnp.matmul(Z.T, (x - xp)[unfixed_idx])
+        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):

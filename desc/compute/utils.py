@@ -128,7 +128,7 @@ def _compute(names, params, transforms, profiles, data=None, **kwargs):
     return data
 
 
-def get_data_deps(keys, has_axis):
+def get_data_deps(keys, has_axis=False):
     """Get list of data keys needed to compute a given quantity.
 
     Parameters
@@ -170,7 +170,7 @@ def get_data_deps(keys, has_axis):
     return sorted(list(set(out)))
 
 
-def get_derivs(keys, has_axis):
+def get_derivs(keys, has_axis=False):
     """Get dict of derivative orders needed to compute a given quantity.
 
     Parameters
@@ -213,19 +213,19 @@ def get_derivs(keys, has_axis):
     return {key: np.unique(val, axis=0).tolist() for key, val in derivs.items()}
 
 
-def get_profiles(keys, has_axis, eq=None, grid=None, **kwargs):
+def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
     """Get profiles needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index.
-    has_axis : bool
-        Whether the grid to compute on has a node on the magnetic axis.
     eq : Equilibrium
         Equilibrium to compute quantity for.
     grid : Grid
         Grid to compute quantity on.
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
@@ -237,7 +237,7 @@ def get_profiles(keys, has_axis, eq=None, grid=None, **kwargs):
     """
     keys = [keys] if isinstance(keys, str) else keys
     has_axis = has_axis or (grid is not None and grid.axis.size)
-    deps = list(keys) + get_data_deps(keys, has_axis)
+    deps = list(keys) + get_data_deps(keys, has_axis=has_axis)
     profs = []
     for key in deps:
         profs += data_index[key]["dependencies"]["profiles"]
@@ -256,17 +256,17 @@ def get_profiles(keys, has_axis, eq=None, grid=None, **kwargs):
     return profiles
 
 
-def get_params(keys, has_axis, eq=None, **kwargs):
+def get_params(keys, eq=None, has_axis=False, **kwargs):
     """Get parameters needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    has_axis : bool
-        Whether the grid to compute on has a node on the magnetic axis.
     eq : Equilibrium
         Equilibrium to compute quantity for.
+    has_axis : bool
+        Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
@@ -276,7 +276,7 @@ def get_params(keys, has_axis, eq=None, **kwargs):
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
     """
     keys = [keys] if isinstance(keys, str) else keys
-    deps = list(keys) + get_data_deps(keys, has_axis)
+    deps = list(keys) + get_data_deps(keys, has_axis=has_axis)
     params = []
     for key in deps:
         params += data_index[key]["dependencies"]["params"]
@@ -287,15 +287,13 @@ def get_params(keys, has_axis, eq=None, **kwargs):
     return params
 
 
-def get_transforms(keys, has_axis, eq, grid, **kwargs):
+def get_transforms(keys, eq, grid, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    has_axis : bool
-        Whether the grid to compute on has a node on the magnetic axis.
     eq : Equilibrium
         Equilibrium to compute quantity for.
     grid : Grid
@@ -312,8 +310,7 @@ def get_transforms(keys, has_axis, eq, grid, **kwargs):
     from desc.transform import Transform
 
     keys = [keys] if isinstance(keys, str) else keys
-    has_axis = has_axis or grid.axis.size
-    derivs = get_derivs(keys, has_axis)
+    derivs = get_derivs(keys, has_axis=grid.axis.size)
     transforms = {"grid": grid}
     for c in ["R", "L", "Z"]:
         if c in derivs:

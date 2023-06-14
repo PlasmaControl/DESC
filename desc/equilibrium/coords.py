@@ -317,7 +317,7 @@ def compute_flux_coords(
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-    Does so by checking coordianate Jacobian (sqrt(g)) sign.
+    Does so by checking coordinate Jacobian (sqrt(g)) sign.
     If coordinate Jacobian switches sign somewhere in the volume, this
     indicates that it is zero at some point, meaning surfaces are touching and
     the equilibrium is not nested.
@@ -352,7 +352,7 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)_PEST", grid.axis.size, eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
     data = compute_fun(
         "sqrt(g)_PEST",
         params={

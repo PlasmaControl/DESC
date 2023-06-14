@@ -146,11 +146,9 @@ class ObjectiveFromUser(_Objective):
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._args = get_params(self._data_keys, grid.axis.size)
-        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
-        self._transforms = get_transforms(
-            self._data_keys, grid.axis.size, eq=eq, grid=grid
-        )
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -266,9 +264,9 @@ class GenericObjective(_Objective):
         else:
             self._dim_f = grid.num_nodes * data_index[self.f]["dim"]
             self._scalar = False
-        self._args = get_params(self.f, grid.axis.size)
-        self._profiles = get_profiles(self.f, grid.axis.size, eq=eq, grid=grid)
-        self._transforms = get_transforms(self.f, grid.axis.size, eq=eq, grid=grid)
+        self._args = get_params(self.f, has_axis=grid.axis.size)
+        self._profiles = get_profiles(self.f, eq=eq, grid=grid)
+        self._transforms = get_transforms(self.f, eq=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -386,17 +384,15 @@ class ToroidalCurrent(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["current"]
-        self._args = get_params(self._data_keys, grid.axis.size)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
-        self._transforms = get_transforms(
-            self._data_keys, grid.axis.size, eq=eq, grid=grid
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -565,17 +561,15 @@ class RotationalTransform(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["iota"]
-        self._args = get_params(self._data_keys, grid.axis.size)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, grid.axis.size, eq=eq, grid=grid)
-        self._transforms = get_transforms(
-            self._data_keys, grid.axis.size, eq=eq, grid=grid
-        )
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:

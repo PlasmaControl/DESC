@@ -57,14 +57,14 @@ from .utils import (
 def _build_data_index():
     for key in data_index.keys():
         full = {
-            "data": get_data_deps(key, False),
-            "transforms": get_derivs(key, False),
-            "params": get_params(key, False),
-            "profiles": get_profiles(key, False),
+            "data": get_data_deps(key, has_axis=False),
+            "transforms": get_derivs(key, has_axis=False),
+            "params": get_params(key, has_axis=False),
+            "profiles": get_profiles(key, has_axis=False),
         }
         data_index[key]["full_dependencies"] = full
 
-        full_with_axis_data = get_data_deps(key, True)
+        full_with_axis_data = get_data_deps(key, has_axis=True)
         if len(full["data"]) >= len(full_with_axis_data):
             # Then this quantity and all its dependencies do not need anything
             # extra to evaluate its limit at the magnetic axis.
@@ -75,9 +75,9 @@ def _build_data_index():
         else:
             full_with_axis = {
                 "data": full_with_axis_data,
-                "transforms": get_derivs(key, True),
-                "params": get_params(key, True),
-                "profiles": get_profiles(key, True),
+                "transforms": get_derivs(key, has_axis=True),
+                "params": get_params(key, has_axis=True),
+                "profiles": get_profiles(key, has_axis=True),
             }
             for _key, val in full_with_axis.items():
                 if full[_key] == val:

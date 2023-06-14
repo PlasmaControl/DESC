@@ -1094,13 +1094,11 @@ class _Configuration(IOAble, ABC):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
         if params is None:
-            params = get_params(names, grid.axis.size, eq=self)
+            params = get_params(names, eq=self, has_axis=grid.axis.size)
         if profiles is None:
-            profiles = get_profiles(names, grid.axis.size, eq=self, grid=grid)
+            profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
-            transforms = get_transforms(
-                names, grid.axis.size, eq=self, grid=grid, **kwargs
-            )
+            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
         if data is None:
             data = {}
 
@@ -1116,10 +1114,8 @@ class _Configuration(IOAble, ABC):
             data0d = compute_fun(
                 dep0d,
                 params=params,
-                transforms=get_transforms(
-                    dep0d, grid0d.axis.size, eq=self, grid=grid0d, **kwargs
-                ),
-                profiles=get_profiles(dep0d, grid0d.axis.size, eq=self, grid=grid0d),
+                transforms=get_transforms(dep0d, eq=self, grid=grid0d, **kwargs),
+                profiles=get_profiles(dep0d, eq=self, grid=grid0d),
                 data=None,
                 **kwargs,
             )
@@ -1140,10 +1136,8 @@ class _Configuration(IOAble, ABC):
             data1d = compute_fun(
                 dep1d,
                 params=params,
-                transforms=get_transforms(
-                    dep1d, grid1d.axis.size, eq=self, grid=grid1d, **kwargs
-                ),
-                profiles=get_profiles(dep1d, grid1d.axis.size, eq=self, grid=grid1d),
+                transforms=get_transforms(dep1d, eq=self, grid=grid1d, **kwargs),
+                profiles=get_profiles(dep1d, eq=self, grid=grid1d),
                 data=None,
                 **kwargs,
             )

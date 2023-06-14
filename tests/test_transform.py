@@ -559,7 +559,7 @@ class TestTransform:
             axis=False,
             node_pattern=eq.node_pattern,
         )
-        tr = get_transforms(data_keys, grid.axis.size, eq, grid)
+        tr = get_transforms(data_keys, eq, grid)
         f = np.ones(grid.num_nodes)
 
         assert tr["Z"].matrices["direct1"][0][0][0].shape == (

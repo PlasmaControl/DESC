@@ -127,18 +127,8 @@ A full example objective with comments describing key points is given below:
             # helper functions for building transforms etc to compute given
             # quantities. Alternatively, these can be created manually based on the
             # equilibrium, though in most cases that isn't necessary.
-            self._profiles = get_profiles(
-                self._data_keys,
-                has_axis=self.grid.axis.size,
-                eq=eq,
-                grid=self.grid,
-            )
-            self._transforms = get_transforms(
-                self._data_keys,
-                has_axis=self.grid.axis.size,
-                eq=eq,
-                grid=self.grid,
-            )
+            self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
+            self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
             timer.stop("Precomputing transforms")
             if verbose > 1:

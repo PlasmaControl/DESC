@@ -6,7 +6,7 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.backend import fori_loop, jnp, put
+from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
@@ -453,17 +453,15 @@ def _get_grid_surface(grid, surface_label):
         unique_size = grid.num_theta
         inverse_idx = grid.inverse_theta_idx
         spacing = grid.spacing[:, [0, 2]]
-        has_endpoint_dupe = (
-            grid.nodes[grid.unique_theta_idx[0], 1] == 0
-            and grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
+        has_endpoint_dupe = (grid.nodes[grid.unique_theta_idx[0], 1] == 0) & (
+            grid.nodes[grid.unique_theta_idx[-1], 1] == 2 * np.pi
         )
     else:
         unique_size = grid.num_zeta
         inverse_idx = grid.inverse_zeta_idx
         spacing = grid.spacing[:, :2]
-        has_endpoint_dupe = (
-            grid.nodes[grid.unique_zeta_idx[0], 2] == 0
-            and grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
+        has_endpoint_dupe = (grid.nodes[grid.unique_zeta_idx[0], 2] == 0) & (
+            grid.nodes[grid.unique_zeta_idx[-1], 2] == 2 * np.pi / grid.NFP
         )
     return unique_size, inverse_idx, spacing, has_endpoint_dupe
 
@@ -791,26 +789,30 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # ith surface. The integral over the ith surface is the dot product of the
     # ith row vector and the vector of integrands of all surfaces.
     masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]
-    if has_endpoint_dupe:
-        masks = put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1])
-        # Imagine a torus cross-section at zeta=π.
-        # A grid with a duplicate zeta=π node has 2 of those cross-sections.
-        #     In grid.py, we multiply by 1/n the areas of surfaces with
-        # duplicity n. This prevents the area of that surface from being
-        # double-counted, as surfaces with the same node value are combined
-        # into 1 integral, which sums their areas. Thus, if the zeta=π
-        # cross-section has duplicity 2, we ensure that the area on the zeta=π
-        # surface will have the correct total area of π+π = 2π.
-        #     An edge case exists if the duplicate surface has nodes with
-        # different values for the surface label, which only occurs when
-        # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
-        # has a duplicate surface at surface_label=0 and
-        # surface_label=max surface value. Although the modulo of these values
-        # are equal, their numeric values are not, so the integration
-        # would treat them as different surfaces. We solve this issue by
-        # combining the indices corresponding to the integrands of the duplicated
-        # surface, so that the duplicate surface is treated as one, like in the
-        # previous paragraph.
+    # Imagine a torus cross-section at zeta=π.
+    # A grid with a duplicate zeta=π node has 2 of those cross-sections.
+    #     In grid.py, we multiply by 1/n the areas of surfaces with
+    # duplicity n. This prevents the area of that surface from being
+    # double-counted, as surfaces with the same node value are combined
+    # into 1 integral, which sums their areas. Thus, if the zeta=π
+    # cross-section has duplicity 2, we ensure that the area on the zeta=π
+    # surface will have the correct total area of π+π = 2π.
+    #     An edge case exists if the duplicate surface has nodes with
+    # different values for the surface label, which only occurs when
+    # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
+    # has a duplicate surface at surface_label=0 and
+    # surface_label=max surface value. Although the modulo of these values
+    # are equal, their numeric values are not, so the integration
+    # would treat them as different surfaces. We solve this issue by
+    # combining the indices corresponding to the integrands of the duplicated
+    # surface, so that the duplicate surface is treated as one, like in the
+    # previous paragraph.
+    masks = cond(
+        has_endpoint_dupe,
+        lambda masks: put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1]),
+        lambda masks: masks,
+        masks,
+    )
     spacing = jnp.prod(spacing, axis=1)
 
     def _surface_integrals(q=jnp.array([1.0])):

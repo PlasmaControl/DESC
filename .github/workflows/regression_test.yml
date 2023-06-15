@@ -57,10 +57,10 @@ jobs:
         with:
           action: codecov/codecov-action@v3
           with: |
-            token: ${{ secrets.CODECOV_TOKEN }} # maybe needed to avoid upload failure?
-            name: codecov-umbrella # optional
+            token: ${{ secrets.CODECOV_TOKEN }}
+            name: codecov-umbrella
             files: ./cov.xml
-            fail_ci_if_error: true # optional (default = false)
-            verbose: true # optional (default = false)
+            fail_ci_if_error: true
+            verbose: true
           attempt_limit: 10
           attempt_delay: 60000 # ms, 1 min

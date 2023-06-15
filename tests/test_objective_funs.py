@@ -210,11 +210,7 @@ class TestObjectiveFunction:
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn",
-            eq=eq,
-            grid=grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
+            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
@@ -268,7 +264,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
-        """Test grid compatability with QS objectives."""
+        """Test grid compatibility with QS objectives."""
         eq = get("QAS")
 
         # symmetric grid
@@ -556,32 +552,10 @@ def test_principal_curvature():
 def test_field_scale_length():
     """Test for B field scale length objective function."""
     surf1 = FourierRZToroidalSurface(
-        R_lmn=[
-            5,
-            1,
-        ],
-        Z_lmn=[
-            -1,
-        ],
-        modes_R=[[0, 0], [1, 0]],
-        modes_Z=[
-            [-1, 0],
-        ],
-        NFP=1,
+        R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
     )
     surf2 = FourierRZToroidalSurface(
-        R_lmn=[
-            10,
-            2,
-        ],
-        Z_lmn=[
-            -2,
-        ],
-        modes_R=[[0, 0], [1, 0]],
-        modes_Z=[
-            [-1, 0],
-        ],
-        NFP=1,
+        R_lmn=[10, 2], Z_lmn=[-2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
     )
     eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
     eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
@@ -599,7 +573,7 @@ def test_field_scale_length():
 
 @pytest.mark.unit
 def test_profile_objective_print(capsys):
-    """Test that the profile objectives prints correctly."""
+    """Test that the profile objectives print correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
@@ -762,7 +736,7 @@ def test_jvp_scaled():
 
 @pytest.mark.unit
 def test_objective_target_bounds():
-    """Test that the target_scaled and bounds_scaled etc return the right things."""
+    """Test that the target_scaled and bounds_scaled etc. return the right things."""
     eq = Equilibrium()
 
     vol = Volume(target=3, normalize=True)

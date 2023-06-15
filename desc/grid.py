@@ -675,7 +675,7 @@ class LinearGrid(Grid):
                 axis=len(self.axis) > 0,
                 endpoint=self.endpoint,
             )
-            self._enforce_symmetry()
+            # symmetry handled in create_nodes()
             self._sort_nodes()
             self._find_axis()
             self._scale_weights()

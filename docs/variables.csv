@@ -383,6 +383,12 @@ Name,Label,Units,Description,Module
 ``iota``,:math:`\iota`,None,Rotational transform (normalized by 2pi),``desc.compute._profiles``
 ``iota_r``,:math:`\partial_{\rho} \iota`,None,"Rotational transform (normalized by 2pi), first radial derivative",``desc.compute._profiles``
 ``iota_rr``,:math:`\partial_{\rho\rho} \iota`,None,"Rotational transform (normalized by 2pi), second radial derivative",``desc.compute._profiles``
+``iota_zero_current_num``,:math:`\iota_{0} numerator`,inverse meters,Zero toroidal current rotational transform numerator,``desc.compute._profiles``
+``iota_zero_current_num_r``,:math:`\partial_{\rho} \iota_{0} numerator`,inverse meters,"Zero toroidal current rotational transform numerator, first radial derivative",``desc.compute._profiles``
+``iota_zero_current_num_rr``,:math:`\partial_{\rho\rho} \iota_{0} numerator`,inverse meters,"Zero toroidal current rotational transform numerator, second radial derivative",``desc.compute._profiles``
+``iota_zero_current_den``,:math:`\iota_{0} denominator`,inverse meters,Zero toroidal current rotational transform denominator,``desc.compute._profiles``
+``iota_zero_current_den_r``,:math:`\partial_{\rho} \iota_{0} denominator`,inverse meters,"Zero toroidal current rotational transform denominator, first radial derivative",``desc.compute._profiles``
+``iota_zero_current_den_rr``,:math:`\partial_{\rho\rho} \iota_{0} denominator`,inverse meters,"Zero toroidal current rotational transform denominator, second radial derivative",``desc.compute._profiles``
 ``q``,:math:`q = 1/\iota`,None,"Safety factor 'q', inverse of rotational transform.",``desc.compute._profiles``
 ``I``,:math:`I`,Tesla * meters,Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current),``desc.compute._profiles``
 ``I_r``,:math:`\partial_{\rho} I`,Tesla * meters,"Covariant poloidal component of magnetic field in Boozer coordinates (proportional to toroidal current), derivative wrt radial coordinate",``desc.compute._profiles``

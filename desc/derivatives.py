@@ -28,7 +28,7 @@ class _Derivative(ABC):
         pass
 
     @abstractmethod
-    def compute(self, *args):
+    def compute(self, *args, **kwargs):
         """Compute the derivative matrix.
 
         Parameters
@@ -69,7 +69,7 @@ class _Derivative(ABC):
         """String : the kind of derivative being computed (eg ``'grad'``)."""
         return self._mode
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         """Compute the derivative matrix.
 
         Parameters
@@ -86,7 +86,7 @@ class _Derivative(ABC):
             will depend on "mode"
 
         """
-        return self.compute(*args)
+        return self.compute(*args, **kwargs)
 
     def __repr__(self):
         """String form of the object."""
@@ -130,7 +130,7 @@ class AutoDiffDerivative(_Derivative):
 
         self._set_mode(mode)
 
-    def compute(self, *args):
+    def compute(self, *args, **kwargs):
         """Compute the derivative matrix.
 
         Parameters
@@ -147,7 +147,7 @@ class AutoDiffDerivative(_Derivative):
             will depend on "mode"
 
         """
-        return self._compute(*args)
+        return self._compute(*args, **kwargs)
 
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args):
@@ -321,7 +321,7 @@ class FiniteDiffDerivative(_Derivative):
         self.rel_step = rel_step
         self._set_mode(mode)
 
-    def _compute_hessian(self, *args):
+    def _compute_hessian(self, *args, **kwargs):
         """Compute the Hessian matrix using 2nd order centered finite differences.
 
         Parameters
@@ -340,7 +340,7 @@ class FiniteDiffDerivative(_Derivative):
 
         def f(x):
             tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
-            return self._fun(*tempargs)
+            return self._fun(*tempargs, **kwargs)
 
         x = np.atleast_1d(args[self._argnum])
         n = len(x)
@@ -364,7 +364,7 @@ class FiniteDiffDerivative(_Derivative):
 
         return hess
 
-    def _compute_grad_or_jac(self, *args):
+    def _compute_grad_or_jac(self, *args, **kwargs):
         """Compute the gradient or Jacobian matrix (ie, first derivative).
 
         Parameters
@@ -383,7 +383,7 @@ class FiniteDiffDerivative(_Derivative):
 
         def f(x):
             tempargs = args[0 : self._argnum] + (x,) + args[self._argnum + 1 :]
-            return self._fun(*tempargs)
+            return self._fun(*tempargs, **kwargs)
 
         x0 = np.atleast_1d(args[self._argnum])
         f0 = f(x0)
@@ -575,7 +575,7 @@ class FiniteDiffDerivative(_Derivative):
         elif self._mode == "jvp":
             self._compute = self._compute_jvp
 
-    def compute(self, *args):
+    def compute(self, *args, **kwargs):
         """Compute the derivative matrix.
 
         Parameters
@@ -592,7 +592,7 @@ class FiniteDiffDerivative(_Derivative):
             will depend on "mode"
 
         """
-        return self._compute(*args)
+        return self._compute(*args, **kwargs)
 
 
 def nested_zeros_like(x):

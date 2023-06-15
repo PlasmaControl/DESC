@@ -12,7 +12,6 @@ from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
-
 plt.rcParams["font.family"] = "DejaVu Sans"
 plt.rcParams["mathtext.fontset"] = "dejavusans"
 plt.rcParams["font.size"] = 14

@@ -38,7 +38,6 @@ class ObjectiveFunction(IOAble):
     def __init__(
         self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
     ):
-
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(
@@ -143,7 +142,7 @@ class ObjectiveFunction(IOAble):
             self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
 
-    def jit(self):
+    def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
         # can't loop here because del doesn't work on getattr
         # main idea is that when jitting a method, jax replaces that method
@@ -152,40 +151,71 @@ class ObjectiveFunction(IOAble):
         # CompiledFunction object, which will then leave the raw method in its place,
         # and then jit the raw method with the new self
 
-        self._compile_mode = "auto"  # make sure this gets set
+        self._use_jit = True
 
-        # doing str name type checking to avoid importing weird jax private stuff
-        # for proper isinstance check
-        if "CompiledFunction" in str(type(self.compute_scaled)):
+        try:
             del self.compute_scaled
+        except AttributeError:
+            pass
         self.compute_scaled = jit(self.compute_scaled)
-        if "CompiledFunction" in str(type(self.compute_scaled_error)):
+
+        try:
             del self.compute_scaled_error
+        except AttributeError:
+            pass
         self.compute_scaled_error = jit(self.compute_scaled_error)
-        if "CompiledFunction" in str(type(self.compute_unscaled)):
+
+        try:
             del self.compute_unscaled
+        except AttributeError:
+            pass
         self.compute_unscaled = jit(self.compute_unscaled)
-        if "CompiledFunction" in str(type(self.compute_scalar)):
+
+        try:
             del self.compute_scalar
+        except AttributeError:
+            pass
         self.compute_scalar = jit(self.compute_scalar)
-        if "CompiledFunction" in str(type(self.jac_scaled)):
+
+        try:
             del self.jac_scaled
+        except AttributeError:
+            pass
         self.jac_scaled = jit(self.jac_scaled)
-        if "CompiledFunction" in str(type(self.jac_unscaled)):
+
+        try:
             del self.jac_unscaled
+        except AttributeError:
+            pass
         self.jac_unscaled = jit(self.jac_unscaled)
-        if "CompiledFunction" in str(type(self.hess)):
+
+        try:
             del self.hess
+        except AttributeError:
+            pass
         self.hess = jit(self.hess)
-        if "CompiledFunction" in str(type(self.grad)):
+
+        try:
             del self.grad
+        except AttributeError:
+            pass
         self.grad = jit(self.grad)
-        if "CompiledFunction" in str(type(self.jvp_scaled)):
+
+        try:
             del self.jvp_scaled
+        except AttributeError:
+            pass
         self.jvp_scaled = jit(self.jvp_scaled)
-        if "CompiledFunction" in str(type(self.jvp_unscaled)):
+
+        try:
             del self.jvp_unscaled
+        except AttributeError:
+            pass
         self.jvp_unscaled = jit(self.jvp_unscaled)
+
+        for obj in self._objectives:
+            if obj._use_jit:
+                obj.jit()
 
     def build(self, eq, use_jit=None, verbose=1):
         """Build the objective.
@@ -660,7 +690,6 @@ class _Objective(IOAble, ABC):
         normalize_target=True,
         name=None,
     ):
-
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
@@ -745,20 +774,32 @@ class _Objective(IOAble, ABC):
 
     def jit(self):
         """Apply JIT to compute methods, or re-apply after updating self."""
-        # doing str name type checking to avoid importing weird jax private stuff
-        # for proper isinstance check
-        if "CompiledFunction" in str(type(self.compute_scaled)):
+        self._use_jit = True
+
+        try:
             del self.compute_scaled
+        except AttributeError:
+            pass
         self.compute_scaled = jit(self.compute_scaled)
-        if "CompiledFunction" in str(type(self.compute_scaled_error)):
+
+        try:
             del self.compute_scaled_error
+        except AttributeError:
+            pass
         self.compute_scaled_error = jit(self.compute_scaled_error)
-        if "CompiledFunction" in str(type(self.compute_unscaled)):
+
+        try:
             del self.compute_unscaled
+        except AttributeError:
+            pass
         self.compute_unscaled = jit(self.compute_unscaled)
-        if "CompiledFunction" in str(type(self.compute_scalar)):
+
+        try:
             del self.compute_scalar
+        except AttributeError:
+            pass
         self.compute_scalar = jit(self.compute_scalar)
+
         del self._derivatives
         self._set_derivatives()
         for mode, val in self._derivatives.items():

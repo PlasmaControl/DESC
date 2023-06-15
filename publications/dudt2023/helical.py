@@ -1,13 +1,10 @@
 """Omnigenity with helical contours."""
 
-# from desc import set_device
-# set_device("gpu")
-
 import numpy as np
 from qsc import Qsc
 
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.grid import LinearGrid, QuadratureGrid
+from desc.grid import LinearGrid
 from desc.objectives import (
     CurrentDensity,
     FixOmni,
@@ -17,7 +14,6 @@ from desc.objectives import (
 )
 from desc.objectives.utils import get_fixed_boundary_constraints, get_NAE_constraints
 from desc.vmec import VMECIO
-
 
 fname = "helical"
 sym = True
@@ -38,14 +34,6 @@ target_mode = [0, 1, 1]
 target_amplitude = -np.pi / 6
 
 assert len(LM) == len(eq_weights)
-
-
-def eq_error(eq):
-    grid = QuadratureGrid(L=32, M=32, N=32, NFP=NFP)
-    data = eq.compute(["<|F|>_vol", "<|grad(|B|^2)|/2mu0>_vol"], grid=grid)
-    return data["<|F|>_vol"] / data["<|grad(|B|^2)|/2mu0>_vol"]
-
-
 fam = EquilibriaFamily()
 
 # initial NAE solution
@@ -100,7 +88,6 @@ omni_lmn[idx] = target_amplitude
 eq._omni_lmn = omni_lmn
 fam.append(eq)
 fam.save(fname + ".h5")
-print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # re-solve with NAE constraints
 constraints = get_NAE_constraints(eq, qsc, order=1)
@@ -116,7 +103,6 @@ eq, result = eq.solve(
 )
 fam.append(eq)
 fam.save(fname + ".h5")
-print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # optimize with increasing resolution
 for i in range(len(LM)):
@@ -158,7 +144,6 @@ for i in range(len(LM)):
     )
     fam.append(eq)
     fam.save(fname + ".h5")
-    print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # re-solve with fixed boundary constraints
 constraints = get_fixed_boundary_constraints(iota=False)
@@ -174,7 +159,6 @@ eq, result = eq.solve(
 )
 fam.append(eq)
 fam.save(fname + ".h5")
-print("equlibrium error: {:.2e}".format(eq_error(eq)))
 
 # save wout file
 VMECIO.save(eq, "wout_" + fname + ".nc", surfs=256)

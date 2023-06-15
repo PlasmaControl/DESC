@@ -188,17 +188,15 @@ def j_dot_B_Redl(
 
     # Redl eq (14):
     X32e = f_t / (
-        (
-            1
-            + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
-            + 0.13
-            * (1 - 0.38 * f_t)
-            * nu_e
-            / (Zeff * Zeff)
-            * (
-                jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
-                + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
-            )
+        1
+        + 0.23 * (1 - 0.96 * f_t) * jnp.sqrt(nu_e) / jnp.sqrt(Zeff)
+        + 0.13
+        * (1 - 0.38 * f_t)
+        * nu_e
+        / (Zeff * Zeff)
+        * (
+            jnp.sqrt(1 + 2 * jnp.sqrt(Zeff - 1))
+            + f_t * f_t * jnp.sqrt((0.075 + 0.25 * (Zeff - 1) ** 2) * nu_e)
         )
     )
 
@@ -279,8 +277,6 @@ def j_dot_B_Redl(
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
-    nu_e_star = nu_e
-    nu_i_star = nu_i
     variables = [
         "rho",
         "ne",

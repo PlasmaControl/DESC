@@ -20,7 +20,7 @@ Minor changes
 Bug Fixes
 - Fixed minor bug with symmetric grids that caused end points to be double counted
 - Fixed bug causing `NFP` of curves to not be updated correctly when the equilibrium changed
-- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid 
+- Fixed issue when converting `pyQIC` solutions to `DESC` equilibria related to offset toroidal grid
 
 
 v0.8.1
@@ -34,7 +34,7 @@ Minor Changes
 Bug Fixes
 * Fix read-the-docs build error
 * Add missing classes to API docs
-* fix error in fix axis util function 
+* fix error in fix axis util function
 * Add missing attributes to new classes added in `v0.8.0`
 
 
@@ -68,7 +68,7 @@ v0.7.2
 [Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.7.1...v0.7.2)
 
 What's Changed
-* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as 
+* Fix bug in QS Boozer metric where non-symmetric modes were sometimes counted as
 symmetric due to different Fourier series conventions.
 * Improve speed of functions for converting between VMEC and DESC Fourier representations.
 * Add objectives for penalizing strong shaping.
@@ -132,7 +132,7 @@ Major Changes
 - All objectives now have a `normalize` argument that when true will nondimensionalize
 the physics value and scale to be approximately ~O(1) in magnitude. This should make it
 easier to tune weights when doing multiobjective optimization.
-- New objective `RotationalTransform` for targeting a particular iota profile in real 
+- New objective `RotationalTransform` for targeting a particular iota profile in real
 space.
 - New function `plot_boundaries` to plot comparisons between boundary shapes.
 
@@ -142,7 +142,7 @@ version is still `0.2.11` but this will likely change in the future.
 
 Bug fixes
 - Fix indexing bug in biot-savart for coils that caused the output to have the wrong shape
-- Fix a bug occasionally preventing the optimizer from restarting correctly after 
+- Fix a bug occasionally preventing the optimizer from restarting correctly after
 trying a bad step
 
 
@@ -165,7 +165,7 @@ Bug Fixes
 - Fix bug preventing ``lsqtr`` from terminating when ``maxiter`` is zero.
 - Fix bug when converting profiles to ``FourierZernikeProfile``.
 - Fix bug where a ``FixBoundary`` constraint with only 1 mode constrained would throw an error during ``objective.build``
- 
+
 
 v0.6.2
 ------

@@ -51,17 +51,40 @@ from .utils import (
 )
 
 
-# rather than having to recursively compute the full dependencies every time we
-# compute something, its easier to just do it once for all quantities when we first
+# Rather than having to recursively compute the full dependencies every time we
+# compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
 def _build_data_index():
     for key in data_index.keys():
-        full = {}
-        full["data"] = get_data_deps(key)
-        full["transforms"] = get_derivs(key)
-        full["params"] = get_params(key)
-        full["profiles"] = get_profiles(key)
+        full = {
+            "data": get_data_deps(key, has_axis=False),
+            "transforms": get_derivs(key, has_axis=False),
+            "params": get_params(key, has_axis=False),
+            "profiles": get_profiles(key, has_axis=False),
+        }
         data_index[key]["full_dependencies"] = full
+
+        full_with_axis_data = get_data_deps(key, has_axis=True)
+        if len(full["data"]) >= len(full_with_axis_data):
+            # Then this quantity and all its dependencies do not need anything
+            # extra to evaluate its limit at the magnetic axis.
+            # The dependencies in the `full` dictionary and the `full_with_axis`
+            # dictionary will be identical, so we assign the same reference to
+            # avoid storing a copy.
+            full_with_axis = full
+        else:
+            full_with_axis = {
+                "data": full_with_axis_data,
+                "transforms": get_derivs(key, has_axis=True),
+                "params": get_params(key, has_axis=True),
+                "profiles": get_profiles(key, has_axis=True),
+            }
+            for _key, val in full_with_axis.items():
+                if full[_key] == val:
+                    # Nothing extra was needed to evaluate this quantity's limit.
+                    # One is a copy of the other; dereference to save memory.
+                    full_with_axis[_key] = full[_key]
+        data_index[key]["full_with_axis_dependencies"] = full_with_axis
 
 
 _build_data_index()

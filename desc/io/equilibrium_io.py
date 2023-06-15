@@ -81,7 +81,23 @@ def _unjittable(x):
         return any([_unjittable(y) for y in x])
     if isinstance(x, dict):
         return any([_unjittable(y) for y in x.values()])
+    if hasattr(x, "dtype"):
+        return x.dtype in (bool, int, np.int_)
     return isinstance(x, (str, types.FunctionType, bool, int, np.int_))
+
+
+def _make_hashable(x):
+    # turn unhashable ndarray of ints nto a hashable tuple
+    if hasattr(x, "shape"):
+        return ("ndarray", x.shape, tuple(x.flatten()))
+    return x
+
+
+def _unmake_hashable(x):
+    # turn tuple of ints and shape to ndarray
+    if isinstance(x, tuple) and x[0] == "ndarray":
+        return np.array(x[2]).reshape(x[1])
+    return x
 
 
 # this gets used as a metaclass, to ensure that all of the subclasses that
@@ -100,7 +116,11 @@ class _AutoRegisterPytree(type):
                 key: val for key, val in obj.__dict__.items() if not _unjittable(val)
             }
             aux_data = tuple(
-                [(key, val) for key, val in obj.__dict__.items() if _unjittable(val)]
+                [
+                    (key, _make_hashable(val))
+                    for key, val in obj.__dict__.items()
+                    if _unjittable(val)
+                ]
             )
             return ((children,), aux_data)
 
@@ -113,7 +133,7 @@ class _AutoRegisterPytree(type):
             obj = cls.__new__(cls)
             obj.__dict__.update(children[0])
             for kv in aux_data:
-                setattr(obj, kv[0], kv[1])
+                setattr(obj, kv[0], _unmake_hashable(kv[1]))
             return obj
 
         register_pytree_node(cls, _generic_tree_flatten, _generic_tree_unflatten)

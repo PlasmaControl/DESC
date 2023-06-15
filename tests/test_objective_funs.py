@@ -39,6 +39,7 @@ from desc.objectives import (
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
+from desc.objectives.utils import jax_softmax, jax_softmin
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -209,11 +210,7 @@ class TestObjectiveFunction:
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn",
-            eq=eq,
-            grid=grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
+            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
@@ -267,7 +264,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
-        """Test grid compatability with QS objectives."""
+        """Test grid compatibility with QS objectives."""
         eq = get("QAS")
 
         # symmetric grid
@@ -495,6 +492,31 @@ def test_plasma_vessel_distance():
     with pytest.warns(UserWarning):
         obj.build(eq)
 
+    # test softmin, should give value less than true minimum
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    assert np.all(np.abs(d) < a_s - a_p)
+
+    # for large enough alpha, should be same as actual min
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+        alpha=100,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
 
 @pytest.mark.unit
 def test_mean_curvature():
@@ -530,32 +552,10 @@ def test_principal_curvature():
 def test_field_scale_length():
     """Test for B field scale length objective function."""
     surf1 = FourierRZToroidalSurface(
-        R_lmn=[
-            5,
-            1,
-        ],
-        Z_lmn=[
-            -1,
-        ],
-        modes_R=[[0, 0], [1, 0]],
-        modes_Z=[
-            [-1, 0],
-        ],
-        NFP=1,
+        R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
     )
     surf2 = FourierRZToroidalSurface(
-        R_lmn=[
-            10,
-            2,
-        ],
-        Z_lmn=[
-            -2,
-        ],
-        modes_R=[[0, 0], [1, 0]],
-        modes_Z=[
-            [-1, 0],
-        ],
-        NFP=1,
+        R_lmn=[10, 2], Z_lmn=[-2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
     )
     eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
     eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
@@ -572,8 +572,8 @@ def test_field_scale_length():
 
 
 @pytest.mark.unit
-def test_objective_print(capsys):
-    """Test that the profile objectives prints correctly."""
+def test_profile_objective_print(capsys):
+    """Test that the profile objectives print correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
@@ -621,6 +621,59 @@ def test_objective_print(capsys):
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, grid=grid)
     test(obj, curr, normalize=True)
+
+
+@pytest.mark.unit
+def test_plasma_vessel_distance_print(capsys):
+    """Test that the PlasmaVesselDistance objective prints correctly."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    surf_grid = LinearGrid(M=5, N=0)
+    plas_grid = LinearGrid(M=5, N=0)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(d))
+        + obj._units
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(d))
+        + obj._units
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(d))
+        + obj._units
+        + "\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
 
 
 @pytest.mark.unit
@@ -683,7 +736,7 @@ def test_jvp_scaled():
 
 @pytest.mark.unit
 def test_objective_target_bounds():
-    """Test that the target_scaled and bounds_scaled etc return the right things."""
+    """Test that the target_scaled and bounds_scaled etc. return the right things."""
     eq = Equilibrium()
 
     vol = Volume(target=3, normalize=True)
@@ -711,3 +764,28 @@ def test_objective_target_bounds():
     assert weight[0] == 1
     assert weight[1] == 1
     assert np.all(weight[2:] == 5)
+
+
+@pytest.mark.unit
+def test_jax_softmax_and_softmin():
+    """Test softmax and softmin function."""
+    arr = np.arange(-17, 17, 5)
+    # expect this to not be equal to the max but rather be more
+    # since softmax is a conservative estimate of the max
+    softmax = jax_softmax(arr, alpha=1)
+    assert softmax >= np.max(arr)
+
+    # expect this to be equal to the max
+    # as alpha -> infinity, softmax -> max
+    softmax = jax_softmax(arr, alpha=100)
+    np.testing.assert_almost_equal(softmax, np.max(arr))
+
+    # expect this to not be equal to the min but rather be less
+    # since softmin is a conservative estimate of the min
+    softmin = jax_softmin(arr, alpha=1)
+    assert softmin <= np.min(arr)
+
+    # expect this to be equal to the min
+    # as alpha -> infinity, softmin -> min
+    softmin = jax_softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(softmin, np.min(arr))

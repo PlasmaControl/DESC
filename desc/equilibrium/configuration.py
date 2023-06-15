@@ -31,7 +31,13 @@ from desc.io import IOAble
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.utils import copy_coeffs
 
-from .coords import compute_flux_coords, compute_theta_coords, is_nested, to_sfl
+from .coords import (
+    compute_flux_coords,
+    compute_theta_coords,
+    is_nested,
+    map_coordinates,
+    to_sfl,
+)
 from .initial_guess import set_initial_guess
 from .utils import parse_profile
 
@@ -1088,7 +1094,7 @@ class _Configuration(IOAble, ABC):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
         if params is None:
-            params = get_params(names, eq=self)
+            params = get_params(names, eq=self, has_axis=grid.axis.size)
         if profiles is None:
             profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
@@ -1099,7 +1105,7 @@ class _Configuration(IOAble, ABC):
         # To avoid the issue of using the wrong grid for surface and volume averages,
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
-        deps = list(set(get_data_deps(names) + names))
+        deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
         dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
         dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
 
@@ -1125,6 +1131,8 @@ class _Configuration(IOAble, ABC):
                 NFP=self.NFP,
                 sym=self.sym,
             )
+            # Todo: Pass in data0d as a seed once there are 1d quantities that
+            #  depend on 0d quantities in data_index.
             data1d = compute_fun(
                 dep1d,
                 params=params,
@@ -1142,8 +1150,8 @@ class _Configuration(IOAble, ABC):
             data.update(data1d)
 
         # TODO: we can probably reduce the number of deps computed here if some are only
-        # needed as inputs for 0d and 1d qtys, unless the user asks for them
-        # specifically?
+        #   needed as inputs for 0d and 1d qtys, unless the user asks for them
+        #   specifically?
         data = compute_fun(
             names,
             params=params,
@@ -1154,6 +1162,41 @@ class _Configuration(IOAble, ABC):
         )
         return data
 
+    def map_coordinates(
+        self, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6
+    ):
+        """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
+
+        First solves for the computational coordinates that correspond to inbasis, then
+        evaluates outbasis at those locations.
+
+        NOTE: this function cannot currently be JIT compiled or differentiated with AD.
+
+        Parameters
+        ----------
+        coords : ndarray, shape(k,3)
+            2D array of input coordinates. Each row is a different
+            point in space.
+        inbasis, outbasis : tuple of str
+            Labels for input and output coordinates, eg ("R", "phi", "Z") or
+            ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
+            Labels should be the same as the compute function data key.
+        tol : float
+            Stopping tolerance.
+        maxiter : int > 0
+            Maximum number of Newton iterations
+        rhomin : float
+            Minimum allowable value of rho (to avoid singularity at rho=0)
+
+        Returns
+        -------
+        coords : ndarray, shape(k,3)
+            Coordinates in outbasis. If Newton method doesn't converge for
+            a given coordinate nan will be returned for those values
+
+        """
+        return map_coordinates(self, coords, inbasis, outbasis, tol, maxiter, rhomin)
+
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find geometric theta for given straight field line theta.
 
@@ -1161,7 +1204,7 @@ class _Configuration(IOAble, ABC):
         ----------
         flux_coords : ndarray, shape(k,3)
             2d array of flux coordinates [rho,theta*,zeta]. Each row is a different
-            coordinate.
+            point in space.
         L_lmn : ndarray
             spectral coefficients for lambda. Defaults to eq.L_lmn
         tol : float
@@ -1187,7 +1230,7 @@ class _Configuration(IOAble, ABC):
         ----------
         real_coords : ndarray, shape(k,3)
             2D array of real space coordinates [R,phi,Z]. Each row is a different
-            coordinate.
+            point in space.
         R_lmn, Z_lmn : ndarray
             spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
         tol : float
@@ -1209,10 +1252,10 @@ class _Configuration(IOAble, ABC):
             self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
-    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, msg=None):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-        Does so by checking coordianate Jacobian (sqrt(g)) sign.
+        Does so by checking coordinate Jacobian (sqrt(g)) sign.
         If coordinate Jacobian switches sign somewhere in the volume, this
         indicates that it is zero at some point, meaning surfaces are touching and
         the equilibrium is not nested.
@@ -1225,8 +1268,8 @@ class _Configuration(IOAble, ABC):
         grid  :  Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn : ndarray, optional
-            spectral coefficients for R and Z. Defaults to eq.R_lmn, eq.Z_lmn
+        R_lmn, Z_lmn, L_lmn : ndarray, optional
+            spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1236,7 +1279,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
 
     def to_sfl(
         self,

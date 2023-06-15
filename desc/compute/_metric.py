@@ -23,6 +23,26 @@ def _sqrtg(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_PEST",
+    label="\\sqrt{g}_{PEST}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of PEST flux coordinate system",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta_PEST", "e_zeta"],
+)
+def _sqrtg_pest(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_PEST"] = dot(
+        data["e_rho"], cross(data["e_theta_PEST"], data["e_zeta"])
+    )
+    return data
+
+
+@register_compute_fun(
     name="|e_theta x e_zeta|",
     label="|e_{\\theta} \\times e_{\\zeta}|",
     units="m^{2}",

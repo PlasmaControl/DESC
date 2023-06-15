@@ -1,11 +1,18 @@
 """Classes for representing flux coordinates."""
 
 import numpy as np
-from scipy import special
+from scipy import optimize, special
 
 from desc.io import IOAble
 
-__all__ = ["Grid", "LinearGrid", "QuadratureGrid", "ConcentricGrid"]
+__all__ = [
+    "Grid",
+    "LinearGrid",
+    "QuadratureGrid",
+    "ConcentricGrid",
+    "find_least_rational_surfaces",
+    "find_most_rational_surfaces",
+]
 
 
 class Grid(IOAble):
@@ -668,7 +675,7 @@ class LinearGrid(Grid):
                 axis=len(self.axis) > 0,
                 endpoint=self.endpoint,
             )
-            self._enforce_symmetry()
+            # symmetry handled in create_nodes()
             self._sort_nodes()
             self._find_axis()
             self._scale_weights()
@@ -1000,12 +1007,15 @@ class ConcentricGrid(Grid):
             self._scale_weights()
 
 
-# these functions are currently unused ---------------------------------------
+def _round(x, tol):
+    # we do this to avoid some floating point issues with things
+    # that are basically low order rationals to near machine precision
+    if abs(x % 1) < tol or abs((x % 1) - 1) < tol:
+        return round(x)
+    return x
 
-# TODO: finish option for placing nodes at irrational surfaces
 
-
-def dec_to_cf(x, dmax=6):  # pragma: no cover
+def dec_to_cf(x, dmax=20, itol=1e-14):
     """Compute continued fraction form of a number.
 
     Parameters
@@ -1014,7 +1024,9 @@ def dec_to_cf(x, dmax=6):  # pragma: no cover
         floating point form of number
     dmax : int
         maximum iterations (ie, number of coefficients of continued fraction).
-        (Default value = 6)
+        (Default value = 20)
+    itol : float, optional
+        tolerance for rounding float to nearest int
 
     Returns
     -------
@@ -1022,20 +1034,21 @@ def dec_to_cf(x, dmax=6):  # pragma: no cover
         coefficients of continued fraction form of x.
 
     """
+    x = float(_round(x, itol))
     cf = []
-    q = np.floor(x)
+    q = np.floor(x).astype(int)
     cf.append(q)
-    x = x - q
+    x = _round(x - q, itol)
     i = 0
     while x != 0 and i < dmax:
-        q = np.floor(1 / x)
+        q = np.floor(1 / x).astype(int)
         cf.append(q)
-        x = 1 / x - q
+        x = _round(1 / x - q, itol)
         i = i + 1
-    return np.array(cf)
+    return np.array(cf).astype(int)
 
 
-def cf_to_dec(cf):  # pragma: no cover
+def cf_to_dec(cf):
     """Compute decimal form of a continued fraction.
 
     Parameters
@@ -1055,13 +1068,15 @@ def cf_to_dec(cf):  # pragma: no cover
         return cf[0] + 1 / cf_to_dec(cf[1:])
 
 
-def most_rational(a, b):  # pragma: no cover
+def most_rational(a, b, itol=1e-14):
     """Compute the most rational number in the range [a,b].
 
     Parameters
     ----------
     a,b : float
         lower and upper bounds
+    itol : float, optional
+        tolerance for rounding float to nearest int
 
     Returns
     -------
@@ -1069,6 +1084,8 @@ def most_rational(a, b):  # pragma: no cover
         most rational number between [a,b]
 
     """
+    a = float(_round(a, itol))
+    b = float(_round(b, itol))
     # handle empty range
     if a == b:
         return a
@@ -1101,3 +1118,186 @@ def most_rational(a, b):  # pragma: no cover
         if a <= dec <= b:
             return dec * s
         f += 1
+
+
+def n_most_rational(a, b, n, eps=1e-12, itol=1e-14):
+    """Find the n most rational numbers in a given interval.
+
+    Parameters
+    ----------
+    a, b : float
+        start and end points of the interval
+    n : integer
+        number of rationals to find
+    eps : float, optional
+        amount to dislace points to avoid duplicates
+    itol : float, optional
+        tolerance for rounding float to nearest int
+
+    Returns
+    -------
+    c : ndarray
+        most rational points in (a,b), in approximate
+        order of "rationality"
+    """
+    assert eps > itol
+    a = float(_round(a, itol))
+    b = float(_round(b, itol))
+    # start with the full interval, find first most rational
+    # then subdivide at that point and look for next most
+    # rational in the largest sub-interval
+    out = []
+    intervals = np.array(sorted([a, b]))
+    for i in range(n):
+        i = np.argmax(np.diff(intervals))
+        ai, bi = intervals[i : i + 2]
+        if ai in out:
+            ai += eps
+        if bi in out:
+            bi -= eps
+        c = most_rational(ai, bi)
+        out.append(c)
+        j = np.searchsorted(intervals, c)
+        intervals = np.insert(intervals, j, c)
+    return np.array(out)
+
+
+def _find_rho(iota, iota_vals, tol=1e-14):
+    """Find rho values for iota_vals in iota profile."""
+    r = np.linspace(0, 1, 1000)
+    io = iota(r)
+    rho = []
+    for ior in iota_vals:
+        f = lambda r: iota(np.atleast_1d(r))[0] - ior
+        df = lambda r: iota(np.atleast_1d(r), dr=1)[0]
+        # nearest neighbor search for initial guess
+        x0 = r[np.argmin(np.abs(io - ior))]
+        rho_i = optimize.root_scalar(f, x0=x0, fprime=df, xtol=tol).root
+        rho.append(rho_i)
+    return np.array(rho)
+
+
+def find_most_rational_surfaces(iota, n, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs):
+    """Find "most rational" surfaces for a give iota profile.
+
+    By most rational, we generally mean lowest order ie smallest continued fraction.
+
+    Note: May not work as expected for non-monotonic profiles with duplicate rational
+    surfaces. (generally only 1 of each rational is found)
+
+    Parameters
+    ----------
+    iota : Profile
+        iota profile to search
+    n : integer
+        number of rational surfaces to find
+    atol : float, optional
+        stopping tolerance for root finding
+    itol : float, optional
+        tolerance for rounding float to nearest int
+    eps : float, optional
+        amount to dislace points to avoid duplicates
+
+    Returns
+    -------
+    rho : ndarray
+        sorted radial locations of rational surfaces
+    rationals: ndarray
+        values of iota at rational surfaces
+    """
+    # find approx min/max
+    r = np.linspace(0, 1, kwargs.get("nsamples", 1000))
+    io = iota(r)
+    iomin, iomax = np.min(io), np.max(io)
+    # find rational values of iota and corresponding rho
+    io_rational = n_most_rational(iomin, iomax, n, itol=itol, eps=eps)
+    rho = _find_rho(iota, io_rational, tol=atol)
+    idx = np.argsort(rho)
+    return rho[idx], io_rational[idx]
+
+
+def find_most_distant(pts, n, a=None, b=None, atol=1e-14, **kwargs):
+    """Find n points in interval that are maximally distant from pts and each other.
+
+    Parameters
+    ----------
+    pts : ndarray
+        Points to avoid
+    n : int
+        Number of points to find.
+    a, b : float, optional
+        Start and end points for interval. Default is min/max of pts
+    atol : float, optional
+        Stopping tolerance for mimimization
+    """
+
+    def foo(x, xs):
+        xs = np.atleast_1d(xs)
+        d = x - xs[:, None]
+        return -np.prod(np.abs(d), axis=0).squeeze()
+
+    if a is None:
+        a = np.min(pts)
+    if b is None:
+        b = np.max(pts)
+
+    pts = list(pts)
+    nsamples = kwargs.get("nsamples", 1000)
+    x = np.linspace(a, b, nsamples)
+    out = []
+    for i in range(n):
+        y = foo(x, pts)
+        x0 = x[np.argmin(y)]
+        bracket = (max(a, x0 - 5 / nsamples), min(x0 + 5 / nsamples, b))
+        c = optimize.minimize_scalar(
+            foo, bracket=bracket, bounds=(a, b), args=(pts,), options={"xatol": atol}
+        ).x
+        pts.append(c)
+        out.append(c)
+    return np.array(out)
+
+
+def find_least_rational_surfaces(
+    iota, n, nrational=100, atol=1e-14, itol=1e-14, eps=1e-12, **kwargs
+):
+    """Find "least rational" surfaces for given iota profile.
+
+    By least rational we mean points farthest in iota from the nrational lowest
+    order rational surfaces and each other.
+
+    Note: May not work as expected for non-monotonic profiles with duplicate rational
+    surfaces. (generally only 1 of each rational is found)
+
+    Parameters
+    ----------
+    iota : Profile
+        iota profile to search
+    n : integer
+        number of approximately irrational surfaces to find
+    nrational : int, optional
+        number of lowest order rational surfaces to avoid.
+    atol : float, optional
+        Stopping tolerance for mimimization
+    itol : float, optional
+        tolerance for rounding float to nearest int
+    eps : float, optional
+        amount to dislace points to avoid duplicates
+
+    Returns
+    -------
+    rho : ndarray
+        locations of least rational surfaces
+    io : ndarray
+        values of iota at least rational surfaces
+    rho_rat : ndarray
+        rho values of lowest order rational surfaces
+    io_rat : ndarray
+        iota values at lowest order rational surfaces
+    """
+    rho_rat, io_rat = find_most_rational_surfaces(
+        iota, nrational, atol, itol, eps, **kwargs
+    )
+    a, b = iota([0.0, 1.0])
+    io = find_most_distant(io_rat, n, a, b, tol=atol, **kwargs)
+    rho = _find_rho(iota, io, tol=atol)
+    return rho, io

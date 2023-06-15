@@ -13,6 +13,7 @@ from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
 from .objective_funs import _Objective
+from .utils import jax_softmin
 
 
 class AspectRatio(_Objective):
@@ -53,7 +54,7 @@ class AspectRatio(_Objective):
     def __init__(
         self,
         eq=None,
-        target=2,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -61,7 +62,8 @@ class AspectRatio(_Objective):
         grid=None,
         name="aspect ratio",
     ):
-
+        if target is None and bounds is None:
+            target = 2
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -93,7 +95,7 @@ class AspectRatio(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -173,7 +175,7 @@ class Elongation(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -181,7 +183,8 @@ class Elongation(_Objective):
         grid=None,
         name="elongation",
     ):
-
+        if target is None and bounds is None:
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -213,7 +216,7 @@ class Elongation(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["a_major/a_minor"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -293,7 +296,7 @@ class Volume(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -301,7 +304,8 @@ class Volume(_Objective):
         grid=None,
         name="volume",
     ):
-
+        if target is None and bounds is None:
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -333,7 +337,7 @@ class Volume(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["V"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -380,12 +384,24 @@ class Volume(_Objective):
 
 
 class PlasmaVesselDistance(_Objective):
-    """Target the distance between the plasma and a surounding surface.
+    """Target the distance between the plasma and a surrounding surface.
 
     Computes the minimum distance from each point on the surface grid to a point on the
     plasma grid. For dense grids, this will approximate the global min, but in general
     will only be an upper bound on the minimum separation between the plasma and the
     surrounding surface.
+
+    NOTE: for best results, use this objective in combination with either MeanCurvature
+    or PrincipalCurvature, to penalize the tendency for the optimizer to only move the
+    points on surface corresponding to the grid that the plasma-vessel distance
+    is evaluated at, which can cause cusps or regions of very large curvature.
+
+    NOTE: When use_softmin=True, ensures that alpha*values passed in is
+    at least >1, otherwise the softmin will return inaccurate approximations
+    of the minimum. Will automatically multiply array values by 2 / min_val if the min
+    of alpha*array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmin, which can cause inaccurate mins or even incorrect
+    signs of the softmin versus the actual min.
 
     Parameters
     ----------
@@ -412,6 +428,13 @@ class PlasmaVesselDistance(_Objective):
         Collocation grid containing the nodes to evaluate surface geometry at.
     plasma_grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
+    use_softmin: Bool, use softmin or hard min.
+    alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
+        approximates the hardmin. softmin -> hardmin as alpha -> infinity.
+        if alpha*array < 1, the underlying softmin will automatically multiply
+        the array by 2/min_val to ensure that alpha*array>1. Making alpha larger
+        than this minimum value will make the softmin a more accurate approximation
+        of the true min.
     name : str
         Name of the objective function.
     """
@@ -426,17 +449,23 @@ class PlasmaVesselDistance(_Objective):
         surface,
         eq=None,
         target=None,
-        bounds=(1, np.inf),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         surface_grid=None,
         plasma_grid=None,
+        use_softmin=False,
+        alpha=1.0,
         name="plasma vessel distance",
     ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
         self._surface = surface
         self._surface_grid = surface_grid
         self._plasma_grid = plasma_grid
+        self._use_softmin = use_softmin
+        self._alpha = alpha
         super().__init__(
             eq=eq,
             target=target,
@@ -446,6 +475,30 @@ class PlasmaVesselDistance(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
+
+    def print_value(self, *args, **kwargs):
+        """Print the value of the objective."""
+        f = self.compute(*args, **kwargs)
+        print("Maximum " + self._print_value_fmt.format(jnp.max(f)) + self._units)
+        print("Minimum " + self._print_value_fmt.format(jnp.min(f)) + self._units)
+        print("Average " + self._print_value_fmt.format(jnp.mean(f)) + self._units)
+
+        if self._normalize:
+            print(
+                "Maximum "
+                + self._print_value_fmt.format(jnp.max(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Minimum "
+                + self._print_value_fmt.format(jnp.min(f / self.normalization))
+                + "(normalized)"
+            )
+            print(
+                "Average "
+                + self._print_value_fmt.format(jnp.mean(f / self.normalization))
+                + "(normalized)"
+            )
 
     def build(self, eq, use_jit=True, verbose=1):
         """Build constant arrays.
@@ -475,7 +528,9 @@ class PlasmaVesselDistance(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
+        )
 
         timer = Timer()
         if verbose > 0:
@@ -485,8 +540,18 @@ class PlasmaVesselDistance(_Objective):
         self._surface_coords = self._surface.compute_coordinates(
             grid=surface_grid, basis="xyz"
         )
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=plasma_grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=plasma_grid)
+        self._profiles = get_profiles(
+            self._data_keys,
+            eq=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
+        self._transforms = get_transforms(
+            self._data_keys,
+            eq=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -525,7 +590,10 @@ class PlasmaVesselDistance(_Objective):
         d = jnp.linalg.norm(
             plasma_coords[:, None, :] - self._surface_coords[None, :, :], axis=-1
         )
-        return d.min(axis=0)
+        if self._use_softmin:  # do softmin
+            return jnp.apply_along_axis(jax_softmin, 0, d, self._alpha)
+        else:  # do hardmin
+            return d.min(axis=0)
 
 
 class MeanCurvature(_Objective):
@@ -572,14 +640,15 @@ class MeanCurvature(_Objective):
         self,
         eq=None,
         target=None,
-        bounds=(-np.inf, 0),
+        bounds=None,
         weight=1,
         normalize=True,
         normalize_target=True,
         grid=None,
         name="mean-curvature",
     ):
-
+        if target is None and bounds is None:
+            bounds = (-np.inf, 0)
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -611,7 +680,7 @@ class MeanCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -703,7 +772,7 @@ class PrincipalCurvature(_Objective):
     def __init__(
         self,
         eq=None,
-        target=1,
+        target=None,
         bounds=None,
         weight=1,
         normalize=True,
@@ -711,7 +780,8 @@ class PrincipalCurvature(_Objective):
         grid=None,
         name="principal-curvature",
     ):
-
+        if target is None and bounds is None:
+            target = 1
         self._grid = grid
         super().__init__(
             eq=eq,
@@ -743,7 +813,7 @@ class PrincipalCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1", "curvature_k2"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -787,3 +857,139 @@ class PrincipalCurvature(_Objective):
             profiles=self._profiles,
         )
         return jnp.maximum(jnp.abs(data["curvature_k1"]), jnp.abs(data["curvature_k2"]))
+
+
+class BScaleLength(_Objective):
+    """Target a particular value for the magnetic field scale length.
+
+    The magnetic field scale length, defined as √2 ||B|| / ||∇ 𝐁||, is a length scale
+    over which the magnetic field varies. It can be a useful proxy for coil complexity,
+    as short length scales require complex coils that are close to the plasma surface.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
+    _linear = False
+    _units = "(m)"
+    _print_value_fmt = "Magnetic field scale length: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        grid=None,
+        name="B-scale-length",
+    ):
+        if target is None and bounds is None:
+            bounds = (1, np.inf)
+        self._grid = grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        if self._grid is None:
+            grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            grid = self._grid
+
+        self._dim_f = grid.num_nodes
+        self._data_keys = ["L_grad(B)"]
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["R0"] / jnp.sqrt(self._dim_f)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute magnetic field scale length.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        L : ndarray
+            Magnetic field scale length at each point (m).
+
+        """
+        params = self._parse_args(*args, **kwargs)
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+        return data["L_grad(B)"]

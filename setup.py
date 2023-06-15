@@ -55,7 +55,7 @@ setup(
     packages=find_packages(exclude=["docs", "tests", "local", "report"]),
     include_package_data=True,
     install_requires=requirements,
-    python_requires="~=3.7",
+    python_requires=">=3.8",
     entry_points={"console_scripts": ["desc=desc.__main__:main"]},
     project_urls={
         "Issues Tracker": "https://github.com/PlasmaControl/DESC/issues",

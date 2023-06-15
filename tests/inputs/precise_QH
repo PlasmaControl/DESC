@@ -11,7 +11,7 @@ N_tor  =  0:2:8
 ftol = 1e-4
 xtol = 1e-6
 gtol = 1e-6
-nfev = 175
+maxiter = 175
 
 # solver methods
 optimizer         = lsq-exact

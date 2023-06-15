@@ -105,7 +105,7 @@ class MercierStability(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -305,7 +305,7 @@ class MagneticWell(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:

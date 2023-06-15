@@ -137,7 +137,7 @@ class ForceBalance(_Objective):
             "F_helical",
             "|e^helical|",
         ]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -321,7 +321,7 @@ class RadialForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -501,7 +501,7 @@ class HelicalForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -692,7 +692,7 @@ class Energy(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["W"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -877,7 +877,7 @@ class CurrentDensity(_Objective):
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:

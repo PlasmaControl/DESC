@@ -2,13 +2,12 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
 from .utils import (
     cross,
     dot,
-    expand,
     surface_averages,
     surface_integrals,
     surface_max,
@@ -28,9 +27,15 @@ from .utils import (
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "sqrt(g)"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r"],
 )
 def _B0(params, transforms, profiles, data, **kwargs):
     data["B0"] = data["psi_r"] / data["sqrt(g)"]
+    if transforms["grid"].axis.size:
+        limit = data["psi_rr"] / data["sqrt(g)_r"]
+        data["B0"] = put(
+            data["B0"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -2894,9 +2899,7 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     data=["|B|"],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["max_tz |B|"] = expand(
-        transforms["grid"], surface_max(transforms["grid"], data["|B|"])
-    )
+    data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])
     return data
 
 
@@ -2914,9 +2917,7 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data=["|B|"],
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["min_tz |B|"] = expand(
-        transforms["grid"], surface_min(transforms["grid"], data["|B|"])
-    )
+    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
     return data
 
 

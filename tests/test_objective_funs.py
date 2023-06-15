@@ -345,7 +345,7 @@ def test_rejit():
             self._dim_f = 1
             super().build(eq, use_jit, verbose)
 
-        def compute(self, R_lmn):
+        def compute(self, R_lmn, **kwargs):
             return 200 + self.target * self.weight - self.y * R_lmn**3
 
     obj = DummyObjective(3)

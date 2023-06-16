@@ -79,19 +79,18 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         function. If set to ``'hess'``, the scale is iteratively updated using the
         inverse norms of the columns of the Hessian matrix.
     ftol : float or None, optional
-        Tolerance for termination by the change of the cost function. Default
-        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+        Tolerance for termination by the change of the cost function.
+        The optimization process is stopped when ``dF < ftol * F``,
         and there was an adequate agreement between a local quadratic model and
         the true model in the last step. If None, the termination by this
         condition is disabled.
     xtol : float or None, optional
         Tolerance for termination by the change of the independent variables.
-        Default is 1e-8. Optimization is stopped when
-        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-        this condition is disabled.
+        Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+        If None, the termination by this condition is disabled.
     gtol : float or None, optional
-        Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Absolute tolerance for termination by the norm of the gradient.
+        Optimizer teriminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
         * 0 (default) : work silently.
@@ -168,7 +167,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         subproblem = trust_region_step_exact_cho
     else:
         raise ValueError(
-            colored("method should be one of 'dogleg' or 'subspace'", "red")
+            colored("method should be one of 'exact', 'dogleg' or 'subspace'", "red")
         )
 
     if maxiter is None:
@@ -405,6 +404,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         success=success,
         fun=f,
         grad=g,
+        v=v,
         hess=H,
         optimality=g_norm,
         nfev=nfev,

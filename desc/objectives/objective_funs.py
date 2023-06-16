@@ -45,7 +45,7 @@ class ObjectiveFunction(IOAble):
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "blocked"}
+        assert deriv_mode in {"batched", "blocked", "looped"}
 
         self._objectives = objectives
         self._use_jit = use_jit
@@ -159,11 +159,15 @@ class ObjectiveFunction(IOAble):
                     for arg in self.args
                 ]
             )
-        if self._deriv_mode == "batched":
+        if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
+        if self._deriv_mode == "batched":
             self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
+        if self._deriv_mode == "looped":
+            self._jac_scaled = Derivative(self.compute_scaled, mode="looped")
+            self._jac_unscaled = Derivative(self.compute_unscaled, mode="looped")
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""

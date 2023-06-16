@@ -1148,7 +1148,7 @@ class _Configuration(IOAble, ABC):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
         if params is None:
-            params = get_params(names, eq=self)
+            params = get_params(names, eq=self, has_axis=grid.axis.size)
         if profiles is None:
             profiles = get_profiles(names, eq=self, grid=grid)
         if transforms is None:
@@ -1159,7 +1159,7 @@ class _Configuration(IOAble, ABC):
         # To avoid the issue of using the wrong grid for surface and volume averages,
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
-        deps = list(set(get_data_deps(names) + names))
+        deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
         dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
         dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
 
@@ -1185,6 +1185,8 @@ class _Configuration(IOAble, ABC):
                 NFP=self.NFP,
                 sym=self.sym,
             )
+            # Todo: Pass in data0d as a seed once there are 1d quantities that
+            #  depend on 0d quantities in data_index.
             data1d = compute_fun(
                 dep1d,
                 params=params,
@@ -1202,8 +1204,8 @@ class _Configuration(IOAble, ABC):
             data.update(data1d)
 
         # TODO: we can probably reduce the number of deps computed here if some are only
-        # needed as inputs for 0d and 1d qtys, unless the user asks for them
-        # specifically?
+        #   needed as inputs for 0d and 1d qtys, unless the user asks for them
+        #   specifically?
         data = compute_fun(
             names,
             params=params,
@@ -1309,7 +1311,7 @@ class _Configuration(IOAble, ABC):
     ):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-        Does so by checking coordianate Jacobian (sqrt(g)) sign.
+        Does so by checking coordinate Jacobian (sqrt(g)) sign.
         If coordinate Jacobian switches sign somewhere in the volume, this
         indicates that it is zero at some point, meaning surfaces are touching and
         the equilibrium is not nested.

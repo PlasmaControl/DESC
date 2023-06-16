@@ -116,7 +116,7 @@ A full example objective with comments describing key points is given below:
             # What data from desc.compute is needed? Here we want the QS triple product.
             self._data_keys = ["f_T"]
             # what arguments should be passed to self.compute
-            self._args = get_params(self._data_keys)
+            self._args = get_params(self._data_keys, has_axis=self.grid.axis.size)
 
             # some helper code for profiling and logging
             timer = Timer()

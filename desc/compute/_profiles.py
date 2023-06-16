@@ -1,6 +1,6 @@
 from scipy.constants import elementary_charge, mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
 from .utils import compress, cumtrapz, dot, expand, surface_averages
@@ -478,7 +478,8 @@ def _gradp_mag_vol(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["iota", "current"],
     coordinates="r",
-    data=["psi_r", "iota_0_num", "iota_0_den"],
+    data=["iota_zero_current_den", "iota_zero_current_num", "psi_r"],
+    axis_limit_data=["psi_rr"],
 )
 def _iota(params, transforms, profiles, data, **kwargs):
     # The rotational transform is computed from the toroidal current profile using
@@ -498,7 +499,19 @@ def _iota(params, transforms, profiles, data, **kwargs):
             * profiles["current"].compute(params["c_l"], dr=0)
             / data["psi_r"]
         )
-        data["iota"] = (current_term + data["iota_0_num"]) / data["iota_0_den"]
+        if transforms["grid"].axis.size:
+            limit = (
+                mu_0
+                / (2 * jnp.pi)
+                * profiles["current"].compute(params["c_l"], dr=2)
+                / data["psi_rr"]
+            )
+            current_term = put(
+                current_term, transforms["grid"].axis, limit[transforms["grid"].axis]
+            )
+        data["iota"] = (current_term + data["iota_zero_current_num"]) / data[
+            "iota_zero_current_den"
+        ]
     return data
 
 
@@ -515,22 +528,14 @@ def _iota(params, transforms, profiles, data, **kwargs):
     coordinates="r",
     data=[
         "iota",
+        "iota_zero_current_den",
+        "iota_zero_current_den_r",
+        "iota_zero_current_num_r",
         "psi_r",
         "psi_rr",
-        "iota_0_num",
-        "iota_0_num_r",
-        "iota_0_den",
-        "iota_0_den_r",
     ],
 )
 def _iota_r(params, transforms, profiles, data, **kwargs):
-    # The rotational transform is computed from the toroidal current profile using
-    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
-    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
-    # with an additional term to account for finite net toroidal currents. Note that
-    # the flux surface average integrals in their formula should not be weighted by a
-    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
-    # these averages will not be canceled out.
     if profiles["iota"] is not None:
         data["iota_r"] = profiles["iota"].compute(params["i_l"], dr=1)
     elif profiles["current"] is not None:
@@ -545,8 +550,10 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             - current_term * data["psi_rr"]
         ) / data["psi_r"]
         data["iota_r"] = (
-            current_term_r + data["iota_0_num_r"] - data["iota"] * data["iota_0_den_r"]
-        ) / data["iota_0_den"]
+            current_term_r
+            + data["iota_zero_current_num_r"]
+            - data["iota"] * data["iota_zero_current_den_r"]
+        ) / data["iota_zero_current_den"]
     return data
 
 
@@ -564,25 +571,16 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
     data=[
         "iota",
         "iota_r",
+        "iota_zero_current_den",
+        "iota_zero_current_den_r",
+        "iota_zero_current_den_rr",
+        "iota_zero_current_num_rr",
         "psi_r",
         "psi_rr",
         "psi_rrr",
-        "iota_0_num",
-        "iota_0_num_r",
-        "iota_0_num_rr",
-        "iota_0_den",
-        "iota_0_den_r",
-        "iota_0_den_rr",
     ],
 )
 def _iota_rr(params, transforms, profiles, data, **kwargs):
-    # The rotational transform is computed from the toroidal current profile using
-    # equation 11 in S.P. Hishman & J.T. Hogan (1986)
-    # doi:10.1016/0021-9991(86)90197-X. Their "zero current algorithm" is supplemented
-    # with an additional term to account for finite net toroidal currents. Note that
-    # the flux surface average integrals in their formula should not be weighted by a
-    # coordinate Jacobian factor, meaning the sqrt(g) terms in the denominators of
-    # these averages will not be canceled out.
     if profiles["iota"] is not None:
         data["iota_rr"] = profiles["iota"].compute(params["i_l"], dr=2)
     elif profiles["current"] is not None:
@@ -603,40 +601,67 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
         ) / data["psi_r"]
         data["iota_rr"] = (
             current_term_rr
-            + data["iota_0_num_rr"]
-            - 2 * data["iota_r"] * data["iota_0_den_r"]
-            - data["iota"] * data["iota_0_den_rr"]
-        ) / data["iota_0_den"]
+            + data["iota_zero_current_num_rr"]
+            - 2 * data["iota_r"] * data["iota_zero_current_den_r"]
+            - data["iota"] * data["iota_zero_current_den_rr"]
+        ) / data["iota_zero_current_den"]
     return data
 
 
 @register_compute_fun(
-    name="iota_0_num",
+    name="iota_zero_current_num",
     label="\\iota_{0} numerator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="0 current rotational transform numerator",
+    description="Zero toroidal current rotational transform numerator",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
     data=["lambda_t", "lambda_z", "g_tt", "g_tz", "sqrt(g)"],
+    axis_limit_data=[
+        "lambda_rt",
+        "g_tt_rr",
+        "g_tz_r",
+        "g_tz_rr",
+        "sqrt(g)_r",
+        "sqrt(g)_rr",
+    ],
 )
-def _iota_0_num(params, transforms, profiles, data, **kwargs):
+def _iota_zero_current_num(params, transforms, profiles, data, **kwargs):
     num = (
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
     ) / data["sqrt(g)"]
-    data["iota_0_num"] = surface_averages(transforms["grid"], num)
+    data["iota_zero_current_num"] = surface_averages(transforms["grid"], num)
+
+    if transforms["grid"].axis.size:
+        limit = (
+            (data["g_tz_r"] * data["sqrt(g)_rr"] * (1 + data["lambda_t"]))
+            / data["sqrt(g)_r"] ** 2
+        ) + (
+            data["lambda_z"] * data["g_tt_rr"]
+            - 2 * data["g_tz_r"] * data["lambda_rt"]
+            - (1 + data["lambda_t"]) * data["g_tz_rr"]
+        ) / data[
+            "sqrt(g)_r"
+        ]
+        limit = surface_averages(transforms["grid"], limit)
+        data["iota_zero_current_num"] = put(
+            data["iota_zero_current_num"],
+            transforms["grid"].axis,
+            limit[transforms["grid"].axis],
+        )
     return data
 
 
 @register_compute_fun(
-    name="iota_0_num_r",
+    name="iota_zero_current_num_r",
     label="\\partial_{\\rho} \\iota_{0} numerator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="0 current rotational transform numerator, first radial derivative",
+    description="Zero toroidal current rotational transform numerator,"
+    " first radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -655,7 +680,7 @@ def _iota_0_num(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_r",
     ],
 )
-def _iota_0_num_r(params, transforms, profiles, data, **kwargs):
+def _iota_zero_current_num_r(params, transforms, profiles, data, **kwargs):
     num = (
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -666,16 +691,18 @@ def _iota_0_num_r(params, transforms, profiles, data, **kwargs):
         - (1 + data["lambda_t"]) * data["g_tz_r"]
         - num * data["sqrt(g)_r"]
     ) / data["sqrt(g)"]
-    data["iota_0_num_r"] = surface_averages(transforms["grid"], num_r)
+    data["iota_zero_current_num_r"] = surface_averages(transforms["grid"], num_r)
+    # TODO: limit at axis
     return data
 
 
 @register_compute_fun(
-    name="iota_0_num_rr",
+    name="iota_zero_current_num_rr",
     label="\\partial_{\\rho\\rho} \\iota_{0} numerator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="0 current rotational transform numerator, second radial derivative",
+    description="Zero toroidal current rotational transform numerator,"
+    " second radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -699,7 +726,7 @@ def _iota_0_num_r(params, transforms, profiles, data, **kwargs):
         "sqrt(g)_rr",
     ],
 )
-def _iota_0_num_rr(params, transforms, profiles, data, **kwargs):
+def _iota_zero_current_num_rr(params, transforms, profiles, data, **kwargs):
     num = (
         data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -720,37 +747,50 @@ def _iota_0_num_rr(params, transforms, profiles, data, **kwargs):
         - 2 * num_r * data["sqrt(g)_r"]
         - num * data["sqrt(g)_rr"]
     ) / data["sqrt(g)"]
-    data["iota_0_num_rr"] = surface_averages(transforms["grid"], num_rr)
+    data["iota_zero_current_num_rr"] = surface_averages(transforms["grid"], num_rr)
+    # TODO: limit at axis
     return data
 
 
 @register_compute_fun(
-    name="iota_0_den",
+    name="iota_zero_current_den",
     label="\\iota_{0} denominator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="0 current rotational transform denominator",
+    description="Zero toroidal current rotational transform denominator",
     dim=1,
     params=[],
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
     data=["g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
+    axis_limit_data=["g_tt_rr", "sqrt(g)_r"],
 )
-def _iota_0_den(params, transforms, profiles, data, **kwargs):
+def _iota_zero_current_den(params, transforms, profiles, data, **kwargs):
     den = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
-    data["iota_0_den"] = surface_averages(transforms["grid"], den)
+    data["iota_zero_current_den"] = surface_averages(transforms["grid"], den)
+
+    if transforms["grid"].axis.size:
+        limit = surface_averages(
+            transforms["grid"], data["g_tt_rr"] / data["sqrt(g)_r"]
+        )
+        data["iota_zero_current_den"] = put(
+            data["iota_zero_current_den"],
+            transforms["grid"].axis,
+            limit[transforms["grid"].axis],
+        )
     return data
 
 
 @register_compute_fun(
-    name="iota_0_den_r",
+    name="iota_zero_current_den_r",
     label="\\partial_{\\rho} \\iota_{0} denominator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="0 current rotational transform denominator, first radial derivative",
+    description="Zero toroidal current rotational transform denominator,"
+    " first radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -769,7 +809,7 @@ def _iota_0_den(params, transforms, profiles, data, **kwargs):
         "omega_rz",
     ],
 )
-def _iota_0_den_r(params, transforms, profiles, data, **kwargs):
+def _iota_zero_current_den_r(params, transforms, profiles, data, **kwargs):
     den = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -780,16 +820,18 @@ def _iota_0_den_r(params, transforms, profiles, data, **kwargs):
         - data["omega_t"] * data["g_tz_r"]
         - den * data["sqrt(g)_r"]
     ) / data["sqrt(g)"]
-    data["iota_0_den_r"] = surface_averages(transforms["grid"], den_r)
+    data["iota_zero_current_den_r"] = surface_averages(transforms["grid"], den_r)
+    # TODO: limit at axis
     return data
 
 
 @register_compute_fun(
-    name="iota_0_den_rr",
+    name="iota_zero_current_den_rr",
     label="\\partial_{\\rho\\rho} \\iota_{0} denominator",
     units="m^{-1}",
     units_long="inverse meters",
-    description="0 current rotational transform denominator, second radial derivative",
+    description="Zero toroidal current rotational transform denominator,"
+    " second radial derivative",
     dim=1,
     params=[],
     transforms={"grid": []},
@@ -813,7 +855,7 @@ def _iota_0_den_r(params, transforms, profiles, data, **kwargs):
         "omega_rrz",
     ],
 )
-def _iota_0_den_rr(params, transforms, profiles, data, **kwargs):
+def _iota_zero_current_den_rr(params, transforms, profiles, data, **kwargs):
     den = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -834,7 +876,8 @@ def _iota_0_den_rr(params, transforms, profiles, data, **kwargs):
         - 2 * den_r * data["sqrt(g)_r"]
         - den * data["sqrt(g)_rr"]
     ) / data["sqrt(g)"]
-    data["iota_0_den_rr"] = surface_averages(transforms["grid"], den_rr)
+    data["iota_zero_current_den_rr"] = surface_averages(transforms["grid"], den_rr)
+    # TODO: limit at axis
     return data
 
 

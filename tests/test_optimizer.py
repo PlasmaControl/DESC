@@ -3,7 +3,14 @@
 import numpy as np
 import pytest
 from numpy.random import default_rng
-from scipy.optimize import BFGS, least_squares, rosen, rosen_der
+from scipy.optimize import (
+    BFGS,
+    NonlinearConstraint,
+    least_squares,
+    minimize,
+    rosen,
+    rosen_der,
+)
 
 import desc.examples
 from desc.backend import jit, jnp
@@ -20,6 +27,8 @@ from desc.objectives import (
     FixPressure,
     FixPsi,
     ForceBalance,
+    GenericObjective,
+    MagneticWell,
     MeanCurvature,
     ObjectiveFunction,
     Volume,
@@ -29,7 +38,9 @@ from desc.optimize import (
     LinearConstraintProjection,
     Optimizer,
     ProximalProjection,
+    fmin_auglag,
     fmintr,
+    lsq_auglag,
     lsqtr,
     optimizers,
     sgd,
@@ -412,12 +423,12 @@ def test_maxiter_1_and_0_solve():
     objectives = ForceBalance()
     obj = ObjectiveFunction(objectives)
     eq = desc.examples.get("SOLOVEV")
-    for opt in ["lsq-exact", "dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
         eq, result = eq.solve(
             maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
         assert result["nit"] == 1
-    for opt in ["lsq-exact", "dogleg-bfgs"]:
+    for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
         eq, result = eq.solve(
             maxiter=0, constraints=constraints, objective=obj, optimizer=opt, verbose=3
         )
@@ -725,3 +736,185 @@ def test_bounded_optimization():
 
     np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-06, atol=1e-06)
     np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-06, atol=1e-06)
+
+
+@pytest.mark.unit
+def test_auglag():
+    """Test that our augmented lagrangian works as well as scipy for convex problems."""
+    rng = default_rng(12)
+
+    n = 15  # number of variables
+    m = 10  # number of constraints
+    p = 7  # number of primals
+    Qs = []
+    gs = []
+    for i in range(m + p):
+        A = 0.5 - rng.random((n, n))
+        Qs.append(A.T @ A)
+        gs.append(0.5 - rng.random(n))
+
+    @jit
+    def vecfun(x):
+        y0 = x @ Qs[0] + gs[0]
+        y1 = x @ Qs[1] + gs[1]
+        y = jnp.concatenate([y0, y1**2])
+        return y
+
+    @jit
+    def fun(x):
+        y = vecfun(x)
+        return 1 / 2 * jnp.dot(y, y)
+
+    grad = jit(Derivative(fun, mode="grad"))
+    hess = jit(Derivative(fun, mode="hess"))
+    jac = jit(Derivative(vecfun, mode="fwd"))
+
+    @jit
+    def con(x):
+        cs = []
+        for i in range(m):
+            cs.append(x @ Qs[p + i] @ x + gs[p + i] @ x)
+        return jnp.array(cs)
+
+    conjac = jit(Derivative(con, mode="fwd"))
+    conhess = jit(Derivative(lambda x, v: v @ con(x), mode="hess"))
+
+    constraint = NonlinearConstraint(con, -np.inf, 0, conjac, conhess)
+    x0 = rng.random(n)
+
+    out1 = fmin_auglag(
+        fun,
+        x0,
+        grad,
+        hess=hess,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale="auto",
+        ftol=0,
+        xtol=1e-6,
+        gtol=1e-6,
+        ctol=1e-6,
+        verbose=3,
+        maxiter=None,
+        options={},
+    )
+    print(out1["active_mask"])
+    out2 = lsq_auglag(
+        vecfun,
+        x0,
+        jac,
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale="auto",
+        ftol=0,
+        xtol=1e-6,
+        gtol=1e-6,
+        ctol=1e-6,
+        verbose=3,
+        maxiter=None,
+        options={},
+    )
+
+    out3 = minimize(
+        fun,
+        x0,
+        jac=grad,
+        hess=hess,
+        constraints=constraint,
+        method="trust-constr",
+        options={"verbose": 3, "maxiter": 1000},
+    )
+
+    np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_constrained_AL_lsq():
+    """Tests that the least squares augmented Lagrangian optimizer does something."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(),  # fix Z shape but not R
+        FixPressure(),  # fix pressure profile
+        FixIota(),  # fix rotational transform profile
+        FixPsi(),  # fix total toroidal magnetic flux
+    )
+    # some random constraints to keep the shape from getting wacky
+    V = eq.compute("V")["V"]
+    Vbounds = (0.95 * V, 1.05 * V)
+    AR = eq.compute("R0/a")["R0/a"]
+    ARbounds = (0.95 * AR, 1.05 * AR)
+    constraints += (
+        Volume(bounds=Vbounds),
+        AspectRatio(bounds=ARbounds),
+        MagneticWell(bounds=(0, jnp.inf)),
+        ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
+    )
+    H = eq.compute(
+        "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+    )["curvature_H"]
+    obj = ObjectiveFunction(MeanCurvature(target=H))
+    eq2, result = eq.optimize(
+        objective=obj,
+        constraints=constraints,
+        optimizer="lsq-auglag",
+        maxiter=500,
+        verbose=3,
+        x_scale="auto",
+        copy=True,
+        options={},
+    )
+    V2 = eq2.compute("V")["V"]
+    AR2 = eq2.compute("R0/a")["R0/a"]
+    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
+    assert ARbounds[0] < AR2 < ARbounds[1]
+    assert Vbounds[0] < V2 < Vbounds[1]
+    assert eq2.is_nested()
+    np.testing.assert_array_less(-Dwell, 0)
+
+
+@pytest.mark.slow
+@pytest.mark.regression
+def test_constrained_AL_scalar():
+    """Tests that the augmented Lagrangian constrained optimizer does something."""
+    eq = desc.examples.get("SOLOVEV")
+
+    constraints = (
+        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(),  # fix Z shape but not R
+        FixPressure(),  # fix pressure profile
+        FixIota(),  # fix rotational transform profile
+        FixPsi(),  # fix total toroidal magnetic flux
+    )
+    V = eq.compute("V")["V"]
+    AR = eq.compute("R0/a")["R0/a"]
+    constraints += (
+        Volume(target=V),
+        AspectRatio(target=AR),
+        MagneticWell(bounds=(0, jnp.inf)),
+        ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
+    )
+    # Dummy objective to return 0, we just want a feasible solution.
+    obj = ObjectiveFunction(GenericObjective("0"))
+    eq2, result = eq.optimize(
+        objective=obj,
+        constraints=constraints,
+        optimizer="fmin-auglag",
+        maxiter=500,
+        verbose=3,
+        x_scale="auto",
+        copy=True,
+        options={},
+    )
+    V2 = eq2.compute("V")["V"]
+    AR2 = eq2.compute("R0/a")["R0/a"]
+    Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
+    np.testing.assert_allclose(AR, AR2)
+    np.testing.assert_allclose(V, V2)
+    assert eq2.is_nested()
+    np.testing.assert_array_less(-Dwell, 0)

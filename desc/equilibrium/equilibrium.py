@@ -548,6 +548,7 @@ class Equilibrium(_Configuration, IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
+        ctol=None,
         maxiter=None,
         x_scale="auto",
         options=None,
@@ -564,7 +565,7 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : str or Optimizer (optional)
             optimizer to use
-        ftol, xtol, gtol : float
+        ftol, xtol, gtol, ctol : float
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
@@ -618,6 +619,7 @@ class Equilibrium(_Configuration, IOAble):
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
+            ctol=ctol,
             x_scale=x_scale,
             verbose=verbose,
             maxiter=maxiter,

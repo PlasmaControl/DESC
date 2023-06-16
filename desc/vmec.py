@@ -194,9 +194,6 @@ class VMECIO:
         """
         file = Dataset(path, mode="w", format="NETCDF3_64BIT_OFFSET")
 
-        # desc throws NaN for r == 0, so we use something small to approximate it
-        ONAXIS = np.array([1e-6])
-
         Psi = eq.Psi
         NFP = eq.NFP
         M = eq.M
@@ -396,7 +393,6 @@ class VMECIO:
         if eq.iota is not None:
             iotaf[:] = -eq.iota(r_full)  # negative sign for negative Jacobian
         else:
-            # value closest to axis will be nan
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=r_full, NFP=NFP)
             iotaf[:] = -compress(grid, eq.compute("iota", grid=grid)["iota"])
 
@@ -498,13 +494,13 @@ class VMECIO:
         rbtor0 = file.createVariable("rbtor0", np.float64)
         rbtor0.long_name = "<R*B_tor> on axis"
         rbtor0.units = "T*m"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[0.0], NFP=NFP)
         rbtor0[:] = eq.compute("G", grid=grid)["G"][0]
 
         b0 = file.createVariable("b0", np.float64)
         b0.long_name = "average B_tor on axis"
         b0.units = "T"
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=ONAXIS, NFP=NFP)
+        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, rho=[0.0], NFP=NFP)
         b0[:] = eq.compute("G", grid=grid)["G"][0] / eq.compute("R", grid=grid)["R"][0]
 
         # grid for computing radial profile data

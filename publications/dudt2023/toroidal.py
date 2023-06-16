@@ -131,4 +131,4 @@ fam.append(eq)
 fam.save(fname + ".h5")
 
 # save wout file
-VMECIO.save(eq, "wout_" + fname + ".nc", surfs=256)
+VMECIO.save(eq, "wout_" + fname + ".nc", surfs=1024)

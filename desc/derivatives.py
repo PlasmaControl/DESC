@@ -640,21 +640,6 @@ class FiniteDiffDerivative(_Derivative):
         return self._compute(*args)
 
 
-def nested_zeros_like(x):
-    """Get a nested pytree of zeros like a given pytree."""
-    if x is None:
-        return None
-    if jnp.isscalar(x) and isinstance(x, int):
-        return 0
-    if jnp.isscalar(x):
-        return 0.0
-    if isinstance(x, tuple):
-        return tuple([nested_zeros_like(a) for a in x])
-    if isinstance(x, list):
-        return list([nested_zeros_like(a) for a in x])
-    return jnp.zeros_like(x)
-
-
 if use_jax:
     Derivative = AutoDiffDerivative
 else:

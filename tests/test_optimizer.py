@@ -896,7 +896,7 @@ def test_constrained_AL_scalar():
     constraints += (
         Volume(target=V),
         AspectRatio(target=AR),
-        MagneticWell(bounds=(0, jnp.inf)),
+        MagneticWell(bounds=(1e-5, jnp.inf)),
         ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     # Dummy objective to return 0, we just want a feasible solution.

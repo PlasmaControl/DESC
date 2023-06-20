@@ -915,7 +915,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # products. However, timing results showed no difference.
         axis_to_move = (integrands.ndim == 3) * 2
         integrals = jnp.moveaxis(
-            masks.astype(int) @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
+            masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
         )
         return expand(grid, integrals, surface_label) if expand_out else integrals
 

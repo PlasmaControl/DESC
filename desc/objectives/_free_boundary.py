@@ -158,6 +158,15 @@ class BoundaryErrorBIEST(_Objective):
         self._eval_profiles = get_profiles(self._data_keys, eq=eq, grid=eval_grid)
         self._eval_transforms = get_transforms(self._data_keys, eq=eq, grid=eval_grid)
 
+        self._constants = {
+            "eval_transforms": self._eval_transforms,
+            "eval_profiles": self._eval_profiles,
+            "src_transforms": self._src_transforms,
+            "src_profiles": self._src_profiles,
+            "interp_matrix": self._interp_matrix,
+            "ext_field": self._ext_field,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -205,39 +214,41 @@ class BoundaryErrorBIEST(_Objective):
             Boundary force error (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         src_data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._src_transforms,
-            profiles=self._src_profiles,
+            transforms=constants["src_transforms"],
+            profiles=constants["src_profiles"],
         )
         eval_data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._eval_transforms,
-            profiles=self._eval_profiles,
+            transforms=constants["eval_transforms"],
+            profiles=constants["eval_profiles"],
         )
         # this is in cartesian
         Bplasma = -singular_integral(
             eval_data,
-            self._eval_transforms["grid"],
+            constants["eval_transforms"]["grid"],
             src_data,
-            self._src_transforms["grid"],
+            constants["src_transforms"]["grid"],
             self._s,
             self._q,
             "biot_savart",
-            self._interp_matrix,
+            constants["interp_matrix"],
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
-        Bext = self._ext_field.compute_magnetic_field(x)
+        Bext = constants["ext_field"].compute_magnetic_field(x)
         Bex_total = Bext + Bplasma
         Bn = jnp.sum(Bex_total * eval_data["n"], axis=-1)
 
         bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
         bsq_in = eval_data["|B|^2"]
-        w = self._eval_transforms["grid"].weights
+        w = constants["eval_transforms"]["grid"].weights
         g = eval_data["|e_theta x e_zeta|"]
         Bn_err = Bn * w * g
         Bsq_err = (bsq_in + eval_data["p"] * (2 * mu_0) - bsq_out) * w * g
@@ -376,6 +387,15 @@ class QuadraticFlux(_Objective):
         self._eval_profiles = get_profiles(self._data_keys, eq=eq, grid=eval_grid)
         self._eval_transforms = get_transforms(self._data_keys, eq=eq, grid=eval_grid)
 
+        self._constants = {
+            "eval_transforms": self._eval_transforms,
+            "eval_profiles": self._eval_profiles,
+            "src_transforms": self._src_transforms,
+            "src_profiles": self._src_profiles,
+            "interp_matrix": self._interp_matrix,
+            "ext_field": self._ext_field,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -423,33 +443,35 @@ class QuadraticFlux(_Objective):
             Boundary force error (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         src_data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._src_transforms,
-            profiles=self._src_profiles,
+            transforms=constants["src_transforms"],
+            profiles=constants["src_profiles"],
         )
         eval_data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._eval_transforms,
-            profiles=self._eval_profiles,
+            transforms=constants["eval_transforms"],
+            profiles=constants["eval_profiles"],
         )
         # this is in cartesian
         Bplasma = -singular_integral(
             eval_data,
-            self._eval_transforms["grid"],
+            constants["eval_transforms"]["grid"],
             src_data,
-            self._src_transforms["grid"],
+            constants["src_transforms"]["grid"],
             self._s,
             self._q,
             "biot_savart",
-            self._interp_matrix,
+            constants["interp_matrix"],
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
-        Bext = self._ext_field.compute_magnetic_field(x)
+        Bext = constants["ext_field"].compute_magnetic_field(x)
         return jnp.sum((Bext + Bplasma) * eval_data["n"], axis=-1)
 
 
@@ -542,6 +564,12 @@ class ToroidalFlux(_Objective):
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
+        self._constants = {
+            "profiles": self._profiles,
+            "transforms": self._transforms,
+            "ext_field": self._ext_field,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -591,21 +619,23 @@ class ToroidalFlux(_Objective):
             Boundary force error (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         x = jnp.array([data["R"], data["zeta"], data["Z"]]).T
-        Bext = self._ext_field.compute_magnetic_field(x, basis="rpz")
+        Bext = constants["ext_field"].compute_magnetic_field(x, basis="rpz")
         n = data["e^zeta"] / jnp.linalg.norm(data["e^zeta"], axis=-1)[:, None]
         Bn = jnp.sum(Bext * n, axis=-1)
         return jnp.sum(
             Bn
             * data["|e_rho x e_theta|"]
-            * self._transforms["grid"].spacing[:, :2].prod(axis=-1)
+            * constants["transforms"]["grid"].spacing[:, :2].prod(axis=-1)
         )
 
 
@@ -721,6 +751,13 @@ class BoundaryErrorNESTOR(_Objective):
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
 
+        self._constants = {
+            "profiles": self._profiles,
+            "transforms": self._transforms,
+            "ext_field": self.ext_field,
+            "nestor": self.nest,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -768,17 +805,19 @@ class BoundaryErrorNESTOR(_Objective):
             Boundary force error (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
 
         ctor = jnp.mean(data["current"])
-        out = self.nest.compute(params["R_lmn"], params["Z_lmn"], ctor)
-        grid = self.nest._Rb_transform.grid
+        out = constants["nestor"].compute(params["R_lmn"], params["Z_lmn"], ctor)
+        grid = constants["nestor"]._Rb_transform.grid
         bsq = out[1]["|B|^2"].reshape((grid.num_zeta, grid.num_theta)).T.flatten()
         bv = bsq / (2 * mu_0)
 

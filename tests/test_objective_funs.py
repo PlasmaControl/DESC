@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
+from desc.backend import jnp
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -17,6 +18,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     Energy,
     ForceBalance,
@@ -25,6 +27,7 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     MercierStability,
+    ObjectiveFromUser,
     ObjectiveFunction,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -36,6 +39,7 @@ from desc.objectives import (
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
+from desc.objectives.utils import jax_softmax, jax_softmin
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -66,6 +70,23 @@ class TestObjectiveFunction:
         test("sqrt(g)", Equilibrium())
         test("current", Equilibrium(iota=PowerSeriesProfile(0)))
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
+
+    @pytest.mark.unit
+    def test_objective_from_user(self):
+        """Test ObjectiveFromUser for arbitrary callable."""
+
+        def myfun(grid, data):
+            x = data["X"]
+            y = data["Y"]
+            r = jnp.sqrt(x**2 + y**2)
+            return r
+
+        eq = Equilibrium()
+        grid = LinearGrid(2, 2, 2)
+        objective = ObjectiveFromUser(myfun, eq=eq, grid=grid)
+        R1 = objective.compute(*objective.xs(eq))
+        R2 = eq.compute("R", grid=grid)["R"]
+        np.testing.assert_allclose(R1, R2)
 
     @pytest.mark.unit
     def test_volume(self):
@@ -189,11 +210,7 @@ class TestObjectiveFunction:
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn",
-            eq=eq,
-            grid=grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
+            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
@@ -247,7 +264,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
-        """Test grid compatability with QS objectives."""
+        """Test grid compatibility with QS objectives."""
         eq = get("QAS")
 
         # symmetric grid
@@ -289,26 +306,38 @@ class TestObjectiveFunction:
 
 @pytest.mark.unit
 def test_derivative_modes():
-    """Test equality of derivatives using batched and blocked methods."""
+    """Test equality of derivatives using batched, blocked, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     obj1 = ObjectiveFunction(MagneticWell(), deriv_mode="batched", use_jit=False)
     obj2 = ObjectiveFunction(MagneticWell(), deriv_mode="blocked", use_jit=False)
+    obj3 = ObjectiveFunction(MagneticWell(), deriv_mode="looped", use_jit=False)
 
     obj1.build(eq)
     obj2.build(eq)
+    obj3.build(eq)
     x = obj1.x(eq)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
+    g3 = obj3.grad(x)
     np.testing.assert_allclose(g1, g2, atol=1e-10)
+    np.testing.assert_allclose(g1, g3, atol=1e-10)
     J1 = obj1.jac_scaled(x)
     J2 = obj2.jac_scaled(x)
+    J3 = obj3.jac_scaled(x)
     np.testing.assert_allclose(J1, J2, atol=1e-10)
+    np.testing.assert_allclose(J1, J3, atol=1e-10)
     J1 = obj1.jac_unscaled(x)
     J2 = obj2.jac_unscaled(x)
+    J3 = obj3.jac_unscaled(x)
     np.testing.assert_allclose(J1, J2, atol=1e-10)
+    np.testing.assert_allclose(J1, J3, atol=1e-10)
     H1 = obj1.hess(x)
     H2 = obj2.hess(x)
+    H3 = obj3.hess(x)
+    # blocked hessian is only block diagonal, so we only check the diag part
     np.testing.assert_allclose(np.diag(H1), np.diag(H2), atol=1e-10)
+    # looped and batched should be full matrices
+    np.testing.assert_allclose(H1, H3, atol=1e-10)
 
 
 @pytest.mark.unit
@@ -324,7 +353,7 @@ def test_rejit():
             self._dim_f = 1
             super().build(eq, use_jit, verbose)
 
-        def compute(self, R_lmn):
+        def compute(self, R_lmn, **kwargs):
             return 200 + self.target * self.weight - self.y * R_lmn**3
 
     obj = DummyObjective(3)
@@ -475,6 +504,31 @@ def test_plasma_vessel_distance():
     with pytest.warns(UserWarning):
         obj.build(eq)
 
+    # test softmin, should give value less than true minimum
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    assert np.all(np.abs(d) < a_s - a_p)
+
+    # for large enough alpha, should be same as actual min
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+        alpha=100,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
 
 @pytest.mark.unit
 def test_mean_curvature():
@@ -507,8 +561,31 @@ def test_principal_curvature():
 
 
 @pytest.mark.unit
-def test_objective_print(capsys):
-    """Test that the profile objectives prints correctly."""
+def test_field_scale_length():
+    """Test for B field scale length objective function."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
+    )
+    surf2 = FourierRZToroidalSurface(
+        R_lmn=[10, 2], Z_lmn=[-2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
+    )
+    eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
+    eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
+    eq1.solve()
+    eq2.solve()
+
+    obj1 = BScaleLength(eq=eq1, normalize=False)
+    obj2 = BScaleLength(eq=eq2, normalize=False)
+
+    L1 = obj1.compute_unscaled(*obj1.xs(eq1))
+    L2 = obj2.compute_unscaled(*obj2.xs(eq2))
+
+    np.testing.assert_array_less(L1, L2)
+
+
+@pytest.mark.unit
+def test_profile_objective_print(capsys):
+    """Test that the profile objectives print correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
@@ -556,6 +633,59 @@ def test_objective_print(capsys):
     curr = eq.compute("current", grid=grid)["current"]
     obj = ToroidalCurrent(eq=eq, grid=grid)
     test(obj, curr, normalize=True)
+
+
+@pytest.mark.unit
+def test_plasma_vessel_distance_print(capsys):
+    """Test that the PlasmaVesselDistance objective prints correctly."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    surf_grid = LinearGrid(M=5, N=0)
+    plas_grid = LinearGrid(M=5, N=0)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(d))
+        + obj._units
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(d))
+        + obj._units
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(d))
+        + obj._units
+        + "\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
 
 
 @pytest.mark.unit
@@ -618,7 +748,7 @@ def test_jvp_scaled():
 
 @pytest.mark.unit
 def test_objective_target_bounds():
-    """Test that the target_scaled and bounds_scaled etc return the right things."""
+    """Test that the target_scaled and bounds_scaled etc. return the right things."""
     eq = Equilibrium()
 
     vol = Volume(target=3, normalize=True)
@@ -646,3 +776,28 @@ def test_objective_target_bounds():
     assert weight[0] == 1
     assert weight[1] == 1
     assert np.all(weight[2:] == 5)
+
+
+@pytest.mark.unit
+def test_jax_softmax_and_softmin():
+    """Test softmax and softmin function."""
+    arr = np.arange(-17, 17, 5)
+    # expect this to not be equal to the max but rather be more
+    # since softmax is a conservative estimate of the max
+    softmax = jax_softmax(arr, alpha=1)
+    assert softmax >= np.max(arr)
+
+    # expect this to be equal to the max
+    # as alpha -> infinity, softmax -> max
+    softmax = jax_softmax(arr, alpha=100)
+    np.testing.assert_almost_equal(softmax, np.max(arr))
+
+    # expect this to not be equal to the min but rather be less
+    # since softmin is a conservative estimate of the min
+    softmin = jax_softmin(arr, alpha=1)
+    assert softmin <= np.min(arr)
+
+    # expect this to be equal to the min
+    # as alpha -> infinity, softmin -> min
+    softmin = jax_softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(softmin, np.min(arr))

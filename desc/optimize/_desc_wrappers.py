@@ -48,7 +48,7 @@ def _optimize_desc_aug_lagrangian(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -142,7 +142,7 @@ def _optimize_desc_aug_lagrangian_least_squares(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -234,7 +234,7 @@ def _optimize_desc_least_squares(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -255,6 +255,8 @@ def _optimize_desc_least_squares(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_radius", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    elif options.get("initial_trust_radius", "scipy") == "scipy":
+        options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_njev"] = stoptol["max_njev"]
 
@@ -262,7 +264,7 @@ def _optimize_desc_least_squares(
         objective.compute_scaled_error,
         x0=x0,
         jac=objective.jac_scaled,
-        args=(),
+        args=(objective.constants,),
         x_scale=x_scale,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],
@@ -333,7 +335,7 @@ def _optimize_desc_fmin_scalar(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -355,6 +357,8 @@ def _optimize_desc_fmin_scalar(
     if not isinstance(x_scale, str) and jnp.allclose(x_scale, 1):
         options.setdefault("initial_trust_ratio", 1e-3)
         options.setdefault("max_trust_radius", 1.0)
+    elif options.get("initial_trust_radius", "scipy") == "scipy":
+        options.setdefault("initial_trust_ratio", 0.1)
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_ngev"] = stoptol["max_ngev"]
     options["max_nhev"] = stoptol["max_nhev"]
@@ -416,7 +420,7 @@ def _optimize_desc_stochastic(
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -438,7 +442,7 @@ def _optimize_desc_stochastic(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
-        args=(),
+        args=(objective.constants,),
         method=method,
         ftol=stoptol["ftol"],
         xtol=stoptol["xtol"],

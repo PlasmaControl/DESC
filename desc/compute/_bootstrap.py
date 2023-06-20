@@ -5,7 +5,7 @@ from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import compress, expand, surface_averages
+from .utils import compress, expand, surface_averages_map
 
 
 @register_compute_fun(
@@ -49,17 +49,18 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     modB_over_Bmax = data["|B|"] / Bmax
     sqrt_g = data["sqrt(g)"]
     Bmax_squared = compress(grid, Bmax * Bmax)
+    V_r = compress(grid, data["V_r(r)"])
+    compute_surface_averages = surface_averages_map(grid, expand_out=False)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
-        flux_surf_avg_term = surface_averages(
-            grid,
+        flux_surf_avg_term = compute_surface_averages(
             jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
             sqrt_g,
-            denominator=data["V_r(r)"],
+            denominator=V_r,
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
-            Bmax_squared * compress(grid, flux_surf_avg_term)
+            Bmax_squared * flux_surf_avg_term
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))

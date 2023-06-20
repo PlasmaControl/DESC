@@ -2,13 +2,12 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
 from .utils import (
     cross,
     dot,
-    expand,
     surface_averages,
     surface_integrals,
     surface_max,
@@ -28,9 +27,15 @@ from .utils import (
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "sqrt(g)"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r"],
 )
 def _B0(params, transforms, profiles, data, **kwargs):
     data["B0"] = data["psi_r"] / data["sqrt(g)"]
+    if transforms["grid"].axis.size:
+        limit = data["psi_rr"] / data["sqrt(g)_r"]
+        data["B0"] = put(
+            data["B0"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -2894,9 +2899,7 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     data=["|B|"],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["max_tz |B|"] = expand(
-        transforms["grid"], surface_max(transforms["grid"], data["|B|"])
-    )
+    data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])
     return data
 
 
@@ -2914,9 +2917,7 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data=["|B|"],
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["min_tz |B|"] = expand(
-        transforms["grid"], surface_min(transforms["grid"], data["|B|"])
-    )
+    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
     return data
 
 
@@ -3006,4 +3007,63 @@ def _kappa_n(params, transforms, profiles, data, **kwargs):
 )
 def _kappa_g(params, transforms, profiles, data, **kwargs):
     data["kappa_g"] = dot(data["kappa"], cross(data["n"], data["b"]))
+    return data
+
+
+@register_compute_fun(
+    name="grad(B)",
+    label="\\nabla \\mathbf{B}",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Gradient of magnetic field vector",
+    dim=(3, 3),
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_r", "B_t", "B_z", "e^rho", "e^theta", "e^zeta"],
+)
+def _grad_B_vec(params, transforms, profiles, data, **kwargs):
+    data["grad(B)"] = (
+        (data["B_r"][:, None, :] * data["e^rho"][:, :, None])
+        + (data["B_t"][:, None, :] * data["e^theta"][:, :, None])
+        + (data["B_z"][:, None, :] * data["e^zeta"][:, :, None])
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|grad(B)|",
+    label="|\\nabla \\mathbf{B}|",
+    units="T \\cdot m^{-1}",
+    units_long="Tesla / meter",
+    description="Frobenius norm of gradient of magnetic field vector",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(B)"],
+)
+def _grad_B_vec_fro(params, transforms, profiles, data, **kwargs):
+    data["|grad(B)|"] = jnp.linalg.norm(data["grad(B)"], axis=(1, 2), ord="fro")
+    return data
+
+
+@register_compute_fun(
+    name="L_grad(B)",
+    label="L_{\\nabla \\mathbf{B}} = \\frac{\\sqrt{2}|B|}{|\\nabla \\mathbf{B}|}",
+    units="m",
+    units_long="meters",
+    description="Magnetic field length scale based on Frobenius norm of gradient "
+    + "of magnetic field vector",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(B)|", "|B|"],
+)
+def _L_grad_B(params, transforms, profiles, data, **kwargs):
+    data["L_grad(B)"] = jnp.sqrt(2) * data["|B|"] / data["|grad(B)|"]
     return data

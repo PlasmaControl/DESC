@@ -191,7 +191,7 @@ def test_objective_compute_heliotron(benchmark):
     x = objective.x(eq)
 
     def run(x):
-        objective.compute(x).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
     return None
@@ -208,7 +208,7 @@ def test_objective_compute_dshape_current(benchmark):
     x = objective.x(eq)
 
     def run(x):
-        objective.compute(x).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
     return None
@@ -225,7 +225,7 @@ def test_objective_compute_atf(benchmark):
     x = objective.x(eq)
 
     def run(x):
-        objective.compute(x).block_until_ready()
+        objective.compute_scaled_error(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=10, iterations=10)
     return None
@@ -242,7 +242,7 @@ def test_objective_jac_heliotron(benchmark):
     x = objective.x(eq)
 
     def run(x):
-        objective.jac(x).block_until_ready()
+        objective.jac_scaled(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
     return None
@@ -259,7 +259,7 @@ def test_objective_jac_dshape_current(benchmark):
     x = objective.x(eq)
 
     def run(x):
-        objective.jac(x).block_until_ready()
+        objective.jac_scaled(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
     return None
@@ -276,7 +276,7 @@ def test_objective_jac_atf(benchmark):
     x = objective.x(eq)
 
     def run(x):
-        objective.jac(x).block_until_ready()
+        objective.jac_scaled(x).block_until_ready()
 
     benchmark.pedantic(run, args=(x,), rounds=5, iterations=5)
     return None

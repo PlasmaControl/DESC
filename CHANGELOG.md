@@ -1,6 +1,91 @@
 Changelog
 =========
 
+v0.9.0
+------
+
+[Github Commits](https://github.com/PlasmaControl/DESC/compare/v0.8.2...v0.9.0)
+
+
+New Features
+- Implements a new limit API to correctly evaluate a number of quantities at the 
+coordinate singularity at $\rho=0$ rather than returning NaN. Currently only quantities
+related to rotational transform and magnetic field strength are implemented, though in
+the future all quantities should evaluate correctly at the magnetic axis. Note that 
+evaluating quantities at the axis generally requires higher order derivatives and so
+can be much more expensive than evaluating at nonsingular points, so during optimization
+it is not recommended to include a grid point at the axis. Generally a small finite value
+such as ``rho = 1e-6`` will avoid the singuarlity with a negligible loss in accuracy for
+analytic quantities.
+- Adds new optimizers ``fmin-auglag`` and ``lsq-auglag`` for performing constrained
+optimization using the augmented Lagrangian method. These generally perform much better
+than constrained algorithms from scipy.
+- Adds interfaces to ``trust-constr`` and ``SLSQP`` methods of ``scipy.optimize.minimize``.
+These methods can handle general nonlinear constraints, though their performance on
+badly scaled problems like those encountered in stellarator optimization isn't great.
+- Adds calculation of the PEST straight field line coordinate jacobian, which is now
+used to check for nestedness in ``Equilibrium.is_nested``. Previously the non-straight
+field line jacobian was used, which would not detect if SFL theta contours overlapped.
+- Introduces a new function/method ``Equilibrium.map_coordinates`` which generalizes
+the existing methods ``compute_theta_coordinates`` and ``compute_flux_coordinates``,
+but allows mapping between arbitrary coordinates.
+- Adds calculation of $\nabla \mathbf{B}$ tensor and corresponding $L_{\nabla B}$ metric
+- Adds objective ``BScaleLength`` for penalizing strong magnetic field curvature.
+- Adds objective ``ObjectiveFromUser`` for wrapping an arbitary user defined function.
+- Adds utilities ``desc.grid.find_least_rational_surfaces`` and
+``desc.grid.find_most_rational_surfaces`` for finding the least/most rational surfaces
+for a given rotational transform profile.
+
+Breaking changes
+- ``Objective`` and ``ObjectiveFunction`` compute methods have now been separated into
+``compute_unscaled`` which returns the raw physics value of the objective,
+``compute_scaled``, which returns the normalized value, and ``compute_scaled_error``
+which returns the normalized difference between the physics value and the target/bounds.
+Similarly, ``jac_scaled`` and ``jac_unscaled`` are the relevant derivatives (note that
+``jac_scaled`` is equivalent to ``jac_scaled_error`` as the constant target drops out).
+``grad`` and ``hess`` methods still correspond to ``compute_scalar`` which returns the
+ sum of squares of ``compute_scaled_error``
+- renames ``zeta`` -> ``phi`` in many places in ``desc.plotting`` to be consistent with
+when we mean the computational coordinate $\zeta$ vs the physical coordinate $\phi$
+- Replaces ``nfev`` with ``maxiter`` in many places in the code. For most optimizers
+in scipy and all DESC optimizers, one iteration means one accepted step, which may
+require more than 1 function evaluation due to line searches or trust region subproblems.
+However, derivatives are generally only evaluated once per iteration, and are usually the
+most significant cost, so the iteration count is generally a better proxy for wall time
+than number of function evaluations.
+
+Minor changes
+- Minor updates to work with newer versions of JAX. Minimum ``jax`` version  is now 
+``0.3.2``, as some functions used in the constrained optimizers aren't present in 
+previous versions. Maximum ``jax`` version is now ``0.4.11``, the latest as of 6/13/23.
+- Adds new ``ObjectiveFunction`` attributes ``target_scaled`` and ``bounds_scaled``
+which return vectors of the scaled values from each sub-objective.
+- Adds automatic scaling of variables for ``scipy.optimize.minimize`` methods, using
+the hessian at the initial point.
+- Ensures objectives don't have both bounds and target set at the same time. This
+occasionally caused issues if one of them had a default value without the user realizing.
+- Adds documentation on how to interface with new optimizers.
+- Adds a documentation notebook with a simple example of using constrained optimizers
+- Adds a table of optimizer info to docs
+- Adds capability of ``InputReader`` to read VMEC files that have inputs spanning
+multiple lines
+- Reduces default initial trust region radius for most optimizers to be more conservative.
+- Adds a "softmin" option to ``PlasmaVesselDistance`` objective which is smoother and
+usually provides a better optimization landscape compared to the standard hard min.
+
+Bug Fixes
+- Fixes orientation of theta in VMEC output. (Previously we flipped theta for the base
+quantities such as $R$, $Z$, and $\lambda$, but not derived quantities such as $B$ and $J$).
+- Fixes VMEC utility bug that would cause ``xn``, ``xm`` to be empty if the Fourier
+modes given had only sine symmetry.
+- Fixes bug when VMEC input file has duplicated lines, DESC now will just use the
+last duplicated line (which is what VMEC does)
+
+New Contributors
+
+- \@pkim1818 made their first contribution in https://github.com/PlasmaControl/DESC/pull/503
+
+
 v0.8.2
 ------
 

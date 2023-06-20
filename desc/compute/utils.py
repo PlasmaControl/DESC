@@ -919,7 +919,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             jnp.matmul(
                 masks,
                 jnp.moveaxis(integrands, axis_to_move, 0),
-                precision=Precision.DEFAULT,
+                precision=Precision.HIGH,
             ),
             0,
             axis_to_move,

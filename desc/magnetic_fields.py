@@ -777,13 +777,22 @@ class DommaschkPotentialField(ScalarPotentialField):
 
     def __init__(self, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1.0):
 
+        ms = jnp.atleast_1d(ms)
+        ls = jnp.atleast_1d(ls)
+        a_arr = jnp.atleast_1d(a_arr)
+        b_arr = jnp.atleast_1d(b_arr)
+        c_arr = jnp.atleast_1d(c_arr)
+        d_arr = jnp.atleast_1d(d_arr)
+
         assert (
             ms.size == ls.size == a_arr.size == b_arr.size == c_arr.size == d_arr.size
         ), "Passed in arrays must all be of the same size!"
         assert not jnp.any(
             jnp.logical_or(ms < 0, ls < 0)
         ), "m and l modenumbers must be >= 0!"
-        assert jnp.isscalar(B0), "B0 should be a scalar value!"
+        assert (
+            jnp.isscalar(B0) or jnp.atleast_1d(B0).size == 1
+        ), "B0 should be a scalar value!"
 
         params = {}
         params["ms"] = ms

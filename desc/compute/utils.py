@@ -4,7 +4,6 @@ import copy
 import warnings
 
 import numpy as np
-from jax._src.lax.lax import Precision
 from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
@@ -916,13 +915,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # products. However, timing results showed no difference.
         axis_to_move = (integrands.ndim == 3) * 2
         integrals = jnp.moveaxis(
-            jnp.matmul(
-                masks,
-                jnp.moveaxis(integrands, axis_to_move, 0),
-                precision=Precision.HIGH,
-            ),
-            0,
-            axis_to_move,
+            masks.astype(int) @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
         )
         return expand(grid, integrals, surface_label) if expand_out else integrals
 

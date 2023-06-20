@@ -11,7 +11,7 @@ from .utils import cross, dot
 
 @register_compute_fun(
     name="K_vc",
-    label="\\mathbf{K}_{VC} = \\mathbf{n} \\times \\mathbf{B}",
+    label="\\mathbf{K}_{VC} = \\mathbf{B} \\time \\mathbf{n}",
     units="A \\cdot m^{-1}",
     units_long="Amps / meter",
     description="Virtual casing sheet current",
@@ -104,7 +104,7 @@ def _A_vc(params, transforms, profiles, data, **kwargs):
             / (2 * jnp.pi)
             / NFP
         )
-        K = data["K_vc"] * data["|e_theta x e_zeta|"][:, None]
+        K = data["K_vc"] * data["|e_theta x e_zeta|"][:, None] * 4 * jnp.pi**2
 
         def body1(i, A):
             Areg1, Areg2 = A
@@ -126,7 +126,7 @@ def _A_vc(params, transforms, profiles, data, **kwargs):
             A1i = mu_0 / (4 * jnp.pi) * jnp.sum(integrand1 * dS[:, None], axis=0)
             A2i = mu_0 / (4 * jnp.pi) * jnp.sum(integrand2 * dS[:, None], axis=0)
             Areg1 = put(Areg1, i, A1i.squeeze())
-            Areg1 = put(Areg2, i, A2i.squeeze())
+            Areg2 = put(Areg2, i, A2i.squeeze())
             return Areg1, Areg2
 
         A1 = jnp.zeros_like(Areg1)

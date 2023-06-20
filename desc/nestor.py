@@ -10,6 +10,7 @@ from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
 from desc.grid import LinearGrid
+from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import Index
 
@@ -1056,7 +1057,7 @@ def firstIterationPrintout(
         )
 
 
-class Nestor:
+class Nestor(IOAble):
     """Neumann Solver for Toroidal Systems.
 
     Parameters

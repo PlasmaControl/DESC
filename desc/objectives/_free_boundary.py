@@ -1,5 +1,7 @@
 """Objectives for solving free boundary equilibria."""
 
+import warnings
+
 import numpy as np
 from scipy.constants import mu_0
 
@@ -10,7 +12,7 @@ from desc.geometry.utils import xyz2rpz_vec
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.nestor import Nestor
 from desc.objectives.objective_funs import _Objective
-from desc.singularities import get_fourier_interp_matrix, singular_integral
+from desc.singularities import DFTInterpolator, FFTInterpolator, singular_integral
 from desc.utils import Timer
 
 from .normalization import compute_scaling_factors
@@ -131,9 +133,14 @@ class BoundaryErrorBIEST(_Objective):
             k = min(src_grid.num_theta, src_grid.num_zeta)
             self._q = k // 2 + int(np.sqrt(k))
 
-        self._interp_matrix = get_fourier_interp_matrix(
-            eval_grid, src_grid, self._s, self._q
-        )
+        try:
+            self._interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+        except AssertionError as e:
+            warnings.warn(
+                "Could not built fft interpolator, switching to dft method which is"
+                " much slower. Reason: " + str(e)
+            )
+            self._interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
         self._data_keys = [
             "K_vc",
@@ -163,7 +170,7 @@ class BoundaryErrorBIEST(_Objective):
             "eval_profiles": self._eval_profiles,
             "src_transforms": self._src_transforms,
             "src_profiles": self._src_profiles,
-            "interp_matrix": self._interp_matrix,
+            "interpolator": self._interpolator,
             "ext_field": self._ext_field,
         }
 
@@ -238,7 +245,7 @@ class BoundaryErrorBIEST(_Objective):
             self._s,
             self._q,
             "biot_savart",
-            constants["interp_matrix"],
+            constants["interpolator"],
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
@@ -370,9 +377,14 @@ class QuadraticFlux(_Objective):
             k = min(src_grid.num_theta, src_grid.num_zeta)
             self._q = k // 2 + int(np.sqrt(k))
 
-        self._interp_matrix = get_fourier_interp_matrix(
-            eval_grid, src_grid, self._s, self._q
-        )
+        try:
+            self._interpolator = FFTInterpolator(eval_grid, src_grid, self._s, self._q)
+        except AssertionError as e:
+            warnings.warn(
+                "Could not built fft interpolator, switching to dft method which is"
+                " much slower. Reason: " + str(e)
+            )
+            self._interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
         self._data_keys = ["K_vc", "R", "zeta", "Z", "e^rho", "n", "|e_theta x e_zeta|"]
         self._args = get_params(self._data_keys)
@@ -392,7 +404,7 @@ class QuadraticFlux(_Objective):
             "eval_profiles": self._eval_profiles,
             "src_transforms": self._src_transforms,
             "src_profiles": self._src_profiles,
-            "interp_matrix": self._interp_matrix,
+            "interpolator": self._interpolator,
             "ext_field": self._ext_field,
         }
 
@@ -467,7 +479,7 @@ class QuadraticFlux(_Objective):
             self._s,
             self._q,
             "biot_savart",
-            constants["interp_matrix"],
+            constants["interpolator"],
         )
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
@@ -700,7 +712,6 @@ class BoundaryErrorNESTOR(_Objective):
         normalize_target=True,
         name="NESTOR Boundary",
     ):
-
         self.mf = mf
         self.nf = nf
         self.ntheta = ntheta

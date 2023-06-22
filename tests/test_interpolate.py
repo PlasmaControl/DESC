@@ -140,15 +140,17 @@ def test_fft_interp1d():
         for i in [1, 2]:
             f1[p][i] = fun(x[p][i])
 
-    for s in ["up", "down"]:  # up or downsample
-        if s == "up":
-            xs = 1
-            xe = 2
-        else:
-            xs = 2
-            xe = 1
-        for sp in ["o", "e"]:  # source parity
-            for ep in ["o", "e"]:  # eval parity
+    for sp in ["o", "e"]:  # source parity
+        fi = f1[sp][1]
+        np.testing.assert_allclose(fi, fft_interp1d(fi, *fi.shape))
+        for ep in ["o", "e"]:  # eval parity
+            for s in ["up", "down"]:  # up or downsample
+                if s == "up":
+                    xs = 1
+                    xe = 2
+                else:
+                    xs = 2
+                    xe = 1
                 true = fun(x[ep][xe])
                 interp = fft_interp1d(f1[sp][xs], x[ep][xe].size)
                 np.testing.assert_allclose(true, interp, atol=1e-12, rtol=1e-12)
@@ -188,24 +190,26 @@ def test_fft_interp2d():
                 for j in [1, 2]:
                     f2[xp][yp][i][j] = fun2(x[xp][i], y[yp][j])
 
-    for sx in ["up", "down"]:  # up or downsample x
-        if sx == "up":
-            xs = 1
-            xe = 2
-        else:
-            xs = 2
-            xe = 1
-        for sy in ["up", "down"]:  # up or downsample y
-            if sy == "up":
-                ys = 1
-                ye = 2
-            else:
-                ys = 2
-                ye = 1
-            for spx in ["o", "e"]:  # source parity x
-                for epx in ["o", "e"]:  # eval parity x
-                    for spy in ["o", "e"]:  # source parity y
-                        for epy in ["o", "e"]:  # eval parity y
+    for spx in ["o", "e"]:  # source parity x
+        for spy in ["o", "e"]:  # source parity y
+            fi = f2[spx][spy][1][1]
+            np.testing.assert_allclose(fi, fft_interp2d(fi, *fi.shape))
+            for epx in ["o", "e"]:  # eval parity x
+                for epy in ["o", "e"]:  # eval parity y
+                    for sx in ["up", "down"]:  # up or downsample x
+                        if sx == "up":
+                            xs = 1
+                            xe = 2
+                        else:
+                            xs = 2
+                            xe = 1
+                        for sy in ["up", "down"]:  # up or downsample y
+                            if sy == "up":
+                                ys = 1
+                                ye = 2
+                            else:
+                                ys = 2
+                                ye = 1
                             true = fun2(x[epx][xe], y[epy][ye])
                             interp = fft_interp2d(
                                 f2[spx][spy][xs][ys], x[epx][xe].size, y[epy][ye].size

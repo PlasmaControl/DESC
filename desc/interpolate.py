@@ -84,10 +84,10 @@ def _pad_along_axis(array, pad=(0, 0), axis=0):
     """Pad with zeros or truncate a given dimension."""
     array = jnp.moveaxis(array, axis, 0)
 
-    if pad[0] <= 0:
+    if pad[0] < 0:
         array = array[abs(pad[0]) :]
         pad = (0, pad[1])
-    if pad[1] <= 0:
+    if pad[1] < 0:
         array = array[: -abs(pad[1])]
         pad = (pad[0], 0)
 

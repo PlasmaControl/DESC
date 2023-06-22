@@ -8,7 +8,6 @@ from .data_index import register_compute_fun
 from .utils import (
     cross,
     dot,
-    expand,
     surface_averages,
     surface_integrals,
     surface_max,
@@ -3130,9 +3129,7 @@ def _B_dot_gradB_z(params, transforms, profiles, data, **kwargs):
     data=["|B|"],
 )
 def _max_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["max_tz |B|"] = expand(
-        transforms["grid"], surface_max(transforms["grid"], data["|B|"])
-    )
+    data["max_tz |B|"] = surface_max(transforms["grid"], data["|B|"])
     return data
 
 
@@ -3150,9 +3147,7 @@ def _max_tz_modB(params, transforms, profiles, data, **kwargs):
     data=["|B|"],
 )
 def _min_tz_modB(params, transforms, profiles, data, **kwargs):
-    data["min_tz |B|"] = expand(
-        transforms["grid"], surface_min(transforms["grid"], data["|B|"])
-    )
+    data["min_tz |B|"] = surface_min(transforms["grid"], data["|B|"])
     return data
 
 

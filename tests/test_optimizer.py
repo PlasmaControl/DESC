@@ -797,7 +797,7 @@ def test_auglag():
         ctol=1e-6,
         verbose=3,
         maxiter=None,
-        options={},
+        options={"initial_multipliers": "least_squares"},
     )
     print(out1["active_mask"])
     out2 = lsq_auglag(
@@ -814,7 +814,7 @@ def test_auglag():
         ctol=1e-6,
         verbose=3,
         maxiter=None,
-        options={},
+        options={"initial_multipliers": "least_squares"},
     )
 
     out3 = minimize(

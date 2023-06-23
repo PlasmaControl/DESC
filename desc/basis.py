@@ -35,7 +35,6 @@ class Basis(IOAble, ABC):
     ]
 
     def __init__(self):
-
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
@@ -223,7 +222,6 @@ class PowerSeries(Basis):
     """
 
     def __init__(self, L, sym="even"):
-
         self._L = L
         self._M = 0
         self._N = 0
@@ -329,7 +327,6 @@ class ChebyshevPolynomial(Basis):
     """
 
     def __init__(self, L):
-
         self._L = L
         self._M = 0
         self._N = 0
@@ -385,6 +382,8 @@ class ChebyshevPolynomial(Basis):
         """
         if modes is None:
             modes = self.modes
+        if (derivatives[1] != 0) or (derivatives[2] != 0):
+            return jnp.zeros((nodes.shape[0], modes.shape[0]))
         if not len(modes):
             return np.array([]).reshape((len(nodes), 0))
 
@@ -428,7 +427,6 @@ class FourierSeries(Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-
         self._L = 0
         self._M = 0
         self._N = N
@@ -548,7 +546,6 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-
         self._L = 0
         self._M = M
         self._N = N
@@ -709,7 +706,6 @@ class ZernikePolynomial(Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-
         self._L = L
         self._M = M
         self._N = 0
@@ -916,7 +912,6 @@ class ChebyshevDoubleFourierBasis(Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False):
-
         self._L = L
         self._M = M
         self._N = N
@@ -1068,7 +1063,6 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-
         self._L = L
         self._M = M
         self._N = N
@@ -1511,8 +1505,8 @@ def zernike_radial(r, l, m, dr=0):
         )
     else:
         raise NotImplementedError(
-            "Analytic radial derivatives of zernike polynomials for order>3 "
-            + "have not been implemented"
+            "Analytic radial derivatives of Zernike polynomials for order>3 "
+            + "have not been implemented."
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)
 

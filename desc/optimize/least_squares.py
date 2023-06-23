@@ -30,9 +30,9 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     fun,
     x0,
     jac,
-    args=(),
     bounds=(-jnp.inf, jnp.inf),
-    x_scale=1,
+    args=(),
+    x_scale="jac",
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
@@ -40,7 +40,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
     maxiter=None,
     tr_method="svd",
     callback=None,
-    options={},
+    options=None,
 ):
     """Solve a least squares problem using a (quasi)-Newton trust region method.
 
@@ -69,19 +69,18 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         function. If set to ``'jac'``, the scale is iteratively updated using the
         inverse norms of the columns of the Jacobian matrix.
     ftol : float or None, optional
-        Tolerance for termination by the change of the cost function. Default
-        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+        Tolerance for termination by the change of the cost function.
+        The optimization process is stopped when ``dF < ftol * F``,
         and there was an adequate agreement between a local quadratic model and
         the true model in the last step. If None, the termination by this
         condition is disabled.
     xtol : float or None, optional
         Tolerance for termination by the change of the independent variables.
-        Default is 1e-8. Optimization is stopped when
-        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-        this condition is disabled.
+        Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+        If None, the termination by this condition is disabled.
     gtol : float or None, optional
-        Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Absolute tolerance for termination by the norm of the gradient.
+        Optimizer teriminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
         * 0 (default) : work silently.
@@ -117,6 +116,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         ``OptimizeResult`` for a description of other attributes.
 
     """
+    options = {} if options is None else options
     if tr_method not in ["cho", "svd"]:
         raise ValueError(
             "tr_method should be one of 'cho', 'svd', got {}".format(tr_method)
@@ -388,6 +388,7 @@ def lsqtr(  # noqa: C901 - FIXME: simplify this
         cost=cost,
         fun=f,
         grad=g,
+        v=v,
         jac=J,
         optimality=g_norm,
         nfev=nfev,

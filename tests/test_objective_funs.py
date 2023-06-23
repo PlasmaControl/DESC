@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 from scipy.constants import mu_0
 
+from desc.backend import jnp
 from desc.compute import get_transforms
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -17,6 +18,7 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    BScaleLength,
     Elongation,
     Energy,
     ForceBalance,
@@ -25,6 +27,7 @@ from desc.objectives import (
     MagneticWell,
     MeanCurvature,
     MercierStability,
+    ObjectiveFromUser,
     ObjectiveFunction,
     PlasmaVesselDistance,
     PrincipalCurvature,
@@ -36,6 +39,7 @@ from desc.objectives import (
     Volume,
 )
 from desc.objectives.objective_funs import _Objective
+from desc.objectives.utils import jax_softmax, jax_softmin
 from desc.profiles import PowerSeriesProfile
 from desc.vmec_utils import ptolemy_linear_transform
 
@@ -58,7 +62,7 @@ class TestObjectiveFunction:
                 "Psi": eq.Psi,
             }
             np.testing.assert_allclose(
-                obj.compute(**kwargs),
+                obj.compute_unscaled(**kwargs),
                 eq.compute(f, grid=obj._transforms["grid"])[f]
                 * obj._transforms["grid"].weights,
             )
@@ -68,6 +72,23 @@ class TestObjectiveFunction:
         test("iota", Equilibrium(current=PowerSeriesProfile(0)))
 
     @pytest.mark.unit
+    def test_objective_from_user(self):
+        """Test ObjectiveFromUser for arbitrary callable."""
+
+        def myfun(grid, data):
+            x = data["X"]
+            y = data["Y"]
+            r = jnp.sqrt(x**2 + y**2)
+            return r
+
+        eq = Equilibrium()
+        grid = LinearGrid(2, 2, 2)
+        objective = ObjectiveFromUser(myfun, eq=eq, grid=grid)
+        R1 = objective.compute(*objective.xs(eq))
+        R2 = eq.compute("R", grid=grid)["R"]
+        np.testing.assert_allclose(R1, R2)
+
+    @pytest.mark.unit
     def test_volume(self):
         """Test calculation of plasma volume."""
 
@@ -75,8 +96,8 @@ class TestObjectiveFunction:
             obj = Volume(
                 target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
-            V = obj.compute(eq.R_lmn, eq.Z_lmn)
-            V_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            V = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
+            V_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             V_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(V, 20 * np.pi**2)
             np.testing.assert_allclose(V_scaled, 10)
@@ -91,8 +112,8 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = AspectRatio(target=5, weight=1, eq=eq)
-            AR = obj.compute(eq.R_lmn, eq.Z_lmn)
-            AR_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            AR = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
+            AR_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(AR, 10)
             np.testing.assert_allclose(AR_scaled, 5)
 
@@ -105,8 +126,8 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Elongation(target=0, weight=2, eq=eq)
-            f = obj.compute(eq.R_lmn, eq.Z_lmn)
-            f_scaled = obj.compute_scaled(eq.R_lmn, eq.Z_lmn)
+            f = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
+            f_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 
@@ -118,8 +139,8 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = Energy(target=0, weight=mu_0, eq=eq, normalize=False)
-            W = obj.compute(*obj.xs(eq))
-            W_scaled = obj.compute_scaled(*obj.xs(eq))
+            W = obj.compute_unscaled(*obj.xs(eq))
+            W_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(W, 10 / mu_0)
             np.testing.assert_allclose(W_scaled, 10)
 
@@ -132,8 +153,8 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = RotationalTransform(target=1, weight=2, eq=eq)
-            iota = obj.compute(*obj.xs(eq))
-            iota_scaled = obj.compute_scaled(*obj.xs(eq))
+            iota = obj.compute_unscaled(*obj.xs(eq))
+            iota_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(iota, 0)
             np.testing.assert_allclose(iota_scaled, -2 / np.sqrt(3))
 
@@ -146,8 +167,8 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = ToroidalCurrent(target=1, weight=2, eq=eq, normalize=False)
-            I = obj.compute(*obj.xs(eq))
-            I_scaled = obj.compute_scaled(*obj.xs(eq))
+            I = obj.compute_unscaled(*obj.xs(eq))
+            I_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(I, 0)
             np.testing.assert_allclose(I_scaled, -2 / np.sqrt(3))
 
@@ -160,7 +181,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryBoozer(eq=eq)
-            fb = obj.compute(*obj.xs(eq))
+            fb = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_allclose(fb, 0, atol=1e-12)
 
         test(Equilibrium(L=2, M=2, N=1, iota=PowerSeriesProfile(0)))
@@ -184,16 +205,12 @@ class TestObjectiveFunction:
             normalize=False,
             eq=eq,
         )
-        f = obj.compute(*obj.xs(eq))
+        f = obj.compute_unscaled(*obj.xs(eq))
         idx_f = np.argsort(np.abs(f))
 
         # compute all amplitudes in the Boozer spectrum
         transforms = get_transforms(
-            "|B|_mn",
-            eq=eq,
-            grid=grid,
-            M_booz=M_booz,
-            N_booz=N_booz,
+            "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
         )
         matrix, modes, idx = ptolemy_linear_transform(
             transforms["B"].basis.modes, helicity=helicity, NFP=eq.NFP
@@ -215,7 +232,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryTwoTerm(eq=eq)
-            fc = obj.compute(*obj.xs(eq))
+            fc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_allclose(fc, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -227,7 +244,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = QuasisymmetryTripleProduct(eq=eq)
-            ft = obj.compute(*obj.xs(eq))
+            ft = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_allclose(ft, 0)
 
         test(Equilibrium(iota=PowerSeriesProfile(0)))
@@ -247,7 +264,7 @@ class TestObjectiveFunction:
 
     @pytest.mark.unit
     def test_qs_boozer_grids(self):
-        """Test grid compatability with QS objectives."""
+        """Test grid compatibility with QS objectives."""
         eq = get("QAS")
 
         # symmetric grid
@@ -266,7 +283,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MercierStability(eq=eq)
-            DMerc = obj.compute(*obj.xs(eq))
+            DMerc = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(len(DMerc), obj._transforms["grid"].num_rho)
             np.testing.assert_allclose(DMerc, 0)
 
@@ -279,7 +296,7 @@ class TestObjectiveFunction:
 
         def test(eq):
             obj = MagneticWell(eq=eq)
-            magnetic_well = obj.compute(*obj.xs(eq))
+            magnetic_well = obj.compute_unscaled(*obj.xs(eq))
             np.testing.assert_equal(len(magnetic_well), obj._transforms["grid"].num_rho)
             np.testing.assert_allclose(magnetic_well, 0, atol=1e-15)
 
@@ -289,23 +306,38 @@ class TestObjectiveFunction:
 
 @pytest.mark.unit
 def test_derivative_modes():
-    """Test equality of derivatives using batched and blocked methods."""
+    """Test equality of derivatives using batched, blocked, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     obj1 = ObjectiveFunction(MagneticWell(), deriv_mode="batched", use_jit=False)
     obj2 = ObjectiveFunction(MagneticWell(), deriv_mode="blocked", use_jit=False)
+    obj3 = ObjectiveFunction(MagneticWell(), deriv_mode="looped", use_jit=False)
 
     obj1.build(eq)
     obj2.build(eq)
+    obj3.build(eq)
     x = obj1.x(eq)
     g1 = obj1.grad(x)
     g2 = obj2.grad(x)
+    g3 = obj3.grad(x)
     np.testing.assert_allclose(g1, g2, atol=1e-10)
-    J1 = obj1.jac(x)
-    J2 = obj2.jac(x)
+    np.testing.assert_allclose(g1, g3, atol=1e-10)
+    J1 = obj1.jac_scaled(x)
+    J2 = obj2.jac_scaled(x)
+    J3 = obj3.jac_scaled(x)
     np.testing.assert_allclose(J1, J2, atol=1e-10)
+    np.testing.assert_allclose(J1, J3, atol=1e-10)
+    J1 = obj1.jac_unscaled(x)
+    J2 = obj2.jac_unscaled(x)
+    J3 = obj3.jac_unscaled(x)
+    np.testing.assert_allclose(J1, J2, atol=1e-10)
+    np.testing.assert_allclose(J1, J3, atol=1e-10)
     H1 = obj1.hess(x)
     H2 = obj2.hess(x)
+    H3 = obj3.hess(x)
+    # blocked hessian is only block diagonal, so we only check the diag part
     np.testing.assert_allclose(np.diag(H1), np.diag(H2), atol=1e-10)
+    # looped and batched should be full matrices
+    np.testing.assert_allclose(H1, H3, atol=1e-10)
 
 
 @pytest.mark.unit
@@ -327,32 +359,32 @@ def test_rejit():
     obj = DummyObjective(3)
     eq = Equilibrium()
     obj.build(eq)
-    assert obj.compute(4) == 8
-    assert obj.compute_scaled(4) == 8
+    assert obj.compute_unscaled(4) == 8
+    assert obj.compute_scaled_error(4) == 8
     obj.target = 1
     obj.weight = 2
     assert obj.compute(4) == 10  # compute method is not JIT compiled
-    assert obj.compute_scaled(4) == 8  # only compute_scaled is JIT compiled
+    assert obj.compute_scaled_error(4) == 8  # only compute_scaled is JIT compiled
     obj.jit()
     assert obj.compute(4) == 10
-    assert obj.compute_scaled(4) == 18
+    assert obj.compute_scaled_error(4) == 18
 
     objFun = ObjectiveFunction(obj)
     objFun.build(eq)
     x = objFun.x(eq)
 
-    f = objFun.compute(x)
-    J = objFun.jac(x)
+    f = objFun.compute_scaled_error(x)
+    J = objFun.jac_scaled(x)
     np.testing.assert_allclose(f, [-5598, 402, 396])
     np.testing.assert_allclose(J, np.diag([-1800, 0, -18]))
     objFun.objectives[0].target = 3
     objFun.objectives[0].weight = 4
     objFun.objectives[0].y = 2
-    np.testing.assert_allclose(objFun.compute(x), f)
-    np.testing.assert_allclose(objFun.jac(x), J)
+    np.testing.assert_allclose(objFun.compute_scaled_error(x), f)
+    np.testing.assert_allclose(objFun.jac_scaled(x), J)
     objFun.jit()
-    np.testing.assert_allclose(objFun.compute(x), [-7164, 836, 828])
-    np.testing.assert_allclose(objFun.jac(x), J * 4 / 3)
+    np.testing.assert_allclose(objFun.compute_scaled_error(x), [-7164, 836, 828])
+    np.testing.assert_allclose(objFun.jac_scaled(x), J * 4 / 3)
 
 
 @pytest.mark.unit
@@ -371,7 +403,7 @@ def test_getter_setter():
     """Test getter and setter methods of Objectives."""
     eq = Equilibrium()
     obj = GenericObjective("R", eq=eq)
-    R = obj.compute(*obj.xs(eq))
+    R = obj.compute_unscaled(*obj.xs(eq))
 
     # target
     target = R - 0.5
@@ -442,7 +474,7 @@ def test_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    d = obj.compute(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq))
     np.testing.assert_allclose(d, a_s - a_p)
 
     # for unequal M, should have error of order M_spacing*a_p
@@ -451,7 +483,7 @@ def test_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    d = obj.compute(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 1] * a_p
 
@@ -461,7 +493,7 @@ def test_plasma_vessel_distance():
     obj = PlasmaVesselDistance(
         eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
     )
-    d = obj.compute(*obj.xs(eq))
+    d = obj.compute_unscaled(*obj.xs(eq))
     assert abs(d.min() - (a_s - a_p)) < 1e-14
     assert abs(d.max() - (a_s - a_p)) < surf_grid.spacing[0, 2] * R0
 
@@ -472,6 +504,31 @@ def test_plasma_vessel_distance():
     with pytest.warns(UserWarning):
         obj.build(eq)
 
+    # test softmin, should give value less than true minimum
+    surf_grid = LinearGrid(M=5, N=6)
+    plas_grid = LinearGrid(M=5, N=6)
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    assert np.all(np.abs(d) < a_s - a_p)
+
+    # for large enough alpha, should be same as actual min
+    obj = PlasmaVesselDistance(
+        eq=eq,
+        plasma_grid=plas_grid,
+        surface_grid=surf_grid,
+        surface=surface,
+        use_softmin=True,
+        alpha=100,
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
 
 @pytest.mark.unit
 def test_mean_curvature():
@@ -479,13 +536,13 @@ def test_mean_curvature():
     # simple case like dshape should have mean curvature negative everywhere
     eq = get("DSHAPE")
     obj = MeanCurvature(eq=eq)
-    H = obj.compute(*obj.xs(eq))
+    H = obj.compute_unscaled(*obj.xs(eq))
     assert np.all(H <= 0)
 
     # more shaped case like NCSX should have some positive curvature
     eq = get("NCSX")
     obj = MeanCurvature(eq=eq)
-    H = obj.compute(*obj.xs(eq))
+    H = obj.compute_unscaled(*obj.xs(eq))
     assert np.any(H > 0)
 
 
@@ -495,17 +552,40 @@ def test_principal_curvature():
     eq1 = get("DSHAPE")
     eq2 = get("NCSX")
     obj1 = PrincipalCurvature(eq=eq1, normalize=False)
-    K1 = obj1.compute(*obj1.xs(eq1))
+    K1 = obj1.compute_unscaled(*obj1.xs(eq1))
     obj2 = PrincipalCurvature(eq=eq2, normalize=False)
-    K2 = obj2.compute(*obj2.xs(eq2))
+    K2 = obj2.compute_unscaled(*obj2.xs(eq2))
 
     # simple test: NCSX should have higher mean absolute curvature than DSHAPE
     assert K1.mean() < K2.mean()
 
 
 @pytest.mark.unit
-def test_objective_print(capsys):
-    """Test that the profile objectives prints correctly."""
+def test_field_scale_length():
+    """Test for B field scale length objective function."""
+    surf1 = FourierRZToroidalSurface(
+        R_lmn=[5, 1], Z_lmn=[-1], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
+    )
+    surf2 = FourierRZToroidalSurface(
+        R_lmn=[10, 2], Z_lmn=[-2], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]], NFP=1
+    )
+    eq1 = Equilibrium(L=2, M=2, N=0, surface=surf1)
+    eq2 = Equilibrium(L=2, M=2, N=0, surface=surf2)
+    eq1.solve()
+    eq2.solve()
+
+    obj1 = BScaleLength(eq=eq1, normalize=False)
+    obj2 = BScaleLength(eq=eq2, normalize=False)
+
+    L1 = obj1.compute_unscaled(*obj1.xs(eq1))
+    L2 = obj2.compute_unscaled(*obj2.xs(eq2))
+
+    np.testing.assert_array_less(L1, L2)
+
+
+@pytest.mark.unit
+def test_profile_objective_print(capsys):
+    """Test that the profile objectives print correctly."""
     eq = Equilibrium()
     grid = LinearGrid(L=10, M=10, N=5, axis=False)
 
@@ -556,6 +636,59 @@ def test_objective_print(capsys):
 
 
 @pytest.mark.unit
+def test_plasma_vessel_distance_print(capsys):
+    """Test that the PlasmaVesselDistance objective prints correctly."""
+    R0 = 10.0
+    a_p = 1.0
+    a_s = 2.0
+    # default eq has R0=10, a=1
+    eq = Equilibrium(M=3, N=2)
+    # surface with same R0, a=2, so true d=1 for all pts
+    surface = FourierRZToroidalSurface(
+        R_lmn=[R0, a_s], Z_lmn=[-a_s], modes_R=[[0, 0], [1, 0]], modes_Z=[[-1, 0]]
+    )
+    surf_grid = LinearGrid(M=5, N=0)
+    plas_grid = LinearGrid(M=5, N=0)
+    obj = PlasmaVesselDistance(
+        eq=eq, plasma_grid=plas_grid, surface_grid=surf_grid, surface=surface
+    )
+    d = obj.compute_unscaled(*obj.xs(eq))
+    np.testing.assert_allclose(d, a_s - a_p)
+
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(d))
+        + obj._units
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(d))
+        + obj._units
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(d))
+        + obj._units
+        + "\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(d / obj.normalization))
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
+
+
+@pytest.mark.unit
 def test_rebuild():
     """Test that the objective is rebuilt correctly when needed."""
     eq = Equilibrium(L=3, M=3)
@@ -577,3 +710,94 @@ def test_rebuild():
     obj = ObjectiveFunction(f_obj)
     obj.build(eq)
     eq.solve(maxiter=2, objective=obj)
+
+
+@pytest.mark.unit
+def test_jvp_scaled():
+    """Test that jvps are scaled correctly."""
+    eq = Equilibrium()
+    weight = 3
+    target = 5
+    objective = ObjectiveFunction(Volume(target=target, normalize=True, weight=weight))
+    objective.build(eq)
+    x = objective.x(eq)
+    dx = x / 100
+    jvp1u = objective.jvp_unscaled((dx,), x)
+    jvp2u = objective.jvp_unscaled((dx, dx), x)
+    jvp3u = objective.jvp_unscaled((dx, dx, dx), x)
+    jvp1s = objective.jvp_scaled((dx,), x)
+    jvp2s = objective.jvp_scaled((dx, dx), x)
+    jvp3s = objective.jvp_scaled((dx, dx, dx), x)
+
+    np.testing.assert_allclose(
+        jvp1u / objective._objectives[0].normalization * weight, jvp1s
+    )
+    np.testing.assert_allclose(
+        jvp2u / objective._objectives[0].normalization * weight, jvp2s
+    )
+    np.testing.assert_allclose(
+        jvp3u / objective._objectives[0].normalization * weight, jvp3s
+    )
+
+    with pytest.raises(NotImplementedError):
+        _ = objective.jvp_scaled((dx, dx, dx, dx), x)
+
+    with pytest.raises(NotImplementedError):
+        _ = objective.jvp_unscaled((dx, dx, dx, dx), x)
+
+
+@pytest.mark.unit
+def test_objective_target_bounds():
+    """Test that the target_scaled and bounds_scaled etc. return the right things."""
+    eq = Equilibrium()
+
+    vol = Volume(target=3, normalize=True)
+    asp = AspectRatio(bounds=(2, 3), normalize=False)
+    fbl = ForceBalance(normalize=True, bounds=(-1, 2), weight=5)
+
+    objective = ObjectiveFunction((vol, asp, fbl))
+    objective.build(eq)
+
+    target = objective.target_scaled
+    bounds = objective.bounds_scaled
+    weight = objective.weights
+
+    assert bounds[0][0] == 3 / vol.normalization
+    assert bounds[1][0] == 3 / vol.normalization
+    assert bounds[0][1] == 2
+    assert bounds[1][1] == 3
+    assert np.all(bounds[0][2:] == -1 / fbl.normalization)
+    assert np.all(bounds[1][2:] == 2 / fbl.normalization)
+
+    assert target[0] == 3 / vol.normalization
+    assert target[1] == 2.5
+    assert np.all(target[2:] == 0.5 / fbl.normalization)
+
+    assert weight[0] == 1
+    assert weight[1] == 1
+    assert np.all(weight[2:] == 5)
+
+
+@pytest.mark.unit
+def test_jax_softmax_and_softmin():
+    """Test softmax and softmin function."""
+    arr = np.arange(-17, 17, 5)
+    # expect this to not be equal to the max but rather be more
+    # since softmax is a conservative estimate of the max
+    softmax = jax_softmax(arr, alpha=1)
+    assert softmax >= np.max(arr)
+
+    # expect this to be equal to the max
+    # as alpha -> infinity, softmax -> max
+    softmax = jax_softmax(arr, alpha=100)
+    np.testing.assert_almost_equal(softmax, np.max(arr))
+
+    # expect this to not be equal to the min but rather be less
+    # since softmin is a conservative estimate of the min
+    softmin = jax_softmin(arr, alpha=1)
+    assert softmin <= np.min(arr)
+
+    # expect this to be equal to the min
+    # as alpha -> infinity, softmin -> min
+    softmin = jax_softmin(arr, alpha=100)
+    np.testing.assert_almost_equal(softmin, np.min(arr))

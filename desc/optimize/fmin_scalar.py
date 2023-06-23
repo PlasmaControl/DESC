@@ -35,14 +35,14 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     bounds=(-jnp.inf, jnp.inf),
     args=(),
     method="exact",
-    x_scale=1,
+    x_scale="hess",
     ftol=1e-6,
     xtol=1e-6,
     gtol=1e-6,
     verbose=1,
     maxiter=None,
     callback=None,
-    options={},
+    options=None,
 ):
     """Minimize a scalar function using a (quasi)-Newton trust region method.
 
@@ -79,19 +79,18 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         function. If set to ``'hess'``, the scale is iteratively updated using the
         inverse norms of the columns of the Hessian matrix.
     ftol : float or None, optional
-        Tolerance for termination by the change of the cost function. Default
-        is 1e-8. The optimization process is stopped when ``dF < ftol * F``,
+        Tolerance for termination by the change of the cost function.
+        The optimization process is stopped when ``dF < ftol * F``,
         and there was an adequate agreement between a local quadratic model and
         the true model in the last step. If None, the termination by this
         condition is disabled.
     xtol : float or None, optional
         Tolerance for termination by the change of the independent variables.
-        Default is 1e-8. Optimization is stopped when
-        ``norm(dx) < xtol * (xtol + norm(x))``. If None, the termination by
-        this condition is disabled.
+        Optimization is stopped when ``norm(dx) < xtol * (xtol + norm(x))``.
+        If None, the termination by this condition is disabled.
     gtol : float or None, optional
-        Absolute tolerance for termination by the norm of the gradient. Default is 1e-8.
-        Optimizer teriminates when ``norm(g) < gtol``, where
+        Absolute tolerance for termination by the norm of the gradient.
+        Optimizer teriminates when ``max(abs(g)) < gtol``.
         If None, the termination by this condition is disabled.
     verbose : {0, 1, 2}, optional
         * 0 (default) : work silently.
@@ -121,6 +120,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         Boolean flag indicating if the optimizer exited successfully.
 
     """
+    options = {} if options is None else options
     nfev = 0
     ngev = 0
     nhev = 0
@@ -167,7 +167,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         subproblem = trust_region_step_exact_cho
     else:
         raise ValueError(
-            colored("method should be one of 'dogleg' or 'subspace'", "red")
+            colored("method should be one of 'exact', 'dogleg' or 'subspace'", "red")
         )
 
     if maxiter is None:
@@ -181,10 +181,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     return_tr = options.pop("return_tr", True)
     max_dx = options.pop("max_dx", jnp.inf)
 
-    auto_scale = str(x_scale) == "auto"
-    x_scale = 1 if auto_scale and bfgs else ("hess" if auto_scale else x_scale)
-    hess_scale = str(x_scale) == "hess"
-    assert not (bfgs and hess_scale), "Hessian scaling is not compatible with BFGS"
+    hess_scale = isinstance(x_scale, str) and x_scale in ["hess", "auto"]
     if hess_scale:
         scale, scale_inv = compute_hess_scale(H)
     else:
@@ -407,6 +404,7 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         success=success,
         fun=f,
         grad=g,
+        v=v,
         hess=H,
         optimality=g_norm,
         nfev=nfev,

@@ -11,13 +11,17 @@ from .stochastic import sgd
 
 
 @register_optimizer(
-    name="fmin-auglag",
-    description="Augmented Lagrangian method with trust region subproblem.",
+    name=["fmin-auglag", "fmin-auglag-bfgs"],
+    description=[
+        "Augmented Lagrangian method with trust region subproblem.",
+        "Augmented Lagrangian method with trust region subproblem. Uses BFGS to"
+        + " approximate hessian",
+    ],
     scalar=True,
     equality_constraints=True,
     inequality_constraints=True,
     stochastic=False,
-    hessian=True,
+    hessian=[True, False],
     GPU=True,
 )
 def _optimize_desc_aug_lagrangian(
@@ -71,6 +75,7 @@ def _optimize_desc_aug_lagrangian(
     options["max_nfev"] = stoptol["max_nfev"]
     options["max_ngev"] = stoptol["max_ngev"]
     options["max_nhev"] = stoptol["max_nhev"]
+    hess = objective.hess if "bfgs" not in method else "bfgs"
 
     if constraint is not None:
         lb, ub = constraint.bounds_scaled
@@ -87,7 +92,7 @@ def _optimize_desc_aug_lagrangian(
         objective.compute_scalar,
         x0=x0,
         grad=objective.grad,
-        hess=objective.hess,
+        hess=hess,
         bounds=(-jnp.inf, jnp.inf),
         constraint=constraint_wrapped,
         args=(),

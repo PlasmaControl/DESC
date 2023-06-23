@@ -218,6 +218,18 @@ class ObjectiveFunction(IOAble):
             pass
         self.jvp_unscaled = jit(self.jvp_unscaled)
 
+        try:
+            del self.vjp_scaled
+        except AttributeError:
+            pass
+        self.vjp_scaled = jit(self.vjp_scaled)
+
+        try:
+            del self.vjp_unscaled
+        except AttributeError:
+            pass
+        self.vjp_unscaled = jit(self.vjp_unscaled)
+
         for obj in self._objectives:
             if obj._use_jit:
                 obj.jit()
@@ -476,6 +488,36 @@ class ObjectiveFunction(IOAble):
             )
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
+
+    def vjp_scaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vectors to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        return Derivative.compute_vjp(self.compute_scaled, 0, v, x)
+
+    def vjp_unscaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vectors to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        return Derivative.compute_vjp(self.compute_unscaled, 0, v, x)
 
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.

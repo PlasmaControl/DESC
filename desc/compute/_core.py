@@ -326,7 +326,7 @@ def _theta_sfl_z(params, transforms, profiles, data, **kwargs):
     label="\\alpha",
     units="~",
     units_long="None",
-    description="Field line label, defined on [0, 2pi]",
+    description="Field line label, defined on [0, 2pi)",
     dim=1,
     params=[],
     transforms={},

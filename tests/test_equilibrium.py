@@ -182,6 +182,32 @@ def test_eq_change_grid_resolution():
 
 
 @pytest.mark.unit
+def test_eq_change_symmetry():
+    """Test changing stellarator symmetry."""
+    eq = Equilibrium(L=2, M=2, N=2, NFP=2, sym=False)
+
+    # stellarator symmetric
+    eq.change_resolution(sym=True)
+    assert eq.sym
+    assert eq.R_basis.sym == "cos"
+    assert eq.Z_basis.sym == "sin"
+    assert eq.L_basis.sym == "sin"
+    assert eq.surface.sym
+    assert eq.surface.R_basis.sym == "cos"
+    assert eq.surface.Z_basis.sym == "sin"
+
+    # undo symmetry
+    eq.change_resolution(sym=False)
+    assert not eq.sym
+    assert not eq.R_basis.sym
+    assert not eq.Z_basis.sym
+    assert not eq.L_basis.sym
+    assert not eq.surface.sym
+    assert not eq.surface.R_basis.sym
+    assert not eq.surface.Z_basis.sym
+
+
+@pytest.mark.unit
 def test_resolution():
     """Test changing equilibrium spectral resolution."""
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)

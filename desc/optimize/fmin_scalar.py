@@ -149,11 +149,12 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
         )
         hess_min_curvature = options.pop("hessian_minimum_curvature", None)
         hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
-        hess.initialize(N, "hess")
-        H = hess.get_matrix()
-        bfgs = True
     elif isinstance(hess, BFGS):
-        hess.initialize(N, "hess")
+        if hasattr(hess, "n"):  # assume its already been initialized
+            assert hess.approx_type == "hess"
+            assert hess.n == N
+        else:
+            hess.initialize(N, "hess")
         bfgs = True
         H = hess.get_matrix()
     else:

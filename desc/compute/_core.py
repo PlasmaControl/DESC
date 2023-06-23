@@ -260,7 +260,7 @@ def _zeta_z(params, transforms, profiles, data, **kwargs):
     data=["theta", "lambda"],
 )
 def _theta_sfl(params, transforms, profiles, data, **kwargs):
-    data["theta_sfl"] = data["theta"] + data["lambda"]
+    data["theta_sfl"] = (data["theta"] + data["lambda"]) % (2 * jnp.pi)
     return data
 
 
@@ -326,7 +326,7 @@ def _theta_sfl_z(params, transforms, profiles, data, **kwargs):
     label="\\alpha",
     units="~",
     units_long="None",
-    description="Field line label",
+    description="Field line label, defined on [0, 2pi]",
     dim=1,
     params=[],
     transforms={},
@@ -335,7 +335,7 @@ def _theta_sfl_z(params, transforms, profiles, data, **kwargs):
     data=["theta_sfl", "zeta", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    data["alpha"] = data["theta_sfl"] - data["iota"] * data["zeta"]
+    data["alpha"] = (data["theta_sfl"] - data["iota"] * data["zeta"]) % (2 * jnp.pi)
     return data
 
 

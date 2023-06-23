@@ -1,3 +1,5 @@
+"""Tests for interpolation functions."""
+
 import numpy as np
 import pytest
 
@@ -33,6 +35,9 @@ class TestInterp1D:
         fq = interp1d(x, xp, fp, method="catmull-rom")
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-5)
 
+        fq = interp1d(x, xp, fp, method="monotonic")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
+
     @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):
         """Test extrapolation and periodic BC of 1d interpolation."""
@@ -52,8 +57,22 @@ class TestInterp1D:
         fq = interp1d(x, xp, fp, method="cubic", period=2 * np.pi)
         np.testing.assert_allclose(fq, f(x), rtol=1e-6, atol=1e-2)
 
+    @pytest.mark.unit
+    def test_interp1d_monotonic(self):
+        """Ensure monotonic interpolation is actually monotonic."""
+        # true function is just linear with a jump discontinuity at x=1.5
+        x = np.linspace(-4, 5, 10)
+        f = np.heaviside(x - 1.5, 0) + 0.1 * x
+        xq = np.linspace(-4, 5, 1000)
+        dfc = interp1d(xq, x, f, derivative=1, method="cubic")
+        dfm = interp1d(xq, x, f, derivative=1, method="monotonic")
+        assert dfc.min() < 0  # cubic interpolation undershoots, giving negative slope
+        assert dfm.min() > 0  # monotonic interpolation doesn't
+
 
 class TestInterp2D:
+    """Tests for interp2d function."""
+
     @pytest.mark.unit
     def test_interp2d(self):
         """Test accuracy of different 2d interpolation methods."""
@@ -77,6 +96,8 @@ class TestInterp2D:
 
 
 class TestInterp3D:
+    """Tests for interp3d function."""
+
     @pytest.mark.unit
     def test_interp3d(self):
         """Test accuracy of different 3d interpolation methods."""
@@ -88,7 +109,7 @@ class TestInterp3D:
         z = np.linspace(0, np.pi, 1000)
         xxp, yyp, zzp = np.meshgrid(xp, yp, zp, indexing="ij")
 
-        f = lambda x, y, z: np.sin(x) * np.cos(y) * z ** 2
+        f = lambda x, y, z: np.sin(x) * np.cos(y) * z**2
         fp = f(xxp, yyp, zzp)
 
         fq = interp3d(x, y, z, xp, yp, zp, fp)

@@ -1,14 +1,15 @@
+"""Tests for jax autodiff wrappers and finite differences."""
+
 import numpy as np
 import pytest
+from numpy.random import default_rng
 
 from desc.backend import jnp
 from desc.derivatives import AutoDiffDerivative, FiniteDiffDerivative
 
-from numpy.random import default_rng
-
 
 class TestDerivative:
-    """Tests Derivative classes"""
+    """Tests Derivative classes."""
 
     @pytest.mark.unit
     def test_finite_diff_vec(self):
@@ -119,6 +120,25 @@ class TestDerivative:
         np.testing.assert_allclose(jac(x), A)
         jac = AutoDiffDerivative(fun, num_blocks=3, shape=A.shape)
         np.testing.assert_allclose(jac(x), A)
+
+    @pytest.mark.unit
+    def test_jac_looped(self):
+        """Test computing the jacobian by explicit looping jvp."""
+
+        def test_fun(x, y, a):
+            return jnp.cos(x) + x * y + a
+
+        x = np.array([1, 5, 0.01, 200])
+        y = np.array([60, 1, 100, 0.02])
+        a = -2.0
+
+        jac1 = AutoDiffDerivative(test_fun, argnum=0, mode="fwd")
+        J1 = jac1.compute(x, y, a)
+
+        jac2 = AutoDiffDerivative(test_fun, argnum=0, mode="looped")
+        J2 = jac2.compute(x, y, a)
+
+        np.testing.assert_allclose(J1, J2, atol=1e-8)
 
 
 class TestJVP:
@@ -341,21 +361,3 @@ class TestJVP:
         np.testing.assert_allclose(
             df, np.array([-33858.0, -55584.0, -77310.0, -99036.0]), rtol=1e-4
         )
-
-
-def test_jac_looped():
-
-    from numpy.random import default_rng
-
-    rng = default_rng(seed=0)
-    A = rng.random((10, 20))
-    x = rng.random(20)
-
-    def fun(x):
-        y = A @ x
-        y = y ** 2
-        return A @ jnp.concatenate([y, y])
-
-    J1 = AutoDiffDerivative(fun, mode="fwd")(x)
-    J2 = AutoDiffDerivative(fun, mode="looped")(x)
-    np.testing.assert_allclose(J1, J2)

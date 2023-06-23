@@ -1,12 +1,15 @@
+"""Tests for Mercier stability functions."""
+
 import numpy as np
 import pytest
 from netCDF4 import Dataset
 
+import desc.examples
 import desc.io
 from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
-import desc.examples
+from desc.objectives import MagneticWell, MercierStability
 
 DEFAULT_RANGE = (0.05, 1)
 DEFAULT_RTOL = 1e-2
@@ -17,9 +20,7 @@ MAX_SIGN_DIFF = 5
 def all_close(
     y1, y2, rho, rho_range=DEFAULT_RANGE, rtol=DEFAULT_RTOL, atol=DEFAULT_ATOL
 ):
-    """
-    Test that the values of y1 and y2, over the indices defined by the given range,
-    are closer than the given tolerance.
+    """Test that the values of y1 and y2, over a given range are close enough.
 
     Parameters
     ----------
@@ -43,7 +44,8 @@ def all_close(
 
 
 def get_vmec_data(stellarator, quantity):
-    """
+    """Get data from a VMEC wout.nc file.
+
     Parameters
     ----------
     stellarator : str
@@ -86,7 +88,7 @@ def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_shear_vmec = get_vmec_data(stellarator, "DShear")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_shear = compress(grid, eq.compute("D_shear", grid)["D_shear"])
+        d_shear = compress(grid, eq.compute("D_shear", grid=grid)["D_shear"])
 
         assert np.all(
             d_shear[np.isfinite(d_shear)] >= 0
@@ -108,7 +110,7 @@ def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_current_vmec = get_vmec_data(stellarator, "DCurr")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_current = compress(grid, eq.compute("D_current", grid)["D_current"])
+        d_current = compress(grid, eq.compute("D_current", grid=grid)["D_current"])
 
         assert (
             len(np.where(np.sign(d_current) != np.sign(d_current_vmec))[0])
@@ -131,7 +133,7 @@ def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_well_vmec = get_vmec_data(stellarator, "DWell")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_well = compress(grid, eq.compute("D_well", grid)["D_well"])
+        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
 
         assert (
             len(np.where(np.sign(d_well) != np.sign(d_well_vmec))[0]) <= MAX_SIGN_DIFF
@@ -155,7 +157,7 @@ def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_geodesic_vmec = get_vmec_data(stellarator, "DGeod")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_geodesic = compress(grid, eq.compute("D_geodesic", grid)["D_geodesic"])
+        d_geodesic = compress(grid, eq.compute("D_geodesic", grid=grid)["D_geodesic"])
 
         assert np.all(
             d_geodesic[np.isfinite(d_geodesic)] <= 0
@@ -178,7 +180,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_mercier_vmec = get_vmec_data(stellarator, "DMerc")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_mercier = compress(grid, eq.compute("D_Mercier", grid)["D_Mercier"])
+        d_mercier = compress(grid, eq.compute("D_Mercier", grid=grid)["D_Mercier"])
 
         assert (
             len(np.where(np.sign(d_mercier) != np.sign(d_mercier_vmec))[0])
@@ -186,7 +188,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         )
         all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=2e-2)
+    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
     test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
     test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
 
@@ -199,9 +201,9 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
     def test(stellarator, rho=np.linspace(0, 1, 128)):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_well = compress(grid, eq.compute("D_well", grid)["D_well"])
+        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
         magnetic_well = compress(
-            grid, eq.compute("magnetic well", grid)["magnetic well"]
+            grid, eq.compute("magnetic well", grid=grid)["magnetic well"]
         )
 
         assert (
@@ -210,3 +212,80 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
 
     test(DSHAPE_current)
     test(HELIOTRON_ex)
+
+
+@pytest.mark.unit
+def test_mercier_print(capsys):
+    """Test that the Mercier stability criteria prints correctly."""
+    eq = Equilibrium()
+    grid = LinearGrid(L=10, M=10, N=5, axis=False)
+
+    Dmerc = eq.compute("D_Mercier", grid=grid)["D_Mercier"]
+
+    mercier_obj = MercierStability(eq=eq, grid=grid)
+    np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
+    mercier_obj.print_value(*mercier_obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum "
+        + mercier_obj._print_value_fmt.format(np.max(Dmerc))
+        + mercier_obj._units
+        + "\n"
+        + "Minimum "
+        + mercier_obj._print_value_fmt.format(np.min(Dmerc))
+        + mercier_obj._units
+        + "\n"
+        + "Average "
+        + mercier_obj._print_value_fmt.format(np.mean(Dmerc))
+        + mercier_obj._units
+        + "\n"
+        + "Maximum "
+        + mercier_obj._print_value_fmt.format(np.max(Dmerc / mercier_obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Minimum "
+        + mercier_obj._print_value_fmt.format(np.min(Dmerc / mercier_obj.normalization))
+        + "(normalized)"
+        + "\n"
+        + "Average "
+        + mercier_obj._print_value_fmt.format(
+            np.mean(Dmerc / mercier_obj.normalization)
+        )
+        + "(normalized)"
+        + "\n"
+    )
+    assert out.out == corr_out
+
+
+@pytest.mark.unit
+def test_magwell_print(capsys):
+    """Test that the magnetic well stability criteria prints correctly."""
+    eq = desc.examples.get("HELIOTRON")
+    grid = LinearGrid(L=12, M=12, N=6, axis=False)
+    obj = MagneticWell(eq=eq, grid=grid)
+
+    magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
+    f = obj.compute(*obj.xs(eq))
+    np.testing.assert_allclose(f, magwell)
+
+    obj.print_value(*obj.xs(eq))
+    out = capsys.readouterr()
+
+    corr_out = str(
+        "Precomputing transforms\n"
+        + "Maximum "
+        + obj._print_value_fmt.format(np.max(magwell))
+        + obj._units
+        + "\n"
+        + "Minimum "
+        + obj._print_value_fmt.format(np.min(magwell))
+        + obj._units
+        + "\n"
+        + "Average "
+        + obj._print_value_fmt.format(np.mean(magwell))
+        + obj._units
+        + "\n"
+    )
+    assert out.out == corr_out

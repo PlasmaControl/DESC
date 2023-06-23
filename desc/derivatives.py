@@ -1,8 +1,11 @@
-import numpy as np
+"""Wrapper classes for JAX automatic differentiation and finite differences."""
+
 from abc import ABC, abstractmethod
+
+import numpy as np
 from termcolor import colored
 
-from desc.backend import use_jax, put, jnp
+from desc.backend import fori_loop, jnp, put, use_jax
 
 if use_jax:
     import jax
@@ -45,7 +48,7 @@ class _Derivative(ABC):
 
     @property
     def fun(self):
-        """callable : function being differentiated"""
+        """Callable : function being differentiated."""
         return self._fun
 
     @fun.setter
@@ -54,7 +57,7 @@ class _Derivative(ABC):
 
     @property
     def argnum(self):
-        """int : argument being differentiated with respect to"""
+        """Integer : argument being differentiated with respect to."""
         return self._argnum
 
     @argnum.setter
@@ -63,7 +66,7 @@ class _Derivative(ABC):
 
     @property
     def mode(self):
-        """str : the kind of derivative being computed (eg ``'grad'``, ``'hess'``, etc)"""
+        """String : the kind of derivative being computed (eg ``'grad'``)."""
         return self._mode
 
     def __call__(self, *args):
@@ -108,10 +111,10 @@ class AutoDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
-        ``'hess'`` (hessian of a scalar function),
-        or ``'jvp'`` (jacobian vector product)
+        ``'hess'`` (Hessian of a scalar function),
+        or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
 
     Raises
@@ -147,7 +150,7 @@ class AutoDiffDerivative(_Derivative):
         return self._compute(*args)
 
     @classmethod
-    def compute_jvp(cls, fun, argnum, v, *args):
+    def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
         """Compute df/dx*v.
 
         Parameters
@@ -159,28 +162,31 @@ class AutoDiffDerivative(_Derivative):
         v : array-like or tuple of array-like
             tangent vectors. Should be one for each argnum
         args : tuple
-            arguments passed to f
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
         jvp : array-like
-            jacobian times vectors v, summed over different argnums
+            Jacobian times vectors v, summed over different argnums
 
         """
-        tangents = list(nested_zeros_like(args))
-        if jnp.isscalar(argnum):
-            argnum = (argnum,)
-        else:
-            argnum = tuple(argnum)
+        _ = kwargs.pop("rel_step", None)  # unused by autodiff
+        argnum = (argnum,) if jnp.isscalar(argnum) else tuple(argnum)
         v = (v,) if not isinstance(v, tuple) else v
 
-        for i, vi in enumerate(v):
-            tangents[argnum[i]] = vi
-        y, u = jax.jvp(fun, args, tuple(tangents))
+        def _fun(*x):
+            _args = list(args)
+            for i, xi in zip(argnum, x):
+                _args[i] = xi
+            return fun(*_args, **kwargs)
+
+        y, u = jax.jvp(_fun, tuple(args[i] for i in argnum), v)
         return u
 
     @classmethod
-    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
+    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):
         """Compute d^2f/dx^2*v1*v2.
 
         Parameters
@@ -193,7 +199,9 @@ class AutoDiffDerivative(_Derivative):
         v1,v2 : array-like or tuple of array-like
             tangent vectors. Should be one for each argnum
         args : tuple
-            arguments passed to f
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
@@ -214,12 +222,14 @@ class AutoDiffDerivative(_Derivative):
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
-        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
-        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args, **kwargs)
+        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(
+            dfdx, argnum2, dx2, dx1, *args, **kwargs
+        )
         return d2fdx2(v1, v2)
 
     @classmethod
-    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args):
+    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args, **kwargs):
         """Compute d^3f/dx^3*v1*v2*v3.
 
         Parameters
@@ -232,7 +242,9 @@ class AutoDiffDerivative(_Derivative):
         v1,v2,v3 : array-like or tuple of array-like
             tangent vectors. Should be one for each argnum
         args : tuple
-            arguments passed to f
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
@@ -260,32 +272,32 @@ class AutoDiffDerivative(_Derivative):
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)
 
-        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
-        d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args, **kwargs)
+        d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(
+            dfdx, argnum2, dx2, dx1, *args, **kwargs
+        )
         d3fdx3 = lambda dx1, dx2, dx3: cls.compute_jvp(
-            d2fdx2, argnum3, dx3, dx2, dx1, *args
+            d2fdx2, argnum3, dx3, dx2, dx1, *args, **kwargs
         )
         return d3fdx3(v1, v2, v3)
 
-    def _compute_jvp(self, v, *args):
-        return self.compute_jvp(self._fun, self.argnum, v, *args)
+    def _compute_jvp(self, v, *args, **kwargs):
+        return self.compute_jvp(self._fun, self.argnum, v, *args, **kwargs)
 
-    def _jac_looped(self, *args):
+    def _jac_looped(self, *args, **kwargs):
 
-        Z = nested_zeros_like(args)
         n = args[self._argnum].size
+        shp = jax.eval_shape(self._fun, *args).shape
         I = jnp.eye(n)
+        J = jnp.zeros((*shp, n)).T
 
-        J = []
-        if not isinstance(Z, tuple):
-            Z = (Z,)
+        def body(i, J):
+            tangents = I[i]
+            Ji = self._compute_jvp(tangents, *args, **kwargs)
+            J = put(J, i, Ji.T)
+            return J
 
-        for i in range(n):
-            tangents = Z[0 : self._argnum] + (I[i],) + Z[self._argnum + 1 :]
-            Ji = jnp.atleast_2d(jax.jit(self._compute_jvp)(tangents, *args))
-            J.append(Ji.T)
-
-        return jnp.hstack(J)
+        return fori_loop(0, n, body, J).T
 
     def _set_mode(self, mode) -> None:
         if mode not in ["fwd", "rev", "grad", "hess", "jvp", "looped"]:
@@ -319,10 +331,10 @@ class FiniteDiffDerivative(_Derivative):
         Specifies which positional argument to differentiate with respect to
     mode : str, optional
         Automatic differentiation mode.
-        One of ``'fwd'`` (forward mode jacobian), ``'rev'`` (reverse mode jacobian),
+        One of ``'fwd'`` (forward mode Jacobian), ``'rev'`` (reverse mode Jacobian),
         ``'grad'`` (gradient of a scalar function),
-        ``'hess'`` (hessian of a scalar function),
-        or ``'jvp'`` (jacobian vector product)
+        ``'hess'`` (Hessian of a scalar function),
+        or ``'jvp'`` (Jacobian vector product)
         Default = ``'fwd'``
     rel_step : float, optional
         Relative step size: dx = max(1, abs(x))*rel_step
@@ -338,13 +350,15 @@ class FiniteDiffDerivative(_Derivative):
         self._set_mode(mode)
 
     def _compute_hessian(self, *args):
-        """Compute the hessian matrix using 2nd order centered finite differences.
+        """Compute the Hessian matrix using 2nd order centered finite differences.
 
         Parameters
         ----------
-        *args : list
+        args : tuple
             Arguments of the objective function where the derivative is to be
             evaluated at.
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
@@ -363,7 +377,6 @@ class FiniteDiffDerivative(_Derivative):
         fx = f(x)
         h = np.maximum(1.0, np.abs(x)) * self.rel_step
         ee = np.diag(h)
-        dtype = fx.dtype
         hess = np.outer(h, h)
 
         for i in range(n):
@@ -382,13 +395,16 @@ class FiniteDiffDerivative(_Derivative):
         return hess
 
     def _compute_grad_or_jac(self, *args):
-        """Compute the gradient or jacobian matrix (ie, first derivative).
+        """Compute the gradient or Jacobian matrix (ie, first derivative).
 
         Parameters
         ----------
-        *args : list
+        args : tuple
             Arguments of the objective function where the derivative is to be
             evaluated at.
+        kwargs : dict
+            keyword arguments passed to fun
+
 
         Returns
         -------
@@ -435,15 +451,17 @@ class FiniteDiffDerivative(_Derivative):
         v : array-like or tuple of array-like
             tangent vectors. Should be one for each argnum
         args : tuple
-            arguments passed to f
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
         jvp : array-like
-            jacobian times vectors v, summed over different argnums
+            Jacobian times vectors v, summed over different argnums
 
         """
-        rel_step = kwargs.get("rel_step", 1e-3)
+        rel_step = kwargs.pop("rel_step", 1e-3)
 
         if np.isscalar(argnum):
             nargs = 1
@@ -454,14 +472,16 @@ class FiniteDiffDerivative(_Derivative):
 
         f = np.array(
             [
-                cls._compute_jvp_1arg(fun, argnum[i], v[i], *args, rel_step=rel_step)
+                cls._compute_jvp_1arg(
+                    fun, argnum[i], v[i], *args, rel_step=rel_step, **kwargs
+                )
                 for i in range(nargs)
             ]
         )
         return np.sum(f, axis=0)
 
     @classmethod
-    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args):
+    def compute_jvp2(cls, fun, argnum1, argnum2, v1, v2, *args, **kwargs):
         """Compute d^2f/dx^2*v1*v2.
 
         Parameters
@@ -474,7 +494,9 @@ class FiniteDiffDerivative(_Derivative):
         v1,v2 : array-like or tuple of array-like
             tangent vectors. Should be one for each argnum
         args : tuple
-            arguments passed to f
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
@@ -495,12 +517,14 @@ class FiniteDiffDerivative(_Derivative):
             argnum2 = tuple([i + 1 for i in argnum2])
             v2 = tuple(v2)
 
-        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
-        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args, **kwargs)
+        d2fdx2 = lambda dx1, dx2: cls.compute_jvp(
+            dfdx, argnum2, dx2, dx1, *args, **kwargs
+        )
         return d2fdx2(v1, v2)
 
     @classmethod
-    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args):
+    def compute_jvp3(cls, fun, argnum1, argnum2, argnum3, v1, v2, v3, *args, **kwargs):
         """Compute d^3f/dx^3*v1*v2*v3.
 
         Parameters
@@ -513,7 +537,9 @@ class FiniteDiffDerivative(_Derivative):
         v1,v2,v3 : array-like or tuple of array-like
             tangent vectors. Should be one for each argnum
         args : tuple
-            arguments passed to f
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
 
         Returns
         -------
@@ -541,22 +567,24 @@ class FiniteDiffDerivative(_Derivative):
             argnum3 = tuple([i + 2 for i in argnum3])
             v3 = tuple(v3)
 
-        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args)
-        d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(dfdx, argnum2, dx2, dx1, *args)
+        dfdx = lambda dx1, *args: cls.compute_jvp(fun, argnum1, dx1, *args, **kwargs)
+        d2fdx2 = lambda dx1, dx2, *args: cls.compute_jvp(
+            dfdx, argnum2, dx2, dx1, *args, **kwargs
+        )
         d3fdx3 = lambda dx1, dx2, dx3: cls.compute_jvp(
-            d2fdx2, argnum3, dx3, dx2, dx1, *args
+            d2fdx2, argnum3, dx3, dx2, dx1, *args, **kwargs
         )
         return d3fdx3(v1, v2, v3)
 
-    def _compute_jvp(self, v, *args):
+    def _compute_jvp(self, v, *args, **kwargs):
         return self.compute_jvp(
-            self._fun, self._argnum, v, *args, rel_step=self.rel_step
+            self._fun, self._argnum, v, *args, rel_step=self.rel_step, **kwargs
         )
 
     @classmethod
     def _compute_jvp_1arg(cls, fun, argnum, v, *args, **kwargs):
         """Compute a jvp wrt a single argument."""
-        rel_step = kwargs.get("rel_step", 1e-3)
+        rel_step = kwargs.pop("rel_step", 1e-3)
         normv = np.linalg.norm(v)
         if normv != 0:
             vh = v / normv
@@ -566,7 +594,7 @@ class FiniteDiffDerivative(_Derivative):
 
         def f(x):
             tempargs = args[0:argnum] + (x,) + args[argnum + 1 :]
-            return fun(*tempargs)
+            return fun(*tempargs, **kwargs)
 
         h = rel_step
         df = (f(x + h * vh) - f(x - h * vh)) / (2 * h)
@@ -610,19 +638,6 @@ class FiniteDiffDerivative(_Derivative):
 
         """
         return self._compute(*args)
-
-
-def nested_zeros_like(x):
-
-    if x is None:
-        return None
-    if jnp.isscalar(x):
-        return 0.0
-    if isinstance(x, tuple):
-        return tuple([nested_zeros_like(a) for a in x])
-    if isinstance(x, list):
-        return list([nested_zeros_like(a) for a in x])
-    return jnp.zeros_like(x)
 
 
 if use_jax:

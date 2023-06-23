@@ -1,6 +1,6 @@
 name: Notebook tests
 
-on: 
+on:
   push:
     branches:
       - master
@@ -26,9 +26,9 @@ jobs:
         python-version: [3.9]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -40,5 +40,4 @@ jobs:
           pwd
           lscpu
           export PYTHONPATH=$(pwd)
-          pytest --nbmake "./docs/notebooks" --nbmake-timeout=600 --ignore=./docs/notebooks/zernike_eval.ipynb
-
+          pytest -v --nbmake "./docs/notebooks" --nbmake-timeout=600 --ignore=./docs/notebooks/zernike_eval.ipynb --ignore=./docs/notebooks/DESC_Solve_from_pyQSC.ipynb

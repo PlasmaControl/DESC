@@ -1,7 +1,9 @@
-import versioneer
-from setuptools import setup, find_packages
+"""Setup/build/install script for DESC."""
+
 import os
 
+import versioneer
+from setuptools import find_packages, setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -22,7 +24,10 @@ setup(
     name="desc-opt",
     version=versioneer.get_version(),
     cmdclass=versioneer.get_cmdclass(),
-    description="Computes, analyzes and optimizes 3D MHD equilibria for stellarators and tokamaks",
+    description=(
+        "Computes, analyzes and optimizes 3D MHD equilibria for "
+        + "stellarators and tokamaks"
+    ),
     long_description=long_description,
     long_description_content_type="text/x-rst",
     url="https://github.com/PlasmaControl/DESC/",
@@ -50,14 +55,11 @@ setup(
     packages=find_packages(exclude=["docs", "tests", "local", "report"]),
     include_package_data=True,
     install_requires=requirements,
-    extras_require={
-        "dev": dev_requirements,
-    },
-    python_requires="~=3.6",
+    python_requires=">=3.8",
     entry_points={"console_scripts": ["desc=desc.__main__:main"]},
     project_urls={
         "Issues Tracker": "https://github.com/PlasmaControl/DESC/issues",
-        "Contributing": "https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst",
+        "Contributing": "https://github.com/PlasmaControl/DESC/blob/master/CONTRIBUTING.rst",  # noqa: E501
         "Source Code": "https://github.com/PlasmaControl/DESC/",
         "Documentation": "https://desc-docs.readthedocs.io/",
     },

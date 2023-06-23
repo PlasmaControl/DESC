@@ -1,8 +1,11 @@
+"""Tests for coils and coilsets."""
+
 import numpy as np
 import pytest
-from desc.grid import LinearGrid, Grid
-from desc.coils import CoilSet, FourierRZCoil, FourierXYZCoil, FourierPlanarCoil
+
+from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
 from desc.geometry import FourierRZCurve
+from desc.grid import Grid, LinearGrid
 
 
 class TestCoil:
@@ -10,16 +13,18 @@ class TestCoil:
 
     @pytest.mark.unit
     def test_biot_savart(self):
-        """Test biot-savart implementation against analytic formula for circular coil."""
+        """Test biot-savart implementation against analytic formula."""
         R = 2
         y = 1
         I = 1
-        By_true = 1e-7 * 2 * np.pi * R ** 2 * I / (y ** 2 + R ** 2) ** (3 / 2)
+        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
         B_true = np.array([0, By_true, 0])
         coil = FourierXYZCoil(I)
         coil.grid = LinearGrid(zeta=100, endpoint=True)
         assert coil.grid.num_nodes == 100
-        B_approx = coil.compute_magnetic_field(Grid([[10, y, 0]]), basis="xyz")[0]
+        B_approx = coil.compute_magnetic_field(
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz"
+        )[0]
         np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
     @pytest.mark.unit
@@ -42,7 +47,7 @@ class TestCoilSet:
         R = 10
         z = np.linspace(0, 10, 10)
         I = 1
-        Bz_true = np.sum(1e-7 * 2 * np.pi * R ** 2 * I / (z ** 2 + R ** 2) ** (3 / 2))
+        Bz_true = np.sum(1e-7 * 2 * np.pi * R**2 * I / (z**2 + R**2) ** (3 / 2))
         B_true = np.array([0, 0, Bz_true])
         coil = FourierRZCoil(0.1)
         coils = CoilSet.linspaced_linear(
@@ -218,7 +223,7 @@ class TestCoilSet:
         assert coils2[-1] is coil2
 
         with pytest.raises(TypeError):
-            coils3 = coils1 + FourierRZCurve()
+            _ = coils1 + FourierRZCurve()
 
         with pytest.raises(TypeError):
             coils1[-1] = FourierRZCurve()

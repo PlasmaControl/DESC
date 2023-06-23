@@ -1,18 +1,21 @@
-import numpy as np
+"""Classes for magnetic fields."""
+
 from abc import ABC, abstractmethod
+
+import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import jnp, jit, odeint
-from desc.io import IOAble
-from desc.grid import Grid
-from desc.interpolate import interp3d, _approx_df
+from desc.backend import jit, jnp, odeint
 from desc.derivatives import Derivative
-from desc.geometry.utils import xyz2rpz, xyz2rpz_vec, rpz2xyz, rpz2xyz_vec
+from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
+from desc.grid import Grid
+from desc.interpolate import _approx_df, interp2d, interp3d
+from desc.io import IOAble
 
 
 # TODO: vectorize this over multiple coils
 def biot_savart(eval_pts, coil_pts, current):
-    """Biot-Savart law following [1]
+    """Biot-Savart law following [1].
 
     Parameters
     ----------
@@ -34,10 +37,10 @@ def biot_savart(eval_pts, coil_pts, current):
     dvec = jnp.diff(coil_pts, axis=0)
     L = jnp.linalg.norm(dvec, axis=-1)
 
-    Ri_vec = eval_pts[jnp.newaxis, :, :] - coil_pts[:-1, jnp.newaxis, :]
+    Ri_vec = eval_pts[jnp.newaxis, :] - coil_pts[:-1, jnp.newaxis, :]
     Ri = jnp.linalg.norm(Ri_vec, axis=-1)
     Rf = jnp.linalg.norm(
-        eval_pts[jnp.newaxis, :, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
+        eval_pts[jnp.newaxis, :] - coil_pts[1:, jnp.newaxis, :], axis=-1
     )
     Ri_p_Rf = Ri + Rf
 
@@ -57,7 +60,7 @@ def biot_savart(eval_pts, coil_pts, current):
 
 
 class MagneticField(IOAble, ABC):
-    """Base class for all magnetic fields
+    """Base class for all magnetic fields.
 
     Subclasses must implement the "compute_magnetic_field" method
 
@@ -88,7 +91,7 @@ class MagneticField(IOAble, ABC):
 
     @abstractmethod
     def compute_magnetic_field(self, coords, params={}, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -107,11 +110,12 @@ class MagneticField(IOAble, ABC):
         """
 
     def __call__(self, coords, params={}, basis="rpz"):
+        """Compute magnetic field at a set of points."""
         return self.compute_magnetic_field(coords, params, basis)
 
 
 class ScaledMagneticField(MagneticField):
-    """Magnetic field scaled by a scalar value
+    """Magnetic field scaled by a scalar value.
 
     ie B_new = scalar * B_old
 
@@ -137,7 +141,7 @@ class ScaledMagneticField(MagneticField):
         self._field = field
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -157,7 +161,7 @@ class ScaledMagneticField(MagneticField):
 
 
 class SumMagneticField(MagneticField):
-    """Sum of two or more magnetic field sources
+    """Sum of two or more magnetic field sources.
 
     Parameters
     ----------
@@ -176,7 +180,7 @@ class SumMagneticField(MagneticField):
         self._fields = fields
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -205,7 +209,7 @@ class SumMagneticField(MagneticField):
 
 
 class ToroidalMagneticField(MagneticField):
-    """Magnetic field purely in the toroidal (phi) direction
+    """Magnetic field purely in the toroidal (phi) direction.
 
     Magnitude is B0*R0/R where R0 is the major radius of the axis and B0
     is the field strength on axis
@@ -227,7 +231,7 @@ class ToroidalMagneticField(MagneticField):
         self._R0 = R0
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -260,7 +264,7 @@ class ToroidalMagneticField(MagneticField):
 
 
 class VerticalMagneticField(MagneticField):
-    """Uniform magnetic field purely in the vertical (Z) direction
+    """Uniform magnetic field purely in the vertical (Z) direction.
 
     Parameters
     ----------
@@ -276,7 +280,7 @@ class VerticalMagneticField(MagneticField):
         self._B0 = B0
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -309,7 +313,7 @@ class VerticalMagneticField(MagneticField):
 
 
 class PoloidalMagneticField(MagneticField):
-    """Pure poloidal magnetic field (ie in theta direction)
+    """Pure poloidal magnetic field (ie in theta direction).
 
     Field strength is B0*iota*r/R0 where B0 is the toroidal field on axis,
     R0 is the major radius of the axis, iota is the desired rotational transform,
@@ -343,7 +347,7 @@ class PoloidalMagneticField(MagneticField):
         self._iota = iota
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -368,7 +372,7 @@ class PoloidalMagneticField(MagneticField):
             coords = xyz2rpz(coords)
 
         R, phi, Z = coords.T
-        r = jnp.sqrt((R - self._R0) ** 2 + Z ** 2)
+        r = jnp.sqrt((R - self._R0) ** 2 + Z**2)
         theta = jnp.arctan2(Z, R - self._R0)
         br = -r * jnp.sin(theta)
         bp = jnp.zeros_like(br)
@@ -382,7 +386,7 @@ class PoloidalMagneticField(MagneticField):
 
 
 class SplineMagneticField(MagneticField):
-    """Magnetic field from precomputed values on a grid
+    """Magnetic field from precomputed values on a grid.
 
     Parameters
     ----------
@@ -418,6 +422,7 @@ class SplineMagneticField(MagneticField):
         "_extrap",
         "_period",
         "_derivs",
+        "_axisym",
     ]
 
     def __init__(self, R, phi, Z, BR, Bphi, BZ, method="cubic", extrap=False, period=0):
@@ -431,6 +436,10 @@ class SplineMagneticField(MagneticField):
 
         self._R = R
         self._phi = phi
+        if len(phi) == 1:
+            self._axisym = True
+        else:
+            self._axisym = False
         self._Z = Z
         self._BR = BR
         self._Bphi = Bphi
@@ -448,16 +457,25 @@ class SplineMagneticField(MagneticField):
     def _approx_derivs(self, Bi):
         tempdict = {}
         tempdict["fx"] = _approx_df(self._R, Bi, self._method, 0)
-        tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
         tempdict["fz"] = _approx_df(self._Z, Bi, self._method, 2)
-        tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
         tempdict["fxz"] = _approx_df(self._Z, tempdict["fx"], self._method, 2)
-        tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
-        tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+        if self._axisym:
+            tempdict["fy"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fxy"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fyz"] = jnp.zeros_like(tempdict["fx"])
+            tempdict["fxyz"] = jnp.zeros_like(tempdict["fx"])
+        else:
+            tempdict["fy"] = _approx_df(self._phi, Bi, self._method, 1)
+            tempdict["fxy"] = _approx_df(self._phi, tempdict["fx"], self._method, 1)
+            tempdict["fyz"] = _approx_df(self._Z, tempdict["fy"], self._method, 2)
+            tempdict["fxyz"] = _approx_df(self._Z, tempdict["fxy"], self._method, 2)
+        if self._axisym:
+            for key, val in tempdict.items():
+                tempdict[key] = val[:, 0, :]
         return tempdict
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -474,7 +492,6 @@ class SplineMagneticField(MagneticField):
             magnetic field at specified points, in cylindrical form [BR, Bphi,BZ]
 
         """
-
         assert basis.lower() in ["rpz", "xyz"]
         if isinstance(coords, Grid):
             coords = coords.nodes
@@ -482,49 +499,87 @@ class SplineMagneticField(MagneticField):
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T
+        if self._axisym:
+            BRq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                self._BR[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs["BR"],
+            )
+            Bphiq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                self._Bphi[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs["Bphi"],
+            )
+            BZq = interp2d(
+                Rq,
+                Zq,
+                self._R,
+                self._Z,
+                self._BZ[:, 0, :],
+                self._method,
+                (0, 0),
+                self._extrap,
+                (None, None),
+                **self._derivs["BZ"],
+            )
 
-        BRq = interp3d(
-            Rq,
-            phiq,
-            Zq,
-            self._R,
-            self._phi,
-            self._Z,
-            self._BR,
-            self._method,
-            (0, 0, 0),
-            self._extrap,
-            (None, self._period, None),
-            **self._derivs["BR"],
-        )
-        Bphiq = interp3d(
-            Rq,
-            phiq,
-            Zq,
-            self._R,
-            self._phi,
-            self._Z,
-            self._Bphi,
-            self._method,
-            (0, 0, 0),
-            self._extrap,
-            (None, self._period, None),
-            **self._derivs["Bphi"],
-        )
-        BZq = interp3d(
-            Rq,
-            phiq,
-            Zq,
-            self._R,
-            self._phi,
-            self._Z,
-            self._BZ,
-            self._method,
-            (0, 0, 0),
-            self._extrap,
-            (None, self._period, None),
-            **self._derivs["BZ"],
-        )
+        else:
+            BRq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                self._BR,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, self._period, None),
+                **self._derivs["BR"],
+            )
+            Bphiq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                self._Bphi,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, self._period, None),
+                **self._derivs["Bphi"],
+            )
+            BZq = interp3d(
+                Rq,
+                phiq,
+                Zq,
+                self._R,
+                self._phi,
+                self._Z,
+                self._BZ,
+                self._method,
+                (0, 0, 0),
+                self._extrap,
+                (None, self._period, None),
+                **self._derivs["BZ"],
+            )
         B = jnp.array([BRq, Bphiq, BZq]).T
         if basis == "xyz":
             B = rpz2xyz_vec(B, phi=coords[:, 1])
@@ -534,7 +589,7 @@ class SplineMagneticField(MagneticField):
     def from_mgrid(
         cls, mgrid_file, extcur=1, method="cubic", extrap=False, period=None
     ):
-        """Create a SplineMagneticField from an "mgrid" file from MAKEGRID
+        """Create a SplineMagneticField from an "mgrid" file from MAKEGRID.
 
         Parameters
         ----------
@@ -595,7 +650,7 @@ class SplineMagneticField(MagneticField):
     def from_field(
         cls, field, R, phi, Z, params={}, method="cubic", extrap=False, period=None
     ):
-        """Create a splined magnetic field from another field for faster evaluation
+        """Create a splined magnetic field from another field for faster evaluation.
 
         Parameters
         ----------
@@ -633,7 +688,7 @@ class SplineMagneticField(MagneticField):
 
 
 class ScalarPotentialField(MagneticField):
-    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates
+    """Magnetic field due to a scalar magnetic potential in cylindrical coordinates.
 
     Parameters
     ----------
@@ -651,7 +706,7 @@ class ScalarPotentialField(MagneticField):
         self._params = params
 
     def compute_magnetic_field(self, coords, params=None, basis="rpz"):
-        """Compute magnetic field at a set of points
+        """Compute magnetic field at a set of points.
 
         Parameters
         ----------
@@ -694,7 +749,7 @@ class ScalarPotentialField(MagneticField):
 def field_line_integrate(
     r0, z0, phis, field, params={}, rtol=1e-8, atol=1e-8, maxstep=1000
 ):
-    """Trace field lines by integration
+    """Trace field lines by integration.
 
     Parameters
     ----------

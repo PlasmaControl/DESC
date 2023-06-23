@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Mon Jun  7 13:15:05 2021
 
@@ -12,13 +11,13 @@ import os
 import sys
 
 import numpy as np
-from desc.backend import jnp, put, fori_loop
-from desc.utils import Index
-from desc.magnetic_fields import SplineMagneticField
-from desc.grid import LinearGrid
-from desc.transform import Transform
-
 from scipy.constants import mu_0
+
+from desc.backend import fori_loop, jnp, put
+from desc.grid import LinearGrid
+from desc.magnetic_fields import SplineMagneticField
+from desc.transform import Transform
+from desc.utils import Index
 
 
 def copy_vector_periods(vec, zetas):
@@ -212,7 +211,7 @@ def compute_jacobian(coords, normal, NFP):
         coords["R_z"] * coords["R_z"]
         + coords["Z_z"] * coords["Z_z"]
         + coords["R"] * coords["R"]
-    ) / NFP ** 2
+    ) / NFP**2
     # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface
     jacobian["a_tt"] = 0.5 * (
         normal["R_n"] * coords["R_tt"] + normal["Z_n"] * coords["Z_tt"]
@@ -229,7 +228,7 @@ def compute_jacobian(coords, normal, NFP):
             normal["R_n"] * (coords["R_zz"] - coords["R"])
             + normal["Z_n"] * coords["Z_zz"]
         )
-    ) / NFP ** 2
+    ) / NFP**2
     return jacobian
 
 
@@ -780,11 +779,11 @@ def regularizedFourierTransforms(
     tanz = tan_zeta[(delta_kz,)]
     ga1 = (
         tant * (jacobian["g_tt"][(ip5,)] * tant + 2 * jacobian["g_tz"][(ip5,)] * tanz)
-        + jacobian["g_zz"][(ip5,)] * tanz ** 2
+        + jacobian["g_zz"][(ip5,)] * tanz**2
     )
     ga2 = (
         tant * (jacobian["a_tt"][(ip5,)] * tant + jacobian["a_tz"][(ip5,)] * tanz)
-        + jacobian["a_zz"][(ip5,)] * tanz ** 2
+        + jacobian["a_zz"][(ip5,)] * tanz**2
     )
 
     kernel_sing = -(ga2 / ga1 * 1 / jnp.sqrt(ga1))
@@ -905,7 +904,7 @@ def compute_scalar_magnetic_potential(
     )
     # add diagnonal terms (#TODO: why 4*pi^3 instead of 1 ?)
     amatrix_4d = put(
-        amatrix_4d, Index[m, n, m, n], amatrix_4d[m, n, m, n] + 4.0 * jnp.pi ** 3
+        amatrix_4d, Index[m, n, m, n], amatrix_4d[m, n, m, n] + 4.0 * jnp.pi**3
     )
 
     amatrix = amatrix_4d.reshape([(mf + 1) * (2 * nf + 1), (mf + 1) * (2 * nf + 1)])
@@ -985,8 +984,8 @@ def compute_vacuum_magnetic_field(
 
     # TODO: for now, simply copied over from NESTOR code; have to understand what is actually done here!
     h_tz = NFP * jacobian["g_tz"]
-    h_zz = jacobian["g_zz"] * NFP ** 2
-    det = 1.0 / (jacobian["g_tt"] * h_zz - h_tz ** 2)
+    h_zz = jacobian["g_zz"] * NFP**2
+    det = 1.0 / (jacobian["g_tt"] * h_zz - h_tz**2)
 
     Btot["B^theta"] = (h_zz * Btot["B_theta"] - h_tz * Btot["B_zeta"]) * det
     Btot["B^zeta"] = (-h_tz * Btot["B_theta"] + jacobian["g_tt"] * Btot["B_zeta"]) * det

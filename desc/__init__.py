@@ -1,8 +1,12 @@
-import colorama
+"""DESC: a 3D MHD equilibrium solver and stellarator optimization suite."""
+
 import os
 import re
 import warnings
+
+import colorama
 from termcolor import colored
+
 from ._version import get_versions
 
 __version__ = get_versions()["version"]
@@ -11,13 +15,13 @@ del get_versions
 colorama.init()
 
 _BANNER = r"""
- ____  ____  _____   ___ 
+ ____  ____  _____   ___
 |  _ \| ___|/  ___|/ ___|
 | | \ | |_  | (__ | |
 | | | |  _| \___ \| |
-| |_/ | |__  ___) | |___ 
+| |_/ | |__  ___) | |___
 |____/|____||____/ \____|
-                         
+
 """
 
 BANNER = colored(_BANNER, "magenta")
@@ -46,7 +50,7 @@ def set_device(kind="cpu"):
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
         import psutil
 
-        cpu_mem = psutil.virtual_memory().available / 1024 ** 3  # RAM in GB
+        cpu_mem = psutil.virtual_memory().available / 1024**3  # RAM in GB
         config["device"] = "CPU"
         config["avail_mem"] = cpu_mem
 
@@ -77,9 +81,14 @@ def set_device(kind="cpu"):
             # cuda visible devices = '' -> don't use any gpu
             warnings.warn(
                 colored(
-                    "CUDA_VISIBLE_DEVICES={} did not match any physical GPU (id={}), falling back to CPU".format(
-                        os.environ["CUDA_VISIBLE_DEVICES"],
-                        [dev["index"] for dev in devices],
+                    (
+                        "CUDA_VISIBLE_DEVICES={} ".format(
+                            os.environ["CUDA_VISIBLE_DEVICES"]
+                        )
+                        + "did not match any physical GPU "
+                        + "(id={}), falling back to CPU".format(
+                            [dev["index"] for dev in devices]
+                        )
                     ),
                     "yellow",
                 )

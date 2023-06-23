@@ -1,30 +1,32 @@
+"""Tests for magnetic field classes."""
+
 import numpy as np
 import pytest
 
 from desc.backend import jnp
 from desc.magnetic_fields import (
+    PoloidalMagneticField,
+    ScalarPotentialField,
+    SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
-    PoloidalMagneticField,
-    SplineMagneticField,
-    ScalarPotentialField,
     field_line_integrate,
 )
 
 
 def phi_lm(R, phi, Z, a, m):
     """Scalar potential test function."""
-    CNm0 = (R ** m - R ** -m) / (2 * m)
+    CNm0 = (R**m - R**-m) / (2 * m)
     Nm1 = CNm0 * Z
-    CDm0 = (R ** m + R ** -m) / 2
+    CDm0 = (R**m + R**-m) / 2
     c1 = -m * (m - 1)
     c2 = (m + 1) * (m - 2)
     c3 = m * (m + 1)
     c4 = -(m + 2) * (m - 1)
     CDm1 = (c1 * R ** (m + 2) + c2 * R ** (m) + c3 * R ** (-m + 2) + c4 * R ** (-m)) / (
-        8 * m * (m ** 2 - 1)
+        8 * m * (m**2 - 1)
     )
-    Dm2 = CDm0 * Z ** 2 / 2 + CDm1
+    Dm2 = CDm0 * Z**2 / 2 + CDm1
     return phi + a * Dm2 * jnp.sin(m * phi) + a * Nm1 * jnp.cos(m * phi)
 
 
@@ -81,6 +83,40 @@ class TestMagneticFields:
         np.testing.assert_allclose(
             field3([0.70, 0, 0]), [[0, -0.671, 0.0858]], rtol=1e-3, atol=1e-8
         )
+
+    @pytest.mark.unit
+    def test_spline_field_axisym(self):
+        """Test computing axisymmetric magnetic field using SplineMagneticField."""
+        extcur = [
+            -1.370985e03,
+            -1.609154e03,
+            -2.751331e03,
+            -2.524384e03,
+            -3.435372e03,
+            -3.466123e03,
+            3.670919e03,
+            3.450196e03,
+            2.908027e03,
+            3.404695e03,
+            -4.148967e03,
+            -4.294406e03,
+            -3.059939e03,
+            -2.990609e03,
+            3.903818e03,
+            3.727301e03,
+            -3.049484e03,
+            -3.086940e03,
+            -1.488703e07,
+            -2.430716e04,
+            -2.380229e04,
+        ]
+        field = SplineMagneticField.from_mgrid(
+            "tests/inputs/mgrid_d3d.nc", extcur=extcur
+        )
+        # make sure field is invariant to shift in phi
+        B1 = field.compute_magnetic_field(np.array([1.75, 0.0, 0.0]))
+        B2 = field.compute_magnetic_field(np.array([1.75, 1.0, 0.0]))
+        np.testing.assert_allclose(B1, B2)
 
     @pytest.mark.unit
     def test_field_line_integrate(self):

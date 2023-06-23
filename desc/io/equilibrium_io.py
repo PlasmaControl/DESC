@@ -1,17 +1,22 @@
+"""Functions and methods for saving and loading equilibria and other objects."""
+
+import copy
 import os
 import pickle
-import copy
-import h5py
 import pydoc
 from abc import ABC
+
+import h5py
 from termcolor import colored
+
 from desc.utils import equals
+
+from .hdf5_io import hdf5Reader, hdf5Writer
 from .pickle_io import PickleReader, PickleWriter
-from .hdf5_io import hdf5Reader, hdf5Writer, fullname
 
 
 def load(load_from, file_format=None):
-    """Load any DESC object from previously saved file
+    """Load any DESC object from previously saved file.
 
     Parameters
     ----------
@@ -25,7 +30,6 @@ def load(load_from, file_format=None):
     obj :
         The object saved in the file
     """
-
     if file_format is None and isinstance(load_from, (str, os.PathLike)):
         name = str(load_from)
         if name.endswith(".h5") or name.endswith(".hdf5"):
@@ -35,7 +39,10 @@ def load(load_from, file_format=None):
         else:
             raise RuntimeError(
                 colored(
-                    "could not infer file format from file name, it should be provided as file_format",
+                    (
+                        "could not infer file format from file name, "
+                        + "it should be provided as file_format"
+                    ),
                     "red",
                 )
             )
@@ -93,7 +100,6 @@ class IOAble(ABC):
             file format of file initializing from
 
         """
-
         if file_format is None and isinstance(load_from, (str, os.PathLike)):
             name = str(load_from)
             if name.endswith(".h5") or name.endswith(".hdf5"):
@@ -103,7 +109,10 @@ class IOAble(ABC):
             else:
                 raise RuntimeError(
                     colored(
-                        "could not infer file format from file name, it should be provided as file_format",
+                        (
+                            "could not infer file format from file name, "
+                            + "it should be provided as file_format"
+                        ),
                         "red",
                     )
                 )
@@ -150,7 +159,7 @@ class IOAble(ABC):
         writer.close()
 
     def __getstate__(self):
-        """helper method for working with pickle io"""
+        """Helper method for working with pickle io."""
         if hasattr(self, "_io_attrs_"):
             return {
                 attr: val
@@ -160,17 +169,17 @@ class IOAble(ABC):
         return self.__dict__
 
     def __setstate__(self, state):
-        """helper method for working with pickle io"""
+        """Helper method for working with pickle io."""
         self.__dict__.update(state)
         if hasattr(self, "_set_up"):
             self._set_up()
 
     def eq(self, other):
-        """Compare equivalence between DESC objects
+        """Compare equivalence between DESC objects.
 
         Two objects are considered equivalent if they will be saved and loaded
-        with the same data, (ie, they have the same data "where it counts", specifically,
-        they have the same _io_attrs_)
+        with the same data, (ie, they have the same data "where it counts",
+        specifically, they have the same _io_attrs_)
 
         Parameters
         ----------

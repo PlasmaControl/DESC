@@ -1,15 +1,19 @@
-import tempfile
-import numpy as np
-import warnings
+"""Classes for 2D surfaces embedded in 3D space."""
+
 import numbers
-from desc.backend import jnp, sign, put
-from desc.utils import copy_coeffs
-from desc.grid import Grid, LinearGrid
+import warnings
+
+import numpy as np
+
+from desc.backend import jnp, put, sign
 from desc.basis import DoubleFourierSeries, ZernikePolynomial
-from desc.transform import Transform
+from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
+from desc.transform import Transform
+from desc.utils import copy_coeffs
+
 from .core import Surface
-from .utils import rpz2xyz_vec, rpz2xyz
+from .utils import rpz2xyz, rpz2xyz_vec
 
 __all__ = ["FourierRZToroidalSurface", "ZernikeRZToroidalSection"]
 
@@ -36,6 +40,10 @@ class FourierRZToroidalSurface(Surface):
         default grid for computation
     name : str
         name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
@@ -61,13 +69,14 @@ class FourierRZToroidalSurface(Surface):
         rho=1,
         grid=None,
         name="",
+        check_orientation=True,
     ):
 
         if R_lmn is None:
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 0]])
         if Z_lmn is None:
-            Z_lmn = np.array([0, 1])
+            Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [-1, 0]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -107,6 +116,16 @@ class FourierRZToroidalSurface(Surface):
         self._NFP = NFP
         self._sym = sym
         self.rho = rho
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta."
+                + " To avoid this warning in the future, switch the sign of all"
+                + " modes with m<0"
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
         if grid is None:
             grid = LinearGrid(
                 M=2 * self.M,
@@ -121,7 +140,7 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def NFP(self):
-        """Number of (toroidal) field periods (int)."""
+        """int: Number of (toroidal) field periods."""
         return self._NFP
 
     @NFP.setter
@@ -133,17 +152,17 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def R_basis(self):
-        """Spectral basis for R double Fourier series."""
+        """DoubleFourierSeries: Spectral basis for R."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z double Fourier series."""
+        """DoubleFourierSeries: Spectral basis for Z."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Grid for computation."""
+        """Grid: Nodes for computation."""
         return self._grid
 
     @grid.setter
@@ -161,17 +180,23 @@ class FourierRZToroidalSurface(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum poloidal and toroidal resolution."""
-        assert ((len(args) in [2, 3]) and (len(kwargs) == 0 or "NFP" in kwargs)) or (
-            len(args) == 0
-        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
-        L = kwargs.get("L", None)
-        M = kwargs.get("M", None)
-        N = kwargs.get("N", None)
-        NFP = kwargs.get("NFP", None)
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        NFP = kwargs.pop("NFP", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         self._NFP = NFP if NFP is not None else self.NFP
         if L is not None:
             warnings.warn(
-                "FourierRZToroidalSurface does not have a radial resolution, ignoring L"
+                "FourierRZToroidalSurface does not have radial resolution, ignoring L"
             )
         if len(args) == 2:
             M, N = args
@@ -189,6 +214,10 @@ class FourierRZToroidalSurface(Surface):
             Z_modes_old = self.Z_basis.modes
             self.R_basis.change_resolution(M=M, N=N, NFP=self.NFP)
             self.Z_basis.change_resolution(M=M, N=N, NFP=self.NFP)
+            if hasattr(self.grid, "change_resolution"):
+                self.grid.change_resolution(
+                    self.grid.L, self.grid.M, self.grid.N, self.NFP
+                )
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)
@@ -197,7 +226,7 @@ class FourierRZToroidalSurface(Surface):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients for R."""
+        """ndarray: Spectral coefficients for R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -206,12 +235,13 @@ class FourierRZToroidalSurface(Surface):
             self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients for Z."""
+        """ndarray: Spectral coefficients for Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -220,7 +250,8 @@ class FourierRZToroidalSurface(Surface):
             self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     def get_coeffs(self, m, n=0):
@@ -294,9 +325,25 @@ class FourierRZToroidalSurface(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        rz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=1)
+        E = jnp.sum(rt * rt, axis=-1)
+        F = jnp.sum(rt * rz, axis=-1)
+        G = jnp.sum(rz * rz, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        rtz = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1, dz=1)
+        rzz = self.compute_coordinates(R_lmn, Z_lmn, grid, dz=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rtt * n, axis=-1)
+        M = jnp.sum(rtz * n, axis=-1)
+        N = jnp.sum(rzz * n, axis=-1)
+        return L, M, N
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dt=0, dz=0, basis="rpz"
@@ -436,7 +483,7 @@ class FourierRZToroidalSurface(Surface):
 
     @classmethod
     def from_input_file(cls, path):
-        """Create a surface from Fourier coefficients in a DESC or VMEC input file
+        """Create a surface from Fourier coefficients in a DESC or VMEC input file.
 
         Parameters
         ----------
@@ -449,7 +496,7 @@ class FourierRZToroidalSurface(Surface):
             Surface with given Fourier coefficients.
 
         """
-        f = open(path, "r")
+        f = open(path)
         if "&INDATA" in f.readlines()[0]:  # vmec input, convert to desc
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
@@ -498,7 +545,7 @@ class FourierRZToroidalSurface(Surface):
         assert mirror_ratio <= 2
         a = np.sqrt(elongation) / aspect_ratio  # major axis
         b = 1 / (aspect_ratio * np.sqrt(elongation))  # minor axis
-        epsilon = (2 - np.sqrt(4 - mirror_ratio ** 2)) / mirror_ratio
+        epsilon = (2 - np.sqrt(4 - mirror_ratio**2)) / mirror_ratio
 
         R_lmn = np.array(
             [
@@ -507,16 +554,16 @@ class FourierRZToroidalSurface(Surface):
                 -1 / 5,
                 a * epsilon,
                 (elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                (elongation - 1) * b / 2,
             ]
         )
         Z_lmn = np.array(
             [
-                (elongation + 1) * b / 2,
+                -(elongation + 1) * b / 2,
                 axis_Z,
-                b * epsilon,
+                -b * epsilon,
                 -(elongation - 1) * b / 2,
-                -(elongation - 1) * b / 2,
+                (elongation - 1) * b / 2,
             ]
         )
         modes_R = np.array([[0, 0], [1, 0], [0, 2], [1, 1], [1, 2], [-1, -2]])
@@ -563,6 +610,10 @@ class ZernikeRZToroidalSection(Surface):
         default grid for computation
     name : str
         name for this surface
+    check_orientation : bool
+        ensure that this surface has a right handed orientation. Do not set to False
+        unless you are sure the parameterization you have given is right handed
+        (ie, e_theta x e_zeta points outward from the surface).
 
     """
 
@@ -588,12 +639,13 @@ class ZernikeRZToroidalSection(Surface):
         zeta=0.0,
         grid=None,
         name="",
+        check_orientation=True,
     ):
         if R_lmn is None:
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 1]])
         if Z_lmn is None:
-            Z_lmn = np.array([0, 1])
+            Z_lmn = np.array([0, -1])
             modes_Z = np.array([[0, 0], [1, -1]])
         if modes_Z is None:
             modes_Z = modes_R
@@ -641,6 +693,16 @@ class ZernikeRZToroidalSection(Surface):
         self._spectral_indexing = spectral_indexing
 
         self.zeta = zeta
+
+        if check_orientation and self._compute_orientation() == -1:
+            warnings.warn(
+                "Left handed coordinates detected, switching sign of theta."
+                + " To avoid this warning in the future, switch the sign of all"
+                + " modes with m<0"
+            )
+            self._flip_orientation()
+            assert self._compute_orientation() == 1
+
         if grid is None:
             grid = LinearGrid(
                 L=self.L, M=2 * self.M, zeta=np.asarray(self.zeta), endpoint=True
@@ -651,21 +713,22 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def spectral_indexing(self):
+        """str: Type of spectral indexing for Zernike basis."""
         return self._spectral_indexing
 
     @property
     def R_basis(self):
-        """Spectral basis for R Zernike polynomial."""
+        """ZernikePolynomial: Spectral basis for R."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z Zernike polynomial."""
+        """ZernikePolynomial: Spectral basis for Z."""
         return self._Z_basis
 
     @property
     def grid(self):
-        """Grid for computation."""
+        """Grid: Nodes for computation."""
         return self._grid
 
     @grid.setter
@@ -683,15 +746,21 @@ class ZernikeRZToroidalSection(Surface):
 
     def change_resolution(self, *args, **kwargs):
         """Change the maximum radial and poloidal resolution."""
-        assert ((len(args) in [2, 3]) and len(kwargs) == 0) or (
-            len(args) == 0
-        ), "change_resolution should be called with 2 or 3 positional arguments or only keyword arguments"
-        L = kwargs.get("L", None)
-        M = kwargs.get("M", None)
-        N = kwargs.get("N", None)
+        assert (
+            ((len(args) in [2, 3]) and len(kwargs) == 0)
+            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or (len(args) == 0)
+        ), (
+            "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
+            + "positional arguments or only keyword arguments."
+        )
+        L = kwargs.pop("L", None)
+        M = kwargs.pop("M", None)
+        N = kwargs.pop("N", None)
+        assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         if N is not None:
             warnings.warn(
-                "ZernikeRZToroidalSection does not have a toroidal resolution, ignoring N"
+                "ZernikeRZToroidalSection does not have toroidal resolution, ignoring N"
             )
         if len(args) == 2:
             L, M = args
@@ -711,7 +780,7 @@ class ZernikeRZToroidalSection(Surface):
 
     @property
     def R_lmn(self):
-        """Spectral coefficients for R."""
+        """ndarray: Spectral coefficients for R."""
         return self._R_lmn
 
     @R_lmn.setter
@@ -720,12 +789,13 @@ class ZernikeRZToroidalSection(Surface):
             self._R_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"R_lmn should have the same size as the basis, got {len(new)} for basis with {self.R_basis.num_modes} modes"
+                f"R_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     @property
     def Z_lmn(self):
-        """Spectral coefficients for Z."""
+        """ndarray: Spectral coefficients for Z."""
         return self._Z_lmn
 
     @Z_lmn.setter
@@ -734,7 +804,8 @@ class ZernikeRZToroidalSection(Surface):
             self._Z_lmn = jnp.asarray(new)
         else:
             raise ValueError(
-                f"Z_lmn should have the same size as the basis, got {len(new)} for basis with {self.Z_basis.num_modes} modes"
+                f"Z_lmn should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.R_basis.num_modes} modes."
             )
 
     def get_coeffs(self, l, m=0):
@@ -804,9 +875,25 @@ class ZernikeRZToroidalSection(Surface):
         )
         return R_transform, Z_transform
 
-    def compute_curvature(self, params=None, grid=None):
-        """Compute gaussian and mean curvature."""
-        raise NotImplementedError()
+    def _compute_first_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the first fundamental form."""
+        rr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1)
+        rt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=1)
+        E = jnp.sum(rr * rr, axis=-1)
+        F = jnp.sum(rr * rt, axis=-1)
+        G = jnp.sum(rt * rt, axis=-1)
+        return E, F, G
+
+    def _compute_second_fundamental_form(self, R_lmn=None, Z_lmn=None, grid=None):
+        """Compute coefficients for the second fundamental form."""
+        rrr = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=2)
+        rrt = self.compute_coordinates(R_lmn, Z_lmn, grid, dr=1, dt=1)
+        rtt = self.compute_coordinates(R_lmn, Z_lmn, grid, dt=2)
+        n = self.compute_normal(R_lmn, Z_lmn, grid)
+        L = jnp.sum(rrr * n, axis=-1)
+        M = jnp.sum(rrt * n, axis=-1)
+        N = jnp.sum(rtt * n, axis=-1)
+        return L, M, N
 
     def compute_coordinates(
         self, R_lmn=None, Z_lmn=None, grid=None, dr=0, dt=0, basis="rpz"

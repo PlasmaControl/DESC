@@ -1,20 +1,21 @@
-from abc import ABC, abstractmethod
+"""Base classes for input/output readers and writers."""
+
 import os
+from abc import ABC, abstractmethod
 
 
 class IO(ABC):
     """Abstract Base Class (ABC) for readers and writers."""
 
     def __init__(self):
-        """Initalize ABC IO"""
         self.resolve_base()
 
     def __del__(self):
-        """Close file upon garbage colleciton or explicit deletion with del function"""
+        """Close file upon garbage colleciton or explicit deletion with del function."""
         self.close()
 
     def close(self):
-        """Close file if initialized with class instance"""
+        """Close file if initialized with class instance."""
         if hasattr(self, "base") and hasattr(self.base, "close"):
             self.base.close()
             self._close_base_ = False
@@ -66,9 +67,10 @@ class IO(ABC):
 
     @abstractmethod
     def open_file(self, file_name, file_mode):
-        """opens the file"""
+        """Open the file."""
 
     def check_type(self, obj):
+        """See if this thing can handle that type of file."""
         if isinstance(obj, self._file_types_):
             return True
         else:
@@ -80,11 +82,11 @@ class Reader(ABC):
 
     @abstractmethod
     def read_obj(self, obj, where=None):
-        """reads an object"""
+        """Read a DESC object."""
 
     @abstractmethod
     def read_dict(self, thedict, where=None):
-        """reads a dictionary"""
+        """Read a dictionary."""
 
 
 class Writer(ABC):
@@ -92,8 +94,8 @@ class Writer(ABC):
 
     @abstractmethod
     def write_obj(self, obj, where=None):
-        """writes an object"""
+        """Write a DESC object."""
 
     @abstractmethod
     def write_dict(self, thedict, where=None):
-        """writes a dictionary"""
+        """Write a dictionary."""

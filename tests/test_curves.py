@@ -1,7 +1,9 @@
+"""Tests for different Curve classes."""
+
 import numpy as np
 import pytest
 
-from desc.geometry import FourierRZCurve, FourierXYZCurve, FourierPlanarCurve
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
 from desc.grid import LinearGrid
 
 
@@ -68,7 +70,7 @@ class TestRZCurve:
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
-        np.testing.assert_allclose(r, np.sqrt(1 ** 2 + 9 ** 2))
+        np.testing.assert_allclose(r, np.sqrt(1**2 + 9**2))
         np.testing.assert_allclose(p, np.arctan2(-9, 1))
         np.testing.assert_allclose(z, 1)
 
@@ -115,11 +117,11 @@ class TestRZCurve:
         assert "FourierRZCurve" in str(c)
         assert c.sym
 
-        with pytest.warns(UserWarning):
-            c.NFP = 3
+        c.NFP = 3
         assert c.NFP == 3
         assert c.R_basis.NFP == 3
         assert c.Z_basis.NFP == 3
+        assert c.grid.NFP == 3
 
     @pytest.mark.unit
     def test_asserts(self):
@@ -134,6 +136,8 @@ class TestRZCurve:
 
 
 class TestXYZCurve:
+    """Tests for FourierXYZCurve class."""
+
     @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
@@ -194,7 +198,7 @@ class TestXYZCurve:
         c.flip([0, 1, 0])
         c.translate([1, 1, 1])
         r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
-        np.testing.assert_allclose(r, np.sqrt(1 ** 2 + 11 ** 2))
+        np.testing.assert_allclose(r, np.sqrt(1**2 + 11**2))
         np.testing.assert_allclose(p, np.arctan2(-11, 1))
         np.testing.assert_allclose(z, 1)
 
@@ -238,6 +242,8 @@ class TestXYZCurve:
 
 
 class TestPlanarCurve:
+    """Tests for FourierPlanarCurve class."""
+
     @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""

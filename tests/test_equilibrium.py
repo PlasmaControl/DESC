@@ -1,13 +1,21 @@
+"""Tests for Equilibrium class."""
+
 import os
+import pickle
+import warnings
+
 import numpy as np
 import pytest
-import pickle
 from netCDF4 import Dataset
 
-from .utils import area_difference, compute_coords
+import desc.examples
+from desc.__main__ import main
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
-from desc.__main__ import main
+from desc.io import InputReader
+from desc.objectives import get_equilibrium_objective
+
+from .utils import area_difference, compute_coords
 
 
 @pytest.mark.unit
@@ -45,7 +53,6 @@ def test_compute_geometry(DSHAPE_current):
 @pytest.mark.solve
 def test_compute_theta_coords(DSHAPE_current):
     """Test root finding for theta(theta*,lambda(theta))."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
@@ -53,7 +60,7 @@ def test_compute_theta_coords(DSHAPE_current):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("lambda", Grid(nodes, sort=False))
+    coords = eq.compute("lambda", grid=Grid(nodes, sort=False))
     flux_coords = nodes.copy()
     flux_coords[:, 1] += coords["lambda"]
 
@@ -72,7 +79,6 @@ def test_compute_theta_coords(DSHAPE_current):
 @pytest.mark.solve
 def test_compute_flux_coords(DSHAPE_current):
     """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
-
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
 
     rho = np.linspace(0.01, 0.99, 200)
@@ -80,7 +86,7 @@ def test_compute_flux_coords(DSHAPE_current):
     zeta = np.linspace(0, 2 * np.pi, 200, endpoint=False)
 
     nodes = np.vstack([rho, theta, zeta]).T
-    coords = eq.compute("R", Grid(nodes, sort=False))
+    coords = eq.compute(["R", "Z"], grid=Grid(nodes, sort=False))
     real_coords = np.vstack([coords["R"].flatten(), zeta, coords["Z"].flatten()]).T
 
     flux_coords = eq.compute_flux_coords(real_coords)
@@ -91,6 +97,28 @@ def test_compute_flux_coords(DSHAPE_current):
         flux_coords[0, 1] = flux_coords[0, 1] - 2 * np.pi
 
     np.testing.assert_allclose(nodes, flux_coords, rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.unit
+def test_map_coordinates():
+    """Test root finding for (rho,theta,zeta) from (R,phi,Z)."""
+    eq = desc.examples.get("DSHAPE")
+
+    inbasis = ["alpha", "phi", "rho"]
+    outbasis = ["rho", "theta_sfl", "zeta"]
+
+    rho = np.linspace(0.01, 0.99, 200)
+    theta = np.linspace(0, np.pi, 200, endpoint=False)
+    zeta = np.linspace(0, np.pi, 200, endpoint=False)
+
+    grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
+    in_data = eq.compute(inbasis, grid=grid)
+    in_coords = np.stack([in_data[k] for k in inbasis], axis=-1)
+    out_data = eq.compute(outbasis, grid=grid)
+    out_coords = np.stack([out_data[k] for k in outbasis], axis=-1)
+
+    out = eq.map_coordinates(in_coords, inbasis, outbasis)
+    np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.slow
@@ -121,14 +149,14 @@ def test_continuation_resolution(tmpdir_factory):
     input_filename = os.path.join(exec_dir, input_path)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    with pytest.warns(UserWarning):
+    with pytest.warns((UserWarning, DeprecationWarning)):
         main(args)
 
 
 @pytest.mark.unit
 def test_grid_resolution_warning():
     """Test that a warning is thrown if grid resolution is too low."""
-    eq = Equilibrium(L=2, M=2, N=2)
+    eq = Equilibrium(L=3, M=3, N=3)
     eqN = eq.copy()
     eqN.change_resolution(N=1, N_grid=0)
     with pytest.warns(Warning):
@@ -159,15 +187,14 @@ def test_resolution():
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
     eq2 = Equilibrium()
 
-    assert eq1.resolution() != eq2.resolution()
-    eq2.change_resolution(**eq1.resolution())
-    assert eq1.resolution() == eq2.resolution()
+    assert eq1.resolution != eq2.resolution
+    eq2.change_resolution(**eq1.resolution)
+    assert eq1.resolution == eq2.resolution
 
     eq1.L = 2
     eq1.M = 3
     eq1.N = 4
-    with pytest.warns(UserWarning):
-        eq1.NFP = 5
+    eq1.NFP = 5
     assert eq1.R_basis.L == 2
     assert eq1.R_basis.M == 3
     assert eq1.R_basis.N == 4
@@ -185,7 +212,7 @@ def test_equilibrium_from_near_axis():
     r = 1e-2
     eq = Equilibrium.from_near_axis(na, r=r, M=8, N=8)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
-    data = eq.compute("|B|", grid)
+    data = eq.compute("|B|", grid=grid)
 
     assert eq.is_nested()
     assert eq.NFP == na.nfp
@@ -216,3 +243,26 @@ def test_poincare_solve_not_implemented():
     )
     with pytest.raises(NotImplementedError):
         eq.solve()
+
+
+@pytest.mark.unit
+def test_equilibriafamily_constructor():
+    """Test that correct errors are thrown when making EquilibriaFamily."""
+    eq = Equilibrium()
+    ir = InputReader(["./tests/inputs/DSHAPE"])
+    eqf = EquilibriaFamily(eq, *ir.inputs)
+    assert len(eqf) == 4
+
+    with pytest.raises(TypeError):
+        _ = EquilibriaFamily(4, 5, 6)
+
+
+@pytest.mark.unit
+def test_change_NFP():
+    """Test that changing the eq NFP correctly changes everything."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        eq = desc.examples.get("HELIOTRON")
+        eq.change_resolution(NFP=4)
+        obj = get_equilibrium_objective()
+        obj.build(eq)

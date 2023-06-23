@@ -15,7 +15,7 @@ N_grid =  0
 ftol = 1e-15
 xtol = 1e-08
 gtol = 1e-08
-nfev = 50
+maxiter = 50
 
 # solver methods
 optimizer         = scipy-trust-exact
@@ -24,8 +24,8 @@ spectral_indexing = ansi
 node_pattern      = quad
 
 # pressure and rotational transform profiles
-l:   0  p =  0.125  i =  1.0
-l:   2  p = -0.125  i =  0.0
+l:   0  p =  0.125  i =  -1.0
+l:   2  p = -0.125  i =  -0.0
 
 # magnetic axis initial guess
 n:   0  R0 =  4.0  Z0 =  0.0
@@ -33,6 +33,6 @@ n:   0  R0 =  4.0  Z0 =  0.0
 # fixed-boundary surface shape
 m:   0  n:   0  R1 =  3.999
 m:   1  n:   0  R1 =  1.026
-m:  -1  n:   0  Z1 =  1.580
+m:  -1  n:   0  Z1 =  -1.580
 m:   2  n:   0  R1 = -0.068
-m:  -2  n:   0  Z1 =  0.010
+m:  -2  n:   0  Z1 =  -0.010

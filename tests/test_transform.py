@@ -1,14 +1,18 @@
+"""Tests for transforming from spectral coefficients to real space values."""
+
 import numpy as np
 import pytest
 
-from desc.grid import Grid, LinearGrid, ConcentricGrid
+import desc.examples
 from desc.basis import (
-    PowerSeries,
-    FourierSeries,
     DoubleFourierSeries,
-    ZernikePolynomial,
+    FourierSeries,
     FourierZernikeBasis,
+    PowerSeries,
+    ZernikePolynomial,
 )
+from desc.compute import get_transforms
+from desc.grid import ConcentricGrid, Grid, LinearGrid
 from desc.transform import Transform
 
 
@@ -65,7 +69,7 @@ class TestTransform:
         values = transf.transform(c, 0, 0, 0)
         derivs = transf.transform(c, 1, 0, 0)
 
-        correct_vals = c[0] + c[1] * x + c[2] * x ** 2
+        correct_vals = c[0] + c[1] * x + c[2] * x**2
         correct_ders = c[1] + c[2] * 2 * x
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
@@ -221,7 +225,6 @@ class TestTransform:
     @pytest.mark.unit
     def test_direct_fft_equal(self):
         """Tests that the direct and fft method produce the same results."""
-
         L = 4
         M = 3
         N = 2
@@ -357,8 +360,7 @@ class TestTransform:
 
     @pytest.mark.unit
     def test_project(self):
-        """Tests projection method."""
-
+        """Tests projection method for Galerkin method."""
         basis = FourierZernikeBasis(L=-1, M=5, N=3)
         grid = ConcentricGrid(L=4, M=2, N=5)
         transform = Transform(grid, basis, method="fft")
@@ -403,7 +405,7 @@ class TestTransform:
 
     @pytest.mark.unit
     def test_fft_warnings(self):
-        """Test that warnings are thrown when trying to use fft where it doesn't work."""
+        """Test that warnings are thrown when trying to use fft where it won't work."""
         g = LinearGrid(rho=2, theta=2, zeta=2)
         b = ZernikePolynomial(L=0, M=0)
         with pytest.warns(UserWarning):
@@ -468,7 +470,7 @@ class TestTransform:
 
     @pytest.mark.unit
     def test_direct2_warnings(self):
-        """Test that warnings are thrown when trying to use direct2 where it doesn't work."""
+        """Test that warnings are thrown when trying to use direct2 if it won't work."""
         g = LinearGrid(rho=2, theta=2, zeta=5)
         b = DoubleFourierSeries(M=1, N=1)
         g._nodes = g._nodes[::-1]
@@ -532,3 +534,36 @@ class TestTransform:
         x = transform.transform(c)
         c1 = transform.fit(x)
         np.testing.assert_allclose(c, c1, atol=1e-12)
+
+    @pytest.mark.unit
+    def test_empty_grid(self):
+        """Make sure we can build transforms with empty grids."""
+        grid = Grid(nodes=np.empty((0, 3)))
+        basis = FourierZernikeBasis(6, 0, 0)
+        _ = Transform(grid, basis)
+
+        basis = FourierZernikeBasis(6, 6, 6)
+        _ = Transform(grid, basis)
+
+    @pytest.mark.unit
+    def test_Z_projection(self):
+        """Make sure we always have the 0,0,0 derivative for projections."""
+        eq = desc.examples.get("DSHAPE")
+        data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)", "F_helical", "|e^helical|"]
+        grid = ConcentricGrid(
+            L=eq.L_grid,
+            M=eq.M_grid,
+            N=eq.N_grid,
+            NFP=eq.NFP,
+            sym=eq.sym,
+            axis=False,
+            node_pattern=eq.node_pattern,
+        )
+        tr = get_transforms(data_keys, eq, grid)
+        f = np.ones(grid.num_nodes)
+
+        assert tr["Z"].matrices["direct1"][0][0][0].shape == (
+            grid.num_nodes,
+            eq.Z_basis.num_modes,
+        )
+        _ = tr["Z"].project(f)

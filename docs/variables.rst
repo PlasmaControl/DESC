@@ -7,10 +7,10 @@ The table below contains a list of variables that are used in the code and that 
   * **Label** : TeX label for the variable
   * **Units** : physical units for the variable
   * **Description** : description of the variable
-  * **Compute function** : the function in the code that computes the variable (generally only for developers)
+  * **Module** : where in the code the source is defined (mostly for developers)
 
-  
+
 .. csv-table:: List of Variables
    :file: variables.csv
-   :widths: 10, 10, 10, 50, 20
+   :widths: 15, 15, 15, 60, 30
    :header-rows: 1

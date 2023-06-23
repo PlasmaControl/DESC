@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Created on Mon Apr 12 21:14:09 2021
 
@@ -7,19 +6,20 @@ Created on Mon Apr 12 21:14:09 2021
 """
 
 import os
+import unittest
+
 import numpy as np
 from netCDF4 import Dataset
-import unittest
-from desc.nestor import Nestor, firstIterationPrintout
-from desc.magnetic_fields import SplineMagneticField
-from desc.grid import LinearGrid
-from desc.transform import Transform
-from desc.basis import DoubleFourierSeries, FourierSeries
-from desc.vmec_utils import ptolemy_identity_fwd
-from desc.utils import copy_coeffs
-
-from desc.equilibrium import Equilibrium
 from scipy.constants import mu_0
+
+from desc.basis import DoubleFourierSeries, FourierSeries
+from desc.equilibrium import Equilibrium
+from desc.grid import LinearGrid
+from desc.magnetic_fields import SplineMagneticField
+from desc.nestor import Nestor, firstIterationPrintout
+from desc.transform import Transform
+from desc.utils import copy_coeffs
+from desc.vmec_utils import ptolemy_identity_fwd
 
 here = os.path.abspath(os.path.dirname(__file__))
 
@@ -195,15 +195,15 @@ def test_same_outputs(tmpdir_factory):
         ref_in = os.path.join(ref_in_folder, "vacin_%s_%06d.nc" % (runId, iteration))
         ref_out = os.path.join(ref_out_folder, "vacout_%s_%06d.nc" % (runId, iteration))
         if not os.path.isfile(ref_in):
-            raise RuntimeError("reference %s not found" % (ref_in,))
+            raise RuntimeError("reference {} not found".format(ref_in))
         if not os.path.isfile(ref_out):
-            raise RuntimeError("reference %s not found" % (ref_out,))
+            raise RuntimeError("reference {} not found".format(ref_out))
 
         desc_tst_fname = output_dir.join("vacout_%s_%06d_desc.nc" % (runId, iteration))
         mgrid = here + "/inputs/nestor/mgrid_test.nc"
         main(ref_in, desc_tst_fname, mgrid)
         if not os.path.isfile(desc_tst_fname):
-            raise RuntimeError("test %s not found" % (desc_tst_fname,))
+            raise RuntimeError("test {} not found".format(desc_tst_fname))
 
         ref_data = {}
         d = Dataset(ref_out, "r")

@@ -1,24 +1,24 @@
-import pytest
-import numpy as np
-import mpmath
+"""Tests for basis classes and evaluation functions."""
 
-from desc.grid import LinearGrid
+import mpmath
+import numpy as np
+import pytest
+
 from desc.basis import (
+    DoubleFourierSeries,
+    FourierSeries,
+    FourierZernikeBasis,
+    PowerSeries,
+    ZernikePolynomial,
+    fourier,
     polyder_vec,
     polyval_vec,
     powers,
     zernike_radial,
-    zernike_radial_poly,
     zernike_radial_coeffs,
-    fourier,
+    zernike_radial_poly,
 )
-from desc.basis import (
-    PowerSeries,
-    FourierSeries,
-    DoubleFourierSeries,
-    ZernikePolynomial,
-    FourierZernikeBasis,
-)
+from desc.grid import LinearGrid
 
 
 class TestBasis:
@@ -43,7 +43,7 @@ class TestBasis:
         p = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         x = np.linspace(0, 1, 11)
 
-        correct_vals = np.array([x ** 2, x, np.ones_like(x), x ** 2 + x + 1])
+        correct_vals = np.array([x**2, x, np.ones_like(x), x**2 + x + 1])
         values = polyval_vec(p, x)
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
@@ -117,7 +117,7 @@ class TestBasis:
         l = np.array([0, 1, 2])
         r = np.linspace(0, 1, 11)  # rho coordinates
 
-        correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
+        correct_vals = np.array([np.ones_like(r), r, r**2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
         values = powers(r, l, dr=0)
@@ -135,23 +135,23 @@ class TestBasis:
 
         # correct value functions
         def Z3_1(x):
-            return 3 * x ** 3 - 2 * x
+            return 3 * x**3 - 2 * x
 
         def Z4_2(x):
-            return 4 * x ** 4 - 3 * x ** 2
+            return 4 * x**4 - 3 * x**2
 
         def Z6_2(x):
-            return 15 * x ** 6 - 20 * x ** 4 + 6 * x ** 2
+            return 15 * x**6 - 20 * x**4 + 6 * x**2
 
         # correct derivative functions
         def dZ3_1(x):
-            return 9 * x ** 2 - 2
+            return 9 * x**2 - 2
 
         def dZ4_2(x):
-            return 16 * x ** 3 - 6 * x
+            return 16 * x**3 - 6 * x
 
         def dZ6_2(x):
-            return 90 * x ** 5 - 80 * x ** 3 + 12 * x
+            return 90 * x**5 - 80 * x**3 + 12 * x
 
         correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
         correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
@@ -187,7 +187,7 @@ class TestBasis:
         grid = LinearGrid(rho=11)
         r = grid.nodes[:, 0]  # rho coordinates
 
-        correct_vals = np.array([np.ones_like(r), r, r ** 2]).T
+        correct_vals = np.array([np.ones_like(r), r, r**2]).T
         correct_ders = np.array([np.zeros_like(r), np.ones_like(r), 2 * r]).T
 
         basis = PowerSeries(L=2, sym=False)
@@ -279,3 +279,28 @@ class TestBasis:
         basis = FourierZernikeBasis(L=10, M=4, N=0, spectral_indexing="fringe")
         assert (basis.modes == [10, 0, 0]).all(axis=1).any()
         assert not (basis.modes == [10, 2, 0]).all(axis=1).any()
+
+    @pytest.mark.unit
+    def test_derivative_not_in_basis_zeros(self):
+        """Test that d/dx = 0 when x is not in the basis."""
+        nodes = np.random.random((10, 3))
+
+        basis = PowerSeries(L=3)
+        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
+        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
+        assert np.all(ft == 0)
+        assert np.all(fz == 0)
+
+        basis = FourierSeries(N=4)
+        fr = basis.evaluate(nodes, derivatives=[1, 0, 0])
+        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
+        assert np.all(fr == 0)
+        assert np.all(ft == 0)
+
+        basis = DoubleFourierSeries(M=2, N=4)
+        fr = basis.evaluate(nodes, derivatives=[1, 0, 0])
+        assert np.all(fr == 0)
+
+        basis = ZernikePolynomial(L=2, M=3)
+        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
+        assert np.all(fz == 0)

@@ -606,42 +606,7 @@ class SplineMagneticField(MagneticField):
             period in the toroidal direction (usually 2pi/NFP)
 
         """
-        mgrid = Dataset(mgrid_file, "r")
-        ir = int(mgrid["ir"][()])
-        jz = int(mgrid["jz"][()])
-        kp = int(mgrid["kp"][()])
-        nfp = mgrid["nfp"][()].data
-        nextcur = int(mgrid["nextcur"][()])
-        rMin = mgrid["rmin"][()]
-        rMax = mgrid["rmax"][()]
-        zMin = mgrid["zmin"][()]
-        zMax = mgrid["zmax"][()]
-
-        br = np.zeros([kp, jz, ir])
-        bp = np.zeros([kp, jz, ir])
-        bz = np.zeros([kp, jz, ir])
-        extcur = np.broadcast_to(extcur, nextcur)
-        for i in range(nextcur):
-
-            # apply scaling by currents given in VMEC input file
-            scale = extcur[i]
-
-            # sum up contributions from different coils
-            coil_id = "%03d" % (i + 1,)
-            br[:, :, :] += scale * mgrid["br_" + coil_id][()]
-            bp[:, :, :] += scale * mgrid["bp_" + coil_id][()]
-            bz[:, :, :] += scale * mgrid["bz_" + coil_id][()]
-        mgrid.close()
-
-        # shift axes to correct order
-        br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
-        bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
-        bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
-
-        # re-compute grid knots in radial and vertical direction
-        Rgrid = np.linspace(rMin, rMax, ir)
-        Zgrid = np.linspace(zMin, zMax, jz)
-        pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
+        Rgrid, pgrid, Zgrid, br, bp, bz, nfp = read_mgrid(mgrid_file, extcur)
         if period is None:
             period = 2 * np.pi / (nfp)
 
@@ -1165,3 +1130,57 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
         value += V_m_l(R, phi, Z, m, l, a, b, c, d)
     return value
+
+
+def read_mgrid(
+    mgrid_file,
+    extcur=1,
+):
+    """Read an "mgrid" file from MAKEGRID and return the grid and magnetic field.
+
+    Parameters
+    ----------
+    mgrid_file : str or path-like
+        path to mgrid file in netCDF format
+    extcur : array-like
+        currents for each subset of the field
+
+    """
+    mgrid = Dataset(mgrid_file, "r")
+    ir = int(mgrid["ir"][()])
+    jz = int(mgrid["jz"][()])
+    kp = int(mgrid["kp"][()])
+    nfp = mgrid["nfp"][()].data
+    nextcur = int(mgrid["nextcur"][()])
+    rMin = mgrid["rmin"][()]
+    rMax = mgrid["rmax"][()]
+    zMin = mgrid["zmin"][()]
+    zMax = mgrid["zmax"][()]
+
+    br = np.zeros([kp, jz, ir])
+    bp = np.zeros([kp, jz, ir])
+    bz = np.zeros([kp, jz, ir])
+    extcur = np.broadcast_to(extcur, nextcur)
+    for i in range(nextcur):
+
+        # apply scaling by currents given in VMEC input file
+        scale = extcur[i]
+
+        # sum up contributions from different coils
+        coil_id = "%03d" % (i + 1,)
+        br[:, :, :] += scale * mgrid["br_" + coil_id][()]
+        bp[:, :, :] += scale * mgrid["bp_" + coil_id][()]
+        bz[:, :, :] += scale * mgrid["bz_" + coil_id][()]
+    mgrid.close()
+
+    # shift axes to correct order
+    br = np.moveaxis(br, (0, 1, 2), (1, 2, 0))
+    bp = np.moveaxis(bp, (0, 1, 2), (1, 2, 0))
+    bz = np.moveaxis(bz, (0, 1, 2), (1, 2, 0))
+
+    # re-compute grid knots in radial and vertical direction
+    Rgrid = np.linspace(rMin, rMax, ir)
+    Zgrid = np.linspace(zMin, zMax, jz)
+    pgrid = 2.0 * np.pi / (nfp * kp) * np.arange(kp)
+
+    return Rgrid, Zgrid, pgrid, br, bp, bz, nfp

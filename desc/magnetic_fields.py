@@ -693,6 +693,8 @@ class ScalarPotentialField(MagneticField):
         if isinstance(coords, Grid):
             coords = coords.nodes
         coords = jnp.atleast_2d(coords)
+        if coords.dtype == int:
+            coords = coords.astype(float)
         if basis == "xyz":
             coords = xyz2rpz(coords)
         Rq, phiq, Zq = coords.T

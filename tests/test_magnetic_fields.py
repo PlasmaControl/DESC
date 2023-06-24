@@ -13,7 +13,6 @@ from desc.magnetic_fields import (
     SplineMagneticField,
     ToroidalMagneticField,
     VerticalMagneticField,
-    dommaschk_potential,
     field_line_integrate,
 )
 
@@ -155,11 +154,8 @@ def test_dommaschk_CN_CD_m_0():
 
 
 @pytest.mark.unit
-def test_dommaschk_potential_errors():
-    """Test the assert statements of the Dommaschk potential function."""
-    phi = 1
-    R = 1
-    Z = 1
+def test_dommaschk_field_errors():
+    """Test the assert statements of the DommaschkField function."""
     ms = [1]
     ls = [1]
     a_arr = [1]
@@ -167,11 +163,11 @@ def test_dommaschk_potential_errors():
     c_arr = [1]
     d_arr = [1, 1]  # length is not equal to the rest
     with pytest.raises(AssertionError):
-        dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr)
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
     d_arr = [1]
     ms = [-1]  # negative modenumber
     with pytest.raises(AssertionError):
-        dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr)
+        DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
 
 
 @pytest.mark.unit

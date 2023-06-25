@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.io
+from desc.compute import data_index
 from desc.compute.utils import compress, surface_averages
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -14,7 +15,7 @@ class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
 
     @pytest.mark.unit
-    def test_compute_axis_limit_api(self):
+    def test_axis_limit_api(self):
         """Test that axis limit dependencies are computed only when necessary."""
         eq = Equilibrium()
         grid = LinearGrid(L=2, M=2, N=2, axis=False)
@@ -32,49 +33,60 @@ class TestAxisLimits:
         assert np.isfinite(data["B0"]).all()
 
     @pytest.mark.unit
-    def test_b_mag_fsa(self):
-        """Test continuity of <|B|>. Failure indicates B0 limit is wrong."""
+    def test_nonexistent_limits(self):
+        """Test that quantities whose limit does not exist evaluates not finite."""
+        eq = get("W7-X")
+        grid = LinearGrid(L=5, M=5, N=5, sym=eq.sym, NFP=eq.NFP, axis=True)
+        axis_mask = grid.nodes[:, 0] == 0
+        no_limits = ["e^theta", "grad(alpha)"]
+        data = eq.compute(names=no_limits, grid=grid)
+        for quantity in no_limits:
+            assert np.all(~np.isfinite(data[quantity][axis_mask]))
 
-        def test(eq, expected_at_axis):
-            delta = 1e-3
-            epsilon = 1e-6
-            rho = np.linspace(0, delta, 10)
-            lg = LinearGrid(rho=rho, M=7, N=7, NFP=eq.NFP, sym=eq.sym)
-            b_mag_fsa_no_sqrt_g = surface_averages(
-                lg, eq.compute("|B|", grid=lg)["|B|"], expand_out=False
-            )
-            # check continuity
-            assert np.isfinite(b_mag_fsa_no_sqrt_g).all()
-            np.testing.assert_allclose(
-                b_mag_fsa_no_sqrt_g[:-1], b_mag_fsa_no_sqrt_g[1:], atol=epsilon
-            )
+    @staticmethod
+    def continuity(eq, name, expected_at_axis=None):
+        """Test that the rho=0 axis limit of name is computed accurately."""
+        delta = 1e-5
+        epsilon = 1e-6
+        grid = LinearGrid(
+            rho=np.linspace(0, 1, 10) * delta, M=7, N=7, NFP=eq.NFP, sym=eq.sym
+        )
+        assert grid.axis.size
+        quantity = eq.compute(name, grid=grid)[name]
+        if data_index[name]["coordinates"] == "r":
+            quantity = compress(grid, quantity)
+        elif data_index[name]["coordinates"] != "":
+            quantity = surface_averages(grid, quantity, expand_out=False)
+        assert np.isfinite(quantity).all()
+        # check continuity
+        np.testing.assert_allclose(quantity[:-1], quantity[1:], atol=epsilon)
+        if expected_at_axis is not None:
             # check value
-            np.testing.assert_allclose(
-                b_mag_fsa_no_sqrt_g[0], expected_at_axis, atol=epsilon
-            )
+            np.testing.assert_allclose(quantity[0], expected_at_axis, atol=epsilon)
 
-        value_computed_close_to_axis = 2.708108
-        test(get("W7-X"), value_computed_close_to_axis)
+    @pytest.mark.unit
+    def test_e_theta(self):
+        """Test that e_theta goes to 0 at magnetic axis."""
+        # All limits rely on this.
+        TestAxisLimits.continuity(get("W7-X"), "e_theta", expected_at_axis=0)
+
+    @pytest.mark.unit
+    def test_b_fsa(self):
+        """Test axis limit of B."""
+        TestAxisLimits.continuity(get("W7-X"), "B")
 
     @pytest.mark.unit
     @pytest.mark.solve
     def test_rotational_transform(self, DSHAPE_current):
-        """Test that the limit at rho=0 axis is computed accurately."""
+        """Test axis limit of iota."""
         # test should be done on equilibria with fixed current profiles
-        def test(eq, expected_at_axis):
-            delta = 1e-3
-            epsilon = 1e-6
-            rho = np.linspace(0, delta, 10)
-            lg = LinearGrid(rho=rho, M=5, N=5, NFP=eq.NFP, sym=eq.sym)
-            iota = compress(lg, eq.compute("iota", grid=lg)["iota"])
-            # check continuity
-            assert np.isfinite(iota).all()
-            np.testing.assert_allclose(iota[:-1], iota[1:], atol=epsilon)
-            # check value
-            np.testing.assert_allclose(iota[0], expected_at_axis, atol=epsilon)
-
-        eq = desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
-        value_computed_close_to_axis = -0.994167
-        test(eq, value_computed_close_to_axis)
-        value_computed_close_to_axis = -0.360675
-        test(get("QAS"), value_computed_close_to_axis)
+        computed_close_to_axis = -0.994167
+        TestAxisLimits.continuity(
+            desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1],
+            "iota",
+            expected_at_axis=computed_close_to_axis,
+        )
+        computed_close_to_axis = -0.360675
+        TestAxisLimits.continuity(
+            get("QAS"), "iota", expected_at_axis=computed_close_to_axis
+        )

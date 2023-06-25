@@ -2,7 +2,7 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
 from .utils import dot, surface_averages
@@ -76,6 +76,7 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     data=["J^rho", "J^theta", "J^zeta", "e_rho", "e_theta", "e_zeta"],
 )
 def _J(params, transforms, profiles, data, **kwargs):
+    # TODO: should be infinite because density at infinitesimal volume
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
         + data["J^theta"] * data["e_theta"].T
@@ -89,7 +90,7 @@ def _J(params, transforms, profiles, data, **kwargs):
     label="J_{R}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Radial componenet of plasma current density in lab frame",
+    description="Radial component of plasma current density in lab frame",
     dim=1,
     params=[],
     transforms={},
@@ -107,7 +108,7 @@ def _J_R(params, transforms, profiles, data, **kwargs):
     label="J_{\\phi}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Toroidal componenet of plasma current density in lab frame",
+    description="Toroidal component of plasma current density in lab frame",
     dim=1,
     params=[],
     transforms={},
@@ -125,7 +126,7 @@ def _J_phi(params, transforms, profiles, data, **kwargs):
     label="J_{Z}",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Vertical componenet of plasma current density in lab frame",
+    description="Vertical component of plasma current density in lab frame",
     dim=1,
     params=[],
     transforms={},
@@ -143,7 +144,7 @@ def _J_Z(params, transforms, profiles, data, **kwargs):
     label="|\\mathbf{J}|",
     units="A \\cdot m^{-2}",
     units_long="Amperes / square meter",
-    description="Magnitue of plasma current density",
+    description="Magnitude of plasma current density",
     dim=1,
     params=[],
     transforms={},
@@ -189,6 +190,12 @@ def _J_sub_rho(params, transforms, profiles, data, **kwargs):
 )
 def _J_sub_theta(params, transforms, profiles, data, **kwargs):
     data["J_theta"] = dot(data["J"], data["e_theta"])
+    if transforms["grid"].axis.size:
+        # FIXME: should be taking the derivative of each coefficient, not the vector
+        limit = dot(data["J_r"], data["e_theta_r"])
+        data["J_theta"] = put(
+            data["J_theta"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 

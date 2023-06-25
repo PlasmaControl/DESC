@@ -184,12 +184,20 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "psi_rr", "sqrt(g)", "sqrt(g)_r"],
+    axis_limit_data=["psi_rrr", "sqrt(g)_rr"],
 )
 def _B0_r(params, transforms, profiles, data, **kwargs):
     data["B0_r"] = (
         data["psi_rr"] / data["sqrt(g)"]
         - data["psi_r"] * data["sqrt(g)_r"] / data["sqrt(g)"] ** 2
     )
+    if transforms["grid"].axis.size:
+        limit = (
+            data["psi_rrr"] * data["sqrt(g)_r"] - data["psi_rr"] * data["sqrt(g)_rr"]
+        ) / (2 * data["sqrt(g)_r"] ** 2)
+        data["B0_r"] = put(
+            data["B0_r"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -307,10 +315,16 @@ def _B_r(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["psi_r", "sqrt(g)_t", "sqrt(g)"],
+    data=["psi_r", "sqrt(g)", "sqrt(g)_t"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rt"],
 )
 def _B0_t(params, transforms, profiles, data, **kwargs):
     data["B0_t"] = -data["psi_r"] * data["sqrt(g)_t"] / data["sqrt(g)"] ** 2
+    if transforms["grid"].axis.size:
+        limit = -data["psi_rr"] * data["sqrt(g)_rt"] / data["sqrt(g)_r"] ** 2
+        data["B0_t"] = put(
+            data["B0_t"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -406,9 +420,15 @@ def _B_t(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_z"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rz"],
 )
 def _B0_z(params, transforms, profiles, data, **kwargs):
     data["B0_z"] = -data["psi_r"] * data["sqrt(g)_z"] / data["sqrt(g)"] ** 2
+    if transforms["grid"].axis.size:
+        limit = -data["psi_rr"] * data["sqrt(g)_rz"] / data["sqrt(g)_r"] ** 2
+        data["B0_z"] = put(
+            data["B0_z"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -506,6 +526,7 @@ def _B_z(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "psi_rr", "psi_rrr", "sqrt(g)", "sqrt(g)_r", "sqrt(g)_rr"],
+    axis_limit_data=["sqrt(g)_rrr"],
 )
 def _B0_rr(params, transforms, profiles, data, **kwargs):
     data["B0_rr"] = (
@@ -514,6 +535,15 @@ def _B0_rr(params, transforms, profiles, data, **kwargs):
         - data["psi_r"] * data["sqrt(g)_rr"] / data["sqrt(g)"] ** 2
         + 2 * data["psi_r"] * data["sqrt(g)_r"] ** 2 / data["sqrt(g)"] ** 3
     )
+    if transforms["grid"].axis.size:
+        limit = (
+            3 * data["sqrt(g)_rr"] ** 2 * data["psi_rr"]
+            - 2 * data["sqrt(g)_rrr"] * data["sqrt(g)_r"] * data["psi_rr"]
+            - 3 * data["psi_rrr"] * data["sqrt(g)_r"] * data["sqrt(g)_rr"]
+        ) / (6 * data["sqrt(g)_r"] ** 3)
+        data["B0_rr"] = put(
+            data["B0_rr"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -671,13 +701,23 @@ def _B_rr(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_t", "sqrt(g)_tt"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rt", "sqrt(g)_rtt"],
 )
 def _B0_tt(params, transforms, profiles, data, **kwargs):
-    data["B0_tt"] = -(
+    data["B0_tt"] = (
         data["psi_r"]
-        / data["sqrt(g)"] ** 2
-        * (data["sqrt(g)_tt"] - 2 * data["sqrt(g)_t"] ** 2 / data["sqrt(g)"])
+        * (2 * data["sqrt(g)_t"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_tt"])
+        / data["sqrt(g)"] ** 3
     )
+    if transforms["grid"].axis.size:
+        limit = (
+            data["psi_rr"]
+            * (2 * data["sqrt(g)_rt"] ** 2 - data["sqrt(g)_r"] * data["sqrt(g)_rtt"])
+            / data["sqrt(g)_r"] ** 3
+        )
+        data["B0_tt"] = put(
+            data["B0_tt"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -805,13 +845,23 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["psi_r", "sqrt(g)", "sqrt(g)_z", "sqrt(g)_zz"],
+    axis_limit_data=["psi_rr", "sqrt(g)_r", "sqrt(g)_rz", "sqrt(g)_rzz"],
 )
 def _B0_zz(params, transforms, profiles, data, **kwargs):
-    data["B0_zz"] = -(
+    data["B0_zz"] = (
         data["psi_r"]
-        / data["sqrt(g)"] ** 2
-        * (data["sqrt(g)_zz"] - 2 * data["sqrt(g)_z"] ** 2 / data["sqrt(g)"])
+        * (2 * data["sqrt(g)_z"] ** 2 - data["sqrt(g)"] * data["sqrt(g)_zz"])
+        / data["sqrt(g)"] ** 3
     )
+    if transforms["grid"].axis.size:
+        limit = (
+            data["psi_rr"]
+            * (2 * data["sqrt(g)_rz"] ** 2 - data["sqrt(g)_r"] * data["sqrt(g)_rzz"])
+            / data["sqrt(g)_r"] ** 3
+        )
+        data["B0_zz"] = put(
+            data["B0_zz"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 

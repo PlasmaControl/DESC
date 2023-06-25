@@ -692,7 +692,14 @@ def _iota_zero_current_num_r(params, transforms, profiles, data, **kwargs):
         - num * data["sqrt(g)_r"]
     ) / data["sqrt(g)"]
     data["iota_zero_current_num_r"] = surface_averages(transforms["grid"], num_r)
-    # TODO: limit at axis
+    if transforms["grid"].axis.size:
+        # TODO: limit at axis
+        limit = jnp.array([jnp.nan])
+        data["iota_zero_current_num_r"] = put(
+            data["iota_zero_current_num_r"],
+            transforms["grid"].axis,
+            limit[transforms["grid"].axis],
+        )
     return data
 
 

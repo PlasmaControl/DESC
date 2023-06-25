@@ -85,13 +85,14 @@ class Transform(IOAble):
 
     def _set_up(self):
 
-        self.method = self._method
+        self.method = self._method  # FIXME: isn't this line redundant
+        n = np.max(self.derivatives) + 1  # TODO: check
         self._matrices = {
             "direct1": {
-                i: {j: {k: {} for k in range(4)} for j in range(4)} for i in range(4)
+                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
             },
-            "fft": {i: {j: {} for j in range(4)} for i in range(4)},
-            "direct2": {i: {} for i in range(4)},
+            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
+            "direct2": {i: {} for i in range(n)},
         }
 
     def _get_derivatives(self, derivs):

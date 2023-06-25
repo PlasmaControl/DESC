@@ -884,7 +884,9 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             Surface integral of the input over each surface in the grid.
 
         """
-        integrands = (spacing * jnp.nan_to_num(q).T).T
+        # Todo: revert to jnp.nan_to_num(q) after limits done
+        #   then modify axis test to replace any nan in q with inf before average
+        integrands = (spacing * jnp.atleast_1d(q).T).T
         # `integrands` may have shape (g.size, f.size, v.size), where
         #     g is the grid function depending on the integration variables
         #     f is a function which may be independent of the integration variables

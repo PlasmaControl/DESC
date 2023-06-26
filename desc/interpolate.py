@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import jnp
 
 
-def fft_interp1d(f, n, sx=0, dx=1):
+def fft_interp1d(f, n, sx=None, dx=1):
     """Interpolation of a 1d periodic function via FFT.
 
     Parameters
@@ -17,28 +17,30 @@ def fft_interp1d(f, n, sx=0, dx=1):
         Source data. Assumed to cover 1 full period, excluding the endpoint.
     n : int
         Number of desired interpolation points.
-    sx : float
+    sx : ndarray or None
         Shift in x to evaluate at. If original data is f(x), interpolates to f(x + sx)
     dx : float
         Spacing of source points
 
     Returns
     -------
-    fi : ndarray, shape(n, ...)
+    fi : ndarray, shape(n, ..., len(sx))
         Interpolated (and possibly shifted) data points
     """
     c = jnp.fft.ifft(f, axis=0)
     nx = c.shape[0]
-    sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx) * sx / dx)
-    c = (c.T * sx).T
+    if sx is not None:
+        sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx)[:, None] * sx / dx)
+        c = (c[None].T * sx).T
+        c = jnp.moveaxis(c, 0, -1)
     pad = ((n - nx) // 2, n - nx - (n - nx) // 2)
     if nx % 2 != 0:
         pad = pad[::-1]
-    c = jnp.fft.ifftshift(_pad_along_axis(jnp.fft.fftshift(c), pad, axis=0))
+    c = jnp.fft.ifftshift(_pad_along_axis(jnp.fft.fftshift(c, axes=0), pad, axis=0))
     return jnp.fft.fft(c, axis=0).real
 
 
-def fft_interp2d(f, n1, n2, sx=0, sy=0, dx=1, dy=1):
+def fft_interp2d(f, n1, n2, sx=None, sy=None, dx=1, dy=1):
     """Interpolation of a 2d periodic function via FFT.
 
     Parameters
@@ -47,22 +49,24 @@ def fft_interp2d(f, n1, n2, sx=0, sy=0, dx=1, dy=1):
         Source data. Assumed to cover 1 full period, excluding the endpoint.
     n1, n2 : int
         Number of desired interpolation points in x and y directions
-    sx, sy : float
+    sx, sy : ndarray or None
         Shift in x and y to evaluate at. If original data is f(x,y), interpolates to
-        f(x + sx, y + sy)
+        f(x + sx, y + sy). Both must be provided or None
     dx, dy : float
         Spacing of source points in x and y
 
     Returns
     -------
-    fi : ndarray, shape(n1, n2, ...)
+    fi : ndarray, shape(n1, n2, ..., len(sx), len(sy))
         Interpolated (and possibly shifted) data points
     """
     c = jnp.fft.ifft2(f, axes=(0, 1))
     nx, ny = c.shape[:2]
-    sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx) * sx / dx)
-    sy = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(ny) * sy / dy)
-    c = (c.T * sx * sy[:, None]).T
+    if (sx is not None) and (sy is not None):
+        sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx)[:, None] * sx / dx)
+        sy = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(ny)[:, None] * sy / dy)
+        c = (c[None, None].T * sx[None, :, None, :] * sy[:, None, :, None]).T
+        c = jnp.moveaxis(c, (0, 1), (-2, -1))
     padx = ((n1 - nx) // 2, n1 - nx - (n1 - nx) // 2)
     pady = ((n2 - ny) // 2, n2 - ny - (n2 - ny) // 2)
     if nx % 2 != 0:

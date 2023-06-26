@@ -129,8 +129,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
 
     def laggrad(z, y, mu, *args):
         c = constraint_wrapped.fun(z, *args)
-        J = constraint_wrapped.jac(z, *args)
-        return grad_wrapped(z, *args) - jnp.dot(y, J) + mu * jnp.dot(c, J)
+        yJ = constraint_wrapped.vjp(y - mu * c, z, *args)
+        return grad_wrapped(z, *args) - yJ
 
     if isinstance(hess_wrapped, str) and hess_wrapped.lower() == "bfgs":
         hess_init_scale = options.pop("hessian_init_scale", "auto")

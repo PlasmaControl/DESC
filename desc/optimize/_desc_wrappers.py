@@ -85,6 +85,7 @@ def _optimize_desc_aug_lagrangian(
             ub,
             constraint.jac_scaled,
         )
+        constraint_wrapped.vjp = constraint.vjp_scaled
     else:
         constraint_wrapped = None
 

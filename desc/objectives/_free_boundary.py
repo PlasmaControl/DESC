@@ -145,6 +145,7 @@ class BoundaryErrorBIEST(_Objective):
         self._data_keys = [
             "K_vc",
             "|B|^2",
+            "B",
             "R",
             "zeta",
             "Z",
@@ -247,7 +248,8 @@ class BoundaryErrorBIEST(_Objective):
             "biot_savart",
             constants["interpolator"],
         )
-        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
+        # need extra factor of B/2 bc we're evaluating on plasma surface
+        Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"]) + eval_data["B"] / 2
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(x)
         Bex_total = Bext + Bplasma
@@ -481,6 +483,7 @@ class QuadraticFlux(_Objective):
             "biot_savart",
             constants["interpolator"],
         )
+        # don't need extra B/2 since we only care about normal component
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(x)

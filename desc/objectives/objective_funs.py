@@ -497,7 +497,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         v : ndarray
-            Vectors to left-multiply the Jacobian by.
+            Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
 
@@ -512,7 +512,7 @@ class ObjectiveFunction(IOAble):
         Parameters
         ----------
         v : ndarray
-            Vectors to left-multiply the Jacobian by.
+            Vector to left-multiply the Jacobian by.
         x : ndarray
             Optimization variables.
 

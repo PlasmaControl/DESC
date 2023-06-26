@@ -120,7 +120,6 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     equal : bool
         Whether axes should have equal scales for x and y.
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -181,7 +180,6 @@ def _get_grid(**kwargs):
     kwargs
          Any arguments taken by LinearGrid.
 
-
     Returns
     -------
     grid : LinearGrid
@@ -216,7 +214,6 @@ def _get_plot_axes(grid):
     grid : Grid
         Grid of coordinates to evaluate at.
 
-
     Returns
     -------
     axes : tuple of int
@@ -247,7 +244,6 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
-
 
     Returns
     -------
@@ -311,7 +307,6 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
-
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -322,15 +317,12 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_font_size: integer, font size of the title
 
-
-
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
-
 
     Examples
     --------
@@ -1670,7 +1662,6 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         * ``label_fontsize``: float, fontsize of the x and y labels
         * ``legend_fontsize``: float, fontsize of the legend
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -2002,6 +1993,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         Axes being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
+
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)
@@ -2126,7 +2118,6 @@ def plot_boozer_modes(
           matplotlib)
         * ``lw``: float, linewidth
         * ``ls``: str, linestyle
-
 
     Returns
     -------
@@ -2267,7 +2258,9 @@ def plot_boozer_surface(
         if True, return the data plotted as well as fig,ax
     **kwargs : dict, optional
         Specify properties of the figure, axis, and plot appearance e.g.::
+
             plot_X(figsize=(4,6),cmap="plasma")
+
         Valid keyword arguments are:
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
@@ -2288,7 +2281,9 @@ def plot_boozer_surface(
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_boozer_surface.png
+
     .. code-block:: python
+
         from desc.plotting import plot_boozer_surface
         fig, ax = plot_boozer_surface(eq)
 
@@ -2633,7 +2628,6 @@ def plot_grid(grid, return_data=False, **kwargs):
           matplotlib)
         * ``title_font_size``: integer, font size of the title
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -2752,7 +2746,6 @@ def plot_basis(basis, return_data=False, **kwargs):
         if True, return the data plotted as well as fig,ax
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
-
 
     Examples
     --------
@@ -3439,8 +3432,6 @@ def plot_field_lines_real_space(
         will also return the dictionary of interpolating radial basis functions
         interpolating the magnetic field in (R,phi,Z)
 
-
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -3595,8 +3586,6 @@ def _find_idx(rho0, theta0, phi0, grid):
     grid : Grid
         grid to find closest point on
 
-
-
     Returns
     -------
     idx_pt : int
@@ -3631,6 +3620,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
     Takes the initial poloidal angle you want to seed a field line at (at phi=0),
     and integrates along the field line to the specified phi_end. returns fR,fZ,fPhi,
     the R,Z,Phi coordinates of the field line trajectory.
+
     """
     fR = []
     fZ = []

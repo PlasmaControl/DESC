@@ -57,7 +57,7 @@ def fft_interp2d(f, n1, n2, sx=None, sy=None, dx=1, dy=1):
 
     Returns
     -------
-    fi : ndarray, shape(n1, n2, ..., len(sx), len(sy))
+    fi : ndarray, shape(n1, n2, ..., len(sx))
         Interpolated (and possibly shifted) data points
     """
     c = jnp.fft.ifft2(f, axes=(0, 1))
@@ -65,8 +65,8 @@ def fft_interp2d(f, n1, n2, sx=None, sy=None, dx=1, dy=1):
     if (sx is not None) and (sy is not None):
         sx = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(nx)[:, None] * sx / dx)
         sy = jnp.exp(-1j * 2 * jnp.pi * jnp.fft.fftfreq(ny)[:, None] * sy / dy)
-        c = (c[None, None].T * sx[None, :, None, :] * sy[:, None, :, None]).T
-        c = jnp.moveaxis(c, (0, 1), (-2, -1))
+        c = (c[None].T * sx[None, :, :] * sy[:, None, :]).T
+        c = jnp.moveaxis(c, 0, -1)
     padx = ((n1 - nx) // 2, n1 - nx - (n1 - nx) // 2)
     pady = ((n2 - ny) // 2, n2 - ny - (n2 - ny) // 2)
     if nx % 2 != 0:

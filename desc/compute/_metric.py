@@ -275,10 +275,9 @@ def _sqrtg_rrr(params, transforms, profiles, data, **kwargs):
         "e_rho_rt",
         "e_theta_rt",
         "e_zeta_rt",
-        # TODO:
-        #  "e_rho_rrt",
-        #  "e_theta_rrt",
-        #  "e_zeta_rrt",
+        "e_rho_rrt",
+        "e_theta_rrt",
+        "e_zeta_rrt",
     ],
 )
 def _sqrtg_rrt(params, transforms, profiles, data, **kwargs):
@@ -596,6 +595,99 @@ def _sqrtg_tz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="sqrt(g)_rtz",
+    label="\\partial_{\\rho\\theta\\zeta} \\sqrt{g}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system, third derivative wrt "
+    + "radial, poloidal, and toroidal coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_rho_t",
+        "e_theta_t",
+        "e_zeta_t",
+        "e_rho_rt",
+        "e_theta_rt",
+        "e_zeta_rt",
+        "e_rho_z",
+        "e_theta_z",
+        "e_zeta_z",
+        "e_rho_rz",
+        "e_theta_rz",
+        "e_zeta_rz",
+        "e_rho_tz",
+        "e_theta_tz",
+        "e_zeta_tz",
+        "e_rho_rtz",
+        "e_theta_rtz",
+        "e_zeta_rtz",
+    ],
+)
+def _sqrtg_rtz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_rtz"] = (
+        dot(data["e_rho_rtz"], cross(data["e_theta"], data["e_zeta"]))
+        + dot(
+            data["e_rho_rz"],
+            cross(data["e_theta_t"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_t"]),
+        )
+        + dot(
+            data["e_rho_rt"],
+            cross(data["e_theta_z"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_z"]),
+        )
+        + dot(
+            data["e_rho_r"],
+            cross(data["e_theta_tz"], data["e_zeta"])
+            + cross(data["e_theta_z"], data["e_zeta_t"])
+            + cross(data["e_theta_t"], data["e_zeta_z"])
+            + cross(data["e_theta"], data["e_zeta_tz"]),
+        )
+        + dot(
+            data["e_rho_tz"],
+            cross(data["e_theta_r"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_r"]),
+        )
+        + dot(
+            data["e_rho_z"],
+            cross(data["e_theta_rt"], data["e_zeta"])
+            + cross(data["e_theta_t"], data["e_zeta_r"])
+            + cross(data["e_theta_r"], data["e_zeta_t"])
+            + cross(data["e_theta"], data["e_zeta_rt"]),
+        )
+        + dot(
+            data["e_rho_t"],
+            cross(data["e_theta_rz"], data["e_zeta"])
+            + cross(data["e_theta_z"], data["e_zeta_r"])
+            + cross(data["e_theta_r"], data["e_zeta_z"])
+            + cross(data["e_theta"], data["e_zeta_rz"]),
+        )
+        + dot(
+            data["e_rho"],
+            cross(data["e_theta_rtz"], data["e_zeta"])
+            + cross(data["e_theta_tz"], data["e_zeta_r"])
+            + cross(data["e_theta_rz"], data["e_zeta_t"])
+            + cross(data["e_theta_z"], data["e_zeta_rt"])
+            + cross(data["e_theta_rt"], data["e_zeta_z"])
+            + cross(data["e_theta_t"], data["e_zeta_rz"])
+            + cross(data["e_theta_r"], data["e_zeta_tz"])
+            + cross(data["e_theta"], data["e_zeta_rtz"]),
+        )
+    )
+    return data
+
+
+@register_compute_fun(
     name="sqrt(g)_rz",
     label="\\partial_{\\rho\\zeta} \\sqrt{g}",
     units="m^{3}",
@@ -633,6 +725,80 @@ def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
         + dot(data["e_rho_z"], cross(data["e_theta"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta_z"], data["e_zeta_r"]))
         + dot(data["e_rho"], cross(data["e_theta"], data["e_zeta_rz"]))
+    )
+    return data
+
+
+@register_compute_fun(
+    name="sqrt(g)_rrz",
+    label="\\partial_{\\rho\\rho\\zeta} \\sqrt{g}",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Jacobian determinant of flux coordinate system, third derivative wrt "
+    + "radial coordinate twice and toroidal angle once",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+        "e_rho_z",
+        "e_theta_z",
+        "e_zeta_z",
+        "e_rho_rz",
+        "e_theta_rz",
+        "e_zeta_rz",
+        "e_rho_rrz",
+        "e_theta_rrz",
+        "e_zeta_rrz",
+    ],
+)
+def _sqrtg_rrz(params, transforms, profiles, data, **kwargs):
+    data["sqrt(g)_rrz"] = (
+        dot(data["e_rho_rrz"], cross(data["e_theta"], data["e_zeta"]))
+        + dot(
+            data["e_rho_rr"],
+            cross(data["e_theta_z"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_z"]),
+        )
+        + 2
+        * dot(
+            data["e_rho_rz"],
+            cross(data["e_theta_r"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_r"]),
+        )
+        + 2
+        * dot(
+            data["e_rho_r"],
+            cross(data["e_theta_rz"], data["e_zeta"])
+            + cross(data["e_theta_r"], data["e_zeta_z"])
+            + cross(data["e_theta_z"], data["e_zeta_r"])
+            + cross(data["e_theta"], data["e_zeta_rz"]),
+        )
+        + dot(
+            data["e_rho_z"],
+            cross(data["e_theta_rr"], data["e_zeta"])
+            + cross(data["e_theta_r"], data["e_zeta_r"])
+            + cross(data["e_theta_r"], data["e_zeta_r"])
+            + cross(data["e_theta"], data["e_zeta_rr"]),
+        )
+        + dot(
+            data["e_rho"],
+            cross(data["e_theta_rrz"], data["e_zeta"])
+            + cross(data["e_theta_rr"], data["e_zeta_z"])
+            + cross(data["e_theta_rz"], data["e_zeta_r"])
+            + cross(data["e_theta_r"], data["e_zeta_rz"])
+            + cross(data["e_theta_rz"], data["e_zeta_r"])
+            + cross(data["e_theta_r"], data["e_zeta_rz"])
+            + cross(data["e_theta_z"], data["e_zeta_rr"])
+            + cross(data["e_theta"], data["e_zeta_rrz"]),
+        )
     )
     return data
 

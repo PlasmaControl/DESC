@@ -919,6 +919,25 @@ def _R_rtz(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="R_rrtz",
+    label="\\partial_{\\rho \\rho \\theta \\zeta} R",
+    units="m",
+    units_long="meters",
+    description="Major radius in lab frame, fourth derivative wrt radius twice, poloidal "
+    + "angle, and toroidal angle",
+    dim=1,
+    params=["R_lmn"],
+    transforms={"R": [[2, 1, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _R_rrtz(params, transforms, profiles, data, **kwargs):
+    data["R_rrtz"] = transforms["R"].transform(params["R_lmn"], 2, 1, 1)
+    return data
+
+
+@register_compute_fun(
     name="R_rtzz",
     label="\\partial_{\\rho \\theta \\zeta \\zeta} R",
     units="m",
@@ -1455,6 +1474,25 @@ def _Z_tzz(params, transforms, profiles, data, **kwargs):
 )
 def _Z_rtz(params, transforms, profiles, data, **kwargs):
     data["Z_rtz"] = transforms["Z"].transform(params["Z_lmn"], 1, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="Z_rrtz",
+    label="\\partial_{\\rho \\rho \\theta \\zeta} Z",
+    units="m",
+    units_long="meters",
+    description="Vertical coordinate in lab frame, fourth derivative wrt radius"
+    "twice, poloidal angle, and toroidal angle",
+    dim=1,
+    params=["Z_lmn"],
+    transforms={"Z": [[2, 1, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _Z_rrtz(params, transforms, profiles, data, **kwargs):
+    data["Z_rrtz"] = transforms["Z"].transform(params["Z_lmn"], 2, 1, 1)
     return data
 
 
@@ -2712,6 +2750,25 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
 )
 def _omega_rtz(params, transforms, profiles, data, **kwargs):
     data["omega_rtz"] = transforms["W"].transform(params["W_lmn"], 1, 1, 1)
+    return data
+
+
+@register_compute_fun(
+    name="omega_rrtz",
+    label="\\partial_{\\rho \\theta \\zeta} \\omega",
+    units="rad",
+    units_long="radians",
+    description="Toroidal stream function, fourth derivative wrt radius twice,"
+    " poloidal angle, and toroidal angle",
+    dim=1,
+    params=["W_lmn"],
+    transforms={"W": [[2, 1, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _omega_rrtz(params, transforms, profiles, data, **kwargs):
+    data["omega_rrtz"] = transforms["W"].transform(params["W_lmn"], 2, 1, 1)
     return data
 
 

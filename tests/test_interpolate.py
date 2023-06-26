@@ -142,7 +142,10 @@ def test_fft_interp1d():
 
     for sp in ["o", "e"]:  # source parity
         fi = f1[sp][1]
-        np.testing.assert_allclose(fi, fft_interp1d(fi, *fi.shape))
+        fs = fun(x[sp][1] + 0.2)
+        np.testing.assert_allclose(
+            fs, fft_interp1d(fi, *fi.shape, sx=0.2, dx=np.diff(x[sp][1])[0]).squeeze()
+        )
         for ep in ["o", "e"]:  # eval parity
             for s in ["up", "down"]:  # up or downsample
                 if s == "up":
@@ -193,7 +196,18 @@ def test_fft_interp2d():
     for spx in ["o", "e"]:  # source parity x
         for spy in ["o", "e"]:  # source parity y
             fi = f2[spx][spy][1][1]
-            np.testing.assert_allclose(fi, fft_interp2d(fi, *fi.shape))
+            fs = fun2(x[spx][1] + 0.2, y[spy][1] + 0.3)
+            np.testing.assert_allclose(
+                fs,
+                fft_interp2d(
+                    fi,
+                    *fi.shape,
+                    sx=0.2,
+                    sy=0.3,
+                    dx=np.diff(x[spx][1])[0],
+                    dy=np.diff(y[spy][1])[0]
+                ).squeeze(),
+            )
             for epx in ["o", "e"]:  # eval parity x
                 for epy in ["o", "e"]:  # eval parity y
                     for sx in ["up", "down"]:  # up or downsample x

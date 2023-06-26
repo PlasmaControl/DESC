@@ -128,8 +128,8 @@ def fmin_auglag(  # noqa: C901 - FIXME: simplify this
 
     def laggrad(z, y, mu, *args):
         c = constraint_wrapped.fun(z, *args)
-        J = constraint_wrapped.jac(z, *args)
-        return grad_wrapped(z, *args) - jnp.dot(y, J) + mu * jnp.dot(c, J)
+        yJ = constraint_wrapped.vjp(y - mu * c, z, *args)
+        return grad_wrapped(z, *args) - yJ
 
     assert callable(hess_wrapped)
     if callable(constraint_wrapped.hess):

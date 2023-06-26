@@ -1574,6 +1574,7 @@ def chebyshev(r, l, dr=0):
         basis function(s) evaluated at specified points
 
     """
+    assert dr == 0
     x = 2 * r - 1  # shift
     x, l, dr = map(jnp.asarray, (x, l, dr))
     return jnp.cos(l * jnp.arccos(x))

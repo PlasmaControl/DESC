@@ -211,6 +211,17 @@ class TestBasis:
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     @pytest.mark.unit
+    def test_chebyshev_polynomial(self):
+        """Test ChebyshevPolynomial evaluation."""
+        grid = LinearGrid(rho=11)
+        r = grid.nodes[:, 0]  # rho coordinates
+
+        basis = PowerSeries(L=2, sym=False)
+        correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
+        values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+    @pytest.mark.unit
     def test_double_fourier(self):
         """Test DoubleFourierSeries evaluation."""
         grid = LinearGrid(M=2, N=2)

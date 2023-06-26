@@ -97,7 +97,7 @@ class BoundaryRSelfConsistency(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute boundary self consistency errror."""
-        params = self._parse_args(*args, **kwargs)
+        params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["R_lmn"]) - params["Rb_lmn"]
 
 
@@ -179,7 +179,7 @@ class BoundaryZSelfConsistency(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute boundary self consistency errror."""
-        params = self._parse_args(*args, **kwargs)
+        params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
 
 
@@ -325,7 +325,7 @@ class FixBoundaryR(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        params = self._parse_args(*args, **kwargs)
+        params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Rb_lmn"])
 
     @property
@@ -476,7 +476,7 @@ class FixBoundaryZ(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute deviation from desired boundary."""
-        params = self._parse_args(*args, **kwargs)
+        params, _ = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Zb_lmn"])
 
     @property

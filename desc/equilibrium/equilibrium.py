@@ -92,7 +92,6 @@ class Equilibrium(_Configuration, IOAble):
     """
 
     _io_attrs_ = _Configuration._io_attrs_ + [
-        "_solved",
         "_L_grid",
         "_M_grid",
         "_N_grid",
@@ -123,7 +122,6 @@ class Equilibrium(_Configuration, IOAble):
         spectral_indexing=None,
         **kwargs,
     ):
-
         super().__init__(
             Psi,
             NFP,
@@ -163,7 +161,6 @@ class Equilibrium(_Configuration, IOAble):
         self._M_grid = M_grid if M_grid is not None else 2 * self.M
         self._N_grid = N_grid if N_grid is not None else 2 * self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
-        self._solved = False
         self.optimizer_results = {}
 
     def __repr__(self):
@@ -221,15 +218,6 @@ class Equilibrium(_Configuration, IOAble):
         if not hasattr(self, "_node_pattern"):
             self._node_pattern = None
         return self._node_pattern
-
-    @property
-    def solved(self):
-        """bool: Whether the equilibrium has been solved."""
-        return self._solved
-
-    @solved.setter
-    def solved(self, solved):
-        self._solved = solved
 
     @property
     def resolution(self):
@@ -537,7 +525,6 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             objective.print_value(objective.x(eq))
 
-        eq.solved = result["success"]
         return eq, result
 
     def optimize(
@@ -641,7 +628,6 @@ class Equilibrium(_Configuration, IOAble):
             for con in constraints:
                 con.print_value(*con.xs(eq))
 
-        eq.solved = result["success"]
         return eq, result
 
     def _optimize(  # noqa: C901
@@ -720,7 +706,6 @@ class Equilibrium(_Configuration, IOAble):
         iteration = 1
         success = None
         while success is None:
-
             timer.start("Step {} time".format(iteration))
             if verbose > 0:
                 print("====================")
@@ -891,7 +876,6 @@ class Equilibrium(_Configuration, IOAble):
             verbose=verbose,
             copy=copy,
         )
-        eq.solved = False
 
         return eq
 
@@ -917,7 +901,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
-
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
             for inp in args[0]:

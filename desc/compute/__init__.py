@@ -37,6 +37,7 @@ from . import (
     _profiles,
     _qs,
     _stability,
+    _virtual_casing,
 )
 from .data_index import data_index
 from .utils import (

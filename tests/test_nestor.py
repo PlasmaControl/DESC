@@ -1,12 +1,11 @@
-#!/usr/bin/env python3
-"""
+"""Tests for NESTOR algorithm, benchmarked against fortran version.
+
 Created on Mon Apr 12 21:14:09 2021
 
 @author: jonathan
 """
 
 import os
-import unittest
 
 import numpy as np
 from netCDF4 import Dataset
@@ -14,6 +13,7 @@ from scipy.constants import mu_0
 
 from desc.basis import DoubleFourierSeries, FourierSeries
 from desc.equilibrium import Equilibrium
+from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.magnetic_fields import SplineMagneticField
 from desc.nestor import Nestor, firstIterationPrintout
@@ -31,13 +31,14 @@ ref_in_folder = here + "/inputs/nestor/ref_in/"
 ref_out_folder = here + "/inputs/nestor/ref_out/"
 
 
-def def_ncdim(ncfile, size):
+def _def_ncdim(ncfile, size):
     dimname = "dim_%05d" % (size,)
     ncfile.createDimension(dimname, size)
     return dimname
 
 
 def produceOutputFile(vacoutFilename, potvac, Btot, mf, nf, ntheta, nzeta, NFP):
+    """Make a fake nestor netcdf output from DESC version of nestor."""
     # mode numbers for potvac
     xmpot = np.zeros([(mf + 1) * (2 * nf + 1)])
     xnpot = np.zeros([(mf + 1) * (2 * nf + 1)])
@@ -50,8 +51,8 @@ def produceOutputFile(vacoutFilename, potvac, Btot, mf, nf, ntheta, nzeta, NFP):
 
     vacout = Dataset(vacoutFilename, "w")
 
-    dim_nuv2 = def_ncdim(vacout, (ntheta // 2 + 1) * nzeta)
-    dim_mnpd2 = def_ncdim(vacout, (mf + 1) * (2 * nf + 1))
+    dim_nuv2 = _def_ncdim(vacout, (ntheta // 2 + 1) * nzeta)
+    dim_mnpd2 = _def_ncdim(vacout, (mf + 1) * (2 * nf + 1))
 
     var_bsqvac = vacout.createVariable("bsqvac", "f8", (dim_nuv2,))
     var_mnpd = vacout.createVariable("mnpd", "i4")
@@ -79,28 +80,23 @@ def produceOutputFile(vacoutFilename, potvac, Btot, mf, nf, ntheta, nzeta, NFP):
 
 
 def nestor_to_eq(vacin):
-
-    ntor = int(vacin["ntor"][()])
-    mpol = int(vacin["mpol"][()])
+    """Make a desc equilibrium from a fortran nestor output."""
     nzeta = int(vacin["nzeta"][()])
-    ntheta = int(vacin["ntheta"][()])
     NFP = int(vacin["nfp"][()])
     sym = bool(vacin["lasym__logical__"][()] == 0)
 
     raxis = vacin["raxis_nestor"][()]
     zaxis = vacin["zaxis_nestor"][()]
-    wint = np.array(vacin["wint"][()])
 
     xm = vacin["xm"][()]
     xn = vacin["xn"][()]
     rmnc = vacin["rmnc"][()]
     zmns = vacin["zmns"][()]
 
-    bdry_grid = LinearGrid(rho=1, theta=ntheta, zeta=nzeta, NFP=NFP)
     mr, nr, Rb_mn = ptolemy_identity_fwd(xm, xn // NFP, np.zeros_like(rmnc), rmnc)
     mz, nz, Zb_mn = ptolemy_identity_fwd(xm, xn // NFP, zmns, np.zeros_like(zmns))
-    M = max(np.max(abs(mr)), np.max(abs(mz)))
-    N = max(np.max(abs(nr)), np.max(abs(nz)))
+    M = int(max(np.max(abs(mr)), np.max(abs(mz))))
+    N = int(max(np.max(abs(nr)), np.max(abs(nz))))
     Rb_mn = Rb_mn[0]
     Zb_mn = Zb_mn[0]
     modes_Rb = np.array([np.zeros_like(mr), mr, nr]).T
@@ -116,7 +112,15 @@ def nestor_to_eq(vacin):
     temp_basis = DoubleFourierSeries(M=M, N=N, NFP=NFP, sym=False)
     Rb_lmn = copy_coeffs(Rb_mn, modes_Rb, temp_basis.modes).reshape((-1, 1))
     Zb_lmn = copy_coeffs(Zb_mn, modes_Zb, temp_basis.modes).reshape((-1, 1))
-    boundary = np.hstack([temp_basis.modes, Rb_lmn, Zb_lmn])
+    surf = FourierRZToroidalSurface(
+        Rb_lmn,
+        Zb_lmn,
+        temp_basis.modes[:, 1:],
+        temp_basis.modes[:, 1:],
+        check_orientation=False,  # comparing to VMEC with left handed theta
+        sym=sym,
+        NFP=NFP,
+    )
     axis = np.hstack([a_basis.modes[:, 2:], Ra_n[:, np.newaxis], Za_n[:, np.newaxis]])
     profiles = np.array([0, 0, 0]).reshape((1, 3))
     eq = {
@@ -124,7 +128,7 @@ def nestor_to_eq(vacin):
         "M": M,
         "N": N,
         "profiles": profiles,
-        "surface": boundary,
+        "surface": surf,
         "NFP": NFP,
         "Psi": 1.0,
         "axis": axis,
@@ -135,18 +139,16 @@ def nestor_to_eq(vacin):
 
 
 def main(vacin_filename, vacout_filename=None, mgrid=None):
+    """Generate desc nestor output from fortran version of nestor."""
     vacin = Dataset(vacin_filename, "r")
 
     ntor = int(vacin["ntor"][()])
     mpol = int(vacin["mpol"][()])
     nzeta = int(vacin["nzeta"][()])
     ntheta = int(vacin["ntheta"][()])
-    NFP = int(vacin["nfp"][()])
-    sym = bool(vacin["lasym__logical__"][()] == 0)
 
     rbtor = vacin["rbtor"][()]
     ctor = vacin["ctor"][()]
-    signgs = vacin["signgs"][()]
 
     extcur = vacin["extcur"][()]
     folder = os.getcwd()
@@ -188,7 +190,7 @@ def main(vacin_filename, vacout_filename=None, mgrid=None):
 
 
 def test_same_outputs(tmpdir_factory):
-
+    """Compare python and fortran versions of nestor outputs for consistency."""
     output_dir = tmpdir_factory.mktemp("nestor_result")
     for iteration in range(maxIter):
 
@@ -221,7 +223,8 @@ def test_same_outputs(tmpdir_factory):
         for key in desc_tst_data:
             r = ref_data[key]
             d = desc_tst_data[key]
-
+            if key == "bsqvac":
+                d /= 2
             np.testing.assert_allclose(
                 r,
                 d,

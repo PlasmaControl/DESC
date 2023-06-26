@@ -85,57 +85,79 @@ class ObjectiveFunction(IOAble):
             "hess": {},
         }
         for arg in self.args:
-            self._derivatives["jac_scaled"][arg] = lambda x, arg=arg: jnp.vstack(
+            self._derivatives["jac_scaled"][
+                arg
+            ] = lambda x, constants=None, arg=arg: jnp.vstack(
                 [
                     obj.derivatives["jac_scaled"][arg](
-                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args),
+                        constants=const,
                     )
-                    for obj in self.objectives
+                    for obj, const in zip(self.objectives, constants)
                 ]
             )
-            self._derivatives["jac_unscaled"][arg] = lambda x, arg=arg: jnp.vstack(
+            self._derivatives["jac_unscaled"][
+                arg
+            ] = lambda x, constants=None, arg=arg: jnp.vstack(
                 [
                     obj.derivatives["jac_unscaled"][arg](
-                        *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                        *self._kwargs_to_args(self.unpack_state(x), obj.args),
+                        constants=const,
                     )
-                    for obj in self.objectives
+                    for obj, const in zip(self.objectives, constants)
                 ]
             )
-            self._derivatives["grad"][arg] = lambda x, arg=arg: jnp.sum(
+            self._derivatives["grad"][arg] = lambda x, constants=None, arg=arg: jnp.sum(
                 jnp.array(
                     [
                         obj.derivatives["grad"][arg](
-                            *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                            *self._kwargs_to_args(self.unpack_state(x), obj.args),
+                            constants=const,
                         )
-                        for obj in self.objectives
+                        for obj, const in zip(self.objectives, constants)
                     ]
                 ),
                 axis=0,
             )
-            self._derivatives["hess"][arg] = lambda x, arg=arg: jnp.sum(
+            self._derivatives["hess"][arg] = lambda x, constants=None, arg=arg: jnp.sum(
                 jnp.array(
                     [
                         obj.derivatives["hess"][arg](
-                            *self._kwargs_to_args(self.unpack_state(x), obj.args)
+                            *self._kwargs_to_args(self.unpack_state(x), obj.args),
+                            constants=const,
                         )
-                        for obj in self.objectives
+                        for obj, const in zip(self.objectives, constants)
                     ]
                 ),
                 axis=0,
             )
 
         if self._deriv_mode == "blocked":
-            self._grad = lambda x: jnp.concatenate(
-                [jnp.atleast_1d(self._derivatives["grad"][arg](x)) for arg in self.args]
+            self._grad = lambda x, constants=None: jnp.concatenate(
+                [
+                    jnp.atleast_1d(
+                        self._derivatives["grad"][arg](x, constants=constants)
+                    )
+                    for arg in self.args
+                ]
             )
-            self._jac_scaled = lambda x: jnp.hstack(
-                [self._derivatives["jac_scaled"][arg](x) for arg in self.args]
+            self._jac_scaled = lambda x, constants=None: jnp.hstack(
+                [
+                    self._derivatives["jac_scaled"][arg](x, constants=constants)
+                    for arg in self.args
+                ]
             )
-            self._jac_unscaled = lambda x: jnp.hstack(
-                [self._derivatives["jac_unscaled"][arg](x) for arg in self.args]
+            self._jac_unscaled = lambda x, constants=None: jnp.hstack(
+                [
+                    self._derivatives["jac_unscaled"][arg](x, constants=constants)
+                    for arg in self.args
+                ]
             )
-            self._hess = lambda x: block_diag(
-                *[self._derivatives["hess"][arg](x) for arg in self.args]
+            self._hess = lambda x, constants=None: block_diag(
+                *[
+                    self._derivatives["hess"][arg](x, constants=constants)
+                    for arg in self.args
+                ]
             )
         if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
@@ -262,13 +284,15 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Objective build")
 
-    def compute_unscaled(self, x):
+    def compute_unscaled(self, x, constants=None):
         """Compute the raw value of the objective function.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -277,21 +301,27 @@ class ObjectiveFunction(IOAble):
 
         """
         kwargs = self.unpack_state(x)
+        if constants is None:
+            constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_unscaled(*self._kwargs_to_args(kwargs, obj.args))
-                for obj in self.objectives
+                obj.compute_unscaled(
+                    *self._kwargs_to_args(kwargs, obj.args), constants=const
+                )
+                for obj, const in zip(self.objectives, constants)
             ]
         )
         return f
 
-    def compute_scaled(self, x):
+    def compute_scaled(self, x, constants=None):
         """Compute the objective function and apply weighting and normalization.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -300,21 +330,27 @@ class ObjectiveFunction(IOAble):
 
         """
         kwargs = self.unpack_state(x)
+        if constants is None:
+            constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled(*self._kwargs_to_args(kwargs, obj.args))
-                for obj in self.objectives
+                obj.compute_scaled(
+                    *self._kwargs_to_args(kwargs, obj.args), constants=const
+                )
+                for obj, const in zip(self.objectives, constants)
             ]
         )
         return f
 
-    def compute_scaled_error(self, x):
+    def compute_scaled_error(self, x, constants=None):
         """Compute and apply the target/bounds, weighting, and normalization.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -323,21 +359,27 @@ class ObjectiveFunction(IOAble):
 
         """
         kwargs = self.unpack_state(x)
+        if constants is None:
+            constants = self.constants
         f = jnp.concatenate(
             [
-                obj.compute_scaled_error(*self._kwargs_to_args(kwargs, obj.args))
-                for obj in self.objectives
+                obj.compute_scaled_error(
+                    *self._kwargs_to_args(kwargs, obj.args), constants=const
+                )
+                for obj, const in zip(self.objectives, constants)
             ]
         )
         return f
 
-    def compute_scalar(self, x):
+    def compute_scalar(self, x, constants=None):
         """Compute the sum of squares error.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         Returns
         -------
@@ -345,26 +387,30 @@ class ObjectiveFunction(IOAble):
             Objective function scalar value.
 
         """
-        f = jnp.sum(self.compute_scaled_error(x) ** 2) / 2
+        f = jnp.sum(self.compute_scaled_error(x, constants=constants) ** 2) / 2
         return f
 
-    def print_value(self, x):
+    def print_value(self, x, constants=None):
         """Print the value(s) of the objective.
 
         Parameters
         ----------
         x : ndarray
             State vector.
+        constants : list
+            Constant parameters passed to sub-objectives.
 
         """
+        if constants is None:
+            constants = self.constants
         if self.compiled and self._compile_mode in {"scalar", "all"}:
-            f = self.compute_scalar(x)
+            f = self.compute_scalar(x, constants=constants)
         else:
-            f = jnp.sum(self.compute_scaled(x) ** 2) / 2
+            f = jnp.sum(self.compute_scaled(x, constants=constants) ** 2) / 2
         print("Total (sum of squares): {:10.3e}, ".format(f))
         kwargs = self.unpack_state(x)
-        for obj in self.objectives:
-            obj.print_value(**kwargs)
+        for obj, const in zip(self.objectives, constants):
+            obj.print_value(**kwargs, constants=const)
         return None
 
     def unpack_state(self, x):
@@ -407,21 +453,29 @@ class ObjectiveFunction(IOAble):
             x[self.x_idx[arg]] = getattr(eq, arg)
         return x
 
-    def grad(self, x):
+    def grad(self, x, constants=None):
         """Compute gradient vector of scalar form of the objective wrt x."""
-        return jnp.atleast_1d(self._grad(x).squeeze())
+        if constants is None:
+            constants = self.constants
+        return jnp.atleast_1d(self._grad(x, constants).squeeze())
 
-    def hess(self, x):
+    def hess(self, x, constants=None):
         """Compute Hessian matrix of scalar form of the objective wrt x."""
-        return jnp.atleast_2d(self._hess(x).squeeze())
+        if constants is None:
+            constants = self.constants
+        return jnp.atleast_2d(self._hess(x, constants).squeeze())
 
-    def jac_scaled(self, x):
+    def jac_scaled(self, x, constants=None):
         """Compute Jacobian matrx of vector form of the objective wrt x."""
-        return jnp.atleast_2d(self._jac_scaled(x).squeeze())
+        if constants is None:
+            constants = self.constants
+        return jnp.atleast_2d(self._jac_scaled(x, constants).squeeze())
 
-    def jac_unscaled(self, x):
+    def jac_unscaled(self, x, constants=None):
         """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
-        return jnp.atleast_2d(self._jac_unscaled(x).squeeze())
+        if constants is None:
+            constants = self.constants
+        return jnp.atleast_2d(self._jac_unscaled(x, constants).squeeze())
 
     def jvp_scaled(self, v, x):
         """Compute Jacobian-vector product of the objective function.
@@ -515,29 +569,29 @@ class ObjectiveFunction(IOAble):
 
         if mode in ["scalar", "bfgs", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scalar(x).block_until_ready()
+            _ = self.compute_scalar(x, self.constants).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Gradient compilation time")
-            _ = self.grad(x).block_until_ready()
+            _ = self.grad(x, self.constants).block_until_ready()
             timer.stop("Gradient compilation time")
             if verbose > 1:
                 timer.disp("Gradient compilation time")
         if mode in ["scalar", "all"]:
             timer.start("Hessian compilation time")
-            _ = self.hess(x).block_until_ready()
+            _ = self.hess(x, self.constants).block_until_ready()
             timer.stop("Hessian compilation time")
             if verbose > 1:
                 timer.disp("Hessian compilation time")
         if mode in ["lsq", "all"]:
             timer.start("Objective compilation time")
-            _ = self.compute_scaled(x).block_until_ready()
+            _ = self.compute_scaled(x, self.constants).block_until_ready()
             timer.stop("Objective compilation time")
             if verbose > 1:
                 timer.disp("Objective compilation time")
             timer.start("Jacobian compilation time")
-            _ = self.jac_scaled(x).block_until_ready()
+            _ = self.jac_scaled(x, self.constants).block_until_ready()
             timer.stop("Jacobian compilation time")
             if verbose > 1:
                 timer.disp("Jacobian compilation time")
@@ -546,6 +600,11 @@ class ObjectiveFunction(IOAble):
         if verbose > 1:
             timer.disp("Total compilation time")
         self._compiled = True
+
+    @property
+    def constants(self):
+        """list: constant parameters for each sub-objective."""
+        return [obj.constants for obj in self.objectives]
 
     @property
     def objectives(self):
@@ -928,6 +987,7 @@ class _Objective(IOAble, ABC):
         return tuple(getattr(eq, arg) for arg in self.args)
 
     def _parse_args(self, *args, **kwargs):
+        constants = kwargs.pop("constants", None)
         assert (len(args) == 0) or (len(kwargs) == 0), (
             "compute should be called with either positional or keyword arguments,"
             + " not both"
@@ -943,7 +1003,14 @@ class _Objective(IOAble, ABC):
                 + f"{set(self.args).difference(kwargs.keys())}"
             )
             params = kwargs
-        return params
+        return params, constants
+
+    @property
+    def constants(self):
+        """dict: Constant parameters such as transforms and profiles."""
+        if hasattr(self, "_constants"):
+            return self._constants
+        return None
 
     @property
     def target(self):

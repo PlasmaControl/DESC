@@ -8,6 +8,12 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
+from ._free_boundary import (
+    BoundaryErrorBIEST,
+    BoundaryErrorNESTOR,
+    QuadraticFlux,
+    ToroidalFlux,
+)
 from ._generic import (
     GenericObjective,
     ObjectiveFromUser,

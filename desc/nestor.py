@@ -1,27 +1,22 @@
-#!/usr/bin/env python3
-"""
-Created on Mon Jun  7 13:15:05 2021
+"""Neumann Solver for Toroidal Systems.
 
-Neumann Solver for Toroidal Systems
+Created on Mon Jun  7 13:15:05 2021
 
 @author: Jonathan Schilling (jonathan.schilling@ipp.mpg.de)
 """
-
-import os
-import sys
 
 import numpy as np
 from scipy.constants import mu_0
 
 from desc.backend import fori_loop, jnp, put
 from desc.grid import LinearGrid
-from desc.magnetic_fields import SplineMagneticField
+from desc.io import IOAble
 from desc.transform import Transform
 from desc.utils import Index
 
 
 def copy_vector_periods(vec, zetas):
-    """Copies a vector into each field period by rotation
+    """Copies a vector into each field period by rotation.
 
     Parameters
     ----------
@@ -51,7 +46,7 @@ def copy_vector_periods(vec, zetas):
 def eval_surface_geometry(
     R_lmn, Z_lmn, Rb_transform, Zb_transform, ntheta, nzeta, NFP, sym
 ):
-    """Evaluate coordinates and derivatives on the surface
+    """Evaluate coordinates and derivatives on the surface.
 
     Parameters
     ----------
@@ -119,7 +114,7 @@ def eval_surface_geometry(
 
 
 def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
-    """Evaluate coordinates and derivatives on the axis
+    """Evaluate coordinates and derivatives on the axis.
 
     Parameters
     ----------
@@ -161,7 +156,7 @@ def eval_axis_geometry(R_lmn, Z_lmn, Ra_transform, Za_transform, nzeta, NFP):
 
 
 def compute_normal(coords, signgs):
-    """Compute the outward normal vector to the plasma surface
+    """Compute the outward normal vector to the plasma surface.
 
     Parameters
     ----------
@@ -185,7 +180,7 @@ def compute_normal(coords, signgs):
 
 
 def compute_jacobian(coords, normal, NFP):
-    """Compute the surface jacobian elements
+    """Compute the surface jacobian elements.
 
     Parameters
     ----------
@@ -212,7 +207,8 @@ def compute_jacobian(coords, normal, NFP):
         + coords["Z_z"] * coords["Z_z"]
         + coords["R"] * coords["R"]
     ) / NFP**2
-    # A, B and C in NESTOR article: surface normal dotted with second-order derivative of surface
+    # A, B and C in NESTOR article: surface normal dotted with second-order
+    # derivative of surface
     jacobian["a_tt"] = 0.5 * (
         normal["R_n"] * coords["R_tt"] + normal["Z_n"] * coords["Z_tt"]
     )
@@ -234,7 +230,7 @@ def compute_jacobian(coords, normal, NFP):
 
 # TODO: vectorize this over multiple coils
 def biot_savart(eval_pts, coil_pts, current):
-    """Biot-Savart law following [1]
+    """Biot-Savart law following [1].
 
     Parameters
     ----------
@@ -250,7 +246,8 @@ def biot_savart(eval_pts, coil_pts, current):
     B : ndarray, shape(3,k)
         magnetic field in cartesian components at specified points
 
-    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart fields of a filamentary segment" (2002)
+    [1] Hanson & Hirshman, "Compact expressions for the Biot-Savart fields of a
+    filamentary segment" (2002)
     """
     dvec = jnp.diff(coil_pts, axis=1)
     L = jnp.linalg.norm(dvec, axis=0)
@@ -272,9 +269,10 @@ def biot_savart(eval_pts, coil_pts, current):
 
 # model net toroidal plasma current as filament along the magnetic axis
 def modelNetToroidalCurrent(axis, current, coords, normal):
-    """Compute field due to net toroidal current
+    """Compute field due to net toroidal current.
 
-    Models the current as a filament along the magnetic axis and computes field on the boundary
+    Models the current as a filament along the magnetic axis and computes field on
+    the boundary
 
     Parameters
     ----------
@@ -290,10 +288,11 @@ def modelNetToroidalCurrent(axis, current, coords, normal):
     Returns
     -------
     B_j : dict of ndarray
-        field on the boundary due to net current at magnetic axis, in cartesian and cylindrical components
+        field on the boundary due to net current at magnetic axis, in cartesian and
+        cylindrical components
     """
-    # TODO: we can simplify this by evaluating the field directly in cylindrical coordinates
-    # convert to cartesian form
+    # TODO: we can simplify this by evaluating the field directly in cylindrical
+    # coordinates convert to cartesian form
     axis = jnp.array(
         [axis["R"] * jnp.cos(axis["phi"]), axis["R"] * jnp.sin(axis["phi"]), axis["Z"]]
     )
@@ -327,7 +326,7 @@ def modelNetToroidalCurrent(axis, current, coords, normal):
 
 
 def compute_T_S(jacobian, mf, nf, ntheta, nzeta, sym):
-    """Compute T and S functions needed for analytic integrals by recurrence relation
+    """Compute T and S functions needed for analytic integrals by recurrence relation.
 
     Parameters
     ----------
@@ -440,6 +439,7 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta, sym):
         "S_m_l": S_m_l,
     }
     # now use recurrence relation for l > 0
+
     def body_fun(l, arrs):
         # compute T^{\pm}_l
         arrs["T_p_l"] = put(
@@ -491,7 +491,7 @@ def compute_T_S(jacobian, mf, nf, ntheta, nzeta, sym):
 def compute_analytic_integrals(
     normal, jacobian, TS, B_field, mf, nf, ntheta, nzeta, cmns, weights, sym
 ):
-    """Compute analytic integral of singular part of greens function kernels
+    """Compute analytic integral of singular part of greens function kernels.
 
     Parameters
     ----------
@@ -628,7 +628,7 @@ def regularizedFourierTransforms(
     weights,
     sym,
 ):
-    """Computes regularized part of fourier transformed kernel and source term
+    """Computes regularized part of fourier transformed kernel and source term.
 
     Parameters
     ----------
@@ -759,22 +759,15 @@ def regularizedFourierTransforms(
     i_itoff = i[..., jnp.newaxis] + itoff
     i_izoff = i[..., jnp.newaxis] + izoff
     if nzeta == 1:
+        # Tokamak: NFP_eff toroidal "modules"
         delta_kt = i_itoff % (2 * ntheta)
         delta_kz = i_izoff // (2 * ntheta)
     else:
+        # Stellarator: nv toroidal grid points
         delta_kt = i_itoff // nzeta
         delta_kz = i_izoff % nzeta
 
-    # if nzeta == 1:
-    #     # Tokamak: NFP_eff toroidal "modules"
-    #     delta_kz = (kz_i - kz_ip)%NFP_eff
-    # else:
-    #     # Stellarator: nv toroidal grid points
-    #     delta_kz = (kz_i - kz_ip)%nzeta
-
     # subtract out singular part of the kernels
-    # TODO: why is there an additional offset of ntheta?
-    # delta_kt = kt_i - kt_ip + ntheta
     tant = tan_theta[(delta_kt,)]
     tanz = tan_zeta[(delta_kz,)]
     ga1 = (
@@ -808,9 +801,11 @@ def regularizedFourierTransforms(
     # becomes g_mnm'n' from Merkel 1986
     # step 1: "fold over" contribution from (pi ... 2pi)
     # stellarator-symmetric first half-module is copied directly
-    # the other half of the first module is "folded over" according to odd symmetry under the stellarator-symmetry operation
+    # the other half of the first module is "folded over" according to odd symmetry
+    # under the stellarator-symmetry operation
     kt, kz = jnp.meshgrid(jnp.arange(ntheta_sym), jnp.arange(nzeta), indexing="ij")
-    # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
+    # anti-symmetric part from stellarator-symmetric half in second half of first
+    # toroidal module
     kernel = kernel[:, :, kt, kz] - kernel[:, :, -kt, -kz]
     kernel = kernel * 1 / NFP * (2 * jnp.pi) / ntheta * (2.0 * jnp.pi) / nzeta
     kernel = put(
@@ -836,7 +831,8 @@ def regularizedFourierTransforms(
         axis=(0, 1),
     )
     # first step: "fold over" upper half of gsource to make use of stellarator symmetry
-    # anti-symmetric part from stellarator-symmetric half in second half of first toroidal module
+    # anti-symmetric part from stellarator-symmetric half in second half of first
+    # toroidal module
     h_tz = h_tz[kt, kz] - h_tz[-kt, -kz]
     h_tz = h_tz * 1 / NFP * (2 * jnp.pi) / ntheta * (2.0 * jnp.pi) / nzeta
     h_tz = put(h_tz, Index[0, :], 0.5 * h_tz[0, :])
@@ -854,7 +850,7 @@ def regularizedFourierTransforms(
 def compute_scalar_magnetic_potential(
     I_mn, K_mntz, g_mntz, h_mn, mf, nf, ntheta, nzeta, weights, sym
 ):
-    """Computes the magnetic scalar potential to cancel the normal field on the surface
+    """Computes the magnetic scalar potential to cancel the normal field on the surface.
 
     Parameters
     ----------
@@ -921,7 +917,7 @@ def compute_scalar_magnetic_potential(
 def compute_vacuum_magnetic_field(
     coords, normal, jacobian, B_field, phi_mn, mf, nf, ntheta, nzeta, NFP, sym
 ):
-    """Computes vacum magnetic field on plasma boundary
+    """Computes vacum magnetic field on plasma boundary.
 
     Parameters
     ----------
@@ -982,7 +978,8 @@ def compute_vacuum_magnetic_field(
     Btot["B_theta"] = Btot["Bpot_theta"] + Btot["Bex_theta"]
     Btot["B_zeta"] = Btot["Bpot_zeta"] + Btot["Bex_zeta"]
 
-    # TODO: for now, simply copied over from NESTOR code; have to understand what is actually done here!
+    # TODO: for now, simply copied over from NESTOR code; have to understand what is
+    # actually done here!
     h_tz = NFP * jacobian["g_tz"]
     h_zz = jacobian["g_zz"] * NFP**2
     det = 1.0 / (jacobian["g_tt"] * h_zz - h_tz**2)
@@ -1027,6 +1024,7 @@ def compute_vacuum_magnetic_field(
 def firstIterationPrintout(
     Btot, ctor, rbtor, signgs, mf, nf, ntheta, nzeta, NFP, weights
 ):
+    """Print some useful diagnostics."""
     print(
         "In VACUUM, NFP = %2d mf = %2d nf = %2d ntheta = %2d nzeta = %2d"
         % (NFP, mf, nf, ntheta, nzeta)
@@ -1048,17 +1046,19 @@ def firstIterationPrintout(
 
     if rbtor * bsubvvac < 0:
         raise ValueError(
-            "poloidal current and toroidal field must have same sign, Psi may be incorrect"
+            "poloidal current and toroidal field must have same sign, "
+            + "Psi may be incorrect"
         )
 
     if np.abs((ctor - bsubuvac) / rbtor) > 1.0e-2:
         raise ValueError(
-            "Toroidal current and poloidal field mismatch, boundary may enclose external coil"
+            "Toroidal current and poloidal field mismatch, "
+            + "boundary may enclose external coil"
         )
 
 
-class Nestor:
-    """Neumann Solver for Toroidal Systems
+class Nestor(IOAble):
+    """Neumann Solver for Toroidal Systems.
 
     Parameters
     ----------
@@ -1112,7 +1112,7 @@ class Nestor:
         # tanu, tanv
         epstan = 2.22e-16
         bigno = 1.0e50  # allows proper comparison against implementation used in VMEC
-        # bigno = np.inf # allows proper plotting
+        # setting bigno = np.inf allows proper plotting
 
         self.tanu = 2.0 * np.tan(np.pi * np.arange(2 * self.ntheta) / self.ntheta)
         # mask explicit singularities at tan(pi/2), tan(3/2 pi)
@@ -1181,6 +1181,7 @@ class Nestor:
         self.tanv = jnp.asarray(self.tanv)
 
     def eval_external_field(self, coords, normal):
+        """Wrapper for handling fields from different coil types."""
         grid = jnp.array([coords["R"], coords["phi"], coords["Z"]]).T
         B = self.ext_field.compute_magnetic_field(grid).T
         B_ex = {}
@@ -1198,7 +1199,7 @@ class Nestor:
         return B_ex
 
     def compute(self, R_lmn, Z_lmn, current):
-
+        """Compute B^2 in the vacuum region and the scalar potential."""
         surface_coords = eval_surface_geometry(
             R_lmn,
             Z_lmn,

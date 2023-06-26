@@ -2,7 +2,7 @@
 import numpy as np
 import scipy
 
-from desc.backend import fori_loop, jnp, put
+from desc.backend import fori_loop, jnp, put, vmap
 from desc.basis import DoubleFourierSeries
 from desc.geometry.utils import rpz2xyz, rpz2xyz_vec
 from desc.interpolate import fft_interp2d
@@ -277,6 +277,7 @@ def _rho(theta, zeta, theta0, zeta0, dtheta, dzeta, s):
 
 def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
     """Integrate kernel over non-singular points."""
+    assert isinstance(src_grid.NFP, int)
     src_theta = src_grid.nodes[:, 1]
     src_zeta = src_grid.nodes[:, 2]
     src_dtheta = src_grid.spacing[:, 1]
@@ -284,15 +285,22 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
     eval_theta = jnp.asarray(eval_grid.nodes[:, 1])
     eval_zeta = jnp.asarray(eval_grid.nodes[:, 2])
     w = src_grid.weights * src_data["|e_theta x e_zeta|"] / src_grid.NFP
+    h_t = jnp.mean(src_dtheta)
+    h_z = jnp.mean(src_dzeta)
+
     keys = kernel.keys
 
-    def body2(j, f_data):  # loop over field periods
+    def nfp_loop(j, f_data):
+        # calculate effects at all eval pts from all src pts on a single field period,
+        # summing over field periods
         f, src_data = f_data
         src_data["zeta"] = (src_zeta + j * 2 * np.pi / src_grid.NFP) % (2 * np.pi)
 
         # nest this def to avoid having to pass the modified src_data around the loop
         # easier to just close over it and let JAX figure it out
-        def body1(i, fj):  # loop over evaluation points
+        def eval_pt_loop(i):
+            # this calculates the effect at a single evaluation point, from all others
+            # in a single field period
             k = kernel(
                 {key: val[i] for key, val in eval_data.items() if key in keys},
                 src_data,
@@ -302,8 +310,8 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
                 src_data["zeta"],  # to account for different field periods
                 eval_theta[i],
                 eval_zeta[i],
-                src_dtheta,
-                src_dzeta,
+                h_t,
+                h_z,
                 s,
             )
             if kernel.ndim == 1:  # so that broadcasting works correctly
@@ -311,15 +319,15 @@ def _nonsingular_part(eval_data, eval_grid, src_data, src_grid, s, kernel):
             eta = _chi(rho)
             A = (1 - eta)[None, :, None] * k
             f_temp = jnp.sum(A * w[None, :, None], axis=1)
-            return fj.at[i].set(f_temp.squeeze())
+            return f_temp.squeeze()
 
-        fj = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-        fj = fori_loop(0, eval_grid.num_nodes, body1, fj)
+        # vmap for inner part found more efficient than fori_loop, especially on gpu
+        fj = vmap(eval_pt_loop)(jnp.arange(eval_grid.num_nodes))
         f += fj
         return f, src_data
 
     f = jnp.zeros((eval_grid.num_nodes, kernel.ndim))
-    f, _ = fori_loop(0, int(src_grid.NFP), body2, (f, src_data))
+    f, _ = fori_loop(0, src_grid.NFP, nfp_loop, (f, src_data))
 
     return f
 
@@ -344,7 +352,9 @@ def _singular_part(
     keys = list(set(["|e_theta x e_zeta|"] + kernel.keys))
     fsrc = [src_data[key] for key in keys]
 
-    def body(i, f):  # loop over polar grid points
+    def polar_pt_loop(i):
+        # evaluate the effect from a single polar node around each singular point
+        # on that singular point. Polar grids from other singularities have no effect
         dt = s / 2 * h_t * r[i] * jnp.sin(w[i])
         dz = s / 2 * h_z * r[i] * jnp.cos(w[i])
         theta_i = eval_theta + dt
@@ -358,7 +368,7 @@ def _singular_part(
 
         # eval pts x src pts for 1 polar grid offset
         # only need diagonal term because polar grid points
-        # don't contribute to other eval pts due to screening
+        # don't contribute to other eval pts
         k = kernel(
             {key: val for key, val in eval_data.items() if key in keys},
             src_data_polar,
@@ -368,10 +378,10 @@ def _singular_part(
             k = k[:, None]
         dS = (v[i] * src_data_polar["|e_theta x e_zeta|"])[:, None]
         fi = k * dS
-        return f + fi
+        return fi
 
-    f = fori_loop(0, v.size, body, jnp.zeros((eval_grid.num_nodes, kernel.ndim)))
-    return f
+    # vmap found more efficient than fori_loop, esp on gpu
+    return vmap(polar_pt_loop)(jnp.arange(v.size)).sum(axis=0)
 
 
 def singular_integral(

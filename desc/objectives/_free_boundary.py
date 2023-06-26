@@ -110,7 +110,7 @@ class BoundaryErrorBIEST(_Objective):
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=eq.NFP,
+                NFP=int(eq.NFP),
                 sym=False,
             )
         else:
@@ -121,7 +121,7 @@ class BoundaryErrorBIEST(_Objective):
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=eq.NFP,
+                NFP=int(eq.NFP),
                 sym=False,
             )
         else:
@@ -356,7 +356,7 @@ class QuadraticFlux(_Objective):
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=eq.NFP,
+                NFP=int(eq.NFP),
                 sym=False,
             )
         else:
@@ -367,7 +367,7 @@ class QuadraticFlux(_Objective):
                 rho=np.array([1.0]),
                 M=eq.M_grid,
                 N=eq.N_grid,
-                NFP=eq.NFP,
+                NFP=int(eq.NFP),
                 sym=False,
             )
         else:

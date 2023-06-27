@@ -972,20 +972,20 @@ def plot_fsa(
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
+        values = compress(grid, values)
     elif with_sqrt_g:
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
-        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-        values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
         plot_data_ylabel_key = f"<{name}>_fsa"
+        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+        values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
         # theta average
         label = (
             r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
         )
-        values = surface_averages(grid, q=values)
         plot_data_ylabel_key = f"<{name}>_fsa"
-    values = compress(grid, values)
+        values = surface_averages(grid, q=values, expand_out=False)
 
     if norm_F:
         # normalize force by B pressure gradient
@@ -2106,7 +2106,7 @@ def plot_boozer_modes(
     norm : bool, optional
         Whether to normalize the magnitudes such that B0=1 Tesla.
     num_modes : int, optional
-        How many modes to include. Default (-1) is all.
+        How many modes to include. Use -1 for all modes.
     rho : int or ndarray, optional
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
@@ -2471,7 +2471,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     f_T = np.array([])
     plot_data = {}
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
+        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
                 "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz

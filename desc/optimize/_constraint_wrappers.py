@@ -314,6 +314,40 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.jac_scaled(x)
         return df[:, self._unfixed_idx] @ self._Z
 
+    def vjp_scaled(self, v, x_reduced):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.vjp_scaled(v, x)
+        return df[self._unfixed_idx] @ self._Z
+
+    def vjp_unscaled(self, v, x_reduced):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.vjp_unscaled(v, x)
+        return df[self._unfixed_idx] @ self._Z
+
     @property
     def target_scaled(self):
         """ndarray: target vector."""
@@ -771,6 +805,36 @@ class ProximalProjection(ObjectiveFunction):
         """
         J = self.jac_scaled(x)
         return J.T @ J
+
+    def vjp_scaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        raise NotImplementedError
+
+    def vjp_unscaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        raise NotImplementedError
 
     @property
     def target_scaled(self):

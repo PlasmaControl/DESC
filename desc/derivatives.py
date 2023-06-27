@@ -150,6 +150,37 @@ class AutoDiffDerivative(_Derivative):
         return self._compute(*args)
 
     @classmethod
+    def compute_vjp(cls, fun, argnum, v, *args, **kwargs):
+        """Compute v.T * df/dx.
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int or tuple
+            arguments to differentiate with respect to
+        v : array-like or tuple of array-like
+            tangent vectors. Should be one for each output of fun.
+        args : tuple
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
+
+        Returns
+        -------
+        vjp : array-like
+            Vector v times Jacobian, summed over different argnums
+
+        """
+        assert jnp.isscalar(argnum), "vjp for multiple args not currently supported"
+        _ = kwargs.pop("rel_step", None)  # unused by autodiff
+
+        def _fun(*args):
+            return v.T @ fun(*args, **kwargs)
+
+        return jax.grad(_fun, argnum)(*args)
+
+    @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):
         """Compute df/dx*v.
 
@@ -437,6 +468,37 @@ class FiniteDiffDerivative(_Derivative):
         if m == 1:
             J = np.ravel(J)
         return J
+
+    @classmethod
+    def compute_vjp(cls, fun, argnum, v, *args, **kwargs):
+        """Compute v.T * df/dx.
+
+        Parameters
+        ----------
+        fun : callable
+            function to differentiate
+        argnum : int or tuple
+            arguments to differentiate with respect to
+        v : array-like or tuple of array-like
+            tangent vectors. Should be one for each output of fun
+        args : tuple
+            arguments passed to fun
+        kwargs : dict
+            keyword arguments passed to fun
+
+        Returns
+        -------
+        vjp : array-like
+            Vector v times Jacobian, summed over different argnums
+
+        """
+        assert np.isscalar(argnum), "vjp for multiple args not currently supported"
+        rel_step = kwargs.pop("rel_step", 1e-3)
+
+        def _fun(*args):
+            return v.T @ fun(*args, **kwargs)
+
+        return FiniteDiffDerivative(_fun, argnum, "grad", rel_step)(*args)
 
     @classmethod
     def compute_jvp(cls, fun, argnum, v, *args, **kwargs):

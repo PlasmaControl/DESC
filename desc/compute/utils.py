@@ -256,21 +256,21 @@ def get_profiles(keys, eq=None, grid=None, has_axis=False, **kwargs):
     return profiles
 
 
-def get_params(keys, eq=None, has_axis=False, **kwargs):
+def get_params(keys, obj=None, has_axis=False, **kwargs):
     """Get parameters needed to compute a given quantity.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     has_axis : bool
         Whether the grid to compute on has a node on the magnetic axis.
 
     Returns
     -------
-    profiles : list of str or dict of ndarray
+    params : list of str or dict of ndarray
         Parameters needed to compute key.
         If eq is None, returns a list of the names of params needed
         otherwise, returns a dict of ndarray with keys for R_lmn, Z_lmn, etc.
@@ -281,21 +281,21 @@ def get_params(keys, eq=None, has_axis=False, **kwargs):
     for key in deps:
         params += data_index[key]["dependencies"]["params"]
     params = _sort_args(list(set(params)))
-    if eq is None:
+    if obj is None:
         return params
-    params = {name: np.atleast_1d(getattr(eq, name)).copy() for name in params}
+    params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
     return params
 
 
-def get_transforms(keys, eq, grid, **kwargs):
+def get_transforms(keys, obj, grid, **kwargs):
     """Get transforms needed to compute a given quantity on a given grid.
 
     Parameters
     ----------
     keys : str or array-like of str
         Name of the desired quantity from the data index
-    eq : Equilibrium
-        Equilibrium to compute quantity for.
+    obj : Equilibrium, Curve, Surface, Coil, etc.
+        Object to compute quantity for.
     grid : Grid
         Grid to compute quantity on
 
@@ -312,37 +312,37 @@ def get_transforms(keys, eq, grid, **kwargs):
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, has_axis=grid.axis.size)
     transforms = {"grid": grid}
-    for c in ["R", "L", "Z"]:
-        if c in derivs:
+    for c in derivs.keys():
+        if hasattr(obj, c + "_basis"):
             transforms[c] = Transform(
-                grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
+                grid, getattr(obj, c + "_basis"), derivs=derivs[c], build=True
             )
-    if "B" in derivs:
-        transforms["B"] = Transform(
-            grid,
-            DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
-                NFP=eq.NFP,
-                sym=eq.R_basis.sym,
-            ),
-            derivs=derivs["B"],
-            build=True,
-            build_pinv=True,
-        )
-    if "w" in derivs:
-        transforms["w"] = Transform(
-            grid,
-            DoubleFourierSeries(
-                M=kwargs.get("M_booz", 2 * eq.M),
-                N=kwargs.get("N_booz", 2 * eq.N),
-                NFP=eq.NFP,
-                sym=eq.Z_basis.sym,
-            ),
-            derivs=derivs["w"],
-            build=True,
-            build_pinv=True,
-        )
+        elif c == "B":
+            transforms["B"] = Transform(
+                grid,
+                DoubleFourierSeries(
+                    M=kwargs.get("M_booz", 2 * obj.M),
+                    N=kwargs.get("N_booz", 2 * obj.N),
+                    NFP=obj.NFP,
+                    sym=obj.R_basis.sym,
+                ),
+                derivs=derivs["B"],
+                build=True,
+                build_pinv=True,
+            )
+        elif c == "w":
+            transforms["w"] = Transform(
+                grid,
+                DoubleFourierSeries(
+                    M=kwargs.get("M_booz", 2 * obj.M),
+                    N=kwargs.get("N_booz", 2 * obj.N),
+                    NFP=obj.NFP,
+                    sym=obj.Z_basis.sym,
+                ),
+                derivs=derivs["w"],
+                build=True,
+                build_pinv=True,
+            )
     return transforms
 
 
@@ -377,38 +377,51 @@ def has_dependencies(qty, params, transforms, profiles, data):
 
 
 def _has_data(qty, data):
-    deps = data_index[qty]["dependencies"]["data"]
-    return all(d in data for d in deps)
+    if "data" in data_index[qty]["dependencies"] and len(
+        data_index[qty]["dependencies"]["data"]
+    ):
+        deps = data_index[qty]["dependencies"]["data"]
+        return all(d in data for d in deps)
+    return True
 
 
 def _has_axis_limit_data(qty, data):
-    deps = data_index[qty]["dependencies"]["axis_limit_data"]
-    return all(d in data for d in deps)
+    if "axis_limit_data" in data_index[qty]["dependencies"] and len(
+        data_index[qty]["dependencies"]["axis_limit_data"]
+    ):
+        deps = data_index[qty]["dependencies"]["axis_limit_data"]
+        return all(d in data for d in deps)
+    return True
 
 
 def _has_params(qty, params):
-    deps = data_index[qty]["dependencies"]["params"]
-    return all(d in params for d in deps)
+    if "params" in data_index[qty]["dependencies"] and len(
+        data_index[qty]["dependencies"]["params"]
+    ):
+        deps = data_index[qty]["dependencies"]["params"]
+        return all(d in params for d in deps)
+    return True
 
 
 def _has_profiles(qty, profiles):
-    deps = data_index[qty]["dependencies"]["profiles"]
-    return all(d in profiles for d in deps)
+    if "profiles" in data_index[qty]["dependencies"] and len(
+        data_index[qty]["dependencies"]["profiles"]
+    ):
+        deps = data_index[qty]["dependencies"]["profiles"]
+        return all(d in profiles for d in deps)
+    return True
 
 
 def _has_transforms(qty, transforms):
     flags = {}
     derivs = data_index[qty]["dependencies"]["transforms"]
-    for key in ["R", "Z", "L", "w", "B"]:
-        if key not in derivs:
-            flags[key] = True
-        elif key not in transforms:
+    for key in derivs.keys():
+        if key not in transforms:
             return False
         else:
             flags[key] = np.array(
                 [d in transforms[key].derivatives.tolist() for d in derivs[key]]
             ).all()
-
     return all(flags.values())
 
 

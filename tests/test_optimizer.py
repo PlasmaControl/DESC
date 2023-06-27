@@ -877,12 +877,14 @@ def test_constrained_AL_lsq():
         "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     )["curvature_H"]
     obj = ObjectiveFunction(MeanCurvature(target=H))
+    ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,
         constraints=constraints,
         optimizer="lsq-auglag",
         maxiter=500,
         verbose=3,
+        ctol=ctol,
         x_scale="auto",
         copy=True,
         options={},
@@ -890,10 +892,10 @@ def test_constrained_AL_lsq():
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
-    assert ARbounds[0] < AR2 < ARbounds[1]
-    assert Vbounds[0] < V2 < Vbounds[1]
+    assert (ARbounds[0] - ctol) < AR2 < (ARbounds[1] + ctol)
+    assert (Vbounds[0] - ctol) < V2 < (Vbounds[1] + ctol)
     assert eq2.is_nested()
-    np.testing.assert_array_less(-Dwell, 0)
+    np.testing.assert_array_less(-Dwell, ctol)
 
 
 @pytest.mark.slow
@@ -919,12 +921,14 @@ def test_constrained_AL_scalar():
     )
     # Dummy objective to return 0, we just want a feasible solution.
     obj = ObjectiveFunction(GenericObjective("0"))
+    ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,
         constraints=constraints,
         optimizer="fmin-auglag",
         maxiter=500,
         verbose=3,
+        ctol=ctol,
         x_scale="auto",
         copy=True,
         options={},
@@ -932,7 +936,7 @@ def test_constrained_AL_scalar():
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
-    np.testing.assert_allclose(AR, AR2)
-    np.testing.assert_allclose(V, V2)
+    np.testing.assert_allclose(AR, AR2, atol=ctol)
+    np.testing.assert_allclose(V, V2, atol=ctol)
     assert eq2.is_nested()
-    np.testing.assert_array_less(-Dwell, 0)
+    np.testing.assert_array_less(-Dwell, ctol)

@@ -6,7 +6,7 @@ import numpy as np
 import scipy.linalg
 from netCDF4 import Dataset
 
-from desc.backend import jit, jnp, odeint
+from desc.backend import cond, fori_loop, gammaln, jit, jnp, odeint
 from desc.derivatives import Derivative
 from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
 from desc.grid import Grid
@@ -697,7 +697,6 @@ class ScalarPotentialField(MagneticField):
             coords = coords.astype(float)
         if basis == "xyz":
             coords = xyz2rpz(coords)
-        Rq, phiq, Zq = coords.T
 
         if (params is None) or (len(params) == 0):
             params = self._params
@@ -929,93 +928,176 @@ def field_line_integrate(
 
 # written with naive for loops initially and can jaxify later
 
+true_fun = lambda m_n: 0.0  # used for returning 0 when conditionals evaluate to True
+
 
 def gamma(n):
     """Gamma function, only implemented for integers (equiv to factorial of (n-1))."""
-    return jnp.prod(jnp.arange(1, n))
+    return jnp.exp(gammaln(n))
 
 
 def alpha(m, n):
     """Alpha of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
     # modified for eqns 31 and 32
-    if n < 0:
-        return 0
-    return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2.0 ** (2 * n + m))
+    # if n < 0:
+    #     return 0
+
+    def false_fun(m_n):
+        m, n = m_n
+        return (-1) ** n / (gamma(m + n + 1) * gamma(n + 1) * 2.0 ** (2 * n + m))
+
+    def bool_fun(n):
+        return jnp.any(n < 0)
+
+    return cond(
+        bool_fun(n),
+        true_fun,
+        false_fun,
+        (
+            m,
+            n,
+        ),
+    )
 
 
 def alphastar(m, n):
     """Alphastar of eq 27, 1st ind comes from C_m_k, 2nd is the subscript of alpha."""
     # modified for eqns 31 and 32
-    if n < 0:
-        return 0
-    return (2 * n + m) * alpha(m, n)
+    # if n < 0:
+    #     return 0
+    # return (2 * n + m) * alpha(m, n)
+
+    def false_fun(m_n):
+        m, n = m_n
+        return (2 * n + m) * alpha(m, n)
+
+    return cond(jnp.any(n < 0), true_fun, false_fun, (m, n))
 
 
 def beta(m, n):
     """Beta of eq 28, modified for eqns 31 and 32."""
-    if n < 0 or n >= m:
-        return 0
-    return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
+    # if n < 0 or n >= m:
+    #     return 0
+    # return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
+    def false_fun(m_n):
+        m, n = m_n
+        return gamma(m - n) / (gamma(n + 1) * 2.0 ** (2 * n - m + 1))
+
+    return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
 
 
 def betastar(m, n):
     """Betastar of eq 28, modified for eqns 31 and 32."""
-    if n < 0 or n >= m:
-        return 0
-    return (2 * n - m) * beta(m, n)
+    # if n < 0 or n >= m:
+    #     return 0
+    # return (2 * n - m) * beta(m, n)
+    def false_fun(m_n):
+        m, n = m_n
+        return (2 * n - m) * beta(m, n)
+
+    return cond(jnp.any(jnp.logical_or(n < 0, n >= m)), true_fun, false_fun, (m, n))
 
 
 def gamma_n(m, n):
     """gamma_n of eq 33."""
-    if n <= 0:
-        return 0
-    return (
-        alpha(m, n)
-        / 2
-        * jnp.sum(jnp.array([1 / i + 1 / (m + i) for i in jnp.arange(1, n)]))
-    )
+    # if n <= 0:
+    #     return 0
+
+    def body_fun(i, val):
+        return val + 1 / i + 1 / (m + i)
+
+    # temp = fori_loop(1, n, body_fun, 0)
+    # # jnp.sum(jnp.array([1 / i + 1 / (m + i) for i in range(1, n)]))
+    # return alpha(m, n) / 2 * fori_loop(1, n, body_fun, 0)
+    def false_fun(m_n):
+        m, n = m_n
+        return alpha(m, n) / 2 * fori_loop(1, n, body_fun, 0)
+
+    return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
 
 
 def gamma_nstar(m, n):
     """gamma_n star of eq 33."""
-    if n <= 0:
-        return 0
-    return (2 * n + m) * gamma_n(m, n)
+    # if n <= 0:
+    #     return 0
+    # return (2 * n + m) * gamma_n(m, n)
+    def false_fun(m_n):
+        m, n = m_n
+        return (2 * n + m) * gamma_n(m, n)
+
+    return cond(jnp.any(n <= 0), true_fun, false_fun, (m, n))
 
 
 def CD_m_k(R, m, k):
     """Eq 31 of Dommaschk paper."""
-    sum1 = 0
-    for j in jnp.arange(k + 1):
-        sum1 += (
-            -(
-                alpha(m, j)
-                * (
-                    alphastar(m, k - m - j) * jnp.log(R)
-                    + gamma_nstar(m, k - m - j)
-                    - alpha(m, k - m - j)
+    # sum1 = 0
+    # for j in range(k + 1):
+    #     sum1 += (
+    #         -(
+    #             alpha(m, j)
+    #             * (
+    #                 alphastar(m, k - m - j) * jnp.log(R)
+    #                 + gamma_nstar(m, k - m - j)
+    #                 - alpha(m, k - m - j)
+    #             )
+    #             - gamma_n(m, j) * alphastar(m, k - m - j)
+    #             + alpha(m, j) * betastar(m, k - j)
+    #         )
+    #         * R ** (2 * j + m)
+    #     ) + beta(m, j) * alphastar(m, k - j) * R ** (2 * j - m)
+    def body_fun(j, val):
+        result = (
+            val
+            + (
+                -(
+                    alpha(m, j)
+                    * (
+                        alphastar(m, k - m - j) * jnp.log(R)
+                        + gamma_nstar(m, k - m - j)
+                        - alpha(m, k - m - j)
+                    )
+                    - gamma_n(m, j) * alphastar(m, k - m - j)
+                    + alpha(m, j) * betastar(m, k - j)
                 )
-                - gamma_n(m, j) * alphastar(m, k - m - j)
-                + alpha(m, j) * betastar(m, k - j)
+                * R ** (2 * j + m)
             )
-            * R ** (2 * j + m)
-        ) + beta(m, j) * alphastar(m, k - j) * R ** (2 * j - m)
-    return sum1
+            + beta(m, j) * alphastar(m, k - j) * R ** (2 * j - m)
+        )
+        return result
+
+    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
 def CN_m_k(R, m, k):
     """Eq 32 of Dommaschk paper."""
-    sum1 = 0
-    for j in jnp.arange(k + 1):
-        sum1 += (
-            (
-                alpha(m, j) * (alpha(m, k - m - j) * jnp.log(R) + gamma_n(m, k - m - j))
-                - gamma_n(m, j) * alpha(m, k - m - j)
-                + alpha(m, j) * beta(m, k - j)
+    # sum1 = 0
+    # for j in range(k + 1):
+    #     sum1 += (
+    #         (
+    #             alpha(m, j) * (alpha(m, k - m - j) * jnp.log(R) + gamma_n(m, k - m - j))
+    #             - gamma_n(m, j) * alpha(m, k - m - j)
+    #             + alpha(m, j) * beta(m, k - j)
+    #         )
+    #         * R ** (2 * j + m)
+    #     ) - beta(m, j) * alpha(m, k - j) * R ** (2 * j - m)
+
+    def body_fun(j, val):
+        result = (
+            val
+            + (
+                (
+                    alpha(m, j)
+                    * (alpha(m, k - m - j) * jnp.log(R) + gamma_n(m, k - m - j))
+                    - gamma_n(m, j) * alpha(m, k - m - j)
+                    + alpha(m, j) * beta(m, k - j)
+                )
+                * R ** (2 * j + m)
             )
-            * R ** (2 * j + m)
-        ) - beta(m, j) * alpha(m, k - j) * R ** (2 * j - m)
-    return sum1
+            - beta(m, j) * alpha(m, k - j) * R ** (2 * j - m)
+        )
+        return result
+
+    return fori_loop(0, k + 1, body_fun, jnp.zeros_like(R))
 
 
 def D_m_n(R, Z, m, n):
@@ -1028,9 +1110,13 @@ def D_m_n(R, Z, m, n):
     # i.e. this is the index of k at
     # which 2k<=n, and 2(max_ind+1) would be > n and so not included in the sum
     result = 0
-    for k in jnp.arange(max_ind + 1):
-        result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
-    return result
+
+    def body_fun(k, val):
+        return val + Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
+
+    # for k in range(n // 2 + 1):
+    #     result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CD_m_k(R, m, k)
+    return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
 def N_m_n(R, Z, m, n):
@@ -1043,9 +1129,12 @@ def N_m_n(R, Z, m, n):
     # i.e. this is the index of k at
     #  which 2k<=n, and 2(max_ind+1) would be > n and so not included in the sum
     result = 0
-    for k in range(max_ind + 1):
-        result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CN_m_k(R, m, k)
-    return result
+    # for k in range(n // 2 + 1):
+    #     result += Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CN_m_k(R, m, k)
+    def body_fun(k, val):
+        return val + Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CN_m_k(R, m, k)
+
+    return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
 # TODO: note on how stell sym affects, i.e.

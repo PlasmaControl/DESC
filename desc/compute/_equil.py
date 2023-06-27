@@ -20,9 +20,18 @@ from .utils import dot, surface_averages
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)", "B_zeta_t", "B_theta_z"],
+    axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     data["J^rho"] = (data["B_zeta_t"] - data["B_theta_z"]) / (mu_0 * data["sqrt(g)"])
+    if transforms["grid"].axis.size:
+        # Recall that B_zeta_t(r=0) = -psi_r sqrt(g)_t ||e_zeta|| / sqrt(g)^2,
+        # which is not equal to zero at the magnetic axis.
+        # Still, it can be shown J^rho is of the indeterminate form 0/0.
+        limit = (data["B_zeta_rt"] - data["B_theta_rz"]) / (mu_0 * data["sqrt(g)_r"])
+        data["J^rho"] = put(
+            data["J^rho"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -76,7 +85,6 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     data=["J^rho", "J^theta", "J^zeta", "e_rho", "e_theta", "e_zeta"],
 )
 def _J(params, transforms, profiles, data, **kwargs):
-    # TODO: should be infinite because density at infinitesimal volume
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
         + data["J^theta"] * data["e_theta"].T
@@ -424,6 +432,7 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
 )
 def _e_helical(params, transforms, profiles, data, **kwargs):
+    # TODO: ask question
     data["e^helical"] = (
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T

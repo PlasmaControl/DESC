@@ -322,57 +322,39 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
 def _e_sub_rho_rrt(params, transforms, profiles, data, **kwargs):
     data["e_rho_rrt"] = jnp.array(
         [
-            -data["R_rt"] * data["omega_r"] ** 2
-            - data["R_t"] * data["omega_r"] * data["omega_rr"]
-            - 2 * data["R_r"] * data["omega_r"] * data["omega_rt"]
-            - 2
+            -3 * data["R_rt"] * data["omega_r"] ** 2
+            - 3 * data["R_t"] * data["omega_r"] * data["omega_rr"]
+            - 4 * data["R_r"] * data["omega_r"] * data["omega_rt"]
+            - 3
             * data["R"]
             * (
                 data["omega_rr"] * data["omega_rt"]
                 + data["omega_r"] * data["omega_rrt"]
             )
-            - data["omega_rt"]
-            * (2 * data["R_r"] * data["omega_r"] + data["R"] * data["omega_rr"])
+            - data["omega_rt"] * (2 * data["R_r"] * data["omega_r"])
             - data["omega_t"]
             * (
-                2 * data["R_rr"] * data["omega_r"]
+                3 * data["R_rr"] * data["omega_r"]
                 + 3 * data["R_r"] * data["omega_rr"]
                 + data["R"] * data["omega_rrr"]
             )
             + data["R_rrrt"]
-            - data["omega_r"]
-            * (
-                2 * data["omega_r"] * data["R_rt"]
-                + 2 * data["R_r"] * data["omega_rt"]
-                + data["omega_t"] * data["R_rr"]
-                + data["R_t"] * data["omega_rr"]
-                + data["R"]
-                * (-data["omega_t"] * data["omega_r"] ** 2 + data["omega_rrt"])
-            ),
-            2 * data["omega_rr"] * data["R_rt"]
-            + 2 * data["omega_r"] * data["R_rrt"]
-            + 2 * data["R_rr"] * data["omega_rt"]
+            + data["omega_r"] * data["R"] * data["omega_t"] * data["omega_r"] ** 2,
+            3 * data["omega_rr"] * data["R_rt"]
+            + 3 * data["omega_r"] * data["R_rrt"]
+            + 3 * data["R_rr"] * data["omega_rt"]
             + 2 * data["R_r"] * data["omega_rrt"]
-            + data["omega_rt"] * data["R_rr"]
             + data["omega_t"] * data["R_rrr"]
-            + data["R_rt"] * data["omega_rr"]
             + data["R_t"] * data["omega_rrr"]
             + data["R_r"]
-            * (-data["omega_t"] * data["omega_r"] ** 2 + data["omega_rrt"])
+            * (-3 * data["omega_t"] * data["omega_r"] ** 2 + data["omega_rrt"])
             + data["R"]
             * (
-                -data["omega_rt"] * data["omega_r"] ** 2
-                - data["omega_t"] * data["omega_r"] * data["omega_rr"]
+                -3 * data["omega_rt"] * data["omega_r"] ** 2
+                - 3 * data["omega_t"] * data["omega_r"] * data["omega_rr"]
                 + data["omega_rrrt"]
             )
-            + data["omega_r"]
-            * (
-                -data["R_t"] * data["omega_r"] ** 2
-                - 2 * data["R"] * data["omega_r"] * data["omega_rt"]
-                - data["omega_t"]
-                * (2 * data["R_r"] * data["omega_r"] + data["R"] * data["omega_rr"])
-                + data["R_rrt"]
-            ),
+            - data["R_t"] * data["omega_r"] ** 3,
             data["Z_rrrt"],
         ]
     ).T
@@ -418,8 +400,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
             + data["R_rrz"],
             2 * data["omega_r"] * data["R_rz"]
             + 2 * data["R_r"] * data["omega_rz"]
-            + data["R_rr"]
-            + data["omega_z"] * data["R_rr"]
+            + (1 + data["omega_z"]) * data["R_rr"]
             + data["R_z"] * data["omega_rr"]
             - data["R"]
             * ((1 + data["omega_z"]) * data["omega_r"] ** 2 - data["omega_rrz"]),
@@ -469,7 +450,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
             * (1 + data["omega_z"])
             * (data["R_rr"] * data["omega_r"] + data["R_r"] * data["omega_rr"])
             - data["R_rz"] * data["omega_r"] ** 2
-            - data["R_z"] * 2 * data["omega_r"] * data["omega_rr"]
+            - 2 * data["R_z"] * data["omega_r"] * data["omega_rr"]
             - 2 * data["R_r"] * data["omega_r"] * data["omega_rz"]
             - 2
             * data["R"]
@@ -488,8 +469,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
             * (
                 2 * data["omega_r"] * data["R_rz"]
                 + 2 * data["R_r"] * data["omega_rz"]
-                + data["R_rr"]
-                + data["omega_z"] * data["R_rr"]
+                + (1 + data["omega_z"]) * data["R_rr"]
                 + data["R_z"] * data["omega_rr"]
                 - data["R"]
                 * ((1 + data["omega_z"]) * data["omega_r"] ** 2 - data["omega_rrz"])
@@ -498,9 +478,8 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
             + 2 * data["omega_r"] * data["R_rrz"]
             + 2 * data["R_rr"] * data["omega_rz"]
             + 2 * data["R_r"] * data["omega_rrz"]
-            + data["R_rrr"]
             + data["omega_rz"] * data["R_rr"]
-            + data["omega_z"] * data["R_rrr"]
+            + (1 + data["omega_z"]) * data["R_rrr"]
             + data["R_rz"] * data["omega_rr"]
             + data["R_z"] * data["omega_rrr"]
             - data["R_r"]
@@ -508,7 +487,7 @@ def _e_sub_rho_rrz(params, transforms, profiles, data, **kwargs):
             - data["R"]
             * (
                 data["omega_rz"] * data["omega_r"] ** 2
-                + (1 + data["omega_z"]) * 2 * data["omega_r"] * data["omega_rr"]
+                + 2 * (1 + data["omega_z"]) * data["omega_r"] * data["omega_rr"]
                 - data["omega_rrrz"]
             )
             + data["omega_r"]

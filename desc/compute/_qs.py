@@ -268,9 +268,8 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["|B|_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * jnp.matmul(
-            transforms["B"].basis.evaluate(nodes).T, data["sqrt(g)_B"] * data["|B|"]
-        )
+        * transforms["B"].basis.evaluate(nodes).T
+        @ (data["sqrt(g)_B"] * data["|B|"])
         / transforms["B"].grid.num_nodes
     )
     return data

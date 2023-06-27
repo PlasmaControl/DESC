@@ -2,7 +2,7 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp
+from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals
@@ -25,6 +25,9 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.16 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
     data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
+    # TODO: limit at magnetic axis is
+    #  data["iota_rrr"] / (2 * (4 * jnp.pi * data["psi_rr"]) ** 2)
+    #  if iota_r = iota_rr = 0, and nan otherwise.
     return data
 
 
@@ -199,4 +202,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         * (2 * mu_0 * data["p_r"] + data["<B^2>_r"])
         / (data["V_r(r)"] * data["<B^2>"])
     )
+    if transforms["grid"].axis.size:
+        # coefficient of limit is V_r / V_rr = 0
+        data["magnetic well"] = put(data["magnetic well"], transforms["grid"].axis, 0)
     return data

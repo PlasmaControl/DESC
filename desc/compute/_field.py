@@ -12,6 +12,7 @@ from .utils import (
     surface_integrals,
     surface_max,
     surface_min,
+    surface_integrals_map,
 )
 
 
@@ -2654,6 +2655,7 @@ def _B_rms(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)", "|B|", "V_r(r)"],
+    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
 )
 def _B_fsa(params, transforms, profiles, data, **kwargs):
     data["<|B|>"] = surface_averages(
@@ -2662,6 +2664,16 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
         data["sqrt(g)"],
         denominator=data["V_r(r)"],
     )
+    if transforms["grid"].axis.size:
+        limit = surface_averages(
+            transforms["grid"],
+            data["|B|"],
+            data["sqrt(g)_r"],
+            denominator=data["V_rr(r)"],
+        )
+        data["<|B|>"] = put(
+            data["<|B|>"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -2677,6 +2689,7 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)", "|B|^2", "V_r(r)"],
+    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
 )
 def _B2_fsa(params, transforms, profiles, data, **kwargs):
     data["<B^2>"] = surface_averages(
@@ -2685,6 +2698,16 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
         data["sqrt(g)"],
         denominator=data["V_r(r)"],
     )
+    if transforms["grid"].axis.size:
+        limit = surface_averages(
+            transforms["grid"],
+            data["|B|^2"],
+            data["sqrt(g)_r"],
+            denominator=data["V_rr(r)"],
+        )
+        data["<B^2>"] = put(
+            data["<B^2>"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -2700,6 +2723,7 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["sqrt(g)", "|B|", "V_r(r)"],
+    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
 )
 def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     data["<1/|B|>"] = surface_averages(
@@ -2708,6 +2732,16 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
         data["sqrt(g)"],
         denominator=data["V_r(r)"],
     )
+    if transforms["grid"].axis.size:
+        limit = surface_averages(
+            transforms["grid"],
+            1 / data["|B|"],
+            data["sqrt(g)_r"],
+            denominator=data["V_rr(r)"],
+        )
+        data["<1/|B|>"] = put(
+            data["<1/|B|>"], transforms["grid"].axis, limit[transforms["grid"].axis]
+        )
     return data
 
 
@@ -2728,20 +2762,33 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
         "B",
         "B_r",
         "|B|^2",
-        "<B^2>",
         "V_r(r)",
         "V_rr(r)",
     ],
+    axis_limit_data=["sqrt(g)_rr", "V_rrr(r)"],
 )
 def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
+    compute_surface_integrals = surface_integrals_map(transforms["grid"])
+    num = compute_surface_integrals(data["sqrt(g)"] * data["|B|^2"])
+    num_r = compute_surface_integrals(
+        data["sqrt(g)_r"] * data["|B|^2"]
+        + 2 * data["sqrt(g)"] * dot(data["B"], data["B_r"]),
+    )
     data["<B^2>_r"] = (
-        surface_integrals(
-            transforms["grid"],
-            data["sqrt(g)_r"] * data["|B|^2"]
-            + data["sqrt(g)"] * 2 * dot(data["B"], data["B_r"]),
+        num_r / data["V_r(r)"] - num * data["V_rr(r)"] / data["V_r(r)"] ** 2
+    )
+    if transforms["grid"].axis.size:
+        limit = (
+            compute_surface_integrals(
+                data["sqrt(g)_rr"] * data["|B|^2"]
+                + 4 * data["sqrt(g)_r"] * dot(data["B"], data["B_r"])
+            )
+            * data["V_rr(r)"]
+            - num_r * data["V_rrr(r)"]
+        ) / (2 * data["V_rr(r)"] ** 2)
+        data["<B^2>_r"] = put(
+            data["<B^2>_r"], transforms["grid"].axis, limit[transforms["grid"].axis]
         )
-        - data["V_rr(r)"] * data["<B^2>"]
-    ) / data["V_r(r)"]
     return data
 
 
@@ -3336,9 +3383,9 @@ def _kappa_g(params, transforms, profiles, data, **kwargs):
 )
 def _grad_B_vec(params, transforms, profiles, data, **kwargs):
     data["grad(B)"] = (
-        (data["B_r"][:, None, :] * data["e^rho"][:, :, None])
-        + (data["B_t"][:, None, :] * data["e^theta"][:, :, None])
-        + (data["B_z"][:, None, :] * data["e^zeta"][:, :, None])
+        (data["B_r"][:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis])
+        + (data["B_t"][:, jnp.newaxis, :] * data["e^theta"][:, :, jnp.newaxis])
+        + (data["B_z"][:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis])
     )
     return data
 

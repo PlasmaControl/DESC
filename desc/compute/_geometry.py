@@ -77,12 +77,29 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)_r", "sqrt(g)"],
+    data=["sqrt(g)_r"],
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
-    data["V_rr(r)"] = surface_integrals(
-        transforms["grid"], data["sqrt(g)_r"] * jnp.sign(data["sqrt(g)"])
-    )
+    data["V_rr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_r"])
+    return data
+
+
+@register_compute_fun(
+    name="V_rrr(r)",
+    label="\\partial_{\\rho\\rho\\rho} V(\\rho)",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Volume enclosed by flux surfaces, third derivative wrt radial "
+    + "coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["sqrt(g)_rr"],
+)
+def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
+    data["V_rrr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_rr"])
     return data
 
 

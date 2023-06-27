@@ -123,12 +123,30 @@ def inequality_to_bounds(x0, fun, grad, hess, constraint, bounds):
     else:  # using BFGS
         conhess_wrapped = constraint.hess
 
+    if hasattr(constraint, "vjp"):
+
+        def vjp_wrapped(y, z, *args):
+            x, s = z2xs(z)
+            I = jnp.eye(nslack)
+            Js = jnp.zeros((ncon, nslack))
+            Js = put(Js, Index[ineq_mask, :], -I)
+            vjpx = constraint.vjp(y, x, *args)
+            vjps = jnp.dot(y, Js)
+            return jnp.concatenate([vjpx, vjps])
+
+    else:
+
+        def vjp_wrapped(y, z, *args):
+            J = conjac_wrapped(z, *args)
+            return jnp.dot(y, J)
+
     newcon = copy.copy(constraint)
     newcon.fun = confun_wrapped
     newcon.jac = conjac_wrapped
     newcon.hess = conhess_wrapped
     newcon.lb = target
     newcon.ub = target
+    newcon.vjp = vjp_wrapped
 
     return z0, fun_wrapped, grad_wrapped, hess_wrapped, newcon, zbounds, z2xs
 

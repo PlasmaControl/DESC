@@ -747,6 +747,27 @@ def test_jvp_scaled():
 
 
 @pytest.mark.unit
+def test_vjp():
+    """Test that vjps are scaled correctly."""
+    eq = Equilibrium()
+    weight = 3
+    target = 5
+    objective = ObjectiveFunction(
+        ForceBalance(target=target, normalize=True, weight=weight)
+    )
+    objective.build(eq)
+    x = objective.x(eq)
+    y = np.linspace(0, 1, objective.dim_f)
+    vjp1u = objective.vjp_unscaled(y, x)
+    vjp1s = objective.vjp_scaled(y, x)
+    vjp2u = y @ objective.jac_unscaled(x)
+    vjp2s = y @ objective.jac_scaled(x)
+
+    np.testing.assert_allclose(vjp1u, vjp2u, atol=1e-8)
+    np.testing.assert_allclose(vjp1s, vjp2s, atol=1e-8)
+
+
+@pytest.mark.unit
 def test_objective_target_bounds():
     """Test that the target_scaled and bounds_scaled etc. return the right things."""
     eq = Equilibrium()

@@ -138,22 +138,23 @@ def fmintr(  # noqa: C901 - FIXME: simplify this
     g = grad(x, *args)
     ngev += 1
 
-    if callable(hess):
-        H = hess(x, *args)
-        nhev += 1
-        bfgs = False
-    elif isinstance(hess, str) and hess.lower() == "bfgs":
+    if isinstance(hess, str) and hess.lower() == "bfgs":
         hess_init_scale = options.pop("hessian_init_scale", "auto")
         hess_exception_strategy = options.pop(
             "hessian_exception_strategy", "damp_update"
         )
         hess_min_curvature = options.pop("hessian_minimum_curvature", None)
         hess = BFGS(hess_exception_strategy, hess_min_curvature, hess_init_scale)
-        hess.initialize(N, "hess")
-        H = hess.get_matrix()
-        bfgs = True
+    if callable(hess):
+        H = hess(x, *args)
+        nhev += 1
+        bfgs = False
     elif isinstance(hess, BFGS):
-        hess.initialize(N, "hess")
+        if hasattr(hess, "n"):  # assume its already been initialized
+            assert hess.approx_type == "hess"
+            assert hess.n == N
+        else:
+            hess.initialize(N, "hess")
         bfgs = True
         H = hess.get_matrix()
     else:

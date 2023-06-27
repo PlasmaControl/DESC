@@ -92,7 +92,6 @@ class Equilibrium(_Configuration, IOAble):
     """
 
     _io_attrs_ = _Configuration._io_attrs_ + [
-        "_solved",
         "_L_grid",
         "_M_grid",
         "_N_grid",
@@ -162,7 +161,6 @@ class Equilibrium(_Configuration, IOAble):
         self._M_grid = M_grid if M_grid is not None else 2 * self.M
         self._N_grid = N_grid if N_grid is not None else 2 * self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
-        self._solved = False
         self.optimizer_results = {}
 
     def __repr__(self):
@@ -220,15 +218,6 @@ class Equilibrium(_Configuration, IOAble):
         if not hasattr(self, "_node_pattern"):
             self._node_pattern = None
         return self._node_pattern
-
-    @property
-    def solved(self):
-        """bool: Whether the equilibrium has been solved."""
-        return self._solved
-
-    @solved.setter
-    def solved(self, solved):
-        self._solved = solved
 
     @property
     def resolution(self):
@@ -548,7 +537,6 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             objective.print_value(objective.x(eq))
 
-        eq.solved = result["success"]
         return eq, result
 
     def optimize(
@@ -652,7 +640,6 @@ class Equilibrium(_Configuration, IOAble):
             for con in constraints:
                 con.print_value(*con.xs(eq))
 
-        eq.solved = result["success"]
         return eq, result
 
     def _optimize(  # noqa: C901
@@ -891,7 +878,6 @@ class Equilibrium(_Configuration, IOAble):
             verbose=verbose,
             copy=copy,
         )
-        eq.solved = False
 
         return eq
 

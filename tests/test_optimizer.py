@@ -826,9 +826,27 @@ def test_auglag():
         method="trust-constr",
         options={"verbose": 3, "maxiter": 1000},
     )
+    out4 = fmin_auglag(
+        fun,
+        x0,
+        grad,
+        hess="bfgs",
+        bounds=(-jnp.inf, jnp.inf),
+        constraint=constraint,
+        args=(),
+        x_scale="auto",
+        ftol=0,
+        xtol=1e-6,
+        gtol=1e-6,
+        ctol=1e-6,
+        verbose=3,
+        maxiter=None,
+        options={"initial_multipliers": "least_squares"},
+    )
 
     np.testing.assert_allclose(out1["x"], out3["x"], rtol=1e-4, atol=1e-4)
     np.testing.assert_allclose(out2["x"], out3["x"], rtol=1e-4, atol=1e-4)
+    np.testing.assert_allclose(out4["x"], out3["x"], rtol=1e-4, atol=1e-4)
 
 
 @pytest.mark.slow

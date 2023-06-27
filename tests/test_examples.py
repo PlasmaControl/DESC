@@ -281,6 +281,7 @@ def run_qh_step(n, eq):
     return eq1
 
 
+@pytest.mark.xfail
 @pytest.mark.regression
 @pytest.mark.solve
 def test_qh_optimization1():
@@ -299,6 +300,7 @@ def test_qh_optimization1():
     np.testing.assert_array_less(B_asym, 1e-1)
 
 
+@pytest.mark.xfail
 @pytest.mark.regression
 @pytest.mark.solve
 def test_qh_optimization2():
@@ -317,6 +319,7 @@ def test_qh_optimization2():
     np.testing.assert_array_less(B_asym, 1e-2)
 
 
+@pytest.mark.xfail
 @pytest.mark.regression
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=15)

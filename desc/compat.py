@@ -40,6 +40,8 @@ def ensure_positive_jacobian(eq):
 
         if eq.iota is not None:
             eq.i_l *= -1
+        else:
+            eq.c_l *= -1
         eq.surface = eq.get_surface_at(rho=1)
 
     signgs = np.sign(eq.compute("sqrt(g)", grid=Grid(np.array([[1, 0, 0]])))["sqrt(g)"])

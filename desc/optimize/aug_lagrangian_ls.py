@@ -153,8 +153,8 @@ def lsq_auglag(  # noqa: C901 - FIXME: simplify this
     nfev += 1
 
     mu = options.pop("initial_penalty_parameter", 10)
-    y = options.pop("initial_multipliers", None)
-    if y is None:  # use least squares multiplier estimates
+    y = options.pop("initial_multipliers", jnp.zeros_like(c))
+    if y == "least_squares":  # use least squares multiplier estimates
         _J = constraint_wrapped.jac(z, *args)
         _g = f @ jac_wrapped(z, *args)
         y = jnp.linalg.lstsq(_J.T, _g)[0]

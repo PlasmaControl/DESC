@@ -5,6 +5,7 @@ import pytest
 from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
+from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.vmec import VMECIO
@@ -255,6 +256,35 @@ class TestVMECIO:
         np.testing.assert_allclose(x_mn, x_mn_correct, atol=1e-8)
 
 
+@pytest.mark.unit
+def test_vmec_load_profiles(TmpDir):
+    """Tests that loading with iota or current profiles give same result."""
+    input_path = "./tests/inputs/wout_SOLOVEV.nc"
+
+    eq_iota = VMECIO.load(input_path, profile="iota")
+    eq_current = VMECIO.load(input_path, profile="current")
+
+    assert eq_iota.current is None
+    assert eq_current.iota is None
+
+    grid = LinearGrid(
+        M=eq_iota.M_grid,
+        N=eq_iota.N_grid,
+        NFP=eq_iota.NFP,
+        rho=np.linspace(0.5, 1.0, 21),
+    )
+    data_iota = eq_iota.compute(["iota", "current"], grid=grid)
+    data_current = eq_current.compute(["iota", "current"], grid=grid)
+
+    iota_iota = compress(grid, data_iota["iota"])
+    iota_current = compress(grid, data_current["iota"])
+    current_iota = compress(grid, data_iota["current"])
+    current_current = compress(grid, data_current["current"])
+
+    np.testing.assert_allclose(iota_iota, iota_current, rtol=2e-2)
+    np.testing.assert_allclose(current_current, current_iota, rtol=2e-2)
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 def test_load_then_save(TmpDir):
@@ -262,10 +292,7 @@ def test_load_then_save(TmpDir):
     input_path = "./tests/inputs/wout_SOLOVEV.nc"
     output_path = str(TmpDir.join("DESC_SOLOVEV.nc"))
 
-    eq = VMECIO.load(input_path, profile="current")
-    assert eq.iota is None
     eq = VMECIO.load(input_path, profile="iota")
-    assert eq.current is None
     VMECIO.save(eq, output_path)
 
     file1 = Dataset(input_path, mode="r")

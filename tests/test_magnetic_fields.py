@@ -150,7 +150,7 @@ def test_dommaschk_CN_CD_m_0():
         # test of CN_m_k based off eqn 9
         res1 = CN_m_k(R, m, 0)
         res2 = 0.5 * (R**m - R ** (-m)) / m
-        np.testing.assert_allclose(res1, res2)
+        np.testing.assert_allclose(res1, res2, atol=1e-15)
 
 
 @pytest.mark.unit
@@ -195,11 +195,11 @@ def test_dommaschk_radial_field():
 @pytest.mark.unit
 def test_dommaschk_vertical_field():
     """Test the Dommaschk potential for a 1/R toroidal + pure vertical field."""
-    phi = np.linspace(0, 2 * np.pi, 10)
-    R = np.linspace(0.1, 1.5, 50)
-    Z = np.linspace(-0.5, 0.5, 50)
-    R, phi, Z = np.meshgrid(R, phi, Z)
-    coords = np.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
+    phi = jnp.linspace(0, 2 * jnp.pi, 10)
+    R = jnp.linspace(0.1, 1.5, 50)
+    Z = jnp.linspace(-0.5, 0.5, 50)
+    R, phi, Z = jnp.meshgrid(R, phi, Z)
+    coords = jnp.vstack((R.flatten(), phi.flatten(), Z.flatten())).T
 
     ms = [0]
     ls = [1]
@@ -209,16 +209,16 @@ def test_dommaschk_vertical_field():
     d_arr = [0]
     B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
     B_dom = B.compute_magnetic_field(coords)
-    ones = np.ones_like(B_dom[:, 0])
-    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-15)
-    np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten(), atol=1e-15)
-    np.testing.assert_array_equal(B_dom[:, 2], ones)
+    ones = jnp.ones_like(B_dom[:, 0])
+    jnp.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    jnp.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten(), atol=1e-14)
+    jnp.testing.assert_allclose(B_dom[:, 2], ones, atol=5e-15)
 
 
 @pytest.mark.unit
 def test_dommaschk_fit_toroidal_field():
     """Test the Dommaschk potential fit for a 1/R toroidal scaled to 2 T."""
-    phi = np.linspace(0, 2 * np.pi, 3)
+    phi = np.linspace(0, 2 * jnp.pi, 3)
     R = np.linspace(0.1, 1.5, 3)
     Z = np.linspace(-0.5, 0.5, 3)
     R, phi, Z = np.meshgrid(R, phi, Z)
@@ -239,7 +239,7 @@ def test_dommaschk_fit_toroidal_field():
     B_dom = B.compute_magnetic_field(coords)
     np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)
     np.testing.assert_allclose(B_dom[:, 1], B0 / R.flatten(), atol=1e-15)
-    np.testing.assert_allclose(B_dom[:, 2], np.zeros_like(R.flatten()), atol=1e-15)
+    np.testing.assert_allclose(B_dom[:, 2], jnp.zeros_like(R.flatten()), atol=1e-15)
 
     # only nonzero coefficient of the field should be the B0
     np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)

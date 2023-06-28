@@ -1385,7 +1385,7 @@ class TestBootstrapObjectives:
             verbose=3,
             objective=objective,
             constraints=constraints,
-            optimizer=Optimizer("scipy-trf"),
+            optimizer=Optimizer("proximal-scipy-trf"),
             ftol=1e-6,
         )
 
@@ -1505,7 +1505,7 @@ class TestBootstrapObjectives:
             verbose=3,
             objective=objective,
             constraints=constraints,
-            optimizer=Optimizer("scipy-trf"),
+            optimizer=Optimizer("proximal-scipy-trf"),
             ftol=1e-6,
             gtol=0,  # It is critical to set gtol=0 when optimizing current profile!
         )

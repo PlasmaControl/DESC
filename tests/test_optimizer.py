@@ -382,7 +382,7 @@ def test_overstepping():
         FixIota(),
         FixPsi(),
     )
-    optimizer = Optimizer("lsq-exact")
+    optimizer = Optimizer("proximal-lsq-exact")
     eq1, history = eq.optimize(
         objective=objective,
         constraints=constraints,

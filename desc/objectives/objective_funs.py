@@ -1,5 +1,6 @@
 """Base classes for objectives."""
 
+import warnings
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
@@ -21,8 +22,6 @@ class ObjectiveFunction(IOAble):
     ----------
     objectives : tuple of Objective
         List of objectives to be minimized.
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the objectives.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"batched", "blocked"}
@@ -35,10 +34,7 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(
-        self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
-    ):
-
+    def __init__(self, objectives, use_jit=True, deriv_mode="batched", verbose=1):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(
@@ -52,9 +48,6 @@ class ObjectiveFunction(IOAble):
         self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
-
-        if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def set_args(self, *args):
         """Set which arguments the objective should expect.
@@ -234,7 +227,7 @@ class ObjectiveFunction(IOAble):
             if obj._use_jit:
                 obj.jit()
 
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq=None, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -691,7 +684,7 @@ class _Objective(IOAble, ABC):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -736,7 +729,6 @@ class _Objective(IOAble, ABC):
         normalize_target=True,
         name=None,
     ):
-
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
@@ -757,8 +749,14 @@ class _Objective(IOAble, ABC):
             "_args",
             [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
         )
-        if eq is not None:
-            self.build(eq)
+        self._eq = eq
+        if eq is None:
+            warnings.warn(
+                FutureWarning(
+                    "Creating an Objective without specifying the Equilibrium to"
+                    " optimize is deprecated, in the future this will raise an error."
+                )
+            )
 
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""
@@ -885,8 +883,10 @@ class _Objective(IOAble, ABC):
             self.jit()
 
     @abstractmethod
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays."""
+        if eq is None:
+            eq = self._eq
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives()

@@ -264,5 +264,5 @@ def test_change_NFP():
         warnings.simplefilter("error")
         eq = desc.examples.get("HELIOTRON")
         eq.change_resolution(NFP=4)
-        obj = get_equilibrium_objective()
-        obj.build(eq)
+        obj = get_equilibrium_objective(eq=eq)
+        obj.build()

@@ -462,6 +462,7 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
+    eq._node_pattern = "quad"
     objectives = Energy()
     obj = ObjectiveFunction(objectives)
     for opt in ["scipy-trust-exact"]:
@@ -558,11 +559,13 @@ def test_wrappers():
 @pytest.mark.slow
 def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
-    eq = desc.examples.get("SOLOVEV")
+    eqf = desc.examples.get("SOLOVEV")
+    eqe = eqf.copy()
+    eqe._node_pattern = "quad"
     fobj = ObjectiveFunction(ForceBalance())
     eobj = ObjectiveFunction(Energy())
-    fobj.build(eq)
-    eobj.build(eq)
+    fobj.build(eqf)
+    eobj.build(eqe)
     constraints = (
         FixBoundaryR(),
         FixBoundaryZ(),
@@ -575,8 +578,10 @@ def test_all_optimizers():
         print("TESTING ", opt)
         if optimizers[opt]["scalar"]:
             obj = eobj
+            eq = eqe
         else:
             obj = fobj
+            eq = eqf
         eq.solve(
             objective=obj,
             constraints=constraints,

@@ -1440,23 +1440,23 @@ class TestBootstrapObjectives:
             modes_Z=[[-1, 0]],
             NFP=NFP,
         )
-
-        eq = Equilibrium(
-            surface=surface,
-            electron_density=ne,
-            electron_temperature=Te,
-            ion_temperature=Ti,
-            current=current,
-            Psi=B0 * np.pi * (aminor**2),
-            NFP=NFP,
-            L=LM_resolution,
-            M=LM_resolution,
-            N=0,
-            L_grid=2 * LM_resolution,
-            M_grid=2 * LM_resolution,
-            N_grid=0,
-            sym=True,
-        )
+        with pytest.warns(UserWarning, match="current profile is not an even"):
+            eq = Equilibrium(
+                surface=surface,
+                electron_density=ne,
+                electron_temperature=Te,
+                ion_temperature=Ti,
+                current=current,
+                Psi=B0 * np.pi * (aminor**2),
+                NFP=NFP,
+                L=LM_resolution,
+                M=LM_resolution,
+                N=0,
+                L_grid=2 * LM_resolution,
+                M_grid=2 * LM_resolution,
+                N_grid=0,
+                sym=True,
+            )
         current_L = 16
         eq.current.change_resolution(current_L)
 

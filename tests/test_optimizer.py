@@ -654,7 +654,8 @@ def test_scipy_constrained_solve():
 def test_solve_with_x_scale():
     """Make sure we can manually specify x_scale when solving/optimizing."""
     # basically just tests that it runs without error
-    eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
+    with pytest.warns(UserWarning, match="pressure profile is not an even"):
+        eq = Equilibrium(L=2, M=2, N=2, pressure=np.array([1000, -2000, 1000]))
     scale = jnp.concatenate(
         [
             (abs(eq.R_basis.modes[:, :2]).sum(axis=1) + 1),

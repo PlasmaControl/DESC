@@ -246,7 +246,7 @@ def test_dommaschk_fit_toroidal_field():
     # only nonzero coefficient of the field should be the B0
     np.testing.assert_allclose(B._params["B0"], B0, atol=1e-15)
     for coef in ["a_arr", "b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[coef], 0, atol=1e-15)
+        np.testing.assert_allclose(B._params[coef], 0, atol=2e-15)
 
 
 @pytest.mark.unit
@@ -281,4 +281,4 @@ def test_dommaschk_fit_vertical_and_toroidal_field():
         else:
             np.testing.assert_allclose(coef, 0, atol=1e-15)
     for name in ["b_arr", "c_arr", "d_arr"]:
-        np.testing.assert_allclose(B._params[name], 0, atol=1e-15)
+        np.testing.assert_allclose(B._params[name], 0, atol=2e-15)

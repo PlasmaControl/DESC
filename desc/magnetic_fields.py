@@ -1,10 +1,10 @@
 """Classes for magnetic fields."""
 
 from abc import ABC, abstractmethod
-from functools import partial
 
 import numpy as np
 import scipy.linalg
+from jax import jacfwd
 from netCDF4 import Dataset
 
 from desc.backend import cond, fori_loop, gammaln, jit, jnp, odeint
@@ -810,9 +810,6 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         rhs = jnp.vstack((B[:, 0], B[:, 1], B[:, 2])).T.flatten(order="F")
 
-        # TODO: note on how stell sym affects, i.e.
-        # if stell sym then a=d=0 for even l and b=c=0 for odd l
-
         #####################
         # b is made, now do A
         #####################
@@ -832,36 +829,19 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         A = jnp.zeros((3 * num_nodes, num_modes))
 
-        # B0 is first coeff, the scale magnitude of the 1/R field
-        domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
-
-        params = {
-            "ms": 0,
-            "ls": 0,
-            "a_arr": 0,
-            "b_arr": 0,
-            "c_arr": 0,
-            "d_arr": 0,
-            "B0": 1,
-        }
-        compute_B_fun = jit(domm_field.compute_magnetic_field)
-        B_temp = compute_B_fun(coords, params=params)
-        for i in range(B_temp.shape[1]):
-            A = A.at[i * num_nodes : (i + 1) * num_nodes, 0:1].add(
-                B_temp[:, i].reshape(num_nodes, 1)
-            )
-
         # mode numbers
         ms = []
         ls = []
 
-        # order of coeffs are a_ml, b_ml, c_ml, d_ml
+        # order of coeffs are B0, a_ml, b_ml, c_ml, d_ml
         coef_ind = 1
         abcd_inds = [[], [], [], []]
+        a_s = []
+        b_s = []
+        c_s = []
+        d_s = []
         for l in range(max_l + 1):
             for m in range(max_m + 1):
-                ms.append(m)
-                ls.append(l)
                 if not sym:
                     which_coefs = range(4)  # no sym, use all coefs
                 elif l // 2 == 0:
@@ -874,23 +854,55 @@ class DommaschkPotentialField(ScalarPotentialField):
                     c = 1 if which_coef == 2 else 0
                     d = 1 if which_coef == 3 else 0
 
-                    params = {
-                        "ms": m,
-                        "ls": l,
-                        "a_arr": a,
-                        "b_arr": b,
-                        "c_arr": c,
-                        "d_arr": d,
-                        "B0": 0,
-                    }
-                    B_temp = compute_B_fun(coords, params=params)
-
-                    for i in range(B_temp.shape[1]):
-                        A = A.at[
-                            i * num_nodes : (i + 1) * num_nodes, coef_ind : coef_ind + 1
-                        ].add(B_temp[:, i].reshape(num_nodes, 1))
+                    a_s.append(a)
+                    b_s.append(b)
+                    c_s.append(c)
+                    d_s.append(d)
+                    ms.append(m)
+                    ls.append(l)
                     abcd_inds[which_coef].append(coef_ind)
                     coef_ind += 1
+
+        params = {
+            "ms": ms,
+            "ls": ls,
+            "a_arr": a_s,
+            "b_arr": b_s,
+            "c_arr": c_s,
+            "d_arr": d_s,
+            "B0": 0.0,
+        }
+        n = len(ms)  # how many l-m mode pairs there are, also is len(a_s)
+
+        domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
+
+        def get_B_dom(coords, X, ms, ls):
+            """Fxn wrapper to find jacobian of dommaschk B wrt coefs a,b,c,d."""
+            return domm_field.compute_magnetic_field(
+                coords,
+                params={
+                    "ms": jnp.asarray(ms),
+                    "ls": jnp.asarray(ls),
+                    "a_arr": jnp.asarray(X[1 : n + 1]),
+                    "b_arr": jnp.asarray(X[n + 1 : 2 * n + 1]),
+                    "c_arr": jnp.asarray(X[2 * n + 1 : 3 * n + 1]),
+                    "d_arr": jnp.asarray(X[3 * n + 1 : 4 * n + 1]),
+                    "B0": X[0],
+                },
+            )
+
+        X = []
+        for key in ["B0", "a_arr", "b_arr", "c_arr", "d_arr"]:
+            obj = params[key]
+            if type(obj) == list:
+                X += obj
+            else:
+                X += [obj]
+        X = jnp.asarray(X)
+
+        jac = jacfwd(get_B_dom, argnums=1)(coords, X, params["ms"], params["ls"])
+
+        A = jac.reshape((rhs.size, len(X)), order="F")
 
         # now solve Ac=b for the coefficients c
 
@@ -905,44 +917,10 @@ class DommaschkPotentialField(ScalarPotentialField):
         # recover the params from the c coefficient vector
         B0 = c[0]
 
-        if sym:
-            a_arr = (
-                c[jnp.asarray(abcd_inds[0]).astype(int)]
-                if not sym
-                else jnp.append(
-                    c[jnp.asarray(abcd_inds[0]).astype(int)],
-                    jnp.zeros((len(abcd_inds[1]),)),
-                )
-            )
-            d_arr = (
-                c[jnp.asarray(abcd_inds[3]).astype(int)]
-                if not sym
-                else jnp.append(
-                    c[jnp.asarray(abcd_inds[3]).astype(int)],
-                    jnp.zeros((len(abcd_inds[1]),)),
-                )
-            )
-            b_arr = (
-                c[jnp.asarray(abcd_inds[1]).astype(int)]
-                if not sym
-                else jnp.append(
-                    jnp.zeros((len(abcd_inds[0]),)),
-                    c[jnp.asarray(abcd_inds[1]).astype(int)],
-                )
-            )
-            c_arr = (
-                c[jnp.asarray(abcd_inds[2]).astype(int)]
-                if not sym
-                else jnp.append(
-                    jnp.zeros((len(abcd_inds[0]),)),
-                    c[jnp.asarray(abcd_inds[2]).astype(int)],
-                )
-            )
-        else:
-            a_arr = c[1::4]
-            b_arr = c[2::4]
-            c_arr = c[3::4]
-            d_arr = c[4::4]
+        a_arr = c[1 : n + 1]
+        b_arr = c[n + 1 : 2 * n + 1]
+        c_arr = c[2 * n + 1 : 3 * n + 1]
+        d_arr = c[3 * n + 1 : 4 * n + 1]
 
         return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
 
@@ -1156,7 +1134,6 @@ def N_m_n(R, Z, m, n):
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
-@partial(jnp.vectorize, signature="(k),(k),(k),(),(),(),(),(),()->(k)")
 def V_m_l(R, phi, Z, m, l, a, b, c, d):
     """Eq 12 of Dommaschk paper.
 
@@ -1233,9 +1210,9 @@ def dommaschk_potential(R, phi, Z, ms, ls, a_arr, b_arr, c_arr, d_arr, B0=1):
     b_arr = jnp.atleast_1d(b_arr)
     c_arr = jnp.atleast_1d(c_arr)
     d_arr = jnp.atleast_1d(d_arr)
-
     for m, l, a, b, c, d in zip(ms, ls, a_arr, b_arr, c_arr, d_arr):
         value += V_m_l(R, phi, Z, m, l, a, b, c, d)
+
     return value
 
 

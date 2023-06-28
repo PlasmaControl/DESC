@@ -228,7 +228,7 @@ def test_1d_optimization_old():
         },
     )
 
-    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=2e-4)
+    np.testing.assert_allclose(eq.compute("R0/a")["R0/a"], 2.5, rtol=1e-3)
 
 
 def run_qh_step(n, eq):

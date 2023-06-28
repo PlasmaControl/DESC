@@ -1,6 +1,7 @@
 """Classes for magnetic fields."""
 
 from abc import ABC, abstractmethod
+from functools import partial
 
 import numpy as np
 import scipy.linalg
@@ -833,7 +834,18 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         # B0 is first coeff, the scale magnitude of the 1/R field
         domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
-        B_temp = domm_field.compute_magnetic_field(coords)
+
+        params = {
+            "ms": 0,
+            "ls": 0,
+            "a_arr": 0,
+            "b_arr": 0,
+            "c_arr": 0,
+            "d_arr": 0,
+            "B0": 1,
+        }
+        compute_B_fun = jit(domm_field.compute_magnetic_field)
+        B_temp = compute_B_fun(coords, params=params)
         for i in range(B_temp.shape[1]):
             A = A.at[i * num_nodes : (i + 1) * num_nodes, 0:1].add(
                 B_temp[:, i].reshape(num_nodes, 1)
@@ -871,7 +883,7 @@ class DommaschkPotentialField(ScalarPotentialField):
                         "d_arr": d,
                         "B0": 0,
                     }
-                    B_temp = domm_field.compute_magnetic_field(coords, params=params)
+                    B_temp = compute_B_fun(coords, params=params)
 
                     for i in range(B_temp.shape[1]):
                         A = A.at[
@@ -1144,6 +1156,7 @@ def N_m_n(R, Z, m, n):
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
 
 
+@partial(jnp.vectorize, signature="(k),(k),(k),(),(),(),(),(),()->(k)")
 def V_m_l(R, phi, Z, m, l, a, b, c, d):
     """Eq 12 of Dommaschk paper.
 

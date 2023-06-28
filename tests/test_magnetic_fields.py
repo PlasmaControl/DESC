@@ -210,9 +210,9 @@ def test_dommaschk_vertical_field():
     B = DommaschkPotentialField(ms, ls, a_arr, b_arr, c_arr, d_arr)
     B_dom = B.compute_magnetic_field(coords)
     ones = jnp.ones_like(B_dom[:, 0])
-    jnp.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
-    jnp.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten(), atol=1e-14)
-    jnp.testing.assert_allclose(B_dom[:, 2], ones, atol=5e-15)
+    np.testing.assert_allclose(B_dom[:, 0], 0, atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 1], 1 / R.flatten(), atol=1e-14)
+    np.testing.assert_allclose(B_dom[:, 2], ones, atol=5e-15)
 
 
 @pytest.mark.unit

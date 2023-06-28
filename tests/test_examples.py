@@ -422,7 +422,7 @@ def test_simsopt_QH_comparison():
     surface = FourierRZToroidalSurface(
         R_lmn=[1.0, 1.0 / aspect_target, Delta],
         modes_R=[[0, 0], [1, 0], [0, 1]],
-        Z_lmn=[0, 1.0 / aspect_target, Delta],
+        Z_lmn=[0, -1.0 / aspect_target, Delta],
         modes_Z=[[0, 0], [-1, 0], [0, -1]],
         NFP=nfp,
     )

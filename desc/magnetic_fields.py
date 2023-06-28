@@ -778,6 +778,8 @@ class DommaschkPotentialField(ScalarPotentialField):
         Parameters
         ----------
             field (MagneticField or callable): magnetic field to fit
+                if callable, must accept (num_nodes,3) ndarray as argument
+                and output (num_nodes,3) as the B field in cylindrical rpz basis.
             coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
             max_m (int): maximum m to use for Dommaschk Potentials
             max_l (int): maximum l to use for Dommaschk Potentials
@@ -820,8 +822,8 @@ class DommaschkPotentialField(ScalarPotentialField):
         A = jnp.zeros((3 * num_nodes, num_modes))
 
         # B0 first, the scale magnitude of the 1/R field
-        Bf_temp = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
-        B_temp = Bf_temp.compute_magnetic_field(coords)
+        domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
+        B_temp = domm_field.compute_magnetic_field(coords)
         for i in range(B_temp.shape[1]):
             A = A.at[i * num_nodes : (i + 1) * num_nodes, 0:1].add(
                 B_temp[:, i].reshape(num_nodes, 1)
@@ -843,8 +845,16 @@ class DommaschkPotentialField(ScalarPotentialField):
                     c = 1 if which_coef == 2 else 0
                     d = 1 if which_coef == 3 else 0
 
-                    Bf_temp = DommaschkPotentialField(m, l, a, b, c, d, 0)
-                    B_temp = Bf_temp.compute_magnetic_field(coords)
+                    params = {
+                        "ms": m,
+                        "ls": l,
+                        "a_arr": a,
+                        "b_arr": b,
+                        "c_arr": c,
+                        "d_arr": d,
+                        "B0": 0,
+                    }
+                    B_temp = domm_field.compute_magnetic_field(coords, params=params)
                     for i in range(B_temp.shape[1]):
                         A = A.at[
                             i * num_nodes : (i + 1) * num_nodes, coef_ind : coef_ind + 1

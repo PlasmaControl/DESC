@@ -224,7 +224,8 @@ def HELIOTRON_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+        main(args)
 
     HELIOTRON_vacuum_out = {
         "input_path": input_path,
@@ -255,7 +256,8 @@ def HELIOTRON_vac2(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
+        main(args)
 
     HELIOTRON_vacuum2_out = {
         "input_path": input_path,

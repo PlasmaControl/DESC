@@ -545,26 +545,22 @@ class VMECIO:
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
         jcuru.units = "A/m^3"
-        jcuru[:] = compress(
+        jcuru[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
         jcurv.units = "A/m^3"
-        jcurv[:] = compress(
+        jcurv[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcurv[0] = 0
 

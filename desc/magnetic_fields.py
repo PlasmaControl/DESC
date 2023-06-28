@@ -772,7 +772,7 @@ class DommaschkPotentialField(ScalarPotentialField):
         super().__init__(dommaschk_potential, params)
 
     @classmethod
-    def fit_magnetic_field(cls, field, coords, max_m, max_l):
+    def fit_magnetic_field(cls, field, coords, max_m, max_l, sym=False):
         """Fit a vacuum magnetic field with a Dommaschk Potential field.
 
         Parameters
@@ -783,6 +783,9 @@ class DommaschkPotentialField(ScalarPotentialField):
             coords (ndarray): shape (num_nodes,3) of R,phi,Z points to fit field at
             max_m (int): maximum m to use for Dommaschk Potentials
             max_l (int): maximum l to use for Dommaschk Potentials
+            sym (bool): if field is stellarator symmetric or not.
+                if True, only stellarator-symmetric modes will
+                be included in the fitting
         """
         # We seek c in  Ac = b
         # A will be the BR, Bphi and BZ from each individual
@@ -806,10 +809,17 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         rhs = jnp.vstack((B[:, 0], B[:, 1], B[:, 2])).T.flatten(order="F")
 
+        # TODO: note on how stell sym affects, i.e.
+        # if stell sym then a=d=0 for even l and b=c=0 for odd l
+
         #####################
         # b is made, now do A
         #####################
-        num_modes = 1 + (max_l + 1) * (max_m + 1) * 4
+        num_modes = (
+            1 + (max_l + 1) * (max_m + 1) * 4
+            if not sym
+            else 1 + (max_l + 1) * (max_m + 1) * 2
+        )
         # TODO: technically we can drop some modes
         # since if max_l=0, there are only ever nonzero terms
         # for a and b
@@ -821,7 +831,7 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         A = jnp.zeros((3 * num_nodes, num_modes))
 
-        # B0 first, the scale magnitude of the 1/R field
+        # B0 is first coeff, the scale magnitude of the 1/R field
         domm_field = DommaschkPotentialField(0, 0, 0, 0, 0, 0, 1)
         B_temp = domm_field.compute_magnetic_field(coords)
         for i in range(B_temp.shape[1]):
@@ -833,13 +843,20 @@ class DommaschkPotentialField(ScalarPotentialField):
         ms = []
         ls = []
 
-        # order of coeffs are a_ml and
+        # order of coeffs are a_ml, b_ml, c_ml, d_ml
         coef_ind = 1
+        abcd_inds = [[], [], [], []]
         for l in range(max_l + 1):
             for m in range(max_m + 1):
                 ms.append(m)
                 ls.append(l)
-                for which_coef in range(4):
+                if not sym:
+                    which_coefs = range(4)  # no sym, use all coefs
+                elif l // 2 == 0:
+                    which_coefs = [1, 2]  # a=d=0 for even l with sym
+                elif l // 2 == 1:
+                    which_coefs = [0, 3]  # b=c=0 for odd l with sym
+                for which_coef in which_coefs:
                     a = 1 if which_coef == 0 else 0
                     b = 1 if which_coef == 1 else 0
                     c = 1 if which_coef == 2 else 0
@@ -855,10 +872,12 @@ class DommaschkPotentialField(ScalarPotentialField):
                         "B0": 0,
                     }
                     B_temp = domm_field.compute_magnetic_field(coords, params=params)
+
                     for i in range(B_temp.shape[1]):
                         A = A.at[
                             i * num_nodes : (i + 1) * num_nodes, coef_ind : coef_ind + 1
                         ].add(B_temp[:, i].reshape(num_nodes, 1))
+                    abcd_inds[which_coef].append(coef_ind)
                     coef_ind += 1
 
         # now solve Ac=b for the coefficients c
@@ -873,10 +892,46 @@ class DommaschkPotentialField(ScalarPotentialField):
 
         # recover the params from the c coefficient vector
         B0 = c[0]
-        a_arr = c[1::4]
-        b_arr = c[2::4]
-        c_arr = c[3::4]
-        d_arr = c[4::4]
+
+        if sym:
+            a_arr = (
+                c[jnp.asarray(abcd_inds[0]).astype(int)]
+                if not sym
+                else jnp.append(
+                    c[jnp.asarray(abcd_inds[0]).astype(int)],
+                    jnp.zeros((len(abcd_inds[1]),)),
+                )
+            )
+            d_arr = (
+                c[jnp.asarray(abcd_inds[3]).astype(int)]
+                if not sym
+                else jnp.append(
+                    c[jnp.asarray(abcd_inds[3]).astype(int)],
+                    jnp.zeros((len(abcd_inds[1]),)),
+                )
+            )
+            b_arr = (
+                c[jnp.asarray(abcd_inds[1]).astype(int)]
+                if not sym
+                else jnp.append(
+                    jnp.zeros((len(abcd_inds[0]),)),
+                    c[jnp.asarray(abcd_inds[1]).astype(int)],
+                )
+            )
+            c_arr = (
+                c[jnp.asarray(abcd_inds[2]).astype(int)]
+                if not sym
+                else jnp.append(
+                    jnp.zeros((len(abcd_inds[0]),)),
+                    c[jnp.asarray(abcd_inds[2]).astype(int)],
+                )
+            )
+        else:
+            a_arr = c[1::4]
+            b_arr = c[2::4]
+            c_arr = c[3::4]
+            d_arr = c[4::4]
+
         return cls(ms, ls, a_arr, b_arr, c_arr, d_arr, B0)
 
 
@@ -1087,10 +1142,6 @@ def N_m_n(R, Z, m, n):
         return val + Z ** (n - 2 * k) / gamma(n - 2 * k + 1) * CN_m_k(R, m, k)
 
     return fori_loop(0, n // 2 + 1, body_fun, jnp.zeros_like(R))
-
-
-# TODO: note on how stell sym affects, i.e.
-# if stell sym then a=d=0 for even l and b=c=0 for odd l
 
 
 def V_m_l(R, phi, Z, m, l, a, b, c, d):

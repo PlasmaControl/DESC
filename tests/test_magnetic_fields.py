@@ -234,7 +234,9 @@ def test_dommaschk_fit_toroidal_field():
         B_Z = np.zeros_like(coord[:, 0])
         return np.vstack((B_R, B_phi, B_Z)).T
 
-    B = DommaschkPotentialField.fit_magnetic_field(B0_over_R, coords, max_m, max_l)
+    B = DommaschkPotentialField.fit_magnetic_field(
+        B0_over_R, coords, max_m, max_l, sym=True
+    )
 
     B_dom = B.compute_magnetic_field(coords)
     np.testing.assert_allclose(B_dom[:, 0], 0, atol=4e-15)

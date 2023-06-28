@@ -40,8 +40,8 @@ class TestAxisLimits:
             epsilon = 1e-6
             rho = np.linspace(0, delta, 10)
             lg = LinearGrid(rho=rho, M=7, N=7, NFP=eq.NFP, sym=eq.sym)
-            b_mag_fsa_no_sqrt_g = compress(
-                lg, surface_averages(lg, eq.compute("|B|", grid=lg)["|B|"])
+            b_mag_fsa_no_sqrt_g = surface_averages(
+                lg, eq.compute("|B|", grid=lg)["|B|"], expand_out=False
             )
             # check continuity
             assert np.isfinite(b_mag_fsa_no_sqrt_g).all()

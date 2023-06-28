@@ -965,20 +965,20 @@ def plot_fsa(
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
+        values = compress(grid, values)
     elif with_sqrt_g:
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
-        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-        values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
         plot_data_ylabel_key = f"<{name}>_fsa"
+        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+        values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
         # theta average
         label = (
             r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
         )
-        values = surface_averages(grid, q=values)
         plot_data_ylabel_key = f"<{name}>_fsa"
-    values = compress(grid, values)
+        values = surface_averages(grid, q=values, expand_out=False)
 
     if norm_F:
         # normalize force by B pressure gradient

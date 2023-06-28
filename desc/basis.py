@@ -406,7 +406,7 @@ class FourierSeries(Basis):
             toroidal = toroidal[zoutidx][:, noutidx]
         return toroidal
 
-    def change_resolution(self, N, NFP=None):
+    def change_resolution(self, N, NFP=None, sym=None):
         """Change resolution of the basis to the given resolutions.
 
         Parameters
@@ -415,11 +415,14 @@ class FourierSeries(Basis):
             Maximum toroidal resolution.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
             self._N = N
+            self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
 

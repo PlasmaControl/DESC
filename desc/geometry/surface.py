@@ -71,7 +71,6 @@ class FourierRZToroidalSurface(Surface):
         name="",
         check_orientation=True,
     ):
-
         if R_lmn is None:
             R_lmn = np.array([10, 1])
             modes_R = np.array([[0, 0], [1, 0]])
@@ -182,7 +181,7 @@ class FourierRZToroidalSurface(Surface):
         """Change the maximum poloidal and toroidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
@@ -192,8 +191,10 @@ class FourierRZToroidalSurface(Surface):
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
         NFP = kwargs.pop("NFP", None)
+        sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
         self._NFP = NFP if NFP is not None else self.NFP
+        self._sym = sym if sym is not None else self.sym
         if L is not None:
             warnings.warn(
                 "FourierRZToroidalSurface does not have radial resolution, ignoring L"
@@ -212,8 +213,12 @@ class FourierRZToroidalSurface(Surface):
             N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(M=M, N=N, NFP=self.NFP)
-            self.Z_basis.change_resolution(M=M, N=N, NFP=self.NFP)
+            self.R_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+            )
+            self.Z_basis.change_resolution(
+                M=M, N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            )
             if hasattr(self.grid, "change_resolution"):
                 self.grid.change_resolution(
                     self.grid.L, self.grid.M, self.grid.N, self.NFP
@@ -748,7 +753,7 @@ class ZernikeRZToroidalSection(Surface):
         """Change the maximum radial and poloidal resolution."""
         assert (
             ((len(args) in [2, 3]) and len(kwargs) == 0)
-            or ((len(args) in [2, 3]) and len(kwargs) == 1 and "NFP" in kwargs)
+            or ((len(args) in [2, 3]) and len(kwargs) in [1, 2])
             or (len(args) == 0)
         ), (
             "change_resolution should be called with 2 (M,N) or 3 (L,M,N) "
@@ -757,7 +762,9 @@ class ZernikeRZToroidalSection(Surface):
         L = kwargs.pop("L", None)
         M = kwargs.pop("M", None)
         N = kwargs.pop("N", None)
+        sym = kwargs.pop("sym", None)
         assert len(kwargs) == 0, "change_resolution got unexpected kwarg: {kwargs}"
+        self._sym = sym if sym is not None else self.sym
         if N is not None:
             warnings.warn(
                 "ZernikeRZToroidalSection does not have toroidal resolution, ignoring N"
@@ -768,10 +775,18 @@ class ZernikeRZToroidalSection(Surface):
             L, M, N = args
 
         if ((L is not None) and (L != self.L)) or ((M is not None) and (M != self.M)):
+            L = L if L is not None else self.L
+            M = M if M is not None else self.M
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(L=L, M=M)
-            self.Z_basis.change_resolution(L=L, M=M)
+            self.R_basis.change_resolution(
+                L=L, M=M, sym="cos" if self.sym else self.sym
+            )
+            self.Z_basis.change_resolution(
+                L=L, M=M, sym="sin" if self.sym else self.sym
+            )
+            if hasattr(self.grid, "change_resolution"):
+                self.grid.change_resolution(self.grid.L, self.grid.M, self.grid.N)
             self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_lmn = copy_coeffs(self.R_lmn, R_modes_old, self.R_basis.modes)
             self.Z_lmn = copy_coeffs(self.Z_lmn, Z_modes_old, self.Z_basis.modes)

@@ -204,7 +204,6 @@ class FixBoundaryR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -356,7 +355,6 @@ class FixBoundaryZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -673,7 +671,6 @@ class FixAxisR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
@@ -835,7 +832,6 @@ class FixAxisZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
@@ -996,7 +992,6 @@ class FixModeR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1141,7 +1136,6 @@ class FixModeZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1287,7 +1281,6 @@ class FixSumModesR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
@@ -1452,7 +1445,6 @@ class FixSumModesZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
@@ -1619,7 +1611,6 @@ class _FixProfile(_Objective, ABC):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or Bool, optional
@@ -1720,7 +1711,6 @@ class FixPressure(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -1834,7 +1824,6 @@ class FixIota(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
         Note: has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
@@ -1945,7 +1934,6 @@ class FixCurrent(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2058,7 +2046,6 @@ class FixElectronTemperature(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2171,7 +2158,6 @@ class FixElectronDensity(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2284,7 +2270,6 @@ class FixIonTemperature(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2398,7 +2383,6 @@ class FixAtomicNumber(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
         Note: has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
@@ -2504,7 +2488,6 @@ class FixPsi(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
     name : str

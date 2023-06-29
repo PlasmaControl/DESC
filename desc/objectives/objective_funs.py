@@ -13,15 +13,6 @@ from desc.utils import Timer, is_broadcastable
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
-# Pretty much all of our objectives return an array of residuals,
-#  but in many use cases we may really only care about some reduced quantity,
-#   such as min/max/mean of the residuals. It would be convenient if
-#   this could be done without having to define a new objective each time.
-
-# One possible solution is to allow each objective to have a
-# "loss" or "reduction" applied to the raw output.
-# Any jax transformable function that takes in and returns a single array should be ok.
-
 
 class ObjectiveFunction(IOAble):
     """Objective function comprised of one or more Objectives.

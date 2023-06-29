@@ -92,6 +92,7 @@ class BootstrapRedlConsistency(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 

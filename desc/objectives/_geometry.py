@@ -39,10 +39,12 @@ class AspectRatio(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True. Note: Has no effect for this objective.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -63,7 +65,7 @@ class AspectRatio(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="aspect ratio",
     ):
@@ -166,10 +168,12 @@ class Elongation(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True. Note: Has no effect for this objective.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -190,7 +194,7 @@ class Elongation(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="elongation",
     ):
@@ -293,10 +297,12 @@ class Volume(_Objective):
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
         be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -317,7 +323,7 @@ class Volume(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="volume",
     ):
@@ -442,13 +448,15 @@ class PlasmaVesselDistance(_Objective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
-    surface_grid : Grid, ndarray, optional
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    surface_grid : Grid, optional
         Collocation grid containing the nodes to evaluate surface geometry at.
-    plasma_grid : Grid, ndarray, optional
+    plasma_grid : Grid, optional
         Collocation grid containing the nodes to evaluate plasma geometry at.
     use_softmin: Bool, use softmin or hard min.
     alpha: float, parameter used for softmin. The larger alpha, the closer the softmin
@@ -475,7 +483,7 @@ class PlasmaVesselDistance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
@@ -648,10 +656,12 @@ class MeanCurvature(_Objective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -672,7 +682,7 @@ class MeanCurvature(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="mean-curvature",
     ):
@@ -787,10 +797,12 @@ class PrincipalCurvature(_Objective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -811,7 +823,7 @@ class PrincipalCurvature(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="principal-curvature",
     ):
@@ -921,10 +933,12 @@ class BScaleLength(_Objective):
         Whether target should be normalized before comparing to computed values.
         if `normalize` is `True` and the target is in physical units, this should also
         be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -945,7 +959,7 @@ class BScaleLength(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="B-scale-length",
     ):

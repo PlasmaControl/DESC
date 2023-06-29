@@ -52,11 +52,13 @@ class ForceBalance(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
-    grid : Grid, ndarray, optional
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -77,7 +79,7 @@ class ForceBalance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="force",
     ):
@@ -240,11 +242,13 @@ class RadialForceBalance(_Objective):
        Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
-    grid : Grid, ndarray, optional
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -265,7 +269,7 @@ class RadialForceBalance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="radial force",
     ):
@@ -419,11 +423,13 @@ class HelicalForceBalance(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
-    grid : Grid, ndarray, optional
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -444,7 +450,7 @@ class HelicalForceBalance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="helical force",
     ):
@@ -594,11 +600,13 @@ class Energy(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
-    grid : Grid, ndarray, optional
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
         This will default to a QuadratureGrid
     gamma : float, optional
@@ -623,7 +631,7 @@ class Energy(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         gamma=0,
         name="energy",
@@ -792,11 +800,13 @@ class CurrentDensity(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
+    loss_function : callable, optional
         User-defined loss function to apply to the objective values once computed.
         Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
-        or `lambda x: 3*x`, etc
-    grid : Grid, ndarray, optional
+        or `lambda x: 3*x`, etc.
+        This loss function is called on the raw compute value, before any shifting,
+        scaling, or normalization.
+    grid : Grid, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.
@@ -817,7 +827,7 @@ class CurrentDensity(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         grid=None,
         name="current density",
     ):

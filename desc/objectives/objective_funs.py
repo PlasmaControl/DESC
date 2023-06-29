@@ -740,20 +740,19 @@ class _Objective(IOAble, ABC):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
+        loss_function=None,
         name=None,
     ):
-
+        if loss_function is None:
+            loss_function = lambda x: x
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
         assert (bounds is None) or (isinstance(bounds, tuple) and len(bounds) == 2)
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert callable(loss_function), "Loss function must be callable!"
-        assert (
-            len(getfullargspec(loss_function).args) == 1
-        ), "Loss function must accept a single array as an argument!"
-        _test_output_loss = loss_function(jnp.array([1, 1]))
+        # function should be able to handle input of this type and shape
+        _test_output_loss = loss_function(jnp.ones((2,)))
         assert (
             isinstance(_test_output_loss, jnp.ndarray) and _test_output_loss.ndim <= 1
         ), "Loss Function must return a single 0D or 1D array!"
@@ -911,6 +910,7 @@ class _Objective(IOAble, ABC):
             self._use_jit = use_jit
         if self._use_jit:
             self.jit()
+
         self._built = True
 
     @abstractmethod

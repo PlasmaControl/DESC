@@ -1,9 +1,13 @@
 Name,Scalar,Equality Constraints,Inequality Constraints,Stochastic,Hessian,GPU,Description
+``fmin-auglag``,True,True,True,False,True,True,Augmented Lagrangian method with trust region subproblem.
+``lsq-auglag``,False,True,True,False,False,True,Least Squares Augmented Lagrangian approach to constrained optimization
 ``lsq-exact``,False,False,False,False,False,True,"Trust region least squares method, similar to the `trf` method in scipy"
-``dogleg``,True,False,False,False,True,True,Trust region method using Powell's dogleg method to approximately solve the trust region subproblem.
-``subspace``,True,False,False,False,True,True,Trust region method solving the subproblem over the 2d subspace spanned by the gradient and newton direction.
-``dogleg-bfgs``,True,False,False,False,False,True,Trust region method using Powell's dogleg method to approximately solve the trust region subproblem. Uses BFGS to approximate hessian
-``subspace-bfgs``,True,False,False,False,False,True,Trust region method solving the subproblem over the 2d subspace spanned by the gradient and newton direction. Uses BFGS to approximate hessian
+``fmin-exact``,True,False,False,False,True,True,Trust region method using iterative cholesky method to exactly solve the trust region subproblem.
+``fmin-dogleg``,True,False,False,False,True,True,Trust region method using Powell's dogleg method to approximately solve the trust region subproblem.
+``fmin-subspace``,True,False,False,False,True,True,Trust region method solving the subproblem over the 2d subspace spanned by the gradient and newton direction.
+``fmin-exact-bfgs``,True,False,False,False,False,True,Trust region method using iterative cholesky method to exactly solve the trust region subproblem. Uses BFGS to approximate hessian
+``fmin-dogleg-bfgs``,True,False,False,False,False,True,Trust region method using Powell's dogleg method to approximately solve the trust region subproblem. Uses BFGS to approximate hessian
+``fmin-subspace-bfgs``,True,False,False,False,False,True,Trust region method solving the subproblem over the 2d subspace spanned by the gradient and newton direction. Uses BFGS to approximate hessian
 ``sgd``,True,False,False,True,False,True,Stochastic gradient descent with Nesterov momentum
 ``scipy-bfgs``,True,False,False,False,False,False,BFGS quasi-newton method with line search. See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-bfgs.html
 ``scipy-CG``,True,False,False,False,False,False,Nonlinear conjugate gradient method. See https://docs.scipy.org/doc/scipy/reference/optimize.minimize-cg.html

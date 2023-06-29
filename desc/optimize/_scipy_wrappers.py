@@ -82,7 +82,7 @@ def _optimize_scipy_minimize(  # noqa: C901 - FIXME: simplify this
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -341,7 +341,7 @@ def _optimize_scipy_least_squares(  # noqa: C901 - FIXME: simplify this
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver
@@ -544,7 +544,7 @@ def _optimize_scipy_constrained(  # noqa: C901 - FIXME: simplify this
         * 1 : display a termination report.
         * 2 : display progress during iterations
     stoptol : dict
-        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol",
+        Dictionary of stopping tolerances, with keys {"xtol", "ftol", "gtol", "ctol",
         "maxiter", "max_nfev", "max_njev", "max_ngev", "max_nhev"}
     options : dict, optional
         Dictionary of optional keyword arguments to override default solver

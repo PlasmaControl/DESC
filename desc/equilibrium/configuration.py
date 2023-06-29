@@ -147,7 +147,6 @@ class _Configuration(IOAble, ABC):
         spectral_indexing=None,
         **kwargs,
     ):
-
         assert spectral_indexing in [None, "ansi", "fringe",], (
             "spectral_indexing should be one of 'ansi', 'fringe', None, got "
             + f"{spectral_indexing}"
@@ -509,22 +508,26 @@ class _Configuration(IOAble, ABC):
             new = copy.copy(self)
         return new
 
-    def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):
+    def change_resolution(
+        self, L=None, M=None, N=None, NFP=None, sym=None, *args, **kwargs
+    ):
         """Set the spectral resolution.
 
         Parameters
         ----------
         L : int
-            maximum radial zernike mode number
+            Maximum radial Zernike mode number.
         M : int
-            maximum poloidal fourier mode number
+            Maximum poloidal Fourier mode number.
         N : int
-            maximum toroidal fourier mode number
+            Maximum toroidal Fourier mode number.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = NFP_change = sym_change = False
         if L is not None and L != self.L:
             L_change = True
             self._L = L
@@ -537,17 +540,26 @@ class _Configuration(IOAble, ABC):
         if NFP is not None and NFP != self.NFP:
             NFP_change = True
             self._NFP = NFP
+        if sym is not None and sym != self.sym:
+            sym_change = True
+            self._sym = sym
 
-        if not np.any([L_change, M_change, N_change, NFP_change]):
+        if not np.any([L_change, M_change, N_change, NFP_change, sym_change]):
             return
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
+        self.R_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+        )
+        self.Z_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.L_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
 
         for profile in [
             "pressure",
@@ -562,8 +574,10 @@ class _Configuration(IOAble, ABC):
             if hasattr(p, "change_resolution") and L_change:
                 p.change_resolution(max(p.basis.L, self.L))
 
-        self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
-        self.axis.change_resolution(self.N, NFP=self.NFP)
+        self.surface.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+        )
+        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)

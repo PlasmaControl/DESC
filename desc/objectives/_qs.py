@@ -86,7 +86,7 @@ class QuasisymmetryBoozer(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=lambda x: x,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -276,7 +276,7 @@ class QuasisymmetryTwoTerm(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=lambda x: x,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -443,7 +443,7 @@ class QuasisymmetryTripleProduct(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=lambda x: x,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -585,7 +585,7 @@ class Isodynamicity(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=lambda x: x,
+            loss_function=loss_function,
             name=name,
         )
 

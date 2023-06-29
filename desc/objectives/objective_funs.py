@@ -752,7 +752,15 @@ class _Objective(IOAble, ABC):
         assert (bounds is None) or (target is None), "Cannot use both bounds and target"
         assert callable(loss_function), "Loss function must be callable!"
         # function should be able to handle input of this type and shape
-        _test_output_loss = loss_function(jnp.ones((2,)))
+        try:
+            _test_output_loss = loss_function(jnp.ones((2,)))
+        except Exception as e:
+            raise Exception(
+                "Loss function should be able"
+                + " to accept a single array as argument! "
+                + "Instead, threw following: ",
+                e,
+            )
         assert (
             isinstance(_test_output_loss, jnp.ndarray) and _test_output_loss.ndim <= 1
         ), "Loss Function must return a single 0D or 1D array!"

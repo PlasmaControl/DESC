@@ -887,7 +887,7 @@ def test_loss_function_asserts():
         RotationalTransform(eq=eq, loss_function=1)
     # ensure passed-in loss_function takes only one argument
     fun = lambda x, y: x + y
-    with pytest.raises(AssertionError):
+    with pytest.raises(Exception):
         RotationalTransform(eq=eq, loss_function=fun)
     # ensure passed-in loss_function returns a single 0D or 1D array
     fun = lambda x: jnp.vstack((x, x))

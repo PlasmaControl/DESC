@@ -87,6 +87,7 @@ class ForceBalance(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -270,6 +271,7 @@ class RadialForceBalance(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -444,6 +446,7 @@ class HelicalForceBalance(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -620,6 +623,7 @@ class Energy(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -807,6 +811,7 @@ class CurrentDensity(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 

@@ -876,3 +876,23 @@ def test_jax_softmax_and_softmin():
     # as alpha -> infinity, softmin -> min
     softmin = jax_softmin(arr, alpha=100)
     np.testing.assert_almost_equal(softmin, np.min(arr))
+
+
+@pytest.mark.unit
+def test_loss_function_asserts():
+    """Test the checks on loss function for _Objective."""
+    eq = Equilibrium()
+    # ensure passed-in loss_function is callable
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=1)
+    # ensure passed-in loss_function takes only one argument
+    fun = lambda x, y: x + y
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)
+    # ensure passed-in loss_function returns a single 0D or 1D array
+    fun = lambda x: jnp.vstack((x, x))
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)
+    fun = lambda x: (x, x)
+    with pytest.raises(AssertionError):
+        RotationalTransform(eq=eq, loss_function=fun)

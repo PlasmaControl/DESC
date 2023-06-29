@@ -122,6 +122,40 @@ def test_map_coordinates():
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
 
 
+@pytest.mark.unit
+def test_map_coordinates2():
+    """Test root finding for (rho,theta,zeta) for common use cases."""
+    eq = desc.examples.get("W7-X")
+
+    n = 100
+    # finding coordinates along a single field line
+    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
+    out = eq.map_coordinates(
+        coords,
+        ["rho", "alpha", "zeta"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 10 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
+
+    # contours of const theta for plotting
+    grid_kwargs = {
+        "rho": np.linspace(0, 1, 50),
+        "NFP": eq.NFP,
+        "theta": np.linspace(0, 2 * np.pi, 9, endpoint=False),
+        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 6, endpoint=False),
+    }
+    t_grid = LinearGrid(**grid_kwargs)
+
+    out = eq.map_coordinates(
+        t_grid.nodes,
+        ["rho", "theta_sfl", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
+
+
 @pytest.mark.slow
 @pytest.mark.unit
 @pytest.mark.solve

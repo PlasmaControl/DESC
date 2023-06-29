@@ -521,7 +521,11 @@ class RotationalTransform(_Objective):
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
         Note: has no effect for this objective.
-    grid : Grid, optional
+    loss_function : function, optional
+        User-defined loss function to apply to the objective values once computed.
+        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
+        or `lambda x: 3*x`, etc
+    grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
         Name of the objective function.

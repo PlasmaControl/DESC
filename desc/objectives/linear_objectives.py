@@ -58,7 +58,6 @@ class BoundaryRSelfConsistency(_Objective):
             weight=1,
             normalize=False,
             normalize_target=False,
-            loss_function=lambda x: x,
             name=name,
         )
 
@@ -141,7 +140,6 @@ class BoundaryZSelfConsistency(_Objective):
             weight=1,
             normalize=False,
             normalize_target=False,
-            loss_function=lambda x: x,
             name=name,
         )
 
@@ -206,9 +204,7 @@ class FixBoundaryR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -240,7 +236,6 @@ class FixBoundaryR(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         modes=True,
         surface_label=None,
         name="lcfs R",
@@ -257,7 +252,6 @@ class FixBoundaryR(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
@@ -362,9 +356,7 @@ class FixBoundaryZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of boundary modes to fix.
         len(target) = len(weight) = len(modes).
@@ -396,7 +388,6 @@ class FixBoundaryZ(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         modes=True,
         surface_label=None,
         name="lcfs Z",
@@ -413,7 +404,6 @@ class FixBoundaryZ(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
@@ -531,7 +521,6 @@ class FixLambdaGauge(_Objective):
             weight=1,
             normalize=False,
             normalize_target=False,
-            loss_function=lambda x: x,
             name=name,
         )
 
@@ -684,9 +673,7 @@ class FixAxisR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
@@ -710,7 +697,6 @@ class FixAxisR(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         modes=True,
         name="axis R",
     ):
@@ -725,7 +711,6 @@ class FixAxisR(_Objective):
             name=name,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
         )
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -850,9 +835,7 @@ class FixAxisZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of axis modes to fix.
         len(target) = len(weight) = len(modes).
@@ -876,7 +859,6 @@ class FixAxisZ(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         modes=True,
         name="axis Z",
     ):
@@ -891,7 +873,6 @@ class FixAxisZ(_Objective):
             name=name,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
         )
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1015,9 +996,7 @@ class FixModeR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1042,7 +1021,6 @@ class FixModeR(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         modes=True,
         name="Fix Mode R",
     ):
@@ -1061,7 +1039,6 @@ class FixModeR(_Objective):
             name=name,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
         )
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1164,9 +1141,7 @@ class FixModeZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     modes : ndarray, optional
         Basis modes numbers [l,m,n] of Fourier-Zernike modes to fix.
         len(target) = len(weight) = len(modes).
@@ -1191,7 +1166,6 @@ class FixModeZ(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         modes=True,
         name="Fix Mode Z",
     ):
@@ -1210,7 +1184,6 @@ class FixModeZ(_Objective):
             name=name,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
         )
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1314,9 +1287,7 @@ class FixSumModesR(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*R_111 + 1*R_222...
@@ -1346,7 +1317,6 @@ class FixSumModesR(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         sum_weights=None,
         modes=True,
         name="Fix Sum Modes R",
@@ -1374,7 +1344,6 @@ class FixSumModesR(_Objective):
             name=name,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
         )
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1483,9 +1452,7 @@ class FixSumModesZ(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     sum_weight : float, ndarray, optional
         Weights on the coefficients in the sum, should be same length as modes.
         Defaults to 1 i.e. target = 1*Z_111 + 1*Z_222...
@@ -1515,7 +1482,6 @@ class FixSumModesZ(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         sum_weights=None,
         modes=True,
         name="Fix Sum Modes Z",
@@ -1543,7 +1509,6 @@ class FixSumModesZ(_Objective):
             name=name,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
         )
 
     def build(self, eq, use_jit=False, verbose=1):
@@ -1654,9 +1619,7 @@ class _FixProfile(_Objective, ABC):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or Bool, optional
@@ -1683,7 +1646,6 @@ class _FixProfile(_Objective, ABC):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="",
@@ -1699,7 +1661,6 @@ class _FixProfile(_Objective, ABC):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 
@@ -1759,9 +1720,7 @@ class FixPressure(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -1789,7 +1748,6 @@ class FixPressure(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-pressure",
@@ -1802,7 +1760,6 @@ class FixPressure(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -1877,9 +1834,7 @@ class FixIota(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
         Note: has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
@@ -1908,7 +1863,6 @@ class FixIota(_FixProfile):
         weight=1,
         normalize=False,
         normalize_target=False,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-iota",
@@ -1921,7 +1875,6 @@ class FixIota(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -1992,9 +1945,7 @@ class FixCurrent(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2022,7 +1973,6 @@ class FixCurrent(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-current",
@@ -2035,7 +1985,6 @@ class FixCurrent(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -2109,9 +2058,7 @@ class FixElectronTemperature(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2139,7 +2086,6 @@ class FixElectronTemperature(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-electron-temperature",
@@ -2152,7 +2098,6 @@ class FixElectronTemperature(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -2226,9 +2171,7 @@ class FixElectronDensity(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2256,7 +2199,6 @@ class FixElectronDensity(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-electron-density",
@@ -2269,7 +2211,6 @@ class FixElectronDensity(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -2343,9 +2284,7 @@ class FixIonTemperature(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
     indices : ndarray or bool, optional
@@ -2373,7 +2312,6 @@ class FixIonTemperature(_FixProfile):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-ion-temperature",
@@ -2386,7 +2324,6 @@ class FixIonTemperature(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -2461,9 +2398,7 @@ class FixAtomicNumber(_FixProfile):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
         Note: has no effect for this objective.
     profile : Profile, optional
         Profile containing the radial modes to evaluate at.
@@ -2492,7 +2427,6 @@ class FixAtomicNumber(_FixProfile):
         weight=1,
         normalize=False,
         normalize_target=False,
-        loss_function=lambda x: x,
         profile=None,
         indices=True,
         name="fixed-atomic-number",
@@ -2505,7 +2439,6 @@ class FixAtomicNumber(_FixProfile):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             profile=profile,
             indices=indices,
             name=name,
@@ -2571,9 +2504,7 @@ class FixPsi(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
-    loss_function : function, optional
-        User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+
     weight : float, optional
         Weighting to apply to the Objective, relative to other Objectives.
     name : str
@@ -2595,7 +2526,6 @@ class FixPsi(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
-        loss_function=lambda x: x,
         name="fixed-Psi",
     ):
         self._target_from_user = target
@@ -2606,7 +2536,6 @@ class FixPsi(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
-            loss_function=loss_function,
             name=name,
         )
 

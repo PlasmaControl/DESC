@@ -52,6 +52,10 @@ class ObjectiveFromUser(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : function, optional
+        User-defined loss function to apply to the objective values once computed.
+        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
+        or `lambda x: 3*x`, etc
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -203,6 +207,10 @@ class GenericObjective(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : function, optional
+        User-defined loss function to apply to the objective values once computed.
+        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
+        or `lambda x: 3*x`, etc
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str
@@ -322,6 +330,10 @@ class ToroidalCurrent(_Objective):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : function, optional
+        User-defined loss function to apply to the objective values once computed.
+        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
+        or `lambda x: 3*x`, etc
     grid : Grid, ndarray, optional
         Collocation grid containing the nodes to evaluate at.
     name : str

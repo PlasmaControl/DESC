@@ -719,7 +719,8 @@ class _Objective(IOAble, ABC):
         this should also be set to True.
     loss_function : function, optional
         User-defined loss function to apply to the objective values once computed.
-        Must be a JAX transformable function, i.e. jnp.mean for taking the average
+        Must be a JAX transformable function, e.g. `jnp.mean` for taking the average
+        or `lambda x: 3*x`, etc
     name : str
         Name of the objective function.
 

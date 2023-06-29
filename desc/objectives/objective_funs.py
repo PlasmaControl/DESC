@@ -754,7 +754,7 @@ class _Objective(IOAble, ABC):
         _test_output_loss = loss_function(jnp.array([1, 1]))
         assert (
             isinstance(_test_output_loss, jnp.ndarray) and _test_output_loss.ndim <= 1
-        ), "Loss Function must return a single, 0D or 1D array!"
+        ), "Loss Function must return a single 0D or 1D array!"
 
         self._target = target
         self._bounds = bounds

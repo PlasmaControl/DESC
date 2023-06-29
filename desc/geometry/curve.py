@@ -21,7 +21,7 @@ __all__ = [
 
 
 class FourierRZCurve(Curve):
-    """Curve parameterized by fourier series for R,Z in terms of toroidal angle phi.
+    """Curve parameterized by Fourier series for R,Z in terms of toroidal angle phi.
 
     Parameters
     ----------
@@ -39,6 +39,7 @@ class FourierRZCurve(Curve):
         Default grid for computation.
     name : str
         Name for this curve.
+
     """
 
     _io_attrs_ = Curve._io_attrs_ + [
@@ -109,12 +110,12 @@ class FourierRZCurve(Curve):
 
     @property
     def R_basis(self):
-        """Spectral basis for R_fourier series."""
+        """Spectral basis for R_Fourier series."""
         return self._R_basis
 
     @property
     def Z_basis(self):
-        """Spectral basis for Z_fourier series."""
+        """Spectral basis for Z_Fourier series."""
         return self._Z_basis
 
     @property
@@ -265,7 +266,7 @@ class FourierRZCurve(Curve):
         Parameters
         ----------
         R_n, Z_n: array-like
-            fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
+            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
@@ -342,7 +343,7 @@ class FourierRZCurve(Curve):
         Parameters
         ----------
         R_n, Z_n: array-like
-            fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
+            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
         basis : {"rpz", "xyz"}
@@ -370,7 +371,7 @@ class FourierRZCurve(Curve):
         Parameters
         ----------
         R_n, Z_n: array-like
-            fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
+            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
@@ -379,6 +380,7 @@ class FourierRZCurve(Curve):
         -------
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
         d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
@@ -392,7 +394,7 @@ class FourierRZCurve(Curve):
         Parameters
         ----------
         R_n, Z_n: array-like
-            fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
+            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
         grid : Grid or array-like
             toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
@@ -401,6 +403,7 @@ class FourierRZCurve(Curve):
         -------
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
         d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
@@ -418,16 +421,17 @@ class FourierRZCurve(Curve):
         Parameters
         ----------
         R_n, Z_n: array-like
-            fourier coefficients for R, Z. If not given, defaults to values given
+            Fourier coefficients for R, Z. If not given, defaults to values given
             by R_n, Z_n attributes
         grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
+            Toroidal coordinates to compute at. Defaults to self.grid
             If an integer, assumes that many linearly spaced points in (0,2pi)
 
         Returns
         -------
         length : float
             length of the curve approximated by quadrature
+
         """
         R_transform, Z_transform = self._get_transforms(grid)
         T = self.compute_coordinates(R_n, Z_n, grid, dt=1)
@@ -435,14 +439,37 @@ class FourierRZCurve(Curve):
         phi = R_transform.grid.nodes[:, 2]
         return jnp.trapz(T, phi)
 
+    def to_xyz(self):
+        """Convert to FourierXYZCurve representation.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        curve : FourierXYZCurve
+            New representation of the curve parameterized by Fourier series for X,Y,Z.
+
+        """
+        N = max(self.R_basis.N, self.Z_basis.N)
+        grid = LinearGrid(N=4 * N, NFP=1, sym=False)
+        basis = FourierSeries(N=N, NFP=1, sym=False)
+        xyz = self.compute_coordinates(grid=grid, basis="xyz")
+        transform = Transform(grid, basis, build_pinv=True)
+        X_n = transform.fit(xyz[:, 0])
+        Y_n = transform.fit(xyz[:, 1])
+        Z_n = transform.fit(xyz[:, 2])
+        return FourierXYZCurve(X_n=X_n, Y_n=Y_n, Z_n=Z_n)
+
 
 class FourierXYZCurve(Curve):
-    """Curve parameterized by fourier series for X,Y,Z in terms of arbitrary angle phi.
+    """Curve parameterized by Fourier series for X,Y,Z in terms of arbitrary angle phi.
 
     Parameters
     ----------
     X_n, Y_n, Z_n: array-like
-        fourier coefficients for X, Y, Z
+        Fourier coefficients for X, Y, Z
     modes : array-like
         mode numbers associated with X_n etc.
     grid : Grid
@@ -626,7 +653,7 @@ class FourierXYZCurve(Curve):
         Parameters
         ----------
         X_n, Y_n, Z_n: array-like
-            fourier coefficients for X, Y, Z. If not given, defaults to values given
+            Fourier coefficients for X, Y, Z. If not given, defaults to values given
             by X_n, Y_n, Z_n attributes
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -677,7 +704,7 @@ class FourierXYZCurve(Curve):
         Parameters
         ----------
         X_n, Y_n, Z_n: array-like
-            fourier coefficients for X, Y, Z. If not given, defaults to values given
+            Fourier coefficients for X, Y, Z. If not given, defaults to values given
             by X_n, Y_n, Z_n attributes
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -707,7 +734,7 @@ class FourierXYZCurve(Curve):
         Parameters
         ----------
         X_n, Y_n, Z_n: array-like
-            fourier coefficients for X, Y, Z. If not given, defaults to values given
+            Fourier coefficients for X, Y, Z. If not given, defaults to values given
             by X_n, Y_n, Z_n attributes
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -717,6 +744,7 @@ class FourierXYZCurve(Curve):
         -------
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
         d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
@@ -730,7 +758,7 @@ class FourierXYZCurve(Curve):
         Parameters
         ----------
         X_n, Y_n, Z_n: array-like
-            fourier coefficients for X, Y, Z. If not given, defaults to values given
+            Fourier coefficients for X, Y, Z. If not given, defaults to values given
             by X_n, Y_n, Z_n attributes
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -740,6 +768,7 @@ class FourierXYZCurve(Curve):
         -------
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
         d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
@@ -757,7 +786,7 @@ class FourierXYZCurve(Curve):
         Parameters
         ----------
         X_n, Y_n, Z_n: array-like
-            fourier coefficients for X, Y, Z. If not given, defaults to values given
+            Fourier coefficients for X, Y, Z. If not given, defaults to values given
             by X_n, Y_n, Z_n attributes
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -767,6 +796,7 @@ class FourierXYZCurve(Curve):
         -------
         length : float
             length of the curve approximated by quadrature
+
         """
         transform = self._get_transforms(grid)
         T = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
@@ -774,7 +804,8 @@ class FourierXYZCurve(Curve):
         theta = transform.grid.nodes[:, 2]
         return jnp.trapz(T, theta)
 
-    # TODO: methods for converting between representations
+    # TODO: to_rz method for converting to FourierRZCurve representation
+    # (might be impossible to parameterize with toroidal angle phi)
 
 
 class FourierPlanarCurve(Curve):
@@ -791,7 +822,7 @@ class FourierPlanarCurve(Curve):
     normal : array-like, shape(3,)
         x,y,z components of normal vector to planar surface
     r_n : array-like
-        fourier coefficients for radius from center as function of polar angle
+        Fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
     grid : Grid
@@ -930,7 +961,7 @@ class FourierPlanarCurve(Curve):
         return r
 
     def set_coeffs(self, n, r=None):
-        """Set specific fourier coefficients."""
+        """Set specific Fourier coefficients."""
         n, r = np.atleast_1d(n), np.atleast_1d(r)
         r = np.broadcast_to(r, n.shape)
         for nn, rr in zip(n, r):
@@ -982,7 +1013,7 @@ class FourierPlanarCurve(Curve):
             x,y,z components of normal vector to planar surface. If not given, defaults
             to self.normal
         r_n : array-like
-            fourier coefficients for radius from center as function of polar angle.
+            Fourier coefficients for radius from center as function of polar angle.
             If not given defaults to self.r_n
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -1075,7 +1106,7 @@ class FourierPlanarCurve(Curve):
             x,y,z components of normal vector to planar surface. If not given, defaults
             to self.normal
         r_n : array-like
-            fourier coefficients for radius from center as function of polar angle.
+            Fourier coefficients for radius from center as function of polar angle.
             If not given defaults to self.r_n
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -1110,7 +1141,7 @@ class FourierPlanarCurve(Curve):
             x,y,z components of normal vector to planar surface. If not given, defaults
             to self.normal
         r_n : array-like
-            fourier coefficients for radius from center as function of polar angle.
+            Fourier coefficients for radius from center as function of polar angle.
             If not given defaults to self.r_n
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -1120,6 +1151,7 @@ class FourierPlanarCurve(Curve):
         -------
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in theta
+
         """
         dx = self.compute_coordinates(center, normal, r_n, grid, dt=1)
         d2x = self.compute_coordinates(center, normal, r_n, grid, dt=2)
@@ -1138,7 +1170,7 @@ class FourierPlanarCurve(Curve):
             x,y,z components of normal vector to planar surface. If not given, defaults
             to self.normal
         r_n : array-like
-            fourier coefficients for radius from center as function of polar angle.
+            Fourier coefficients for radius from center as function of polar angle.
             If not given defaults to self.r_n
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -1148,6 +1180,7 @@ class FourierPlanarCurve(Curve):
         -------
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
+
         """
         # torsion is zero for planar curves
         transform = self._get_transforms(grid)
@@ -1165,7 +1198,7 @@ class FourierPlanarCurve(Curve):
             x,y,z components of normal vector to planar surface. If not given, defaults
             to self.normal
         r_n : array-like
-            fourier coefficients for radius from center as function of polar angle.
+            Fourier coefficients for radius from center as function of polar angle.
             If not given defaults to self.r_n
         grid : Grid or array-like
             dependent coordinates to compute at. Defaults to self.grid
@@ -1175,6 +1208,7 @@ class FourierPlanarCurve(Curve):
         -------
         length : float
             length of the curve approximated by quadrature
+
         """
         transform = self._get_transforms(grid)
         T = self.compute_coordinates(center, normal, r_n, grid, dt=1)

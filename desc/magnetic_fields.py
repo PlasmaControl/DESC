@@ -900,7 +900,7 @@ class DommaschkPotentialField(ScalarPotentialField):
                 X += [obj]
         X = jnp.asarray(X)
 
-        jac = jacfwd(get_B_dom, argnums=1)(coords, X, params["ms"], params["ls"])
+        jac = jit(jacfwd(get_B_dom, argnums=1))(coords, X, params["ms"], params["ls"])
 
         A = jac.reshape((rhs.size, len(X)), order="F")
 

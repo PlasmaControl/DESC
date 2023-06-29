@@ -90,6 +90,7 @@ class ObjectiveFromUser(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="custom",
     ):
@@ -104,6 +105,7 @@ class ObjectiveFromUser(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -222,6 +224,7 @@ class GenericObjective(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="generic",
     ):
@@ -236,6 +239,7 @@ class GenericObjective(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
         self._units = "(" + data_index[self.f]["units"] + ")"
@@ -338,6 +342,7 @@ class ToroidalCurrent(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="toroidal current",
     ):
@@ -351,6 +356,7 @@ class ToroidalCurrent(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -515,6 +521,7 @@ class RotationalTransform(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="rotational transform",
     ):
@@ -528,6 +535,7 @@ class RotationalTransform(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 

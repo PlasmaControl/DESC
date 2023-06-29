@@ -59,6 +59,7 @@ class AspectRatio(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="aspect ratio",
     ):
@@ -72,6 +73,7 @@ class AspectRatio(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -180,6 +182,7 @@ class Elongation(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="elongation",
     ):
@@ -193,6 +196,7 @@ class Elongation(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -301,6 +305,7 @@ class Volume(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="volume",
     ):
@@ -314,6 +319,7 @@ class Volume(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -453,6 +459,7 @@ class PlasmaVesselDistance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         surface_grid=None,
         plasma_grid=None,
         use_softmin=False,
@@ -473,6 +480,7 @@ class PlasmaVesselDistance(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -644,6 +652,7 @@ class MeanCurvature(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="mean-curvature",
     ):
@@ -657,6 +666,7 @@ class MeanCurvature(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -777,6 +787,7 @@ class PrincipalCurvature(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="principal-curvature",
     ):
@@ -790,6 +801,7 @@ class PrincipalCurvature(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -905,6 +917,7 @@ class BScaleLength(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="B-scale-length",
     ):
@@ -918,6 +931,7 @@ class BScaleLength(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 

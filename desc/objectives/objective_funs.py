@@ -13,6 +13,15 @@ from desc.utils import Timer, is_broadcastable
 
 # XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
+# Pretty much all of our objectives return an array of residuals,
+#  but in many use cases we may really only care about some reduced quantity,
+#   such as min/max/mean of the residuals. It would be convenient if
+#   this could be done without having to define a new objective each time.
+
+# One possible solution is to allow each objective to have a
+# "loss" or "reduction" applied to the raw output.
+# Any jax transformable function that takes in and returns a single array should be ok.
+
 
 class ObjectiveFunction(IOAble):
     """Objective function comprised of one or more Objectives.
@@ -708,6 +717,9 @@ class _Objective(IOAble, ABC):
         Whether target and bounds should be normalized before comparing to computed
         values. If `normalize` is `True` and the target is in physical units,
         this should also be set to True.
+    loss_function : function, optional
+        User-defined loss function to apply to the objective values once computed.
+        Must be a JAX transformable function, i.e. jnp.mean for taking the average
     name : str
         Name of the objective function.
 
@@ -734,6 +746,7 @@ class _Objective(IOAble, ABC):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         name=None,
     ):
 
@@ -751,6 +764,7 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
+        self._loss_function = loss_function
         # if args is already set don't overwrite it
         self._args = getattr(
             self,
@@ -902,16 +916,18 @@ class _Objective(IOAble, ABC):
 
     def compute_unscaled(self, *args, **kwargs):
         """Compute the raw value of the objective."""
-        return jnp.atleast_1d(self.compute(*args, **kwargs))
+        return jnp.atleast_1d(
+            self._loss_function(jnp.atleast_1d(self.compute(*args, **kwargs)))
+        )
 
     def compute_scaled(self, *args, **kwargs):
         """Compute and apply weighting and normalization."""
-        f = self.compute(*args, **kwargs)
+        f = jnp.atleast_1d(self._loss_function(self.compute(*args, **kwargs)))
         return self._scale(f)
 
     def compute_scaled_error(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        f = self.compute(*args, **kwargs)
+        f = jnp.atleast_1d(self._loss_function(self.compute(*args, **kwargs)))
         return self._scale(self._shift(f))
 
     def _shift(self, f):

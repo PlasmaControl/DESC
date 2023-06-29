@@ -73,6 +73,7 @@ class ForceBalance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="force",
     ):
@@ -255,6 +256,7 @@ class RadialForceBalance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="radial force",
     ):
@@ -428,6 +430,7 @@ class HelicalForceBalance(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="helical force",
     ):
@@ -601,6 +604,7 @@ class Energy(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         gamma=0,
         name="energy",
@@ -789,6 +793,7 @@ class CurrentDensity(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="current density",
     ):

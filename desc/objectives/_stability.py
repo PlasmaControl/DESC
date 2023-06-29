@@ -63,6 +63,7 @@ class MercierStability(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="Mercier Stability",
     ):
@@ -76,6 +77,7 @@ class MercierStability(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 
@@ -255,6 +257,7 @@ class MagneticWell(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         name="Magnetic Well",
     ):
@@ -268,6 +271,7 @@ class MagneticWell(_Objective):
             weight=weight,
             normalize=normalize,
             normalize_target=normalize_target,
+            loss_function=loss_function,
             name=name,
         )
 

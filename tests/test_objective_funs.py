@@ -303,6 +303,60 @@ class TestObjectiveFunction:
         test(Equilibrium(iota=PowerSeriesProfile(0)))
         test(Equilibrium(current=PowerSeriesProfile(0)))
 
+    @pytest.mark.unit
+    def test_target_mean_iota(self):
+        """Test calculation of iota profile average."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            mean_iota = jnp.mean(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=mean_iota, weight=1, eq=eq, loss_function=jnp.mean, grid=grid
+            )
+            mean_iota_obj = obj.compute_unscaled(*obj.xs(eq))
+            mean_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            np.testing.assert_allclose(mean_iota, mean_iota_obj, atol=1e-16)
+            np.testing.assert_allclose(mean_iota_scaled_error, 0, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_max_iota(self):
+        """Test calculation of iota profile max."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            max_iota = jnp.max(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=max_iota, weight=1, eq=eq, loss_function=jnp.max, grid=grid
+            )
+            max_iota_obj = obj.compute_unscaled(*obj.xs(eq))
+            max_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            np.testing.assert_allclose(max_iota, max_iota_obj, atol=1e-16)
+            np.testing.assert_allclose(max_iota_scaled_error, 0, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
+    @pytest.mark.unit
+    def test_target_min_iota(self):
+        """Test calculation of iota profile min."""
+
+        def test(eq):
+            grid = LinearGrid(L=5, M=1, N=1, NFP=eq.NFP)
+            min_iota = jnp.min(eq.compute("iota", grid=grid)["iota"])
+            obj = RotationalTransform(
+                target=min_iota, weight=1, eq=eq, loss_function=jnp.min, grid=grid
+            )
+            min_iota_obj = obj.compute_unscaled(*obj.xs(eq))
+            min_iota_scaled_error = obj.compute_scaled_error(*obj.xs(eq))
+            np.testing.assert_allclose(min_iota, min_iota_obj, atol=1e-16)
+            np.testing.assert_allclose(min_iota_scaled_error, 0, atol=5e-16)
+
+        test(get("DSHAPE"))
+        test(get("HELIOTRON"))
+
 
 @pytest.mark.unit
 def test_derivative_modes():

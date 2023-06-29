@@ -73,6 +73,7 @@ class BootstrapRedlConsistency(_Objective):
         weight=1,
         normalize=True,
         normalize_target=True,
+        loss_function=lambda x: x,
         grid=None,
         helicity=(1, 0),
         name="Bootstrap current self-consistency (Redl)",

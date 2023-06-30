@@ -92,8 +92,7 @@ class MercierStability(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -285,8 +284,7 @@ class MagneticWell(_Objective):
         verbose : int, optional
             Level of output.
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,

@@ -107,8 +107,7 @@ class BootstrapRedlConsistency(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,

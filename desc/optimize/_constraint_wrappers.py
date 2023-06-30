@@ -79,8 +79,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Linear constraint projection build")
 
@@ -523,8 +522,7 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 

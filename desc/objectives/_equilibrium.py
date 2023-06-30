@@ -102,8 +102,7 @@ class ForceBalance(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -286,8 +285,7 @@ class RadialForceBalance(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -461,8 +459,7 @@ class HelicalForceBalance(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -638,8 +635,7 @@ class Energy(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern in [
                 "jacobi",
@@ -826,8 +822,7 @@ class CurrentDensity(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",

@@ -885,8 +885,7 @@ class _Objective(IOAble, ABC):
     @abstractmethod
     def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays."""
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives()

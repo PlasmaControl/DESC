@@ -88,8 +88,7 @@ class AspectRatio(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -211,8 +210,7 @@ class Elongation(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -334,8 +332,7 @@ class Volume(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -495,8 +492,7 @@ class PlasmaVesselDistance(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._surface_grid is None:
             surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -681,8 +677,7 @@ class MeanCurvature(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -816,8 +811,7 @@ class PrincipalCurvature(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:
@@ -946,8 +940,7 @@ class BScaleLength(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
         else:

@@ -120,8 +120,7 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -255,8 +254,7 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -371,8 +369,7 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,
@@ -550,8 +547,7 @@ class RotationalTransform(_Objective):
             Level of output.
 
         """
-        if eq is None:
-            eq = self._eq
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,

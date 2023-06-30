@@ -304,3 +304,30 @@ class TestBasis:
         basis = ZernikePolynomial(L=2, M=3)
         fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
         assert np.all(fz == 0)
+
+    @pytest.mark.unit
+    def test_basis_resolutions_are_integers(self):
+        """Test that basis modes are integers."""
+        L = 3.0
+        M = 3.0
+        N = 3.0
+
+        basis = PowerSeries(L=L)
+        assert isinstance(basis.L, int)
+        assert basis.L == 3
+
+        basis = FourierSeries(N=N)
+        assert isinstance(basis.N, int)
+        assert basis.N == 3
+
+        basis = DoubleFourierSeries(M=M, N=N)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.N, int)
+        assert basis.M == 3
+        assert basis.N == 3
+
+        basis = ZernikePolynomial(L=L, M=M)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.L, int)
+        assert basis.M == 3
+        assert basis.L == 3

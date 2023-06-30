@@ -147,17 +147,17 @@ class Basis(IOAble, ABC):
     @property
     def L(self):
         """int: Maximum radial resolution."""
-        return self.__dict__.setdefault("_L", 0)
+        return round(self.__dict__.setdefault("_L", 0))
 
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
-        return self.__dict__.setdefault("_M", 0)
+        return round(self.__dict__.setdefault("_M", 0))
 
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
-        return self.__dict__.setdefault("_N", 0)
+        return round(self.__dict__.setdefault("_N", 0))
 
     @property
     def NFP(self):

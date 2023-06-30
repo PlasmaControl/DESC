@@ -306,28 +306,19 @@ class TestBasis:
         assert np.all(fz == 0)
 
     @pytest.mark.unit
-    def test_basis_resolutions_are_integers(self):
-        """Test that basis modes are integers."""
+    def test_basis_resolutions_assert_integers(self):
+        """Test that basis modes are asserted as integers."""
         L = 3.0
         M = 3.0
         N = 3.0
+        with pytest.raises(AssertionError):
+            PowerSeries(L=L)
 
-        basis = PowerSeries(L=L)
-        assert isinstance(basis.L, int)
-        assert basis.L == 3
+        with pytest.raises(AssertionError):
+            FourierSeries(N=N)
 
-        basis = FourierSeries(N=N)
-        assert isinstance(basis.N, int)
-        assert basis.N == 3
+        with pytest.raises(AssertionError):
+            DoubleFourierSeries(M=M, N=N)
 
-        basis = DoubleFourierSeries(M=M, N=N)
-        assert isinstance(basis.M, int)
-        assert isinstance(basis.N, int)
-        assert basis.M == 3
-        assert basis.N == 3
-
-        basis = ZernikePolynomial(L=L, M=M)
-        assert isinstance(basis.M, int)
-        assert isinstance(basis.L, int)
-        assert basis.M == 3
-        assert basis.L == 3
+        with pytest.raises(AssertionError):
+            ZernikePolynomial(L=L, M=M)

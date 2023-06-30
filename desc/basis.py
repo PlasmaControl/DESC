@@ -147,17 +147,32 @@ class Basis(IOAble, ABC):
     @property
     def L(self):
         """int: Maximum radial resolution."""
-        return round(self.__dict__.setdefault("_L", 0))
+        return self.__dict__.setdefault("_L", 0)
+
+    @L.setter
+    def L(self, L):
+        assert isinstance(L, int), "Basis Resolution must be an integer!"
+        self._L = L
 
     @property
     def M(self):
         """int:  Maximum poloidal resolution."""
-        return round(self.__dict__.setdefault("_M", 0))
+        return self.__dict__.setdefault("_M", 0)
+
+    @M.setter
+    def M(self, M):
+        assert isinstance(M, int), "Basis Resolution must be an integer!"
+        self._M = M
 
     @property
     def N(self):
         """int: Maximum toroidal resolution."""
-        return round(self.__dict__.setdefault("_N", 0))
+        return self.__dict__.setdefault("_N", 0)
+
+    @N.setter
+    def N(self, N):
+        assert isinstance(N, int), "Basis Resolution must be an integer!"
+        self._N = N
 
     @property
     def NFP(self):
@@ -216,9 +231,9 @@ class PowerSeries(Basis):
     """
 
     def __init__(self, L, sym="even"):
-        self._L = L
-        self._M = 0
-        self._N = 0
+        self.L = L
+        self.M = 0
+        self.N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -304,7 +319,7 @@ class PowerSeries(Basis):
 
         """
         if L != self.L:
-            self._L = L
+            self.L = L
             self._modes = self._get_modes(self.L)
             self._set_up()
 
@@ -328,9 +343,9 @@ class FourierSeries(Basis):
     """
 
     def __init__(self, N, NFP=1, sym=False):
-        self._L = 0
-        self._M = 0
-        self._N = N
+        self.L = 0
+        self.M = 0
+        self.N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -421,7 +436,7 @@ class FourierSeries(Basis):
         """
         self._NFP = NFP if NFP is not None else self.NFP
         if N != self.N:
-            self._N = N
+            self.N = N
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.N)
             self._set_up()
@@ -448,9 +463,9 @@ class DoubleFourierSeries(Basis):
     """
 
     def __init__(self, M, N, NFP=1, sym=False):
-        self._L = 0
-        self._M = M
-        self._N = N
+        self.L = 0
+        self.M = M
+        self.N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = "linear"
@@ -565,8 +580,8 @@ class DoubleFourierSeries(Basis):
         """
         self._NFP = NFP if NFP is not None else self.NFP
         if M != self.M or N != self.N or sym != self.sym:
-            self._M = M
-            self._N = N
+            self.M = M
+            self.N = N
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(self.M, self.N)
             self._set_up()
@@ -606,9 +621,9 @@ class ZernikePolynomial(Basis):
     """
 
     def __init__(self, L, M, sym=False, spectral_indexing="ansi"):
-        self._L = L
-        self._M = M
-        self._N = 0
+        self.L = L
+        self.M = M
+        self.N = 0
         self._NFP = 1
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -659,7 +674,7 @@ class ZernikePolynomial(Basis):
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self._L = L
+        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -778,8 +793,8 @@ class ZernikePolynomial(Basis):
 
         """
         if L != self.L or M != self.M or sym != self.sym:
-            self._L = L
-            self._M = M
+            self.L = L
+            self.M = M
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, spectral_indexing=self.spectral_indexing
@@ -828,9 +843,9 @@ class FourierZernikeBasis(Basis):
     """
 
     def __init__(self, L, M, N, NFP=1, sym=False, spectral_indexing="ansi"):
-        self._L = L
-        self._M = M
-        self._N = N
+        self.L = L
+        self.M = M
+        self.N = N
         self._NFP = NFP
         self._sym = sym
         self._spectral_indexing = spectral_indexing
@@ -883,7 +898,7 @@ class FourierZernikeBasis(Basis):
         ], "Unknown spectral_indexing: {}".format(spectral_indexing)
         default_L = {"ansi": M, "fringe": 2 * M}
         L = L if L >= 0 else default_L.get(spectral_indexing, M)
-        self._L = L
+        self.L = L
 
         if spectral_indexing == "ansi":
             pol_posm = [
@@ -1018,9 +1033,9 @@ class FourierZernikeBasis(Basis):
         """
         self._NFP = NFP if NFP is not None else self.NFP
         if L != self.L or M != self.M or N != self.N or sym != self.sym:
-            self._L = L
-            self._M = M
-            self._N = N
+            self.L = L
+            self.M = M
+            self.N = N
             self._sym = sym if sym is not None else self.sym
             self._modes = self._get_modes(
                 self.L, self.M, self.N, spectral_indexing=self.spectral_indexing

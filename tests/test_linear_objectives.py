@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 import scipy.linalg
+from qsc import Qsc
 
 import desc.examples
 from desc.compute import arg_order
@@ -36,6 +37,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -761,17 +763,53 @@ def test_FixSumModes_False_or_None_modes():
         FixSumModesR(modes=None, target=np.array([[0, 1]]))
 
 
+def _is_any_instance(things, cls):
+    return any([isinstance(t, cls) for t in things])
+
+
 @pytest.mark.unit
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
     cs = get_fixed_axis_constraints(iota=False)
-    correct_cs = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixLambdaGauge(),
-        FixPsi(),
-        FixPressure(),
-        FixCurrent(),
-    )
-    for c, cc in zip(cs, correct_cs):
-        assert type(c) == type(cc)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_fixed_axis_constraints(iota=True, kinetic=True)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixElectronDensity)
+    assert _is_any_instance(cs, FixElectronTemperature)
+    assert _is_any_instance(cs, FixIonTemperature)
+    assert _is_any_instance(cs, FixAtomicNumber)
+    assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_FixNAE_util_correct_objectives():
+    """Test util for fix NAE constraints."""
+    eq = Equilibrium()
+    qsc = Qsc.from_paper("precise QA")
+    cs = get_NAE_constraints(eq, qsc, iota=False)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixSumModesR)
+    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, iota=True, kinetic=True)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixSumModesR)
+    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixElectronDensity)
+    assert _is_any_instance(cs, FixElectronTemperature)
+    assert _is_any_instance(cs, FixIonTemperature)
+    assert _is_any_instance(cs, FixAtomicNumber)
+    assert _is_any_instance(cs, FixIota)

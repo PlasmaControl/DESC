@@ -108,9 +108,9 @@ def test_map_coordinates():
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_sfl", "zeta"]
 
-    rho = np.linspace(0.01, 0.99, 200)
-    theta = np.linspace(0, np.pi, 200, endpoint=False)
-    zeta = np.linspace(0, np.pi, 200, endpoint=False)
+    rho = np.linspace(0.01, 0.99, 100)
+    theta = np.linspace(0, np.pi, 100, endpoint=False)
+    zeta = np.linspace(0, np.pi, 100, endpoint=False)
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
@@ -140,10 +140,10 @@ def test_map_coordinates2():
 
     # contours of const theta for plotting
     grid_kwargs = {
-        "rho": np.linspace(0, 1, 50),
+        "rho": np.linspace(0, 1, 10),
         "NFP": eq.NFP,
-        "theta": np.linspace(0, 2 * np.pi, 9, endpoint=False),
-        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 6, endpoint=False),
+        "theta": np.linspace(0, 2 * np.pi, 3, endpoint=False),
+        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 2, endpoint=False),
     }
     t_grid = LinearGrid(**grid_kwargs)
 

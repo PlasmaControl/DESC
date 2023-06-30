@@ -1120,10 +1120,31 @@ class _Configuration(IOAble, ABC):
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
         deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
-        dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
-        dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[dep]["coordinates"] == "") and (dep not in data)
+        ]
+        dep1d = [
+            dep
+            for dep in deps
+            if (data_index[dep]["coordinates"] == "r") and (dep not in data)
+        ]
 
-        if len(dep0d):
+        # whether we need to calculate 0d or 1d quantities on a special grid
+        calc0d = bool(len(dep0d))
+        calc1d = bool(len(dep1d))
+        if (  # see if the grid we're already using will work for desired qtys
+            (grid.L >= self.L_grid)
+            and (grid.M >= self.M_grid)
+            and (grid.N >= self.N_grid)
+        ):
+            if isinstance(grid, QuadratureGrid):
+                calc0d = calc1d = False
+            if isinstance(grid, LinearGrid):
+                calc1d = False
+
+        if calc0d:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 dep0d,
@@ -1137,7 +1158,7 @@ class _Configuration(IOAble, ABC):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if len(dep1d):
+        if calc1d:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,

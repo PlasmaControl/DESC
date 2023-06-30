@@ -939,6 +939,11 @@ class FixAxisR(_Objective):
         f = jnp.dot(self._A, Ra_n)
         return f
 
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Ra_n"
+
 
 class FixAxisZ(_Objective):
     """Fixes magnetic axis Z coefficients.
@@ -1085,6 +1090,11 @@ class FixAxisZ(_Objective):
         """
         f = jnp.dot(self._A, Za_n)
         return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Za_n"
 
 
 class FixModeR(_Objective):

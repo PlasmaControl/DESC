@@ -17,6 +17,7 @@ from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
     get_equilibrium_objective,
+    get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
 from desc.optimize import Optimizer
@@ -861,10 +862,16 @@ class Equilibrium(_Configuration, IOAble):
         if objective is None:
             objective = get_equilibrium_objective()
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                iota=self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            if "Ra_n" in deltas or "Za_n" in deltas:
+                constraints = get_fixed_axis_constraints(
+                    iota=self.iota is not None,
+                    kinetic=self.electron_temperature is not None,
+                )
+            else:
+                constraints = get_fixed_boundary_constraints(
+                    iota=self.iota is not None,
+                    kinetic=self.electron_temperature is not None,
+                )
 
         eq = perturb(
             self,

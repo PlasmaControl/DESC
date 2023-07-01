@@ -311,6 +311,31 @@ class TestBasis:
         L = 3.0
         M = 3.0
         N = 3.0
+
+        basis = PowerSeries(L=L)
+        assert isinstance(basis.L, int)
+        assert basis.L == 3
+
+        basis = FourierSeries(N=N)
+        assert isinstance(basis.N, int)
+        assert basis.N == 3
+
+        basis = DoubleFourierSeries(M=M, N=N)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.N, int)
+        assert basis.M == 3
+        assert basis.N == 3
+
+        basis = ZernikePolynomial(L=L, M=M)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.L, int)
+        assert basis.M == 3
+        assert basis.L == 3
+
+        L = 3.1
+        M = 3.1
+        N = 3.1
+
         with pytest.raises(AssertionError):
             PowerSeries(L=L)
 

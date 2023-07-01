@@ -152,7 +152,7 @@ class Basis(IOAble, ABC):
     @L.setter
     def L(self, L):
         assert int(L) == L, "Basis Resolution must be an integer!"
-        self._L = L
+        self._L = int(L)
 
     @property
     def M(self):
@@ -162,7 +162,7 @@ class Basis(IOAble, ABC):
     @M.setter
     def M(self, M):
         assert int(M) == M, "Basis Resolution must be an integer!"
-        self._M = M
+        self._M = int(M)
 
     @property
     def N(self):
@@ -172,7 +172,7 @@ class Basis(IOAble, ABC):
     @N.setter
     def N(self, N):
         assert int(N) == N, "Basis Resolution must be an integer!"
-        self._N = N
+        self._N = int(N)
 
     @property
     def NFP(self):

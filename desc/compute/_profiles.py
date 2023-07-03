@@ -80,60 +80,6 @@ def _psi_rrr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="grad(psi)",
-    label="\\nabla\\psi",
-    units="Wb / m",
-    units_long="Webers per meter",
-    description="Toroidal flux gradient (normalized by 2pi)",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["psi_r", "e^rho"],
-)
-def _gradpsi(params, transforms, profiles, data, **kwargs):
-    data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
-    return data
-
-
-@register_compute_fun(
-    name="|grad(psi)|^2",
-    label="|\\nabla\\psi|^{2}",
-    units="(Wb / m)^{2}",
-    units_long="Webers squared per square meter",
-    description="Toroidal flux gradient (normalized by 2pi) magnitude squared",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["grad(psi)"],
-)
-def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
-    data["|grad(psi)|^2"] = dot(data["grad(psi)"], data["grad(psi)"])
-    return data
-
-
-@register_compute_fun(
-    name="|grad(psi)|",
-    label="|\\nabla\\psi|",
-    units="Wb / m",
-    units_long="Webers per meter",
-    description="Toroidal flux gradient (normalized by 2pi) magnitude",
-    dim=1,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["|grad(psi)|^2"],
-)
-def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
-    data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
-    return data
-
-
-@register_compute_fun(
     name="chi_r",
     label="\\partial_{\\rho} \\chi",
     units="Wb",
@@ -496,19 +442,12 @@ def _iota(params, transforms, profiles, data, **kwargs):
         current_term = (
             mu_0
             / (2 * jnp.pi)
-            * profiles["current"].compute(params["c_l"], dr=0)
-            / data["psi_r"]
+            * transforms["grid"].replace_at_axis(
+                profiles["current"].compute(params["c_l"], dr=0) / data["psi_r"],
+                lambda: profiles["current"].compute(params["c_l"], dr=2)
+                / data["psi_rr"],
+            )
         )
-        if transforms["grid"].axis.size:
-            limit = (
-                mu_0
-                / (2 * jnp.pi)
-                * profiles["current"].compute(params["c_l"], dr=2)
-                / data["psi_rr"]
-            )
-            current_term = put(
-                current_term, transforms["grid"].axis, limit[transforms["grid"].axis]
-            )
         data["iota"] = (current_term + data["iota_zero_current_num"]) / data[
             "iota_zero_current_den"
         ]
@@ -630,28 +569,21 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _iota_zero_current_num(params, transforms, profiles, data, **kwargs):
-    num = (
-        data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"]
-    ) / data["sqrt(g)"]
-    data["iota_zero_current_num"] = surface_averages(transforms["grid"], num)
-
-    if transforms["grid"].axis.size:
-        limit = (
+    num = transforms["grid"].replace_at_axis(
+        (data["lambda_z"] * data["g_tt"] - (1 + data["lambda_t"]) * data["g_tz"])
+        / data["sqrt(g)"],
+        lambda: (
             (data["g_tz_r"] * data["sqrt(g)_rr"] * (1 + data["lambda_t"]))
             / data["sqrt(g)_r"] ** 2
-        ) + (
+        )
+        + (
             data["lambda_z"] * data["g_tt_rr"]
             - 2 * data["g_tz_r"] * data["lambda_rt"]
             - (1 + data["lambda_t"]) * data["g_tz_rr"]
-        ) / data[
-            "sqrt(g)_r"
-        ]
-        limit = surface_averages(transforms["grid"], limit)
-        data["iota_zero_current_num"] = put(
-            data["iota_zero_current_num"],
-            transforms["grid"].axis,
-            limit[transforms["grid"].axis],
         )
+        / data["sqrt(g)_r"],
+    )
+    data["iota_zero_current_num"] = surface_averages(transforms["grid"], num)
     return data
 
 
@@ -780,6 +712,7 @@ def _iota_zero_current_den(params, transforms, profiles, data, **kwargs):
     data["iota_zero_current_den"] = surface_averages(transforms["grid"], den)
 
     if transforms["grid"].axis.size:
+        # TODO: fix for omega
         limit = surface_averages(
             transforms["grid"], data["g_tt_rr"] / data["sqrt(g)_r"]
         )

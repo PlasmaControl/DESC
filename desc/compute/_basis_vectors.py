@@ -1,4 +1,4 @@
-from desc.backend import jnp, put
+from desc.backend import jnp
 
 from .data_index import register_compute_fun
 from .utils import cross
@@ -39,6 +39,28 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
     data["e_theta"] = jnp.array(
         [data["R_t"], data["R"] * data["omega_t"], data["Z_t"]]
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="e_theta / sqrt(g)",
+    label="\\mathbf{e}_{\\theta} / \\sqrt{g}",
+    units="m",
+    units_long="meters",
+    description="Covariant Poloidal basis vector divided by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "sqrt(g)"],
+    axis_limit_data=["e_theta_r", "sqrt(g)_r"],
+)
+def _e_sub_theta_over_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["e_theta / sqrt(g)"] = transforms["grid"].replace_at_axis(
+        (data["e_theta"].T / data["sqrt(g)"]).T,
+        lambda: (data["e_theta_r"].T / data["sqrt(g)_r"]).T,
+    )
     return data
 
 
@@ -305,6 +327,7 @@ def _e_sub_rho_rt(params, transforms, profiles, data, **kwargs):
         "R",
         "R_r",
         "R_rr",
+        "R_rrr",
         "R_rrt",
         "R_rrrt",
         "R_rt",
@@ -2940,16 +2963,28 @@ def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_theta", "e_zeta", "sqrt(g)"],
-    axis_limit_data=["e_theta_r", "e_zeta_r", "sqrt(g)_r"],
+    data=["e_theta / sqrt(g)", "e_zeta"],
 )
 def _e_sup_rho(params, transforms, profiles, data, **kwargs):
-    data["e^rho"] = (cross(data["e_theta"], data["e_zeta"]).T / data["sqrt(g)"]).T
-    if transforms["grid"].axis.size:
-        limit = (cross(data["e_theta_r"], data["e_zeta"]).T / data["sqrt(g)_r"]).T
-        data["e^rho"] = put(
-            data["e^rho"], transforms["grid"].axis, limit[transforms["grid"].axis]
-        )
+    data["e^rho"] = cross(data["e_theta / sqrt(g)"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="grad(psi)",
+    label="\\nabla\\psi",
+    units="Wb / m",
+    units_long="Webers per meter",
+    description="Toroidal flux gradient (normalized by 2pi)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["psi_r", "e^rho"],
+)
+def _gradpsi(params, transforms, profiles, data, **kwargs):
+    data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
     return data
 
 
@@ -2982,16 +3017,10 @@ def _e_sup_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_theta", "sqrt(g)"],
-    axis_limit_data=["e_rho_r", "e_theta_r", "sqrt(g)_r"],
+    data=["e_rho", "e_theta / sqrt(g)"],
 )
 def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["e^zeta"] = (cross(data["e_rho"], data["e_theta"]).T / data["sqrt(g)"]).T
-    if transforms["grid"].axis.size:
-        limit = (cross(data["e_rho"], data["e_theta_r"]).T / data["sqrt(g)_r"]).T
-        data["e^zeta"] = put(
-            data["e^zeta"], transforms["grid"].axis, limit[transforms["grid"].axis]
-        )
+    data["e^zeta"] = cross(data["e_rho"], data["e_theta / sqrt(g)"])
     return data
 
 

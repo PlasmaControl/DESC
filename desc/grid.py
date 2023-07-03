@@ -3,6 +3,7 @@
 import numpy as np
 from scipy import optimize, special
 
+from desc.backend import jnp, put
 from desc.io import IOAble
 
 __all__ = [
@@ -341,6 +342,32 @@ class Grid(IOAble):
                 self.L, self.M, self.N, self.NFP, self.sym, self.node_pattern
             )
         )
+
+    def replace_at_axis(self, x, y, *args, **kwargs):
+        """Replace elements of x with elements of y at axis indices of grid.
+
+        Parameters
+        ----------
+        x : array-like
+            Values to selectively replace. Should have size grid.num_nodes.
+            May be modified in-place.
+        y : array-like
+            Replacement values. Should be able to broadcast with arrays of size
+            grid.num_nodes. Can also be a function that returns such an array.
+            Excess arguments are inputs to the function.
+
+        Returns
+        -------
+        out : ndarray
+            An array of size grid.num_nodes where elements at axis indices match
+            those of y and all others match x.
+
+        """
+        if self.axis.size:
+            if callable(y):
+                y = y(*args, **kwargs)
+            return put(x, self.axis, y if jnp.ndim(y) < 1 else y[self.axis])
+        return x
 
 
 class LinearGrid(Grid):

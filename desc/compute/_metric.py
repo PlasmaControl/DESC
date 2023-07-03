@@ -63,6 +63,72 @@ def _e_theta_x_e_zeta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="|e_theta x e_zeta|_r",
+    label="\\partial_{\\rho} |e_{\\theta} \\times e_{\\zeta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant rho surface"
+    + " derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r"],
+)
+def _e_theta_x_e_zeta_r(params, transforms, profiles, data, **kwargs):
+    a = cross(data["e_theta"], data["e_zeta"])
+    a_r = cross(data["e_theta_r"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_r"]
+    )
+    # The limit of a sequence and the norm function can be interchanged
+    # because norms are continuous functions. Likewise with dot product.
+    # Then lim ||e^rho|| = ||lim e^rho|| != 0.
+    # Apply algebraic limit theorem.
+    # lim (dot(e^rho, a_r) / ||e^rho||) = dot(lim e^rho, lim a_r) / lim ||e^rho||
+    # Apply the Cauchy-Schwarz inequality.
+    data["|e_theta x e_zeta|_r"] = transforms["grid"].replace_at_axis(
+        dot(a, a_r) / jnp.linalg.norm(a, axis=1), lambda: jnp.linalg.norm(a_r, axis=1)
+    )
+    return data
+
+
+@register_compute_fun(
+    name="|e_theta x e_zeta|_rr",
+    label="\\partial_{\\rho \\rho} |e_{\\theta} \\times e_{\\zeta}|",
+    units="m^{2}",
+    units_long="square meters",
+    description="2D Jacobian determinant for constant rho surface"
+    + " second derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "e_theta_rr", "e_zeta_rr"],
+)
+def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
+    a = cross(data["e_theta"], data["e_zeta"])
+    a_r = cross(data["e_theta_r"], data["e_zeta"]) + cross(
+        data["e_theta"], data["e_zeta_r"]
+    )
+    a_rr = (
+        cross(data["e_theta_rr"], data["e_zeta"])
+        + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
+        + cross(data["e_theta"], data["e_zeta_rr"])
+    )
+    norm_a = jnp.linalg.norm(a, axis=1)
+    norm2_a_r = dot(a_r, a_r)
+    # The limit eventually reduces to a form where the technique used to compute
+    # lim |e_theta x e_zeta|_r can be applied.
+    data["|e_theta x e_zeta|_rr"] = transforms["grid"].replace_at_axis(
+        (norm2_a_r + dot(a, a_rr) - (dot(a, a_r) / norm_a) ** 2) / norm_a,
+        lambda: dot(a_r, a_rr) / jnp.sqrt(norm2_a_r),
+    )
+    return data
+
+
+@register_compute_fun(
     name="|e_zeta x e_rho|",
     label="|e_{\\zeta} \\times e_{\\rho}|",
     units="m^{2}",
@@ -275,6 +341,9 @@ def _sqrtg_rrr(params, transforms, profiles, data, **kwargs):
         "e_rho_rt",
         "e_theta_rt",
         "e_zeta_rt",
+        "e_rho_rr",
+        "e_theta_rr",
+        "e_zeta_rr",
         "e_rho_rrt",
         "e_theta_rrt",
         "e_zeta_rrt",
@@ -1127,25 +1196,17 @@ def _g_sup_tz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _g_sup_rr_r(params, transforms, profiles, data, **kwargs):
-    data["g^rr_r"] = (
-        -data["sqrt(g)_r"]
+    # 2 e^rho dot (e^rho)_r
+    data["g^rr_r"] = 2 * (
+        dot(
+            data["e^rho"],
+            cross(data["e_theta_r"], data["e_zeta"])
+            + cross(data["e_theta"], data["e_zeta_r"]),
+        )
+        / data["sqrt(g)"]
+        - dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
+        * data["sqrt(g)_r"]
         / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_r"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_r"]))
-        - data["sqrt(g)_r"]
-        / data["sqrt(g)"] ** 2
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta_r"], data["e_zeta"]))
-        + 1
-        / data["sqrt(g)"]
-        * dot(data["e^rho"], cross(data["e_theta"], data["e_zeta_r"]))
     )
     return data
 
@@ -1998,6 +2059,42 @@ def _g_sup_zz_z(params, transforms, profiles, data, **kwargs):
 )
 def _gradrho(params, transforms, profiles, data, **kwargs):
     data["|grad(rho)|"] = jnp.sqrt(data["g^rr"])
+    return data
+
+
+@register_compute_fun(
+    name="|grad(psi)|",
+    label="|\\nabla\\psi|",
+    units="Wb / m",
+    units_long="Webers per meter",
+    description="Toroidal flux gradient (normalized by 2pi) magnitude",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["|grad(psi)|^2"],
+)
+def _gradpsi_mag(params, transforms, profiles, data, **kwargs):
+    data["|grad(psi)|"] = jnp.sqrt(data["|grad(psi)|^2"])
+    return data
+
+
+@register_compute_fun(
+    name="|grad(psi)|^2",
+    label="|\\nabla\\psi|^{2}",
+    units="(Wb / m)^{2}",
+    units_long="Webers squared per square meter",
+    description="Toroidal flux gradient (normalized by 2pi) magnitude squared",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["grad(psi)"],
+)
+def _gradpsi_mag2(params, transforms, profiles, data, **kwargs):
+    data["|grad(psi)|^2"] = dot(data["grad(psi)"], data["grad(psi)"])
     return data
 
 

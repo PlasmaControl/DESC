@@ -38,7 +38,14 @@ class TestAxisLimits:
         eq = get("W7-X")
         grid = LinearGrid(L=5, M=5, N=5, sym=eq.sym, NFP=eq.NFP, axis=True)
         axis_mask = grid.nodes[:, 0] == 0
-        no_limits = ["e^theta", "grad(alpha)"]
+        no_limits = [
+            "e^theta",
+            "grad(alpha)",
+            "D_current",
+            "D_well",
+            "D_geodesic",
+            "D_Mercier",
+        ]
         data = eq.compute(names=no_limits, grid=grid)
         for quantity in no_limits:
             assert np.all(~np.isfinite(data[quantity][axis_mask]))
@@ -52,11 +59,12 @@ class TestAxisLimits:
         grid = LinearGrid(rho=rho, M=7, N=7, NFP=eq.NFP, sym=eq.sym)
         assert grid.axis.size
         quantity = eq.compute(name, grid=grid)[name]
+        # check finiteness before surface integral
+        assert np.isfinite(quantity).all()
         if data_index[name]["coordinates"] == "r":
             quantity = compress(grid, quantity)
         elif data_index[name]["coordinates"] != "":
             quantity = surface_averages(grid, quantity, expand_out=False)
-        assert np.isfinite(quantity).all()
         # check continuity
         np.testing.assert_allclose(quantity[:-1], quantity[1:], atol=epsilon)
 

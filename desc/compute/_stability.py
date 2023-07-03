@@ -2,7 +2,7 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp, put
+from desc.backend import jnp
 
 from .data_index import register_compute_fun
 from .utils import dot, surface_integrals
@@ -25,9 +25,9 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.16 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
     data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
-    # TODO: limit at magnetic axis is
-    #  data["iota_rrr"] / (2 * (4 * jnp.pi * data["psi_rr"]) ** 2)
-    #  if iota_r = iota_rr = 0, and nan otherwise.
+    # Limit at magnetic axis is iota_rrr / (32 pi^2 psi_rr^2)
+    # if iota_r = iota_rr = 0 at axis, and does not converge otherwise.
+    # Since this is stellarator dependent, we do not implement it here.
     return data
 
 
@@ -58,6 +58,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
             data["|e_theta x e_zeta|"] / data["|grad(psi)|"] ** 3 * dot(Xi, data["B"]),
         )
     )
+    # Axis limit does not exist as 1/|grad(psi)| terms dominate.
     return data
 
 
@@ -89,8 +90,8 @@ def _D_well(params, transforms, profiles, data, **kwargs):
     # doi:10.1017/S002237782000121X.
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
     d2V_dpsi2 = (
-        data["V_rr(r)"] - data["V_r(r)"] * data["psi_rr"] / data["psi_r"]
-    ) / data["psi_r"] ** 2
+        data["V_rr(r)"] * data["psi_r"] - data["V_r(r)"] * data["psi_rr"]
+    ) / data["psi_r"] ** 3
     data["D_well"] = (
         dp_dpsi
         * (
@@ -107,6 +108,7 @@ def _D_well(params, transforms, profiles, data, **kwargs):
         )
         / (2 * jnp.pi) ** 6
     )
+    # Axis limit does not exist as 1/psi_r and 1/|grad(psi)| terms dominate.
     return data
 
 
@@ -144,6 +146,7 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
             / (data["|B|^2"] * data["|grad(psi)|"] ** 3),
         )
     ) / (2 * jnp.pi) ** 6
+    # Axis limit does not exist as 1/|grad(psi)| terms dominate.
     return data
 
 
@@ -167,6 +170,7 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
     data["D_Mercier"] = (
         data["D_shear"] + data["D_current"] + data["D_well"] + data["D_geodesic"]
     )
+    # Axis limit does not exist since there are linearly independent unbounded terms.
     return data
 
 
@@ -197,12 +201,10 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     # The surface average operation is an additive homomorphism.
     # Thermal pressure is constant over a rho surface.
     # surface average(pressure) = thermal + surface average(magnetic)
-    data["magnetic well"] = (
+    data["magnetic well"] = transforms["grid"].replace_at_axis(
         data["V(r)"]
         * (2 * mu_0 * data["p_r"] + data["<B^2>_r"])
-        / (data["V_r(r)"] * data["<B^2>"])
+        / (data["V_r(r)"] * data["<B^2>"]),
+        0,  # coefficient of limit is V_r / V_rr = 0
     )
-    if transforms["grid"].axis.size:
-        # coefficient of limit is V_r / V_rr = 0
-        data["magnetic well"] = put(data["magnetic well"], transforms["grid"].axis, 0)
     return data

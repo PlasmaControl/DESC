@@ -3,7 +3,7 @@
 from scipy.constants import elementary_charge
 from scipy.special import roots_legendre
 
-from ..backend import fori_loop, jnp, put
+from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
 from .utils import compress, expand, surface_averages_map
 
@@ -64,26 +64,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
-
-    B_squared_avg = compress(grid, data["<B^2>"])
-    trapped_fraction = 1 - 0.75 * B_squared_avg * lambda_integral
-    data["trapped fraction"] = expand(grid, trapped_fraction)
-    if transforms["grid"].axis:
-        # TODO: fix but also see if simpler analytic formula
-        lambda_integral_r = jnp.nan
-        limit = expand(
-            grid,
-            -0.75
-            * (
-                compress(grid, data["<B^2>_r"]) * lambda_integral
-                + B_squared_avg * lambda_integral_r
-            ),
-        )
-        data["trapped fraction"] = put(
-            data["trapped fraction"],
-            transforms["grid"].axis,
-            limit[transforms["grid"].axis],
-        )
+    data["trapped fraction"] = 1 - 0.75 * data["<B^2>"] * expand(grid, lambda_integral)
     return data
 
 

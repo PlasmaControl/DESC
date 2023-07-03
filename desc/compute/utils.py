@@ -884,8 +884,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             Surface integral of the input over each surface in the grid.
 
         """
+        ndim = jnp.ndim(q)
         # Todo: revert to jnp.nan_to_num(q) after limits done
-        #   then modify axis test to replace any nan in q with inf before average
         integrands = (spacing * jnp.atleast_1d(q).T).T
         # `integrands` may have shape (g.size, f.size, v.size), where
         #     g is the grid function depending on the integration variables
@@ -917,7 +917,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
         # integration is in theory faster since numpy optimizes large matrix
         # products. However, timing results showed no difference.
-        axis_to_move = (integrands.ndim == 3) * 2
+        axis_to_move = (ndim == 3) * 2
         integrals = jnp.moveaxis(
             masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
         )

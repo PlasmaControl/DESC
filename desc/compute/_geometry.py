@@ -147,6 +147,45 @@ def _S_of_r(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="S_r(r)",
+    label="\\partial_{\\rho} S(\\rho)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Surface area of flux surfaces, derivative wrt radial coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|e_theta x e_zeta|_r"],
+)
+def _S_r_of_r(params, transforms, profiles, data, **kwargs):
+    data["S_r(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|_r"])
+    return data
+
+
+@register_compute_fun(
+    name="S_rr(r)",
+    label="\\partial_{\\rho\\rho} S(\\rho)",
+    units="m^{2}",
+    units_long="square meters",
+    description="Surface area of flux surfaces, second derivative wrt radial"
+    " coordinate",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["|e_theta x e_zeta|_rr"],
+)
+def _S_rr_of_r(params, transforms, profiles, data, **kwargs):
+    data["S_rr(r)"] = surface_integrals(
+        transforms["grid"], data["|e_theta x e_zeta|_rr"]
+    )
+    return data
+
+
+@register_compute_fun(
     name="R0",
     label="R_{0}",
     units="m",
@@ -349,8 +388,15 @@ def _curvature_k1(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    data["curvature_k1"] = jnp.maximum(r1, r2)
-    data["curvature_k2"] = jnp.minimum(r1, r2)
+    # Both r1 and r2 are of the indeterminate form 0/0, but computing their
+    # limits to find the curvature at the magnetic axis is invalid because
+    # the principle curvatures are the eigenvalues of a matrix that is
+    # singular (with rank 0) at the magnetic axis. Hence, the limit of the
+    # indeterminate ratio may be an extraneous solution.
+    # To compute the curvature in this limit, notice that the second fundamental
+    # form becomes the zero map.
+    data["curvature_k1"] = transforms["grid"].replace_at_axis(jnp.maximum(r1, r2), 0)
+    data["curvature_k2"] = transforms["grid"].replace_at_axis(jnp.minimum(r1, r2), 0)
     return data
 
 
@@ -368,22 +414,7 @@ def _curvature_k1(params, transforms, profiles, data, **kwargs):
     data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
 )
 def _curvature_k2(params, transforms, profiles, data, **kwargs):
-    # following notation from
-    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
-    E = data["g_tt"]
-    F = data["g_tz"]
-    G = data["g_zz"]
-    L = data["L_sff"]
-    M = data["M_sff"]
-    N = data["N_sff"]
-    a = E * G - F**2
-    b = F * M - L * G - E * N
-    c = L * N - M**2
-    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    data["curvature_k1"] = jnp.maximum(r1, r2)
-    data["curvature_k2"] = jnp.minimum(r1, r2)
-    return data
+    return _curvature_k1(params, transforms, profiles, data, **kwargs)
 
 
 @register_compute_fun(

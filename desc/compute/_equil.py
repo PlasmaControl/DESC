@@ -2,16 +2,16 @@
 
 from scipy.constants import mu_0
 
-from desc.backend import jnp, put
+from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages
+from .utils import dot, surface_averages, cross
 
 
 @register_compute_fun(
     name="J^rho",
     label="J^{\\rho}",
-    units="A \\cdot m^{-3}",
+    units="A \\cdot m^{-3}",  # FIXME: inconsistent with F_helical
     units_long="Amperes / cubic meter",
     description="Contravariant radial component of plasma current density",
     dim=1,
@@ -23,15 +23,12 @@ from .utils import dot, surface_averages
     axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
-    data["J^rho"] = (data["B_zeta_t"] - data["B_theta_z"]) / (mu_0 * data["sqrt(g)"])
-    if transforms["grid"].axis.size:
-        # Recall that B_zeta_t(r=0) = -psi_r sqrt(g)_t ||e_zeta|| / sqrt(g)^2,
-        # which is not equal to zero at the magnetic axis.
-        # Still, it can be shown J^rho is of the indeterminate form 0/0.
-        limit = (data["B_zeta_rt"] - data["B_theta_rz"]) / (mu_0 * data["sqrt(g)_r"])
-        data["J^rho"] = put(
-            data["J^rho"], transforms["grid"].axis, limit[transforms["grid"].axis]
+    data["J^rho"] = (
+        transforms["grid"].replace_at_axis(
+            (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
+            lambda: (data["B_zeta_rt"] - data["B_theta_rz"]) / data["sqrt(g)_r"],
         )
+    ) / mu_0
     return data
 
 
@@ -65,9 +62,15 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["sqrt(g)", "B_theta_r", "B_rho_t"],
+    axis_limit_data=["sqrt(g)_r", "B_theta_rr", "B_rho_rt"],
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["J^zeta"] = (data["B_theta_r"] - data["B_rho_t"]) / (mu_0 * data["sqrt(g)"])
+    data["J^zeta"] = (
+        transforms["grid"].replace_at_axis(
+            (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],
+            lambda: (data["B_theta_rr"] - data["B_rho_rt"]) / data["sqrt(g)_r"],
+        )
+    ) / mu_0
     return data
 
 
@@ -82,14 +85,101 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["J^rho", "J^theta", "J^zeta", "e_rho", "e_theta", "e_zeta"],
+    data=[
+        "J^rho",
+        "J^zeta",
+        "B_rho_z",
+        "B_zeta_r",
+        "e_rho",
+        "e_zeta",
+        "e_theta / sqrt(g)",
+    ],
 )
 def _J(params, transforms, profiles, data, **kwargs):
+    J_sup_theta_e_theta = (
+        (data["B_rho_z"] - data["B_zeta_r"]) / mu_0 * data["e_theta / sqrt(g)"].T
+    ).T
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
-        + data["J^theta"] * data["e_theta"].T
+        + J_sup_theta_e_theta
         + data["J^zeta"] * data["e_zeta"].T
     ).T
+    return data
+
+
+@register_compute_fun(
+    name="J sqrt(g)",
+    label="\\mathbf{J} \\sqrt{g}",
+    units="A m",
+    units_long="Ampere meters",  # FIXME: units inconsistent with F_helical
+    description="Plasma current density weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B_rho_z",
+        "B_theta_r",
+        "B_zeta_t",
+        "B_rho_t",
+        "B_theta_z",
+        "B_zeta_r",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+    ],
+)
+def _J_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["J sqrt(g)"] = (
+        (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho"].T
+        + (data["B_rho_z"] - data["B_zeta_r"]) * data["e_theta"].T
+        + (data["B_theta_r"] - data["B_rho_t"]) * data["e_zeta"].T
+    ).T / mu_0
+    return data
+
+
+@register_compute_fun(
+    name="(J sqrt(g))_r",
+    label="\\partial_{\\rho} (\\mathbf{J} \\sqrt{g})",
+    units="A m",
+    units_long="Ampere meters",
+    description="Plasma current density weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B_rho_z",
+        "B_rho_rz",
+        "B_theta_r",
+        "B_theta_rr",
+        "B_zeta_t",
+        "B_zeta_rt",
+        "B_rho_t",
+        "B_rho_rt",
+        "B_theta_z",
+        "B_theta_rz",
+        "B_zeta_r",
+        "B_zeta_rr",
+        "e_rho",
+        "e_theta",
+        "e_zeta",
+        "e_rho_r",
+        "e_theta_r",
+        "e_zeta_r",
+    ],
+)
+def _J_sqrt_g_r(params, transforms, profiles, data, **kwargs):
+    data["(J sqrt(g))_r"] = (
+        (data["B_zeta_rt"] - data["B_theta_rz"]) * data["e_rho"].T
+        + (data["B_zeta_t"] - data["B_theta_z"]) * data["e_rho_r"].T
+        + (data["B_rho_rz"] - data["B_zeta_rr"]) * data["e_theta"].T
+        + (data["B_rho_z"] - data["B_zeta_r"]) * data["e_theta_r"].T
+        + (data["B_theta_rr"] - data["B_rho_rt"]) * data["e_zeta"].T
+        + (data["B_theta_r"] - data["B_rho_t"]) * data["e_zeta_r"].T
+    ).T / mu_0
     return data
 
 
@@ -198,12 +288,6 @@ def _J_sub_rho(params, transforms, profiles, data, **kwargs):
 )
 def _J_sub_theta(params, transforms, profiles, data, **kwargs):
     data["J_theta"] = dot(data["J"], data["e_theta"])
-    if transforms["grid"].axis.size:
-        # FIXME: should be taking the derivative of each coefficient, not the vector
-        limit = dot(data["J_r"], data["e_theta_r"])
-        data["J_theta"] = put(
-            data["J_theta"], transforms["grid"].axis, limit[transforms["grid"].axis]
-        )
     return data
 
 
@@ -255,13 +339,19 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="r",
-    data=["J*B", "sqrt(g)"],
+    data=["J sqrt(g)", "B", "V_r(r)"],
+    axis_limit_data=["(J sqrt(g))_r", "V_rr(r)"],
 )
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
+    J = transforms["grid"].replace_at_axis(
+        data["J sqrt(g)"].copy(), data.get("(J sqrt(g))_r")
+    )
     data["<J*B>"] = surface_averages(
         transforms["grid"],
-        data["J*B"],
-        sqrt_g=data["sqrt(g)"],
+        dot(J, data["B"]),  # sqrt(g) factor pushed into J
+        denominator=transforms["grid"].replace_at_axis(
+            data["V_r(r)"].copy(), data.get("V_rr(r)")
+        ),
     )
     return data
 
@@ -295,12 +385,13 @@ def _J_parallel(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["p_r", "sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
+    data=["p_r", "B^theta", "B^zeta", "B_rho_z", "B_zeta_r", "B_theta_r", "B_rho_t"],
 )
 def _F_rho(params, transforms, profiles, data, **kwargs):
-    data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
-        data["B^zeta"] * data["J^theta"] - data["B^theta"] * data["J^zeta"]
-    )
+    data["F_rho"] = (
+        data["B^zeta"] * (data["B_rho_z"] - data["B_zeta_r"])
+        - data["B^theta"] * (data["B_theta_r"] - data["B_rho_t"])
+    ) / mu_0 - data["p_r"]
     return data
 
 
@@ -315,10 +406,10 @@ def _F_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "B^zeta", "J^rho"],
+    data=["F_helical", "B^zeta"],
 )
 def _F_theta(params, transforms, profiles, data, **kwargs):
-    data["F_theta"] = -data["sqrt(g)"] * data["B^zeta"] * data["J^rho"]
+    data["F_theta"] = -data["B^zeta"] * data["F_helical"]
     return data
 
 
@@ -333,10 +424,10 @@ def _F_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "B^theta", "J^rho"],
+    data=["B^theta", "F_helical"],
 )
 def _F_zeta(params, transforms, profiles, data, **kwargs):
-    data["F_zeta"] = data["sqrt(g)"] * data["B^theta"] * data["J^rho"]
+    data["F_zeta"] = data["B^theta"] * data["F_helical"]
     return data
 
 
@@ -351,10 +442,10 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "J^rho"],
+    data=["B_zeta_t", "B_theta_z"],
 )
 def _F_helical(params, transforms, profiles, data, **kwargs):
-    data["F_helical"] = data["sqrt(g)"] * data["J^rho"]
+    data["F_helical"] = (data["B_zeta_t"] - data["B_theta_z"]) / mu_0
     return data
 
 
@@ -369,12 +460,13 @@ def _F_helical(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["F_rho", "F_theta", "F_zeta", "e^rho", "e^theta", "e^zeta"],
+    data=["F_rho", "F_zeta", "e^rho", "e^zeta", "B_zeta", "J^rho", "e_rho", "e_zeta"],
 )
 def _F(params, transforms, profiles, data, **kwargs):
+    # F_theta e^theta = -B_zeta J^rho sqrt(g) e^theta
     data["F"] = (
         data["F_rho"] * data["e^rho"].T
-        + data["F_theta"] * data["e^theta"].T
+        - data["B_zeta"] * data["J^rho"] * cross(data["e_zeta"], data["e_rho"]).T
         + data["F_zeta"] * data["e^zeta"].T
     ).T
     return data
@@ -432,7 +524,6 @@ def _Fmag_vol(params, transforms, profiles, data, **kwargs):
     data=["B^theta", "B^zeta", "e^theta", "e^zeta"],
 )
 def _e_helical(params, transforms, profiles, data, **kwargs):
-    # TODO: ask question
     data["e^helical"] = (
         data["B^zeta"] * data["e^theta"].T - data["B^theta"] * data["e^zeta"].T
     ).T

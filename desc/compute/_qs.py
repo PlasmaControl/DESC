@@ -358,7 +358,7 @@ def _f_T(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="isodynamicity",
-    label="1/B^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
+    label="1/|B|^2 (\\mathbf{b} \\times \\nabla B) \\cdot \\nabla \\psi",
     units="~",
     units_long="None",
     description="Measure of cross field drift at each point, "

@@ -290,24 +290,6 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="n_rho",
-    label="\\hat{\\mathbf{n}}_{\\rho}",
-    units="~",
-    units_long="None",
-    description="Unit normal vector to constant rho surface",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho"],
-)
-def _n_rho(params, transforms, profiles, data, **kwargs):
-    data["n_rho"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"])).T
-    return data
-
-
-@register_compute_fun(
     name="L_sff",
     label="L_{sff}",
     units="m",
@@ -318,10 +300,10 @@ def _n_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n_rho", "e_theta_t"],
+    data=["n", "e_theta_t"],
 )
 def _L_sff(params, transforms, profiles, data, **kwargs):
-    data["L_sff"] = dot(data["e_theta_t"], data["n_rho"])
+    data["L_sff"] = dot(data["e_theta_t"], data["n"])
     return data
 
 
@@ -336,10 +318,10 @@ def _L_sff(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n_rho", "e_theta_z"],
+    data=["n", "e_theta_z"],
 )
 def _M_sff(params, transforms, profiles, data, **kwargs):
-    data["M_sff"] = dot(data["e_theta_z"], data["n_rho"])
+    data["M_sff"] = dot(data["e_theta_z"], data["n"])
     return data
 
 
@@ -354,10 +336,10 @@ def _M_sff(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n_rho", "e_zeta_z"],
+    data=["n", "e_zeta_z"],
 )
 def _N_sff(params, transforms, profiles, data, **kwargs):
-    data["N_sff"] = dot(data["e_zeta_z"], data["n_rho"])
+    data["N_sff"] = dot(data["e_zeta_z"], data["n"])
     return data
 
 

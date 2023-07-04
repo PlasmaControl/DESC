@@ -94,7 +94,7 @@ class TestBootstrapCompute:
             f_t_data = trapped_fraction(grid, modB, sqrt_g)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
-                f_t_data["<B^2>"],
+                f_t_data["<|B|^2>"],
                 expand(
                     grid,
                     np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
@@ -189,7 +189,7 @@ class TestBootstrapCompute:
             # Eq (A8):
             fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
-                f_t_data["<B^2>"],
+                f_t_data["<|B|^2>"],
                 expand(grid, fsa_B2),
                 rtol=1e-6,
             )

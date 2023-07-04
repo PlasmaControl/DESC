@@ -348,7 +348,7 @@ def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     )
     data["<J*B>"] = surface_averages(
         transforms["grid"],
-        dot(J, data["B"]),  # sqrt(g) factor pushed into J
+        dot(J, data["B"]),
         denominator=transforms["grid"].replace_at_axis(
             data["V_r(r)"].copy(), data.get("V_rr(r)")
         ),

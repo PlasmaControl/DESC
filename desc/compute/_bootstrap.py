@@ -10,7 +10,7 @@ from .utils import compress, expand, surface_averages_map
 
 @register_compute_fun(
     name="trapped fraction",
-    label="1 - \\frac{3}{4} \\langle B^2 \\rangle \\int_0^{1/Bmax} "
+    label="1 - \\frac{3}{4} \\langle |B|^2 \\rangle \\int_0^{1/Bmax} "
     "\\frac{\\lambda\\; d\\lambda}{\\langle \\sqrt{1 - \\lambda B} \\rangle}",
     units="~",
     units_long="None",
@@ -20,7 +20,7 @@ from .utils import compress, expand, surface_averages_map
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)", "V_r(r)", "|B|", "<B^2>", "max_tz |B|"],
+    data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
     n_gauss="n_gauss",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
@@ -32,7 +32,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     ``f_t`` has a standard definition in neoclassical theory:
 
     .. math::
-        f_t = 1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax}
+        f_t = 1 - \frac{3}{4} \langle |B|^2 \rangle \int_0^{1/Bmax}
             \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}
 
     where :math:`\langle \ldots \rangle` is a flux surface average.
@@ -64,7 +64,9 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
-    data["trapped fraction"] = 1 - 0.75 * data["<B^2>"] * expand(grid, lambda_integral)
+    data["trapped fraction"] = 1 - 0.75 * data["<|B|^2>"] * expand(
+        grid, lambda_integral
+    )
     return data
 
 

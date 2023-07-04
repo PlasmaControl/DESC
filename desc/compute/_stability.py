@@ -26,7 +26,7 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     # doi:10.1017/S002237782000121X.
     data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
     # Limit at magnetic axis is iota_rrr / (32 pi^2 psi_rr^2)
-    # if iota_r = iota_rr = 0 at axis, and does not converge otherwise.
+    # if iota_r = iota_rr = 0 at axis and does not converge otherwise.
     # Since this is stellarator dependent, we do not implement it here.
     return data
 
@@ -190,21 +190,21 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
         "V(r)",
         "V_r(r)",
         "p_r",
-        "<B^2>",
-        "<B^2>_r",
+        "<|B|^2>",
+        "<|B|^2>_r",
     ],
 )
 def _magnetic_well(params, transforms, profiles, data, **kwargs):
     # Implements equation 3.2 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
-    # pressure = thermal + magnetic = 2 mu_0 p + B^2
+    # pressure = thermal + magnetic = 2 mu_0 p + |B|^2
     # The surface average operation is an additive homomorphism.
     # Thermal pressure is constant over a rho surface.
     # surface average(pressure) = thermal + surface average(magnetic)
     data["magnetic well"] = transforms["grid"].replace_at_axis(
         data["V(r)"]
-        * (2 * mu_0 * data["p_r"] + data["<B^2>_r"])
-        / (data["V_r(r)"] * data["<B^2>"]),
+        * (2 * mu_0 * data["p_r"] + data["<|B|^2>_r"])
+        / (data["V_r(r)"] * data["<|B|^2>"]),
         0,  # coefficient of limit is V_r / V_rr = 0
     )
     return data

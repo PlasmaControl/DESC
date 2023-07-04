@@ -80,12 +80,12 @@ class Grid(IOAble):
         """
         if self.sym:
             # indices where theta coordinate is off the symmetry line of theta=0 or pi
-            off_sym_line_idx = np.where(self.nodes[:, 1] % np.pi != 0)[0]
+            off_sym_line_idx = self.nodes[:, 1] % np.pi != 0
             __, inverse, off_sym_line_per_rho_surf_count = np.unique(
                 self.nodes[off_sym_line_idx, 0], return_inverse=True, return_counts=True
             )
             # indices of nodes to be deleted
-            to_delete_idx = np.where(self.nodes[:, 1] > np.pi)[0]
+            to_delete_idx = self.nodes[:, 1] > np.pi
             __, to_delete_per_rho_surf_count = np.unique(
                 self.nodes[to_delete_idx, 0], return_counts=True
             )
@@ -122,8 +122,8 @@ class Grid(IOAble):
             # Scale up all nodes so that their spacing accounts for the node
             # that is their reflection across the symmetry line.
             self._spacing[off_sym_line_idx, 1] *= scale
-            self._nodes = np.delete(self.nodes, to_delete_idx, axis=0)
-            self._spacing = np.delete(self.spacing, to_delete_idx, axis=0)
+            self._nodes = self.nodes[~to_delete_idx]
+            self._spacing = self.spacing[~to_delete_idx]
 
     def _sort_nodes(self):
         """Sort nodes for use with FFT."""
@@ -1255,7 +1255,7 @@ def find_most_distant(pts, n, a=None, b=None, atol=1e-14, **kwargs):
     a, b : float, optional
         Start and end points for interval. Default is min/max of pts
     atol : float, optional
-        Stopping tolerance for mimimization
+        Stopping tolerance for minimization
     """
 
     def foo(x, xs):
@@ -1304,11 +1304,11 @@ def find_least_rational_surfaces(
     nrational : int, optional
         number of lowest order rational surfaces to avoid.
     atol : float, optional
-        Stopping tolerance for mimimization
+        Stopping tolerance for minimization
     itol : float, optional
         tolerance for rounding float to nearest int
     eps : float, optional
-        amount to dislace points to avoid duplicates
+        amount to displace points to avoid duplicates
 
     Returns
     -------

@@ -513,14 +513,14 @@ class VMECIO:
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
         data = eq.compute(
-            ["<B^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
+            ["<|B|^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
             grid=grid,
         )
 
         bdotb = file.createVariable("bdotb", np.float64, ("radius",))
         bdotb.long_name = "flux surface average of magnetic field squared"
         bdotb.units = "T^2"
-        bdotb[:] = compress(grid, data["<B^2>"])
+        bdotb[:] = compress(grid, data["<|B|^2>"])
         bdotb[0] = 0
 
         # currents
@@ -1168,7 +1168,7 @@ class VMECIO:
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
-        # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
+        # beta_vol = something like p/(|B|^2 - p) ? It's not <beta>_vol(r)
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
         # betaxis = beta_vol at the axis?

@@ -37,7 +37,6 @@ class TestAxisLimits:
         """Test that quantities whose limit does not exist evaluates not finite."""
         eq = get("W7-X")
         grid = LinearGrid(L=5, M=5, N=5, sym=eq.sym, NFP=eq.NFP, axis=True)
-        axis_mask = grid.nodes[:, 0] == 0
         no_limits = [
             "e^theta",
             "grad(alpha)",
@@ -48,7 +47,7 @@ class TestAxisLimits:
         ]
         data = eq.compute(names=no_limits, grid=grid)
         for quantity in no_limits:
-            assert np.all(~np.isfinite(data[quantity][axis_mask]))
+            assert np.all(~np.isfinite(data[quantity][grid.axis]))
 
     @staticmethod
     def continuity(eq, name, expected_at_axis=None):

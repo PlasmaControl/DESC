@@ -2566,8 +2566,9 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _grad_B(params, transforms, profiles, data, **kwargs):
-    # TODO: for reviewer, confirm whether grad(|B|) not finite at axis.
-    #  Finite iff |B|_t is 0 at axis, which (i claim) requires sqrt(g)_rt = 0 at axis.
+    # TODO: for reviewer, confirm that grad(|B|) not finite at axis.
+    #  claim finite iff |B|_t is 0 at axis, which requires sqrt(g)_rt = 0 at axis
+    #  which is not true.
     data["grad(|B|)"] = (
         data["|B|_r"] * data["e^rho"].T
         + data["|B|_t"] * data["e^theta"].T
@@ -2646,8 +2647,8 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="<B^2>",
-    label="\\langle B^2 \\rangle",
+    name="<|B|^2>",
+    label="\\langle |B|^2 \\rangle",
     units="T^2",
     units_long="Tesla squared",
     description="Flux surface average magnetic field squared",
@@ -2660,7 +2661,7 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
 )
 def _B2_fsa(params, transforms, profiles, data, **kwargs):
-    data["<B^2>"] = surface_averages(
+    data["<|B|^2>"] = surface_averages(
         transforms["grid"],
         data["|B|^2"],
         sqrt_g=transforms["grid"].replace_at_axis(
@@ -2702,8 +2703,8 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="<B^2>_r",
-    label="\\partial_{\\rho} \\langle B^2 \\rangle",
+    name="<|B|^2>_r",
+    label="\\partial_{\\rho} \\langle |B|^2 \\rangle",
     units="T^2",
     units_long="Tesla squared",
     description="Flux surface average magnetic field squared, radial derivative",
@@ -2730,7 +2731,7 @@ def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
         data["sqrt(g)_r"] * data["|B|^2"]
         + 2 * data["sqrt(g)"] * dot(data["B"], data["B_r"]),
     )
-    data["<B^2>_r"] = transforms["grid"].replace_at_axis(
+    data["<|B|^2>_r"] = transforms["grid"].replace_at_axis(
         num_r / data["V_r(r)"] - num * data["V_rr(r)"] / data["V_r(r)"] ** 2,
         lambda: (
             compute_surface_integrals(
@@ -2747,7 +2748,7 @@ def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="grad(|B|^2)_rho",
-    label="(\\nabla B^{2})_{\\rho}",
+    label="(\\nabla |B|^{2})_{\\rho}",
     units="T^{2}",
     units_long="Tesla squared",
     description="Covariant radial component of magnetic pressure gradient",
@@ -2779,7 +2780,7 @@ def _gradB2_rho(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="grad(|B|^2)_theta",
-    label="(\\nabla B^{2})_{\\theta}",
+    label="(\\nabla |B|^{2})_{\\theta}",
     units="T^{2}",
     units_long="Tesla squared",
     description="Covariant poloidal component of magnetic pressure gradient",
@@ -2811,7 +2812,7 @@ def _gradB2_theta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="grad(|B|^2)_zeta",
-    label="(\\nabla B^{2})_{\\zeta}",
+    label="(\\nabla |B|^{2})_{\\zeta}",
     units="T^{2}",
     units_long="Tesla squared",
     description="Covariant toroidal component of magnetic pressure gradient",
@@ -2843,7 +2844,7 @@ def _gradB2_zeta(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="grad(|B|^2)",
-    label="\\nabla B^{2}",
+    label="\\nabla |B|^{2}",
     units="T^{2} \\cdot m^{-1}",
     units_long="Tesla squared / meters",
     description="Magnetic pressure gradient",
@@ -2872,7 +2873,7 @@ def _gradB2(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="|grad(|B|^2)|/2mu0",
-    label="|\\nabla B^{2}/(2\\mu_0)|",
+    label="|\\nabla |B|^{2}/(2\\mu_0)|",
     units="N \\cdot m^{-3}",
     units_long="Newton / cubic meter",
     description="Magnitude of magnetic pressure gradient",
@@ -2892,7 +2893,7 @@ def _gradB2mag(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<|grad(|B|^2)|/2mu0>_vol",
-    label="\\langle |\\nabla B^{2}/(2\\mu_0)| \\rangle_{vol}",
+    label="\\langle |\\nabla |B|^{2}/(2\\mu_0)| \\rangle_{vol}",
     units="N \\cdot m^{-3}",
     units_long="Newtons per cubic meter",
     description="Volume average of magnitude of magnetic pressure gradient",
@@ -2994,7 +2995,7 @@ def _curl_B_x_B_zeta(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _curl_B_x_B(params, transforms, profiles, data, **kwargs):
-    # (curl(B)xB)_theta e^theta = -mu_0 B^zeta J^rho (e_zeta x e_rho)
+    # (curl(B)xB)_theta e^theta = -mu_0 B^zeta J^rho sqrt(g) e^theta
     data["curl(B)xB"] = (
         data["(curl(B)xB)_rho"] * data["e^rho"].T
         - mu_0 * data["B^zeta"] * data["J^rho"] * cross(data["e_zeta"], data["e_rho"]).T

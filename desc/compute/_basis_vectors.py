@@ -656,10 +656,10 @@ def _b(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="n",
-    label="\\hat{n}",
+    label="\\hat{\\mathbf{n}}",
     units="~",
     units_long="None",
-    description="Unit vector normal to flux surface",
+    description="Unit normal vector to constant rho surface",
     dim=3,
     params=[],
     transforms={},

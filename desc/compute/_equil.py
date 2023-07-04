@@ -5,13 +5,13 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_averages, cross
+from .utils import cross, dot, surface_averages
 
 
 @register_compute_fun(
     name="J^rho",
     label="J^{\\rho}",
-    units="A \\cdot m^{-3}",  # FIXME: inconsistent with F_helical
+    units="A \\cdot m^{-3}",
     units_long="Amperes / cubic meter",
     description="Contravariant radial component of plasma current density",
     dim=1,
@@ -23,6 +23,9 @@ from .utils import dot, surface_averages, cross
     axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
+    # In the axis limit, J^rho is of indeterminate form 0/0. The cancellation
+    # in the numerator becomes apparent when it is decomposed into the basis
+    # vectors of the lab frame.
     data["J^rho"] = (
         transforms["grid"].replace_at_axis(
             (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
@@ -46,6 +49,7 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     data=["sqrt(g)", "B_rho_z", "B_zeta_r"],
 )
 def _J_sup_theta(params, transforms, profiles, data, **kwargs):
+    # Axis limit does not exist.
     data["J^theta"] = (data["B_rho_z"] - data["B_zeta_r"]) / (mu_0 * data["sqrt(g)"])
     return data
 
@@ -65,6 +69,9 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_r", "B_theta_rr", "B_rho_rt"],
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
+    # In the axis limit, J^zeta is of indeterminate form 0/0. The cancellation
+    # in the numerator becomes apparent when it is decomposed into the basis
+    # vectors of the lab frame.
     data["J^zeta"] = (
         transforms["grid"].replace_at_axis(
             (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],
@@ -111,7 +118,7 @@ def _J(params, transforms, profiles, data, **kwargs):
     name="J sqrt(g)",
     label="\\mathbf{J} \\sqrt{g}",
     units="A m",
-    units_long="Ampere meters",  # FIXME: units inconsistent with F_helical
+    units_long="Ampere meters",
     description="Plasma current density weighted by 3-D volume Jacobian",
     dim=3,
     params=[],
@@ -344,13 +351,13 @@ def _J_dot_B(params, transforms, profiles, data, **kwargs):
 )
 def _J_dot_B_fsa(params, transforms, profiles, data, **kwargs):
     J = transforms["grid"].replace_at_axis(
-        data["J sqrt(g)"].copy(), data.get("(J sqrt(g))_r")
+        data["J sqrt(g)"], lambda: data["(J sqrt(g))_r"], copy=True
     )
     data["<J*B>"] = surface_averages(
         transforms["grid"],
-        dot(J, data["B"]),
+        dot(J, data["B"]),  # sqrt(g) factor pushed into J
         denominator=transforms["grid"].replace_at_axis(
-            data["V_r(r)"].copy(), data.get("V_rr(r)")
+            data["V_r(r)"], lambda: data["V_rr(r)"], copy=True
         ),
     )
     return data
@@ -377,8 +384,8 @@ def _J_parallel(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F_rho",
     label="F_{\\rho}",
-    units="N \\cdot m^{-2}",
-    units_long="Newtons / square meter",
+    units="N / (T m)",
+    units_long="Newtons / (Tesla meters)",
     description="Covariant radial component of force balance error",
     dim=1,
     params=[],
@@ -398,8 +405,8 @@ def _F_rho(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F_theta",
     label="F_{\\theta}",
-    units="N \\cdot m^{-2}",
-    units_long="Newtons / square meter",
+    units="N / (T m)",
+    units_long="Newtons / (Tesla meters)",
     description="Covariant poloidal component of force balance error",
     dim=1,
     params=[],
@@ -416,8 +423,8 @@ def _F_theta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F_zeta",
     label="F_{\\zeta}",
-    units="N \\cdot m^{-2}",
-    units_long="Newtons / square meter",
+    units="N / (T m)",
+    units_long="Newtons / (Tesla meters)",
     description="Covariant toroidal component of force balance error",
     dim=1,
     params=[],
@@ -434,8 +441,8 @@ def _F_zeta(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F_helical",
     label="F_{helical}",
-    units="N \\cdot m^{-2}",
-    units_long="Newtons / square meter",
+    units="N / (T m)",
+    units_long="Newtons / (Tesla meters)",
     description="Covariant helical component of force balance error",
     dim=1,
     params=[],
@@ -452,8 +459,8 @@ def _F_helical(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="F",
     label="\\mathbf{J} \\times \\mathbf{B} - \\nabla p",
-    units="N \\cdot m^{-3}",
-    units_long="Newtons / cubic meter",
+    units="N / (T m^{2})",
+    units_long="Newtons / (Tesla meters squared)",
     description="Force balance error",
     dim=3,
     params=[],
@@ -475,8 +482,8 @@ def _F(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="|F|",
     label="|\\mathbf{J} \\times \\mathbf{B} - \\nabla p|",
-    units="N \\cdot m^{-3}",
-    units_long="Newtons / cubic meter",
+    units="N / (T m^{2})",
+    units_long="Newtons / (Tesla meters squared)",
     description="Magnitude of force balance error",
     dim=1,
     params=[],
@@ -493,8 +500,8 @@ def _Fmag(params, transforms, profiles, data, **kwargs):
 @register_compute_fun(
     name="<|F|>_vol",
     label="\\langle |\\mathbf{J} \\times \\mathbf{B} - \\nabla p| \\rangle_{vol}",
-    units="N \\cdot m^{-3}",
-    units_long="Newtons / cubic meter",
+    units="N / (T m^{2})",
+    units_long="Newtons / (Tesla meters squared)",
     description="Volume average of magnitude of force balance error",
     dim=0,
     params=[],

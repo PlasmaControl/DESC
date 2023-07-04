@@ -108,9 +108,7 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "chi_r",
-    ],
+    data=["chi_r"],
 )
 def _chi(params, transforms, profiles, data, **kwargs):
     chi_r = compress(transforms["grid"], data["chi_r"], surface_label="rho")

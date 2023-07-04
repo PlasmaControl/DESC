@@ -343,30 +343,35 @@ class Grid(IOAble):
             )
         )
 
-    def replace_at_axis(self, x, y, *args, **kwargs):
-        """Replace elements of x with elements of y at axis indices of grid.
+    def replace_at_axis(self, x, y, copy=False, *args, **kwargs):
+        """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
 
         Parameters
         ----------
         x : array-like
-            Values to selectively replace. Should have size grid.num_nodes.
-            May be modified in-place.
+            Values to selectively replace. Should have length ``grid.num_nodes``.
         y : array-like
-            Replacement values. Should be able to broadcast with arrays of size
-            grid.num_nodes. Can also be a function that returns such an array.
-            Excess arguments are inputs to the function.
+            Replacement values. Should broadcast with arrays of size
+            ``grid.num_nodes``. Can also be a function that returns such an
+            array. Additional arguments are then parsed as inputs to ``y``.
+        copy : bool
+            If some value of ``x`` is to be replaced by ``y``, then setting
+            ``copy`` to true ensures that ``x`` will not be modified in-place.
 
         Returns
         -------
         out : ndarray
-            An array of size grid.num_nodes where elements at axis indices match
-            those of y and all others match x.
+            An array of size ``grid.num_nodes`` where elements at the indices
+            corresponding to the axis of this grid match those of ``y`` and all
+            others match ``x``.
 
         """
         if self.axis.size:
             if callable(y):
                 y = y(*args, **kwargs)
-            return put(x, self.axis, y if jnp.ndim(y) < 1 else y[self.axis])
+            return put(
+                x.copy() if copy else x, self.axis, y[self.axis] if jnp.ndim(y) else y
+            )
         return x
 
 

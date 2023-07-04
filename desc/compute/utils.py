@@ -1219,8 +1219,6 @@ def surface_min(grid, x, surface_label="rho"):
         return mins
 
     mins = fori_loop(0, inverse_idx.size, body, mins)
-    # The above implementation was benchmarked to be more efficient, after jit
-    # compilation, than the alternative given in the two lines below.
-    # masks = inverse_idx == jnp.arange(unique_size)[:, jnp.newaxis]  # noqa: E501,E800
-    # mins = jnp.amin(x[jnp.newaxis, :], axis=1, initial=jnp.inf, where=masks)  # noqa: E501,E800
+    # The above implementation was benchmarked to be more efficient than
+    # alternatives without explicit loops.
     return expand(grid, mins, surface_label)

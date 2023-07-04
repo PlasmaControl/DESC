@@ -9,9 +9,9 @@ from .utils import (
     cross,
     dot,
     surface_averages,
+    surface_integrals_map,
     surface_max,
     surface_min,
-    surface_integrals_map,
 )
 
 
@@ -2566,9 +2566,7 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _grad_B(params, transforms, profiles, data, **kwargs):
-    # TODO: for reviewer, confirm that grad(|B|) not finite at axis.
-    #  claim finite iff |B|_t is 0 at axis, which requires sqrt(g)_rt = 0 at axis
-    #  which is not true.
+    # Axis limit does not exist because sqrt(g)_rt need not be 0.
     data["grad(|B|)"] = (
         data["|B|_r"] * data["e^rho"].T
         + data["|B|_t"] * data["e^theta"].T
@@ -2629,18 +2627,15 @@ def _B_rms(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)", "|B|", "V_r(r)"],
-    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
+    data=["sqrt(g)", "|B|"],
+    axis_limit_data=["sqrt(g)_r"],
 )
 def _B_fsa(params, transforms, profiles, data, **kwargs):
     data["<|B|>"] = surface_averages(
         transforms["grid"],
         data["|B|"],
         sqrt_g=transforms["grid"].replace_at_axis(
-            data["sqrt(g)"].copy(), data.get("sqrt(g)_r")
-        ),
-        denominator=transforms["grid"].replace_at_axis(
-            data["V_r(r)"].copy(), data.get("V_rr(r)")
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
         ),
     )
     return data
@@ -2657,18 +2652,15 @@ def _B_fsa(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)", "|B|^2", "V_r(r)"],
-    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
+    data=["sqrt(g)", "|B|^2"],
+    axis_limit_data=["sqrt(g)_r"],
 )
 def _B2_fsa(params, transforms, profiles, data, **kwargs):
     data["<|B|^2>"] = surface_averages(
         transforms["grid"],
         data["|B|^2"],
         sqrt_g=transforms["grid"].replace_at_axis(
-            data["sqrt(g)"].copy(), data.get("sqrt(g)_r")
-        ),
-        denominator=transforms["grid"].replace_at_axis(
-            data["V_r(r)"].copy(), data.get("V_rr(r)")
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
         ),
     )
     return data
@@ -2685,18 +2677,15 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["sqrt(g)", "|B|", "V_r(r)"],
-    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
+    data=["sqrt(g)", "|B|"],
+    axis_limit_data=["sqrt(g)_r"],
 )
 def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     data["<1/|B|>"] = surface_averages(
         transforms["grid"],
         1 / data["|B|"],
         sqrt_g=transforms["grid"].replace_at_axis(
-            data["sqrt(g)"].copy(), data.get("sqrt(g)_r")
-        ),
-        denominator=transforms["grid"].replace_at_axis(
-            data["V_r(r)"].copy(), data.get("V_rr(r)")
+            data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True
         ),
     )
     return data
@@ -2725,16 +2714,16 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_rr", "V_rrr(r)"],
 )
 def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
-    compute_surface_integrals = surface_integrals_map(transforms["grid"])
-    num = compute_surface_integrals(data["sqrt(g)"] * data["|B|^2"])
-    num_r = compute_surface_integrals(
+    integrate = surface_integrals_map(transforms["grid"])
+    num = integrate(data["sqrt(g)"] * data["|B|^2"])
+    num_r = integrate(
         data["sqrt(g)_r"] * data["|B|^2"]
         + 2 * data["sqrt(g)"] * dot(data["B"], data["B_r"]),
     )
     data["<|B|^2>_r"] = transforms["grid"].replace_at_axis(
-        num_r / data["V_r(r)"] - num * data["V_rr(r)"] / data["V_r(r)"] ** 2,
+        (num_r * data["V_r(r)"] - num * data["V_rr(r)"]) / data["V_r(r)"] ** 2,
         lambda: (
-            compute_surface_integrals(
+            integrate(
                 data["sqrt(g)_rr"] * data["|B|^2"]
                 + 4 * data["sqrt(g)_r"] * dot(data["B"], data["B_r"])
             )
@@ -2905,7 +2894,7 @@ def _gradB2mag(params, transforms, profiles, data, **kwargs):
     data=["|grad(|B|^2)|/2mu0", "sqrt(g)", "V"],
 )
 def _gradB2mag_vol(params, transforms, profiles, data, **kwargs):
-    # TODO: fix later, curious why nan not detected after sum
+    # TODO: jax removes nan, but numpy doesn't
     data["<|grad(|B|^2)|/2mu0>_vol"] = (
         jnp.sum(
             data["|grad(|B|^2)|/2mu0"] * data["sqrt(g)"] * transforms["grid"].weights

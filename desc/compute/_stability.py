@@ -5,7 +5,7 @@ from scipy.constants import mu_0
 from desc.backend import jnp
 
 from .data_index import register_compute_fun
-from .utils import dot, surface_integrals
+from .utils import dot, surface_integrals_map
 
 
 @register_compute_fun(
@@ -48,14 +48,14 @@ def _D_current(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.17 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
     Xi = mu_0 * data["J"] - jnp.atleast_2d(data["I_r"] / data["psi_r"]).T * data["B"]
+    integrate = surface_integrals_map(transforms["grid"])
     data["D_current"] = (
         -jnp.sign(data["G"])
         / (2 * jnp.pi) ** 4
         * data["iota_r"]
         / data["psi_r"]
-        * surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"] / data["|grad(psi)|"] ** 3 * dot(Xi, data["B"]),
+        * integrate(
+            data["|e_theta x e_zeta|"] / data["|grad(psi)|"] ** 3 * dot(Xi, data["B"])
         )
     )
     # Axis limit does not exist as 1/|grad(psi)| terms dominate.
@@ -88,6 +88,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
 def _D_well(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.18 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
+    integrate = surface_integrals_map(transforms["grid"])
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
     d2V_dpsi2 = (
         data["V_rr(r)"] * data["psi_r"] - data["V_r(r)"] * data["psi_rr"]
@@ -97,14 +98,12 @@ def _D_well(params, transforms, profiles, data, **kwargs):
         * (
             jnp.sign(data["psi"]) * d2V_dpsi2
             - dp_dpsi
-            * surface_integrals(
-                transforms["grid"],
-                data["|e_theta x e_zeta|"] / (data["|B|^2"] * data["|grad(psi)|"]),
+            * integrate(
+                data["|e_theta x e_zeta|"] / (data["|B|^2"] * data["|grad(psi)|"])
             )
         )
-        * surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3,
+        * integrate(
+            data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3
         )
         / (2 * jnp.pi) ** 6
     )
@@ -128,17 +127,16 @@ def _D_well(params, transforms, profiles, data, **kwargs):
 def _D_geodesic(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.19 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
+    integrate = surface_integrals_map(transforms["grid"])
     data["D_geodesic"] = (
-        surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"] * mu_0 * data["J*B"] / data["|grad(psi)|"] ** 3,
+        integrate(
+            data["|e_theta x e_zeta|"] * mu_0 * data["J*B"] / data["|grad(psi)|"] ** 3
         )
         ** 2
-        - surface_integrals(
-            transforms["grid"],
-            data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3,
+        - integrate(
+            data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3
         )
-        * surface_integrals(
+        * integrate(
             transforms["grid"],
             data["|e_theta x e_zeta|"]
             * mu_0**2
@@ -170,7 +168,7 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
     data["D_Mercier"] = (
         data["D_shear"] + data["D_current"] + data["D_well"] + data["D_geodesic"]
     )
-    # Axis limit does not exist since there are linearly independent unbounded terms.
+    # Axis limit does not exist because of linearly independent unbounded terms.
     return data
 
 

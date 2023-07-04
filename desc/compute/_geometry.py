@@ -80,6 +80,7 @@ def _V_r_of_r(params, transforms, profiles, data, **kwargs):
     data=["sqrt(g)_r"],
 )
 def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
+    # The sign of sqrt(g) is enforced to be non-negative.
     data["V_rr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_r"])
     return data
 
@@ -99,6 +100,7 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     data=["sqrt(g)_rr"],
 )
 def _V_rrr_of_r(params, transforms, profiles, data, **kwargs):
+    # The sign of sqrt(g) is enforced to be non-negative.
     data["V_rrr(r)"] = surface_integrals(transforms["grid"], data["sqrt(g)_rr"])
     return data
 
@@ -254,7 +256,7 @@ def _R0_over_a(params, transforms, profiles, data, **kwargs):
 )
 def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     max_rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx[-1], 0]
-    P = (  # perimeter
+    P = (  # perimeter at rho=1
         line_integrals(
             transforms["grid"],
             jnp.sqrt(data["g_tt"]),
@@ -370,7 +372,7 @@ def _curvature_k1(params, transforms, profiles, data, **kwargs):
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    # Both r1 and r2 are of the indeterminate form 0/0, but computing their
+    # Both roots are of the indeterminate form 0/0, but computing their
     # limits to find the curvature at the magnetic axis is invalid because
     # the principle curvatures are the eigenvalues of a matrix that is
     # singular (with rank 0) at the magnetic axis. Hence, the limit of the
@@ -396,7 +398,29 @@ def _curvature_k1(params, transforms, profiles, data, **kwargs):
     data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
 )
 def _curvature_k2(params, transforms, profiles, data, **kwargs):
-    return _curvature_k1(params, transforms, profiles, data, **kwargs)
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_tt"]
+    F = data["g_tz"]
+    G = data["g_zz"]
+    L = data["L_sff"]
+    M = data["M_sff"]
+    N = data["N_sff"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    # Both roots are of the indeterminate form 0/0, but computing their
+    # limits to find the curvature at the magnetic axis is invalid because
+    # the principle curvatures are the eigenvalues of a matrix that is
+    # singular (with rank 0) at the magnetic axis. Hence, the limit of the
+    # indeterminate ratio may be an extraneous solution.
+    # To compute the curvature in this limit, notice that the second fundamental
+    # form becomes the zero map.
+    data["curvature_k1"] = transforms["grid"].replace_at_axis(jnp.maximum(r1, r2), 0)
+    data["curvature_k2"] = transforms["grid"].replace_at_axis(jnp.minimum(r1, r2), 0)
+    return data
 
 
 @register_compute_fun(

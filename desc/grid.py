@@ -343,7 +343,7 @@ class Grid(IOAble):
             )
         )
 
-    def replace_at_axis(self, x, y, copy=False, *args, **kwargs):
+    def replace_at_axis(self, x, y, copy=False, **kwargs):
         """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
 
         Parameters
@@ -353,10 +353,11 @@ class Grid(IOAble):
         y : array-like
             Replacement values. Should broadcast with arrays of size
             ``grid.num_nodes``. Can also be a function that returns such an
-            array. Additional arguments are then parsed as inputs to ``y``.
+            array. Additional keyword arguments are then input to ``y``.
         copy : bool
-            If some value of ``x`` is to be replaced by ``y``, then setting
-            ``copy`` to true ensures that ``x`` will not be modified in-place.
+            If some value of ``x`` is to be replaced by some value in ``y``,
+            then setting ``copy`` to true ensures that ``x`` will not be
+            modified in-place.
 
         Returns
         -------
@@ -368,7 +369,7 @@ class Grid(IOAble):
         """
         if self.axis.size:
             if callable(y):
-                y = y(*args, **kwargs)
+                y = y(**kwargs)
             return put(
                 x.copy() if copy else x, self.axis, y[self.axis] if jnp.ndim(y) else y
             )

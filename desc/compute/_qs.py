@@ -268,8 +268,7 @@ def _B_mn(params, transforms, profiles, data, **kwargs):
     norm = 2 ** (3 - jnp.sum((transforms["B"].basis.modes == 0), axis=1))
     data["|B|_mn"] = (
         norm  # 1 if m=n=0, 2 if m=0 or n=0, 4 if m!=0 and n!=0
-        * transforms["B"].basis.evaluate(nodes).T
-        @ (data["sqrt(g)_B"] * data["|B|"])
+        * (transforms["B"].basis.evaluate(nodes).T @ (data["sqrt(g)_B"] * data["|B|"]))
         / transforms["B"].grid.num_nodes
     )
     return data
@@ -305,23 +304,12 @@ def _B_modes(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "iota",
-        "psi_r",
-        "sqrt(g)",
-        "B_theta",
-        "B_zeta",
-        "|B|_t",
-        "|B|_z",
-        "G",
-        "I",
-        "B*grad(|B|)",
-    ],
+    data=["iota", "B0", "B_theta", "B_zeta", "|B|_t", "|B|_z", "G", "I", "B*grad(|B|)"],
     helicity="helicity",
 )
 def _f_C(params, transforms, profiles, data, **kwargs):
     M, N = kwargs.get("helicity", (1, 0))
-    data["f_C"] = (M * data["iota"] - N) * (data["psi_r"] / data["sqrt(g)"]) * (
+    data["f_C"] = (M * data["iota"] - N) * data["B0"] * (
         data["B_zeta"] * data["|B|_t"] - data["B_theta"] * data["|B|_z"]
     ) - (M * data["G"] + N * data["I"]) * data["B*grad(|B|)"]
     return data
@@ -339,17 +327,10 @@ def _f_C(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "psi_r",
-        "sqrt(g)",
-        "|B|_t",
-        "|B|_z",
-        "(B*grad(|B|))_t",
-        "(B*grad(|B|))_z",
-    ],
+    data=["B0", "|B|_t", "|B|_z", "(B*grad(|B|))_t", "(B*grad(|B|))_z"],
 )
 def _f_T(params, transforms, profiles, data, **kwargs):
-    data["f_T"] = (data["psi_r"] / data["sqrt(g)"]) * (
+    data["f_T"] = data["B0"] * (
         data["|B|_t"] * data["(B*grad(|B|))_z"]
         - data["|B|_z"] * data["(B*grad(|B|))_t"]
     )

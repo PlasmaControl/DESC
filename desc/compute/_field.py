@@ -2556,20 +2556,20 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "|B|_r",
-        "|B|_t",
-        "|B|_z",
-        "e^rho",
-        "e^theta",
-        "e^zeta",
-    ],
+    data=["|B|_r", "|B|_t", "|B|_z", "e^rho", "e^theta sqrt(g)", "e^zeta"],
+    axis_limit_data=["|B|_rt", "sqrt(g)_r"],
 )
 def _grad_B(params, transforms, profiles, data, **kwargs):
-    # Axis limit does not exist because sqrt(g)_rt need not be 0.
+    # fixme: Numerically |B|_t is not zero at axis.
+    #   think it should be closer. Maybe there's a typo in basis vectors?
+    # In the axis limit, |B|_t is 0. Cancellation occurs when decomposed into
+    # the basis vectors of the lab frame.
     data["grad(|B|)"] = (
         data["|B|_r"] * data["e^rho"].T
-        + data["|B|_t"] * data["e^theta"].T
+        + transforms["grid"].replace_at_axis(
+            data["|B|_t"] / data["sqrt(g)"], lambda: data["|B|_rt"] / data["sqrt(g)_r"]
+        )
+        * data["e^theta sqrt(g)"].T
         + data["|B|_z"] * data["e^zeta"].T
     ).T
     return data
@@ -2668,7 +2668,7 @@ def _B2_fsa(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="<1/|B|>",
-    label="\\langle 1/B \\rangle",
+    label="\\langle 1/|B| \\rangle",
     units="T^{-1}",
     units_long="1 / Tesla",
     description="Flux surface averaged inverse field strength",
@@ -2702,31 +2702,18 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "sqrt(g)",
-        "sqrt(g)_r",
-        "B",
-        "B_r",
-        "|B|^2",
-        "V_r(r)",
-        "V_rr(r)",
-    ],
+    data=["sqrt(g)", "sqrt(g)_r", "B", "B_r", "|B|^2", "V_r(r)", "V_rr(r)"],
     axis_limit_data=["sqrt(g)_rr", "V_rrr(r)"],
 )
 def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
+    B2_r = 2 * dot(data["B"], data["B_r"])
     integrate = surface_integrals_map(transforms["grid"])
     num = integrate(data["sqrt(g)"] * data["|B|^2"])
-    num_r = integrate(
-        data["sqrt(g)_r"] * data["|B|^2"]
-        + 2 * data["sqrt(g)"] * dot(data["B"], data["B_r"]),
-    )
+    num_r = integrate(data["sqrt(g)_r"] * data["|B|^2"] + data["sqrt(g)"] * B2_r)
     data["<|B|^2>_r"] = transforms["grid"].replace_at_axis(
         (num_r * data["V_r(r)"] - num * data["V_rr(r)"]) / data["V_r(r)"] ** 2,
         lambda: (
-            integrate(
-                data["sqrt(g)_rr"] * data["|B|^2"]
-                + 4 * data["sqrt(g)_r"] * dot(data["B"], data["B_r"])
-            )
+            integrate(data["sqrt(g)_rr"] * data["|B|^2"] + 2 * data["sqrt(g)_r"] * B2_r)
             * data["V_rr(r)"]
             - num_r * data["V_rrr(r)"]
         )
@@ -2842,21 +2829,18 @@ def _gradB2_zeta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[
-        "grad(|B|^2)_rho",
-        "grad(|B|^2)_theta",
-        "grad(|B|^2)_zeta",
-        "e^rho",
-        "e^theta",
-        "e^zeta",
-    ],
+    data=["|B|", "grad(|B|)"],
 )
 def _gradB2(params, transforms, profiles, data, **kwargs):
-    data["grad(|B|^2)"] = (
-        data["grad(|B|^2)_rho"] * data["e^rho"].T
-        + data["grad(|B|^2)_theta"] * data["e^theta"].T
-        + data["grad(|B|^2)_zeta"] * data["e^zeta"].T
-    ).T
+    # TODO: remove commented code
+    #  For context, I failed to compute the limit of the commented code, so
+    #  I switched to this.
+    # data["grad(|B|^2)"] = (
+    #     data["grad(|B|^2)_rho"] * data["e^rho"].T
+    #     + data["grad(|B|^2)_theta"] * data["e^theta"].T
+    #     + data["grad(|B|^2)_zeta"] * data["e^zeta"].T
+    # ).T
+    data["grad(|B|^2)"] = 2 * (data["|B|"] * data["grad(|B|)"].T).T
     return data
 
 
@@ -2894,7 +2878,6 @@ def _gradB2mag(params, transforms, profiles, data, **kwargs):
     data=["|grad(|B|^2)|/2mu0", "sqrt(g)", "V"],
 )
 def _gradB2mag_vol(params, transforms, profiles, data, **kwargs):
-    # TODO: jax removes nan, but numpy doesn't
     data["<|grad(|B|^2)|/2mu0>_vol"] = (
         jnp.sum(
             data["|grad(|B|^2)|/2mu0"] * data["sqrt(g)"] * transforms["grid"].weights
@@ -2935,10 +2918,10 @@ def _curl_B_x_B_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B^zeta", "F_helical"],
+    data=["B^zeta", "B_zeta_t", "B_theta_z"],
 )
 def _curl_B_x_B_theta(params, transforms, profiles, data, **kwargs):
-    data["(curl(B)xB)_theta"] = -data["B^zeta"] * data["F_helical"] * mu_0
+    data["(curl(B)xB)_theta"] = -data["B^zeta"] * (data["B_zeta_t"] - data["B_theta_z"])
     return data
 
 
@@ -2953,10 +2936,10 @@ def _curl_B_x_B_theta(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B^theta", "F_helical"],
+    data=["B^theta", "B_zeta_t", "B_theta_z"],
 )
 def _curl_B_x_B_zeta(params, transforms, profiles, data, **kwargs):
-    data["(curl(B)xB)_zeta"] = data["B^theta"] * data["F_helical"] * mu_0
+    data["(curl(B)xB)_zeta"] = data["B^theta"] * (data["B_zeta_t"] - data["B_theta_z"])
     return data
 
 
@@ -2975,19 +2958,17 @@ def _curl_B_x_B_zeta(params, transforms, profiles, data, **kwargs):
         "(curl(B)xB)_rho",
         "B^zeta",
         "J^rho",
-        "e_rho",
-        "e_zeta",
         "(curl(B)xB)_zeta",
         "e^rho",
-        "e^theta",
+        "e^theta sqrt(g)",
         "e^zeta",
     ],
 )
 def _curl_B_x_B(params, transforms, profiles, data, **kwargs):
-    # (curl(B)xB)_theta e^theta = -mu_0 B^zeta J^rho sqrt(g) e^theta
+    # (curl(B)xB)_theta e^theta refactored to resolve indeterminacy at axis.
     data["curl(B)xB"] = (
         data["(curl(B)xB)_rho"] * data["e^rho"].T
-        - mu_0 * data["B^zeta"] * data["J^rho"] * cross(data["e_zeta"], data["e_rho"]).T
+        - mu_0 * data["B^zeta"] * data["J^rho"] * data["e^theta sqrt(g)"].T
         + data["(curl(B)xB)_zeta"] * data["e^zeta"].T
     ).T
     return data
@@ -3124,7 +3105,38 @@ def _B_dot_gradB(params, transforms, profiles, data, **kwargs):
     return data
 
 
-# TODO: (B*grad(|B|))_r
+@register_compute_fun(
+    name="(B*grad(|B|))_r",
+    label="\\partial_{\\theta} (\\mathbf{B} \\cdot \\nabla B)",
+    units="T^2 \\cdot m^{-1}",
+    units_long="Tesla squared / meters",
+    description="",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=[
+        "B^theta",
+        "B^zeta",
+        "|B|_t",
+        "|B|_z",
+        "B^theta_r",
+        "B^zeta_r",
+        "|B|_rt",
+        "|B|_rz",
+    ],
+)
+def _B_dot_gradB_r(params, transforms, profiles, data, **kwargs):
+    data["(B*grad(|B|))_r"] = (
+        data["B^theta_r"] * data["|B|_t"]
+        + data["B^theta"] * data["|B|_rt"]
+        + data["B^zeta_r"] * data["|B|_z"]
+        + data["B^zeta"] * data["|B|_rz"]
+    )
+    return data
+
+
 @register_compute_fun(
     name="(B*grad(|B|))_t",
     label="\\partial_{\\theta} (\\mathbf{B} \\cdot \\nabla B)",
@@ -3325,12 +3337,21 @@ def _kappa_g(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B_r", "B_t", "B_z", "e^rho", "e^theta", "e^zeta"],
+    data=["B_r", "B_t", "B_z", "e^rho", "e^theta sqrt(g)", "e^zeta", "sqrt(g)"],
+    axis_limit_data=["B_rt", "sqrt(g)_r"],
 )
 def _grad_B_vec(params, transforms, profiles, data, **kwargs):
+    # In the axis limit, |B|_t is 0 implying B_t is 0.
+    B_t_over_sqrt_g = transforms["grid"].replace_at_axis(
+        (data["B_t"].T / data["sqrt(g)"]).T,
+        lambda: (data["B_rt"].T / data["sqrt(g)_r"]).T,
+    )
     data["grad(B)"] = (
         (data["B_r"][:, jnp.newaxis, :] * data["e^rho"][:, :, jnp.newaxis])
-        + (data["B_t"][:, jnp.newaxis, :] * data["e^theta"][:, :, jnp.newaxis])
+        + (
+            B_t_over_sqrt_g[:, jnp.newaxis, :]
+            * data["e^theta sqrt(g)"][:, :, jnp.newaxis]
+        )
         + (data["B_z"][:, jnp.newaxis, :] * data["e^zeta"][:, :, jnp.newaxis])
     )
     return data

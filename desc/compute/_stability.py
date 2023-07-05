@@ -137,7 +137,6 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
             data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3
         )
         * integrate(
-            transforms["grid"],
             data["|e_theta x e_zeta|"]
             * mu_0**2
             * data["J*B"] ** 2
@@ -203,6 +202,6 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
         data["V(r)"]
         * (2 * mu_0 * data["p_r"] + data["<|B|^2>_r"])
         / (data["V_r(r)"] * data["<|B|^2>"]),
-        0,  # coefficient of limit is V_r / V_rr = 0
+        0,  # coefficient of limit is V_r / V_rr, rest is finite
     )
     return data

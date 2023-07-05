@@ -845,9 +845,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # previous paragraph.
     masks = cond(
         has_endpoint_dupe,
-        lambda masks: put(masks, jnp.asarray([0, -1]), masks[0] | masks[-1]),
-        lambda masks: masks,
-        masks,
+        lambda: put(masks, jnp.array([0, -1]), masks[0] | masks[-1]),
+        lambda: masks,
     )
     spacing = jnp.prod(spacing, axis=1)
 
@@ -884,7 +883,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
             Surface integral of the input over each surface in the grid.
 
         """
-        ndim = jnp.ndim(q)
+        axis_to_move = (jnp.ndim(q) == 3) * 2
         # Todo: revert to jnp.nan_to_num(q) after limits done
         integrands = (spacing * jnp.atleast_1d(q).T).T
         # `integrands` may have shape (g.size, f.size, v.size), where
@@ -917,7 +916,6 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         # shape (v.size, g.size, f.size). As we expect f.size >> v.size, the
         # integration is in theory faster since numpy optimizes large matrix
         # products. However, timing results showed no difference.
-        axis_to_move = (ndim == 3) * 2
         integrals = jnp.moveaxis(
             masks @ jnp.moveaxis(integrands, axis_to_move, 0), 0, axis_to_move
         )
@@ -965,9 +963,10 @@ def surface_averages(
     surface_label : str
         The surface label of rho, theta, or zeta to compute the average over.
     denominator : ndarray
-        This can optionally be supplied to avoid redundant computations.
-        Volume enclosed by the surfaces, derivative wrt the surface label.
-        This array should succeed broadcasting with arrays of size
+        By default, the denominator is computed as the surface integral of
+        ``sqrt_g``. This parameter can optionally be supplied to avoid
+        redundant computations or to use a different denominator to compute
+        the average. This array should broadcast with arrays of size
         ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
         is true (false).
     expand_out : bool
@@ -1005,7 +1004,7 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
     -------
     function : callable
         Method to compute any surface average of the input ``q`` and optionally
-        the volume Jacobian ``sqrt_g``  over each surface in the grid with code:
+        the volume Jacobian ``sqrt_g`` over each surface in the grid with code:
         ``function(q, sqrt_g)``.
 
     """
@@ -1039,9 +1038,10 @@ def surface_averages_map(grid, surface_label="rho", expand_out=True):
         sqrt_g : ndarray
             Coordinate system Jacobian determinant; see ``data_index["sqrt(g)"]``.
         denominator : ndarray
-            This can optionally be supplied to avoid redundant computations.
-            Volume enclosed by the surfaces, derivative wrt the surface label.
-            This array should succeed broadcasting with arrays of size
+            By default, the denominator is computed as the surface integral of
+            ``sqrt_g``. This parameter can optionally be supplied to avoid
+            redundant computations or to use a different denominator to compute
+            the average. This array should broadcast with arrays of size
             ``grid.num_nodes`` (``grid.num_surface_label``) if ``expand_out``
             is true (false).
 

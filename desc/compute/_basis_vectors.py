@@ -451,6 +451,7 @@ def _e_sub_rho_rz(params, transforms, profiles, data, **kwargs):
         "R",
         "R_r",
         "R_rr",
+        "R_rrr",
         "R_rrz",
         "R_rrrz",
         "R_rz",
@@ -602,6 +603,7 @@ def _e_sub_rho_tt(params, transforms, profiles, data, **kwargs):
         "R_tt",
         "Z_rrtt",
         "omega_r",
+        "omega_rr",
         "omega_rt",
         "omega_rrt",
         "omega_rtt",
@@ -1425,6 +1427,7 @@ def _e_sub_theta_rz(params, transforms, profiles, data, **kwargs):
         "R_rtz",
         "R_rrtz",
         "R_rz",
+        "R_rrz",
         "R_t",
         "R_tz",
         "R_z",
@@ -1592,6 +1595,7 @@ def _e_sub_theta_tt(params, transforms, profiles, data, **kwargs):
         "R_ttt",
         "R_rttt",
         "Z_rttt",
+        "omega_r",
         "omega_t",
         "omega_rt",
         "omega_tt",
@@ -1720,6 +1724,7 @@ def _e_sub_theta_tz(params, transforms, profiles, data, **kwargs):
         "R_z",
         "R_rz",
         "Z_rttz",
+        "omega_r",
         "omega_t",
         "omega_rt",
         "omega_tt",
@@ -1877,12 +1882,14 @@ def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
         "omega_rtz",
         "omega_tzz",
         "omega_rtzz",
+        "omega_r",
         "omega_z",
+        "omega_zz",
         "omega_rz",
         "omega_rzz",
     ],
 )
-def _e_sub_theta_zz(params, transforms, profiles, data, **kwargs):
+def _e_sub_theta_rzz(params, transforms, profiles, data, **kwargs):
     data["e_theta_rzz"] = jnp.array(
         [
             -2 * (1 + data["omega_z"]) * data["omega_rz"] * data["R_t"]
@@ -2576,6 +2583,7 @@ def _e_sub_zeta_tt(params, transforms, profiles, data, **kwargs):
         "R_z",
         "R_rz",
         "Z_rttz",
+        "omega_r",
         "omega_t",
         "omega_rt",
         "omega_tt",
@@ -2726,6 +2734,7 @@ def _e_sub_zeta_tz(params, transforms, profiles, data, **kwargs):
         "R_zz",
         "R_rzz",
         "Z_rtzz",
+        "omega_r",
         "omega_t",
         "omega_rt",
         "omega_tz",
@@ -2867,6 +2876,7 @@ def _e_sub_zeta_zz(params, transforms, profiles, data, **kwargs):
         "R_zzz",
         "R_rzzz",
         "Z_rzzz",
+        "omega_r",
         "omega_z",
         "omega_rz",
         "omega_zz",
@@ -2989,6 +2999,24 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e^theta sqrt(g)",
+    label="\\mathbf{e}^{\\theta} \\sqrt{g}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Contravariant poloidal basis vector weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_zeta"],
+)
+def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["e^theta sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
+    return data
+
+
+@register_compute_fun(
     name="e^theta",
     label="\\mathbf{e}^{\\theta}",
     units="m^{-1}",
@@ -2999,10 +3027,10 @@ def _gradpsi(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_zeta", "sqrt(g)"],
+    data=["e^theta sqrt(g)", "sqrt(g)"],
 )
 def _e_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["e^theta"] = (cross(data["e_zeta"], data["e_rho"]).T / data["sqrt(g)"]).T
+    data["e^theta"] = (data["e^theta sqrt(g)"].T / data["sqrt(g)"]).T
     return data
 
 

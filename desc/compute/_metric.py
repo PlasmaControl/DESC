@@ -139,12 +139,10 @@ def _e_theta_x_e_zeta_rr(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["e_rho", "e_zeta"],
+    data=["e^theta sqrt(g)"],
 )
 def _e_zeta_x_e_rho(params, transforms, profiles, data, **kwargs):
-    data["|e_zeta x e_rho|"] = jnp.linalg.norm(
-        cross(data["e_zeta"], data["e_rho"]), axis=1
-    )
+    data["|e_zeta x e_rho|"] = jnp.linalg.norm(data["e^theta sqrt(g)"], axis=1)
     return data
 
 
@@ -820,9 +818,12 @@ def _sqrtg_rz(params, transforms, profiles, data, **kwargs):
         "e_rho_z",
         "e_theta_z",
         "e_zeta_z",
+        "e_rho_rr",
         "e_rho_rz",
+        "e_theta_rr",
         "e_theta_rz",
         "e_zeta_rz",
+        "e_zeta_rr",
         "e_rho_rrz",
         "e_theta_rrz",
         "e_zeta_rrz",

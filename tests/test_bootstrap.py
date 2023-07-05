@@ -47,7 +47,7 @@ def trapped_fraction(grid, modB, sqrt_g):
     Helper function to test trapped fraction calculation.
 
     Function to help test the trapped fraction calculation on
-    analytic B fields rather than Equilibium objects.
+    analytic B fields rather than Equilibrium objects.
     """
     data = {"|B|": modB, "|B|^2": modB**2, "sqrt(g)": sqrt_g}
     params = None
@@ -72,60 +72,35 @@ class TestBootstrapCompute:
         M = 100
         NFP = 3
         for N in [0, 25]:
-            grid = LinearGrid(
-                rho=[0.5, 1],
-                M=M,
-                N=N,
-                NFP=NFP,
-            )
+            grid = LinearGrid(rho=[0.5, 1], M=M, N=N, NFP=NFP)
             theta = grid.nodes[:, 1]
             zeta = grid.nodes[:, 2]
-            modB = np.zeros_like(theta)
-            sqrt_g = np.zeros_like(theta)
 
-            sqrt_g[grid.inverse_rho_idx == 0] = 10.0
-            sqrt_g[grid.inverse_rho_idx == 1] = -25.0
-
-            modB = 13.0 + 2.6 * np.cos(theta)
-            modB_1 = 9.0 + 3.7 * np.sin(theta - NFP * zeta)
+            sqrt_g = np.where(grid.inverse_rho_idx == 0, 10.0, 0.0)
             mask = grid.inverse_rho_idx == 1
-            modB[mask] = modB_1[mask]
+            sqrt_g[mask] = -25.0
+            modB = np.where(
+                mask, 9.0 + 3.7 * np.sin(theta - NFP * zeta), 13.0 + 2.6 * np.cos(theta)
+            )
 
             f_t_data = trapped_fraction(grid, modB, sqrt_g)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                expand(
-                    grid,
-                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
-                ),
+                expand(grid, [13**2 + 0.5 * 2.6**2, 9**2 + 0.5 * 3.7**2]),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
-                expand(
-                    grid,
-                    np.array(
-                        [
-                            1 / np.sqrt(13.0**2 - 2.6**2),
-                            1 / np.sqrt(9.0**2 - 3.7**2),
-                        ]
-                    ),
-                ),
+                expand(grid, 1 / np.sqrt([13**2 - 2.6**2, 9**2 - 3.7**2])),
             )
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"],
-                expand(grid, np.array([13.0 - 2.6, 9.0 - 3.7])),
-                rtol=1e-4,
+                f_t_data["min_tz |B|"], expand(grid, [13 - 2.6, 9 - 3.7]), rtol=1e-4
             )
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"],
-                expand(grid, np.array([13.0 + 2.6, 9.0 + 3.7])),
-                rtol=1e-4,
+                f_t_data["max_tz |B|"], expand(grid, [13 + 2.6, 9 + 3.7]), rtol=1e-4
             )
             np.testing.assert_allclose(
-                f_t_data["effective r/R0"],
-                expand(grid, np.array([2.6 / 13.0, 3.7 / 9.0])),
-                rtol=1e-3,
+                f_t_data["effective r/R0"], expand(grid, [2.6 / 13, 3.7 / 9]), rtol=1e-3
             )
 
     @pytest.mark.unit
@@ -152,12 +127,7 @@ class TestBootstrapCompute:
         fig = plt.figure()
 
         def test(N, grid_type):
-            grid = grid_type(
-                L=L,
-                M=M,
-                N=N,
-                NFP=NFP,
-            )
+            grid = grid_type(L=L, M=M, N=N, NFP=NFP)
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             epsilon_3D = rho * epsilon_max
@@ -189,9 +159,7 @@ class TestBootstrapCompute:
             # Eq (A8):
             fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
-                f_t_data["<|B|^2>"],
-                expand(grid, fsa_B2),
-                rtol=1e-6,
+                f_t_data["<|B|^2>"], expand(grid, fsa_B2), rtol=1e-6
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"], expand(grid, (2 + epsilon**2) / (2 * B0))
@@ -205,7 +173,7 @@ class TestBootstrapCompute:
             # Now compute f_t numerically by a different algorithm:
             modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
             sqrt_g = sqrt_g.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
-            fourpisq = 4 * np.pi * np.pi
+            fourpisq = 4 * np.pi**2
             d_V_d_rho = np.mean(sqrt_g, axis=(0, 2)) / fourpisq
             f_t = np.zeros(grid.num_rho)
             for jr in range(grid.num_rho):
@@ -277,6 +245,12 @@ class TestBootstrapCompute:
         d_ne_d_s = ne(rho, dr=1) / (2 * rho)
         d_Te_d_s = Te(rho, dr=1) / (2 * rho)
         d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
+        # TODO: remember to remove
+        print("Kaya look a tthis:", ne(np.linspace(0, 1, 20), dr=1))
+        print()
+        print("Kaya look a tthis:", Te(np.linspace(0, 1, 20), dr=1))
+        print()
+        print("Kaya look a tthis:", Ti(np.linspace(0, 1, 20), dr=1))
 
         # Sauter eq (18d)-(18e):
         ln_Lambda_e = 31.3 - np.log(np.sqrt(ne_rho) / Te_rho)
@@ -287,7 +261,7 @@ class TestBootstrapCompute:
         # Sauter eq (18b)-(18c):
         nu_e = abs(
             R
-            * (6.921e-18)
+            * 6.921e-18
             * ne_rho
             * Zeff_rho
             * ln_Lambda_e
@@ -295,7 +269,7 @@ class TestBootstrapCompute:
         )
         nu_i = abs(
             R
-            * (4.90e-18)
+            * 4.90e-18
             * ni_rho
             * (Zeff_rho**4)
             * ln_Lambda_ii
@@ -521,7 +495,7 @@ class TestBootstrapCompute:
             # Sauter eq (18b), but without the iota factor:
             nu_e_without_iota = (
                 R
-                * (6.921e-18)
+                * 6.921e-18
                 * ne_rho
                 * Zeff_rho
                 * ln_Lambda_e
@@ -658,7 +632,7 @@ class TestBootstrapCompute:
                 # Sauter eq (18b), but without the q = 1/iota factor:
                 nu_e_without_iota = (
                     R
-                    * (6.921e-18)
+                    * 6.921e-18
                     * ne_rho
                     * Zeff_rho
                     * ln_Lambda_e
@@ -1252,19 +1226,9 @@ class TestBootstrapObjectives:
         eq.atomic_number = 1.4
 
         def test(grid_type, kwargs, L, M, N):
-            grid = grid_type(
-                L=L,
-                M=M,
-                N=N,
-                NFP=eq.NFP,
-                **kwargs,
-            )
+            grid = grid_type(L=L, M=M, N=N, NFP=eq.NFP, **kwargs)
             obj = ObjectiveFunction(
-                BootstrapRedlConsistency(
-                    grid=grid,
-                    helicity=helicity,
-                ),
-                eq,
+                BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
             )
             scalar_objective = obj.compute_scalar(obj.x(eq))
             print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
@@ -1376,10 +1340,7 @@ class TestBootstrapObjectives:
             NFP=eq.NFP,
         )
         objective = ObjectiveFunction(
-            BootstrapRedlConsistency(
-                grid=grid,
-                helicity=helicity,
-            )
+            BootstrapRedlConsistency(grid=grid, helicity=helicity)
         )
         eq, _ = eq.optimize(
             verbose=3,
@@ -1395,11 +1356,7 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute(
-            ["<J*B>", "<J*B> Redl"],
-            grid=grid,
-            helicity=helicity,
-        )
+        data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
         J_dot_B_MHD = compress(grid, data["<J*B>"])
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 
@@ -1489,17 +1446,9 @@ class TestBootstrapObjectives:
         )
 
         # grid for bootstrap consistency objective:
-        grid = QuadratureGrid(
-            L=current_L * 2,
-            M=eq.M * 2,
-            N=eq.N * 2,
-            NFP=eq.NFP,
-        )
+        grid = QuadratureGrid(L=current_L * 2, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         objective = ObjectiveFunction(
-            BootstrapRedlConsistency(
-                grid=grid,
-                helicity=helicity,
-            )
+            BootstrapRedlConsistency(grid=grid, helicity=helicity)
         )
         eq, _ = eq.optimize(
             verbose=3,
@@ -1518,11 +1467,7 @@ class TestBootstrapObjectives:
 
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
-        data = eq.compute(
-            ["<J*B>", "<J*B> Redl"],
-            grid=grid,
-            helicity=helicity,
-        )
+        data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
         J_dot_B_MHD = compress(grid, data["<J*B>"])
         J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
 

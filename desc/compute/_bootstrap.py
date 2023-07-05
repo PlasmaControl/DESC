@@ -21,6 +21,7 @@ from .utils import compress, expand, surface_averages_map
     profiles=[],
     coordinates="r",
     data=["sqrt(g)", "V_r(r)", "|B|", "<|B|^2>", "max_tz |B|"],
+    axis_limit_data=["sqrt(g)_r", "V_rr(r)"],
     n_gauss="n_gauss",
 )
 def _trapped_fraction(params, transforms, profiles, data, **kwargs):
@@ -45,19 +46,18 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     lambda_weights = jnp.asarray(base_weights * 0.5)
 
     grid = transforms["grid"]
-    Bmax = data["max_tz |B|"]
-    modB_over_Bmax = data["|B|"] / Bmax
-    sqrt_g = data["sqrt(g)"]
-    Bmax_squared = compress(grid, Bmax * Bmax)
-    V_r = compress(grid, data["V_r(r)"])
+    modB_over_Bmax = data["|B|"] / data["max_tz |B|"]
+    Bmax_squared = compress(grid, data["max_tz |B|"] ** 2)
+    sqrt_g = grid.replace_at_axis(data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True)
+    V_r = compress(
+        grid, grid.replace_at_axis(data["V_r(r)"], lambda: data["V_rr(r)"], copy=True)
+    )
     compute_surface_averages = surface_averages_map(grid, expand_out=False)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
         flux_surf_avg_term = compute_surface_averages(
-            jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
-            sqrt_g,
-            denominator=V_r,
+            jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax), sqrt_g, denominator=V_r
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
             Bmax_squared * flux_surf_avg_term
@@ -141,6 +141,8 @@ def j_dot_B_Redl(
     Zeff = jnp.maximum(1 + 1.0e-14, profile_data["Zeff"])
     ni = ne / Zeff
     pe = ne * Te
+    # TODO: this. mark source of nan at axis limit here
+    print(psi_edge)
     d_ne_d_s = profile_data["ne_r"] / (2 * rho)
     d_Te_d_s = profile_data["Te_r"] / (2 * rho)
     d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
@@ -153,7 +155,7 @@ def j_dot_B_Redl(
     geometry_factor = abs(R / (iota - helicity_N))
     nu_e = (
         geometry_factor
-        * (6.921e-18)
+        * 6.921e-18
         * ne
         * Zeff
         * ln_Lambda_e
@@ -161,7 +163,7 @@ def j_dot_B_Redl(
     )
     nu_i = (
         geometry_factor
-        * (4.90e-18)
+        * 4.90e-18
         * ni
         * (Zeff**4)
         * ln_Lambda_ii
@@ -280,6 +282,7 @@ def j_dot_B_Redl(
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
+    # These two variables look unused, but they are.
     nu_e_star = nu_e
     nu_i_star = nu_i
     variables = [

@@ -483,11 +483,12 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
+                eq=self,
                 iota=objective != "vacuum" and self.iota is not None,
                 kinetic=self.electron_temperature is not None,
             )
         if not isinstance(objective, ObjectiveFunction):
-            objective = get_equilibrium_objective(objective)
+            objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
 
@@ -602,10 +603,11 @@ class Equilibrium(_Configuration, IOAble):
             optimizer = Optimizer(optimizer)
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
+                eq=self,
                 iota=self.iota is not None,
                 kinetic=self.electron_temperature is not None,
             )
-            constraints = (ForceBalance(), *constraints)
+            constraints = (ForceBalance(eq=self), *constraints)
 
         if copy:
             eq = self.copy()
@@ -695,7 +697,7 @@ class Equilibrium(_Configuration, IOAble):
         perturb_options = {} if perturb_options is None else perturb_options
 
         if constraint is None:
-            constraint = get_equilibrium_objective()
+            constraint = get_equilibrium_objective(eq=self)
 
         timer = Timer()
         timer.start("Total time")
@@ -860,15 +862,17 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         if objective is None:
-            objective = get_equilibrium_objective()
+            objective = get_equilibrium_objective(eq=self)
         if constraints is None:
             if "Ra_n" in deltas or "Za_n" in deltas:
                 constraints = get_fixed_axis_constraints(
+                    eq=self,
                     iota=self.iota is not None,
                     kinetic=self.electron_temperature is not None,
                 )
             else:
                 constraints = get_fixed_boundary_constraints(
+                    eq=self,
                     iota=self.iota is not None,
                     kinetic=self.electron_temperature is not None,
                 )

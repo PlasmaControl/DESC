@@ -61,7 +61,7 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -74,6 +74,7 @@ class BoundaryRSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         modes = eq.surface.R_basis.modes
         idx = np.arange(eq.surface.R_basis.num_modes)
 
@@ -143,7 +144,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -156,6 +157,7 @@ class BoundaryZSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         modes = eq.surface.Z_basis.modes
         idx = np.arange(eq.surface.Z_basis.num_modes)
 
@@ -219,7 +221,7 @@ class AxisRSelfConsistency(_Objective):
             normalize_target=False,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -232,6 +234,7 @@ class AxisRSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -291,7 +294,7 @@ class AxisZSelfConsistency(_Objective):
             normalize_target=False,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -304,6 +307,7 @@ class AxisZSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         ns = eq.axis.Z_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
@@ -398,7 +402,7 @@ class FixBoundaryR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -411,6 +415,7 @@ class FixBoundaryR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -549,7 +554,7 @@ class FixBoundaryZ(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -562,6 +567,7 @@ class FixBoundaryZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -666,7 +672,7 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -679,6 +685,7 @@ class FixLambdaGauge(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         L_basis = eq.L_basis
 
         if L_basis.sym:
@@ -747,7 +754,7 @@ class FixThetaSFL(_Objective):
 
         super().__init__(eq=eq, target=0, weight=1, name=name)
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -760,6 +767,7 @@ class FixThetaSFL(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         idx = np.arange(eq.L_basis.num_modes)
         modes_idx = idx
         self._idx = idx
@@ -853,7 +861,7 @@ class FixAxisR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -866,6 +874,8 @@ class FixAxisR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
+
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -1005,7 +1015,7 @@ class FixAxisZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1018,6 +1028,8 @@ class FixAxisZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
+
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -1163,7 +1175,7 @@ class FixModeR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1176,6 +1188,7 @@ class FixModeR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1307,7 +1320,7 @@ class FixModeZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1320,6 +1333,7 @@ class FixModeZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1466,7 +1480,7 @@ class FixSumModesR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1479,6 +1493,7 @@ class FixSumModesR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1630,7 +1645,7 @@ class FixSumModesZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1643,6 +1658,7 @@ class FixSumModesZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1782,7 +1798,7 @@ class _FixProfile(_Objective, ABC):
             name=name,
         )
 
-    def build(self, eq, profile=None, use_jit=False, verbose=1):
+    def build(self, eq=None, profile=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1797,6 +1813,7 @@ class _FixProfile(_Objective, ABC):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = profile
 
@@ -1882,7 +1899,7 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1895,6 +1912,7 @@ class FixPressure(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.pressure is None:
             raise RuntimeError(
                 "Attempting to fix pressure on an equilibrium with no "
@@ -1996,7 +2014,7 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2009,6 +2027,7 @@ class FixIota(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.iota is None:
             raise RuntimeError(
                 "Attempt to fix rotational transform on an equilibrium with no "
@@ -2105,7 +2124,7 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2118,6 +2137,7 @@ class FixCurrent(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.current is None:
             raise RuntimeError(
                 "Attempting to fix toroidal current on an equilibrium with no "
@@ -2217,7 +2237,7 @@ class FixElectronTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2230,6 +2250,7 @@ class FixElectronTemperature(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.electron_temperature is None:
             raise RuntimeError(
                 "Attempting to fix electron temperature on an equilibrium with no "
@@ -2329,7 +2350,7 @@ class FixElectronDensity(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2342,6 +2363,7 @@ class FixElectronDensity(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.electron_density is None:
             raise RuntimeError(
                 "Attempting to fix electron density on an equilibrium with no "
@@ -2441,7 +2463,7 @@ class FixIonTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2454,6 +2476,7 @@ class FixIonTemperature(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.ion_temperature is None:
             raise RuntimeError(
                 "Attempting to fix ion temperature on an equilibrium with no "
@@ -2555,7 +2578,7 @@ class FixAtomicNumber(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2568,6 +2591,7 @@ class FixAtomicNumber(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.atomic_number is None:
             raise RuntimeError(
                 "Attempting to fix atomic number on an equilibrium with no "
@@ -2649,7 +2673,7 @@ class FixPsi(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2662,6 +2686,7 @@ class FixPsi(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         self._dim_f = 1
 
         if self._target_from_user is None:

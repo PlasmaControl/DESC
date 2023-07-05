@@ -1,8 +1,9 @@
-"""Tests for surface averaging etc."""
+"""Tests compute utilities related to surface averaging, etc."""
 
 import numpy as np
 import pytest
 
+from desc.basis import FourierZernikeBasis
 from desc.compute.utils import (
     _get_grid_surface,
     line_integrals,
@@ -14,6 +15,7 @@ from desc.compute.utils import (
 )
 from desc.examples import get
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
+from desc.transform import Transform
 
 
 def benchmark_surface_integrals(grid, q=np.array([1.0]), surface_label="rho"):
@@ -78,8 +80,8 @@ N = 3
 NFP = 5
 
 
-class TestComputeUtils:
-    """Tests for grid operations, surface averages etc."""
+class TestComputeUtilsSurface:
+    """Tests for compute utilities related to surface averaging, etc."""
 
     @pytest.mark.unit
     def test_surface_integrals(self):
@@ -340,7 +342,131 @@ class TestComputeUtils:
         )
 
     @pytest.mark.unit
-    def test_min_max(self):
+    def test_symmetry_surface_average_1(self):
+        """Test surface average of a symmetric function."""
+
+        def test(grid):
+            r = grid.nodes[:, 0]
+            t = grid.nodes[:, 1]
+            z = grid.nodes[:, 2] * grid.NFP
+            true_surface_avg = 5
+            function_of_rho = 1 / (r + 0.35)
+            f = (
+                true_surface_avg
+                + np.cos(t)
+                - 0.5 * np.cos(z)
+                + 3 * np.cos(t) * np.cos(z) ** 2
+                - 2 * np.sin(z) * np.sin(t)
+            ) * function_of_rho
+            np.testing.assert_allclose(
+                surface_averages(grid, f),
+                true_surface_avg * function_of_rho,
+                rtol=1e-15,
+                err_msg=type(grid),
+            )
+
+        # these tests should be run on relatively low resolution grids,
+        # or at least low enough so that the asymmetric spacing test fails
+        L = [3, 3, 5, 3]
+        M = [3, 6, 5, 7]
+        N = [2, 2, 2, 2]
+        NFP = [5, 3, 5, 3]
+        sym = np.asarray([True, True, False, False])
+        # to test code not tested on grids made with M=.
+        even_number = 4
+        n_theta = even_number - sym
+
+        # asymmetric spacing
+        with pytest.raises(AssertionError):
+            theta = 2 * np.pi * np.asarray([t**2 for t in np.linspace(0, 1, max(M))])
+            test(LinearGrid(L=max(L), theta=theta, N=max(N), sym=False))
+
+        for i in range(len(L)):
+            test(LinearGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            test(LinearGrid(L=L[i], theta=n_theta[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, 2 * np.pi, n_theta[i]),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, 2 * np.pi, n_theta[i] + 1),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+            test(QuadratureGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i]))
+            test(ConcentricGrid(L=L[i], M=M[i], N=N[i], NFP=NFP[i], sym=sym[i]))
+            # nonuniform spacing when sym is False, but spacing is still symmetric
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, np.pi, n_theta[i]),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+            test(
+                LinearGrid(
+                    L=L[i],
+                    theta=np.linspace(0, np.pi, n_theta[i] + 1),
+                    N=N[i],
+                    NFP=NFP[i],
+                    sym=sym[i],
+                )
+            )
+
+    @pytest.mark.unit
+    def test_symmetry_surface_average_2(self):
+        """Tests that surface averages are correct using specified basis."""
+
+        def test(grid, basis, true_avg=1):
+            transform = Transform(grid, basis)
+
+            # random data with specified average on each surface
+            coeffs = np.random.rand(basis.num_modes)
+            coeffs[np.where((basis.modes[:, 1:] == [0, 0]).all(axis=1))[0]] = 0
+            coeffs[np.where((basis.modes == [0, 0, 0]).all(axis=1))[0]] = true_avg
+
+            # compute average for each surface in grid
+            values = transform.transform(coeffs)
+            numerical_avg = surface_averages(grid, values, expand_out=False)
+            if isinstance(grid, ConcentricGrid):
+                # values closest to axis are never accurate enough
+                numerical_avg = numerical_avg[1:]
+            np.testing.assert_allclose(
+                numerical_avg,
+                true_avg,
+                err_msg=str(type(grid)) + " " + str(grid.sym),
+            )
+
+        M = 10
+        M_grid = 23
+        test(
+            QuadratureGrid(L=M_grid, M=M_grid, N=0), FourierZernikeBasis(L=M, M=M, N=0)
+        )
+        test(
+            LinearGrid(L=M_grid, M=M_grid, N=0, sym=True),
+            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
+        )
+        test(
+            ConcentricGrid(L=M_grid, M=M_grid, N=0), FourierZernikeBasis(L=M, M=M, N=0)
+        )
+        test(
+            ConcentricGrid(L=M_grid, M=M_grid, N=0, sym=True),
+            FourierZernikeBasis(L=M, M=M, N=0, sym="cos"),
+        )
+
+    @pytest.mark.unit
+    def test_surface_min_max(self):
         """Test the surface_min and surface_max functions."""
         for grid_type in [LinearGrid, QuadratureGrid, ConcentricGrid]:
             grid = grid_type(L=3, M=4, N=5, NFP=3)

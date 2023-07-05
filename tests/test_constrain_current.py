@@ -64,22 +64,20 @@ class TestConstrainCurrent:
 
         def test(stellarator, grid_type):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            if grid_type == "Quadrature":
-                grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
-            elif grid_type == "Concentric":
+            if grid_type == QuadratureGrid:
+                grid = grid_type(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            elif grid_type == ConcentricGrid:
                 grid = ConcentricGrid(
                     L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
                 )
             else:
-                # Todo: set axis to true when every quantity's limit at the axis
-                #  can be computed.
                 grid = LinearGrid(
                     L=eq.L_grid,
                     M=eq.M_grid,
                     N=eq.N_grid,
                     NFP=eq.NFP,
                     sym=eq.sym,
-                    axis=False,
+                    axis=True,
                 )
 
             params = {
@@ -113,7 +111,7 @@ class TestConstrainCurrent:
             np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
             np.testing.assert_allclose(data["iota_rr"], benchmark_data["iota_rr"])
 
-        for e in ("Quadrature", "Concentric", "Linear"):
+        for grid_type in (QuadratureGrid, ConcentricGrid, LinearGrid):
             # works with any stellarators in desc/examples with fixed iota profiles
-            test(DSHAPE, e)
-            test(HELIOTRON_vac, e)
+            test(DSHAPE, grid_type)
+            test(HELIOTRON_vac, grid_type)

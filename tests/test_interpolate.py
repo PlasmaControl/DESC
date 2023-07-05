@@ -38,6 +38,9 @@ class TestInterp1D:
         fq = interp1d(x, xp, fp, method="monotonic")
         np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-3)
 
+        fq = interp1d(x, xp, fp, method="monotonic-0")
+        np.testing.assert_allclose(fq, f(x), rtol=1e-4, atol=1e-2)
+
     @pytest.mark.unit
     def test_interp1d_extrap_periodic(self):
         """Test extrapolation and periodic BC of 1d interpolation."""
@@ -66,8 +69,12 @@ class TestInterp1D:
         xq = np.linspace(-4, 5, 1000)
         dfc = interp1d(xq, x, f, derivative=1, method="cubic")
         dfm = interp1d(xq, x, f, derivative=1, method="monotonic")
+        dfm0 = interp1d(xq, x, f, derivative=1, method="monotonic-0")
         assert dfc.min() < 0  # cubic interpolation undershoots, giving negative slope
         assert dfm.min() > 0  # monotonic interpolation doesn't
+        assert dfm0.min() >= 0  # monotonic-0 doesn't overshoot either
+        # ensure monotonic-0 has 0 slope at end points
+        np.testing.assert_allclose(dfm0[np.array([0, -1])], 0, atol=1e-12)
 
 
 class TestInterp2D:

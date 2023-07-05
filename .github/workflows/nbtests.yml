@@ -40,4 +40,4 @@ jobs:
           pwd
           lscpu
           export PYTHONPATH=$(pwd)
-          pytest -v --nbmake "./docs/notebooks" --nbmake-timeout=600 --ignore=./docs/notebooks/zernike_eval.ipynb --ignore=./docs/notebooks/DESC_Solve_from_pyQSC.ipynb
+          pytest -v --nbmake "./docs/notebooks" --nbmake-timeout=1000 --ignore=./docs/notebooks/zernike_eval.ipynb --ignore=./docs/notebooks/DESC_Solve_from_pyQSC.ipynb

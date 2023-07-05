@@ -244,7 +244,7 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n", "e_theta_t"],
+    data=["n_rho", "e_theta_t"],
 )
 def _L_sff(params, transforms, profiles, data, **kwargs):
     data["L_sff"] = dot(data["e_theta_t"], data["n_rho"])
@@ -262,7 +262,7 @@ def _L_sff(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n", "e_theta_z"],
+    data=["n_rho", "e_theta_z"],
 )
 def _M_sff(params, transforms, profiles, data, **kwargs):
     data["M_sff"] = dot(data["e_theta_z"], data["n_rho"])
@@ -280,7 +280,7 @@ def _M_sff(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["n", "e_zeta_z"],
+    data=["n_rho", "e_zeta_z"],
 )
 def _N_sff(params, transforms, profiles, data, **kwargs):
     data["N_sff"] = dot(data["e_zeta_z"], data["n_rho"])

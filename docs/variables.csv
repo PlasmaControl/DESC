@@ -34,7 +34,7 @@ Name,Label,Units,Description,Module
 ``e^theta``,:math:`\mathbf{e}^{\theta}`,inverse meters,Contravariant poloidal basis vector,``desc.compute._basis_vectors``
 ``e^zeta``,:math:`\mathbf{e}^{\zeta}`,inverse meters,Contravariant toroidal basis vector,``desc.compute._basis_vectors``
 ``b``,:math:`\hat{b}`,None,Unit vector along magnetic field,``desc.compute._basis_vectors``
-``n``,:math:`\hat{\mathbf{n}}`,None,Unit normal vector to constant rho surface,``desc.compute._basis_vectors``
+``n_rho``,:math:`\hat{\mathbf{n}}_{\rho}`,None,Unit vector normal to constant rho surface (direction of e^rho),``desc.compute._basis_vectors``
 ``grad(alpha)``,:math:`\nabla \alpha`,Inverse meters,Unit vector normal to flux surface,``desc.compute._basis_vectors``
 ``trapped fraction``,:math:`1 - \frac{3}{4} \langle B^2 \rangle \int_0^{1/Bmax} \frac{\lambda\; d\lambda}{\langle \sqrt{1 - \lambda B} \rangle}`,None,Neoclassical effective trapped particle fraction,``desc.compute._bootstrap``
 ``<J*B> Redl``,:math:`\langle\mathbf{J}\cdot\mathbf{B}\rangle_{Redl}`,Tesla Ampere / meter^2,"Bootstrap current profile, Redl model for quasisymmetry",``desc.compute._bootstrap``

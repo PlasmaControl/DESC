@@ -439,7 +439,7 @@ class FourierRZCurve(Curve):
         phi = R_transform.grid.nodes[:, 2]
         return jnp.trapz(T, phi)
 
-    def to_xyz(self, N=None):
+    def to_FourierXYZCurve(self, N=None):
         """Convert to FourierXYZCurve representation.
 
         Parameters

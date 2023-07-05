@@ -135,10 +135,10 @@ class TestRZCurve:
             c.grid = [1, 2, 3]
 
     @pytest.mark.unit
-    def test_to_xyz(self):
+    def test_to_FourierXYZCurve(self):
         """Test conversion to XYZCurve."""
         rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
-        xyz = rz.to_xyz(N=2)
+        xyz = rz.to_FourierXYZCurve(N=2)
 
         np.testing.assert_allclose(
             rz.compute_curvature(), xyz.compute_curvature(grid=rz.grid)

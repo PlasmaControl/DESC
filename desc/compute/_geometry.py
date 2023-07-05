@@ -97,13 +97,13 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="",
-    data=["sqrt(g)", "R"],
+    data=["|e_rho x e_theta|"],
 )
 def _A(params, transforms, profiles, data, **kwargs):
     data["A"] = jnp.mean(
         surface_integrals(
             transforms["grid"],
-            jnp.abs(data["sqrt(g)"] / data["R"]),
+            data["|e_rho x e_theta|"],  # equivalent to sqrt(g)/R for phi=zeta
             surface_label="zeta",
             expand_out=False,
         )

@@ -343,6 +343,68 @@ class Grid(IOAble):
             )
         )
 
+    def compress(self, x, surface_label="rho"):
+        """Compress x by returning only the elements at unique surface_label indices.
+
+        Parameters
+        ----------
+        x : ndarray
+            The array to compress.
+            Should usually represent a surface function (a function constant over a surface)
+            in an array that matches the grid's pattern.
+        surface_label : str
+            The surface label of rho, theta, or zeta.
+
+        Returns
+        -------
+        compress_x : ndarray
+            x[grid.unique_surface_label_indices]
+            This array will be sorted such that the
+                first element corresponds to the value associated with the smallest surface
+                last element  corresponds to the value associated with the largest surface
+
+        """
+        assert surface_label in {"rho", "theta", "zeta"}
+        assert len(x) == self.num_nodes
+        if surface_label == "rho":
+            return x[self.unique_rho_idx]
+        if surface_label == "theta":
+            return x[self.unique_theta_idx]
+        if surface_label == "zeta":
+            return x[self.unique_zeta_idx]
+
+    def expand(self, x, surface_label="rho"):
+        """Expand x by duplicating elements to match the grid's pattern.
+
+        Parameters
+        ----------
+        x : ndarray
+            Stores the values of a surface function (a function constant over a surface)
+            for all unique surfaces of the specified label on the grid.
+            - len(x) should be grid.num_surface_label
+            - x should be sorted such that the
+                first element corresponds to the value associated with the smallest surface
+                last element  corresponds to the value associated with the largest surface
+        surface_label : str
+            The surface label of rho, theta, or zeta.
+
+        Returns
+        -------
+        expand_x : ndarray
+            X expanded to match the grid's pattern.
+
+        """
+        assert surface_label in {"rho", "theta", "zeta"}
+        if surface_label == "rho":
+            assert len(x) == self.num_rho
+            return x[self.inverse_rho_idx]
+        if surface_label == "theta":
+            assert len(x) == self.num_theta
+            return x[self.inverse_theta_idx]
+        if surface_label == "zeta":
+            assert len(x) == self.num_zeta
+            return x[self.inverse_zeta_idx]
+
     def replace_at_axis(self, x, y, copy=False, **kwargs):
         """Replace elements of ``x`` with elements of ``y`` at the axis of grid.
 

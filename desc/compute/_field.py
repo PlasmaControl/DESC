@@ -3301,10 +3301,10 @@ def _kappa(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["kappa", "n"],
+    data=["kappa", "n_rho"],
 )
 def _kappa_n(params, transforms, profiles, data, **kwargs):
-    data["kappa_n"] = dot(data["kappa"], data["n"])
+    data["kappa_n"] = dot(data["kappa"], data["n_rho"])
     return data
 
 
@@ -3319,10 +3319,10 @@ def _kappa_n(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["kappa", "n", "b"],
+    data=["kappa", "n_rho", "b"],
 )
 def _kappa_g(params, transforms, profiles, data, **kwargs):
-    data["kappa_g"] = dot(data["kappa"], cross(data["n"], data["b"]))
+    data["kappa_g"] = dot(data["kappa"], cross(data["n_rho"], data["b"]))
     return data
 
 

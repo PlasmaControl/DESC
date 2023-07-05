@@ -6,7 +6,6 @@ from netCDF4 import Dataset
 
 import desc.examples
 import desc.io
-from desc.compute.utils import compress
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.objectives import MagneticWell, MercierStability
@@ -39,7 +38,7 @@ def all_close(
 
     """
     minimum, maximum = rho_range
-    interval = np.where((minimum < rho) & (rho < maximum))[0]
+    interval = (minimum < rho) & (rho < maximum)
     np.testing.assert_allclose(y1[interval], y2[interval], rtol=rtol, atol=atol)
 
 
@@ -88,7 +87,7 @@ def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_shear_vmec = get_vmec_data(stellarator, "DShear")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_shear = compress(grid, eq.compute("D_shear", grid=grid)["D_shear"])
+        d_shear = grid.compress(eq.compute("D_shear", grid=grid)["D_shear"])
 
         assert np.all(
             d_shear[np.isfinite(d_shear)] >= 0
@@ -110,7 +109,7 @@ def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_current_vmec = get_vmec_data(stellarator, "DCurr")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_current = compress(grid, eq.compute("D_current", grid=grid)["D_current"])
+        d_current = grid.compress(eq.compute("D_current", grid=grid)["D_current"])
 
         assert (
             len(np.where(np.sign(d_current) != np.sign(d_current_vmec))[0])
@@ -133,7 +132,7 @@ def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_well_vmec = get_vmec_data(stellarator, "DWell")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
+        d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
 
         assert (
             len(np.where(np.sign(d_well) != np.sign(d_well_vmec))[0]) <= MAX_SIGN_DIFF
@@ -157,7 +156,7 @@ def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_geodesic_vmec = get_vmec_data(stellarator, "DGeod")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_geodesic = compress(grid, eq.compute("D_geodesic", grid=grid)["D_geodesic"])
+        d_geodesic = grid.compress(eq.compute("D_geodesic", grid=grid)["D_geodesic"])
 
         assert np.all(
             d_geodesic[np.isfinite(d_geodesic)] <= 0
@@ -180,7 +179,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         rho, d_mercier_vmec = get_vmec_data(stellarator, "DMerc")
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_mercier = compress(grid, eq.compute("D_Mercier", grid=grid)["D_Mercier"])
+        d_mercier = grid.compress(eq.compute("D_Mercier", grid=grid)["D_Mercier"])
 
         assert (
             len(np.where(np.sign(d_mercier) != np.sign(d_mercier_vmec))[0])
@@ -201,11 +200,10 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
     def test(stellarator, rho=np.linspace(0, 1, 128)):
         eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
         grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-        d_well = compress(grid, eq.compute("D_well", grid=grid)["D_well"])
-        magnetic_well = compress(
-            grid, eq.compute("magnetic well", grid=grid)["magnetic well"]
+        d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
+        magnetic_well = grid.compress(
+            eq.compute("magnetic well", grid=grid)["magnetic well"]
         )
-
         assert (
             len(np.where(np.sign(d_well) != np.sign(magnetic_well))[0]) <= MAX_SIGN_DIFF
         )
@@ -266,7 +264,7 @@ def test_magwell_print(capsys):
     grid = LinearGrid(L=12, M=12, N=6, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
 
-    magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
+    magwell = grid.compress(eq.compute("magnetic well", grid=grid)["magnetic well"])
     f = obj.compute(*obj.xs(eq))
     np.testing.assert_allclose(f, magwell)
 

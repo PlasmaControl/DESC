@@ -5,11 +5,11 @@ All compute functions take the following arguments:
 Parameters
 ----------
 params : dict of ndarray
-    Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc
+    Parameters from the equilibrium, such as R_lmn, Z_lmn, i_l, p_l, etc.
 transforms : dict of Transform
-    Transforms for R, Z, lambda, etc
+    Transforms for R, Z, lambda, etc.
 profiles : dict of Profile
-    Profile objects for pressure, iota, current, etc
+    Profile objects for pressure, iota, current, etc.
 data : dict of ndarray
     Data computed so far, generally output from other compute functions
 kwargs : dict

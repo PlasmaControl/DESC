@@ -5,7 +5,7 @@ from scipy.special import roots_legendre
 
 from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
-from .utils import compress, expand, surface_averages_map
+from .utils import surface_averages_map
 
 
 @register_compute_fun(
@@ -47,10 +47,10 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
 
     grid = transforms["grid"]
     modB_over_Bmax = data["|B|"] / data["max_tz |B|"]
-    Bmax_squared = compress(grid, data["max_tz |B|"] ** 2)
+    Bmax_squared = grid.compress(data["max_tz |B|"] ** 2)
     sqrt_g = grid.replace_at_axis(data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True)
-    V_r = compress(
-        grid, grid.replace_at_axis(data["V_r(r)"], lambda: data["V_rr(r)"], copy=True)
+    V_r = grid.compress(
+        grid.replace_at_axis(data["V_r(r)"], lambda: data["V_rr(r)"], copy=True)
     )
     compute_surface_averages = surface_averages_map(grid, expand_out=False)
 
@@ -64,9 +64,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
         )
 
     lambda_integral = fori_loop(0, n_gauss, body_fun, jnp.zeros(grid.num_rho))
-    data["trapped fraction"] = 1 - 0.75 * data["<|B|^2>"] * expand(
-        grid, lambda_integral
-    )
+    data["trapped fraction"] = 1 - 0.75 * data["<|B|^2>"] * grid.expand(lambda_integral)
     return data
 
 
@@ -282,7 +280,7 @@ def j_dot_B_Redl(
     J_dot_B = dnds_term + dTeds_term + dTids_term
 
     # Store all results in the J_dot_B_data dictionary:
-    # These two variables look unused, but they are.
+    # These two variables look unused, but they are used.
     nu_e_star = nu_e
     nu_i_star = nu_i
     variables = [
@@ -363,30 +361,32 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     # i.e. on the compressed grid. In contrast, "data" contains
     # quantities on a 3D grid even for quantities that are flux
     # functions.
-    geom_data = {}
-    geom_data["f_t"] = compress(grid, data["trapped fraction"])
-    geom_data["epsilon"] = compress(grid, data["effective r/R0"])
-    geom_data["G"] = compress(grid, data["G"])
-    geom_data["I"] = compress(grid, data["I"])
-    geom_data["iota"] = compress(grid, data["iota"])
-    geom_data["<1/|B|>"] = compress(grid, data["<1/|B|>"])
+    geom_data = {
+        "f_t": grid.compress(data["trapped fraction"]),
+        "epsilon": grid.compress(data["effective r/R0"]),
+        "G": grid.compress(data["G"]),
+        "I": grid.compress(data["I"]),
+        "iota": grid.compress(data["iota"]),
+        "<1/|B|>": grid.compress(data["<1/|B|>"]),
+        "psi_edge": params["Psi"] / (2 * jnp.pi),
+    }
     geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
         "<1/|B|>"
     ]
-    geom_data["psi_edge"] = params["Psi"] / (2 * jnp.pi)
 
-    profile_data = {}
-    profile_data["rho"] = compress(grid, data["rho"])
-    profile_data["ne"] = compress(grid, data["ne"])
-    profile_data["ne_r"] = compress(grid, data["ne_r"])
-    profile_data["Te"] = compress(grid, data["Te"])
-    profile_data["Te_r"] = compress(grid, data["Te_r"])
-    profile_data["Ti"] = compress(grid, data["Ti"])
-    profile_data["Ti_r"] = compress(grid, data["Ti_r"])
+    profile_data = {
+        "rho": grid.compress(data["rho"]),
+        "ne": grid.compress(data["ne"]),
+        "ne_r": grid.compress(data["ne_r"]),
+        "Te": grid.compress(data["Te"]),
+        "Te_r": grid.compress(data["Te_r"]),
+        "Ti": grid.compress(data["Ti"]),
+        "Ti_r": grid.compress(data["Ti_r"]),
+    }
     if profiles["atomic_number"] is None:
         Zeff = jnp.ones(grid.num_rho)
     else:
-        Zeff = compress(grid, data["Zeff"])
+        Zeff = grid.compress(data["Zeff"])
     profile_data["Zeff"] = Zeff
 
     helicity = kwargs.get("helicity", (1, 0))
@@ -397,5 +397,5 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         profile_data,
         helicity_N,
     )
-    data["<J*B> Redl"] = expand(grid, j_dot_B_data["<J*B>"])
+    data["<J*B> Redl"] = grid.expand(j_dot_B_data["<J*B>"])
     return data

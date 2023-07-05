@@ -5,7 +5,6 @@ import pytest
 from netCDF4 import Dataset
 
 from desc.basis import DoubleFourierSeries, FourierZernikeBasis
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid
 from desc.vmec import VMECIO
@@ -276,10 +275,10 @@ def test_vmec_load_profiles(TmpDir):
     data_iota = eq_iota.compute(["iota", "current"], grid=grid)
     data_current = eq_current.compute(["iota", "current"], grid=grid)
 
-    iota_iota = compress(grid, data_iota["iota"])
-    iota_current = compress(grid, data_current["iota"])
-    current_iota = compress(grid, data_iota["current"])
-    current_current = compress(grid, data_current["current"])
+    iota_iota = grid.compress(data_iota["iota"])
+    iota_current = grid.compress(data_current["iota"])
+    current_iota = grid.compress(data_iota["current"])
+    current_current = grid.compress(data_current["current"])
 
     np.testing.assert_allclose(iota_iota, iota_current, rtol=2e-2)
     np.testing.assert_allclose(current_current, current_iota, rtol=2e-2)

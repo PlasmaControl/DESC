@@ -43,6 +43,25 @@ def _e_sub_theta(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="e_theta_PEST",
+    label="\\mathbf{e}_{\\theta_{PEST}}",
+    units="m",
+    units_long="meters",
+    description="Covariant straight field line (PEST) poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "theta_PEST_t"],
+)
+def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
+    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
+    data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
+    return data
+
+
+@register_compute_fun(
     name="e_theta / sqrt(g)",
     label="\\mathbf{e}_{\\theta} / \\sqrt{g}",
     units="m",
@@ -100,6 +119,154 @@ def _e_sub_zeta(params, transforms, profiles, data, **kwargs):
 def _e_sub_phi(params, transforms, profiles, data, **kwargs):
     # dX/dphi at const r,t = dX/dz * dz/dphi = dX/dz / (dphi/dz)
     data["e_phi"] = (data["e_zeta"].T / data["phi_z"]).T
+    return data
+
+
+@register_compute_fun(
+    name="e^rho",
+    label="\\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta / sqrt(g)", "e_zeta"],
+)
+def _e_sup_rho(params, transforms, profiles, data, **kwargs):
+    data["e^rho"] = cross(data["e_theta / sqrt(g)"], data["e_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="n_rho",
+    label="\\hat{\\mathbf{n}}_{\\rho}",
+    units="~",
+    units_long="None",
+    description="Unit vector normal to constant rho surface (direction of e^rho)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho"],
+)
+def _n_rho(params, transforms, profiles, data, **kwargs):
+    data["n_rho"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"], axis=-1)).T
+    return data
+
+
+@register_compute_fun(
+    name="grad(psi)",
+    label="\\nabla\\psi",
+    units="Wb / m",
+    units_long="Webers per meter",
+    description="Toroidal flux gradient (normalized by 2pi)",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["psi_r", "e^rho"],
+)
+def _gradpsi(params, transforms, profiles, data, **kwargs):
+    data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
+    return data
+
+
+@register_compute_fun(
+    name="e^theta sqrt(g)",
+    label="\\mathbf{e}^{\\theta} \\sqrt{g}",
+    units="m^{2}",
+    units_long="square meters",
+    description="Contravariant poloidal basis vector weighted by 3-D volume Jacobian",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_zeta"],
+)
+def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["e^theta sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
+    return data
+
+
+@register_compute_fun(
+    name="e^theta",
+    label="\\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant poloidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^theta sqrt(g)", "sqrt(g)"],
+)
+def _e_sup_theta(params, transforms, profiles, data, **kwargs):
+    data["e^theta"] = (data["e^theta sqrt(g)"].T / data["sqrt(g)"]).T
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta",
+    label="\\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_theta / sqrt(g)"],
+)
+def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
+    data["e^zeta"] = cross(data["e_rho"], data["e_theta / sqrt(g)"])
+    return data
+
+
+@register_compute_fun(
+    name="b",
+    label="\\hat{b}",
+    units="~",
+    units_long="None",
+    description="Unit vector along magnetic field",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B"],
+)
+def _b(params, transforms, profiles, data, **kwargs):
+    data["b"] = (data["B"].T / jnp.linalg.norm(data["B"], axis=-1)).T
+    return data
+
+
+@register_compute_fun(
+    name="grad(alpha)",
+    label="\\nabla \\alpha",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Unit vector along field line",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e^rho", "e^theta", "e^zeta", "alpha_r", "alpha_t", "alpha_z"],
+)
+def _grad_alpha(params, transforms, profiles, data, **kwargs):
+    data["grad(alpha)"] = (
+        data["alpha_r"] * data["e^rho"].T
+        + data["alpha_t"] * data["e^theta"].T
+        + data["alpha_z"] * data["e^zeta"].T
+    ).T
     return data
 
 
@@ -2936,175 +3103,5 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
             ),
             data["Z_rzzz"],
         ]
-    ).T
-    return data
-
-
-@register_compute_fun(
-    name="e_theta_PEST",
-    label="\\mathbf{e}_{\\theta_{PEST}}",
-    units="m",
-    units_long="meters",
-    description="Covariant straight field line (PEST) poloidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=[
-        "e_theta",
-        "theta_PEST_t",
-    ],
-)
-def _e_sub_theta_pest(params, transforms, profiles, data, **kwargs):
-    # dX/dv at const r,z = dX/dt * dt/dv / dX/dt / dv/dt
-    data["e_theta_PEST"] = (data["e_theta"].T / data["theta_PEST_t"]).T
-    return data
-
-
-@register_compute_fun(
-    name="e^rho",
-    label="\\mathbf{e}^{\\rho}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Contravariant radial basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_theta / sqrt(g)", "e_zeta"],
-)
-def _e_sup_rho(params, transforms, profiles, data, **kwargs):
-    data["e^rho"] = cross(data["e_theta / sqrt(g)"], data["e_zeta"])
-    return data
-
-
-@register_compute_fun(
-    name="grad(psi)",
-    label="\\nabla\\psi",
-    units="Wb / m",
-    units_long="Webers per meter",
-    description="Toroidal flux gradient (normalized by 2pi)",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["psi_r", "e^rho"],
-)
-def _gradpsi(params, transforms, profiles, data, **kwargs):
-    data["grad(psi)"] = (data["psi_r"] * data["e^rho"].T).T
-    return data
-
-
-@register_compute_fun(
-    name="e^theta sqrt(g)",
-    label="\\mathbf{e}^{\\theta} \\sqrt{g}",
-    units="m^{2}",
-    units_long="square meters",
-    description="Contravariant poloidal basis vector weighted by 3-D volume Jacobian",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho", "e_zeta"],
-)
-def _e_sup_theta_times_sqrt_g(params, transforms, profiles, data, **kwargs):
-    data["e^theta sqrt(g)"] = cross(data["e_zeta"], data["e_rho"])
-    return data
-
-
-@register_compute_fun(
-    name="e^theta",
-    label="\\mathbf{e}^{\\theta}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Contravariant poloidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^theta sqrt(g)", "sqrt(g)"],
-)
-def _e_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["e^theta"] = (data["e^theta sqrt(g)"].T / data["sqrt(g)"]).T
-    return data
-
-
-@register_compute_fun(
-    name="e^zeta",
-    label="\\mathbf{e}^{\\zeta}",
-    units="m^{-1}",
-    units_long="inverse meters",
-    description="Contravariant toroidal basis vector",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e_rho", "e_theta / sqrt(g)"],
-)
-def _e_sup_zeta(params, transforms, profiles, data, **kwargs):
-    data["e^zeta"] = cross(data["e_rho"], data["e_theta / sqrt(g)"])
-    return data
-
-
-@register_compute_fun(
-    name="b",
-    label="\\hat{b}",
-    units="~",
-    units_long="None",
-    description="Unit vector along magnetic field",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["B"],
-)
-def _b(params, transforms, profiles, data, **kwargs):
-    data["b"] = (data["B"].T / jnp.linalg.norm(data["B"], axis=-1)).T
-    return data
-
-
-@register_compute_fun(
-    name="n",
-    label="\\hat{\\mathbf{n}}",
-    units="~",
-    units_long="None",
-    description="Unit normal vector to constant rho surface",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho"],
-)
-def _n(params, transforms, profiles, data, **kwargs):
-    data["n"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"], axis=-1)).T
-    return data
-
-
-@register_compute_fun(
-    name="grad(alpha)",
-    label="\\nabla \\alpha",
-    units="m^{-1}",
-    units_long="Inverse meters",
-    description="Unit vector normal to flux surface",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho", "e^theta", "e^zeta", "alpha_r", "alpha_t", "alpha_z"],
-)
-def _grad_alpha(params, transforms, profiles, data, **kwargs):
-    data["grad(alpha)"] = (
-        data["alpha_r"] * data["e^rho"].T
-        + data["alpha_t"] * data["e^theta"].T
-        + data["alpha_z"] * data["e^zeta"].T
     ).T
     return data

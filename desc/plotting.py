@@ -15,7 +15,7 @@ from termcolor import colored
 
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
-from desc.compute.utils import compress, surface_averages
+from desc.compute.utils import surface_averages
 from desc.grid import Grid, LinearGrid
 from desc.utils import flatten_list
 from desc.vmec_utils import ptolemy_linear_transform
@@ -972,7 +972,7 @@ def plot_fsa(
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
-        values = compress(grid, values)
+        values = grid.compress(values)
     elif with_sqrt_g:
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])

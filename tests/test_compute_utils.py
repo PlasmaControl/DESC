@@ -5,8 +5,6 @@ import pytest
 
 from desc.compute.utils import (
     _get_grid_surface,
-    compress,
-    expand,
     line_integrals,
     surface_averages,
     surface_integrals,
@@ -82,38 +80,6 @@ NFP = 5
 
 class TestComputeUtils:
     """Tests for grid operations, surface averages etc."""
-
-    @pytest.mark.unit
-    def test_compress_expand_inverse_op(self):
-        """Test that compress & expand are inverse operations for surface functions.
-
-        Each test should be done on different types of grids
-        (e.g. LinearGrid, ConcentricGrid) and grids with duplicate nodes
-        (e.g. endpoint=True).
-        """
-
-        def test(surface_label, grid):
-            r = np.random.random_sample(
-                size={
-                    "rho": grid.num_rho,
-                    "theta": grid.num_theta,
-                    "zeta": grid.num_zeta,
-                }[surface_label]
-            )
-            expanded = expand(grid, r, surface_label)
-            assert expanded.size == grid.num_nodes
-            s = compress(grid, expanded, surface_label)
-            np.testing.assert_allclose(r, s, err_msg=surface_label)
-
-        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
-        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
-
-        test("rho", lg_endpoint)
-        test("theta", lg_endpoint)
-        test("zeta", lg_endpoint)
-        test("rho", cg_sym)
-        test("theta", cg_sym)
-        test("zeta", cg_sym)
 
     @pytest.mark.unit
     def test_surface_integrals(self):
@@ -205,7 +171,7 @@ class TestComputeUtils:
                 / benchmark_surface_integrals(grid, sqrt_g, surface_label)
             ).T
             np.testing.assert_allclose(
-                compress(grid, averages, surface_label), desired, err_msg=surface_label
+                grid.compress(averages, surface_label), desired, err_msg=surface_label
             )
 
         cg = ConcentricGrid(L=L, M=M, N=N, sym=True, NFP=NFP)
@@ -392,5 +358,5 @@ class TestComputeUtils:
             for j in range(grid.num_rho):
                 Bmax_alt[j] = np.max(B[grid.inverse_rho_idx == j])
                 Bmin_alt[j] = np.min(B[grid.inverse_rho_idx == j])
-            np.testing.assert_allclose(Bmax_alt, compress(grid, surface_max(grid, B)))
-            np.testing.assert_allclose(Bmin_alt, compress(grid, surface_min(grid, B)))
+            np.testing.assert_allclose(Bmax_alt, grid.compress(surface_max(grid, B)))
+            np.testing.assert_allclose(Bmin_alt, grid.compress(surface_min(grid, B)))

@@ -7,7 +7,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -206,20 +205,11 @@ class BootstrapRedlConsistency(_Objective):
             profiles=self._profiles,
             helicity=self.helicity,
         )
-
-        return compress(
-            self._transforms["grid"],
-            data["<J*B>"] - data["<J*B> Redl"],
-            surface_label="rho",
-        )
+        return self._transforms["grid"].compress(data["<J*B>"] - data["<J*B> Redl"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
+        w = self._transforms["grid"].compress([self._transforms["grid"].spacing[:, 0]])
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

@@ -3,7 +3,7 @@ from scipy.constants import elementary_charge, mu_0
 from desc.backend import jnp, put
 
 from .data_index import register_compute_fun
-from .utils import compress, cumtrapz, dot, expand, surface_averages
+from .utils import cumtrapz, dot, surface_averages
 
 
 @register_compute_fun(
@@ -108,13 +108,12 @@ def _chi_r(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=["chi_r"],
+    data=["chi_r", "rho"],
 )
 def _chi(params, transforms, profiles, data, **kwargs):
-    chi_r = compress(transforms["grid"], data["chi_r"], surface_label="rho")
-    rho = transforms["grid"].nodes[transforms["grid"].unique_rho_idx, 0]
-    chi = cumtrapz(chi_r, rho, initial=0)
-    data["chi"] = expand(transforms["grid"], chi, surface_label="rho")
+    chi_r = transforms["grid"].compress(data["chi_r"])
+    chi = cumtrapz(chi_r, transforms["grid"].compress(data["rho"]), initial=0)
+    data["chi"] = transforms["grid"].expand(chi)
     return data
 
 

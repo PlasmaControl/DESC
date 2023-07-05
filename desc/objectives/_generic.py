@@ -5,7 +5,7 @@ import re
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
-from desc.compute.utils import compress, get_params, get_profiles, get_transforms
+from desc.compute.utils import get_params, get_profiles, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.profiles import Profile
 from desc.utils import Timer
@@ -62,7 +62,7 @@ class ObjectiveFromUser(_Objective):
     --------
     .. code-block:: python
 
-        from desc.compute.utils import surface_averages, compress
+        from desc.compute.utils import surface_averages
         def myfun(grid, data):
             # This will compute the flux surface average of the function
             # R*B_T from the Grad-Shafranov equation
@@ -70,7 +70,7 @@ class ObjectiveFromUser(_Objective):
             f_fsa = surface_averages(grid, f, sqrt_g=data['sqrt_g'])
             # this has the FSA values on the full grid, but we just want
             # the unique values:
-            return compress(grid, f_fsa)
+            return grid.compress(f_fsa)
 
         myobj = ObjectiveFromUser(myfun)
 
@@ -435,15 +435,11 @@ class ToroidalCurrent(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(self._transforms["grid"], data["current"], surface_label="rho")
+        return self._transforms["grid"].compress(data["current"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
+        w = self._transforms["grid"].compress(self._transforms["grid"].spacing[:, 0])
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
@@ -608,15 +604,11 @@ class RotationalTransform(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(self._transforms["grid"], data["iota"], surface_label="rho")
+        return self._transforms["grid"].compress(data["iota"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
+        w = self._transforms["grid"].compress(self._transforms["grid"].spacing[:, 0])
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

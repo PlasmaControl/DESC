@@ -7,7 +7,6 @@ from scipy.signal import convolve2d
 
 import desc.examples
 from desc.compute import data_index
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import LinearGrid, QuadratureGrid
 
@@ -58,15 +57,15 @@ def test_enclosed_volumes():
     data = eq.compute(["V_rr(r)", "R0", "V(r)", "V_r(r)"], grid=grid)
     np.testing.assert_allclose(
         2 * data["R0"] * (np.pi * rho) ** 2,
-        compress(grid, data["V(r)"]),
+        grid.compress(data["V(r)"]),
     )
     np.testing.assert_allclose(
         4 * data["R0"] * np.pi**2 * rho,
-        compress(grid, data["V_r(r)"]),
+        grid.compress(data["V_r(r)"]),
     )
     np.testing.assert_allclose(
         4 * data["R0"] * np.pi**2,
-        compress(grid, data["V_rr(r)"]),
+        grid.compress(data["V_rr(r)"]),
     )
 
 
@@ -78,7 +77,7 @@ def test_surface_areas():
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
     data = eq.compute(["S(r)", "R0"], grid=grid)
     S = 4 * data["R0"] * np.pi**2 * rho
-    np.testing.assert_allclose(S, compress(grid, data["S(r)"]))
+    np.testing.assert_allclose(S, grid.compress(data["S(r)"]))
 
 
 @pytest.mark.unit
@@ -1104,7 +1103,7 @@ def test_compare_quantities_to_vmec():
     rho = np.sqrt(s)
     grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
     data = eq.compute("<J*B>", grid=grid)
-    J_dot_B_desc = compress(grid, data["<J*B>"])
+    J_dot_B_desc = grid.compress(data["<J*B>"])
 
     # Drop first point since desc gives NaN:
     np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)

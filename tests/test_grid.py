@@ -615,6 +615,38 @@ class TestGrid:
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
     @pytest.mark.unit
+    def test_compress_expand_inverse_op(self):
+        """Test that compress & expand are inverse operations for surface functions.
+
+        Each test should be done on different types of grids
+        (e.g. LinearGrid, ConcentricGrid) and grids with duplicate nodes
+        (e.g. endpoint=True).
+        """
+
+        def test(surface_label, grid):
+            r = np.random.random_sample(
+                size={
+                    "rho": grid.num_rho,
+                    "theta": grid.num_theta,
+                    "zeta": grid.num_zeta,
+                }[surface_label]
+            )
+            expanded = grid.expand(r, surface_label)
+            assert expanded.size == grid.num_nodes
+            s = grid.compress(expanded, surface_label)
+            np.testing.assert_allclose(r, s, err_msg=surface_label)
+
+        L, M, N, NFP = 6, 6, 3, 5
+        lg_endpoint = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True, endpoint=True)
+        cg_sym = ConcentricGrid(L=L, M=M, N=N, NFP=NFP, sym=True)
+        test("rho", lg_endpoint)
+        test("theta", lg_endpoint)
+        test("zeta", lg_endpoint)
+        test("rho", cg_sym)
+        test("theta", cg_sym)
+        test("zeta", cg_sym)
+
+    @pytest.mark.unit
     def test_symmetry_surface_average_1(self):
         """Test surface average of a symmetric function."""
 

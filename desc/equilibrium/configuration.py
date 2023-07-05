@@ -13,8 +13,6 @@ from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
 from desc.compute.utils import (
-    compress,
-    expand,
     get_data_deps,
     get_params,
     get_profiles,
@@ -717,7 +715,7 @@ class _Configuration(IOAble, ABC):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
         data = self.compute(name, grid=grid, **kwargs)
         x = data[name]
-        x = compress(grid, x, surface_label="rho")
+        x = grid.compress(x, surface_label="rho")
         return SplineProfile(
             x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
         )
@@ -1195,9 +1193,9 @@ class _Configuration(IOAble, ABC):
                 data=None,
                 **kwargs,
             )
-            # need to make this data broadcastable with the data on the original grid
+            # need to make this data broadcast with the data on the original grid
             data1d = {
-                key: expand(grid, compress(grid1d, val))
+                key: grid.expand(grid1d.compress(val))
                 for key, val in data1d.items()
                 if key in dep1d
             }

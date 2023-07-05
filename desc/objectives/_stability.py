@@ -5,7 +5,6 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
 
@@ -166,17 +165,11 @@ class MercierStability(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(
-            self._transforms["grid"], data["D_Mercier"], surface_label="rho"
-        )
+        return self._transforms["grid"].compress(data["D_Mercier"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
+        w = self._transforms["grid"].compress(self._transforms["grid"].spacing[:, 0])
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):
@@ -353,17 +346,11 @@ class MagneticWell(_Objective):
             transforms=self._transforms,
             profiles=self._profiles,
         )
-        return compress(
-            self._transforms["grid"], data["magnetic well"], surface_label="rho"
-        )
+        return self._transforms["grid"].compress(data["magnetic well"])
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
-            surface_label="rho",
-        )
+        w = self._transforms["grid"].compress(self._transforms["grid"].spacing[:, 0])
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

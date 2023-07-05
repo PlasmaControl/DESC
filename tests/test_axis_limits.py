@@ -5,7 +5,7 @@ import pytest
 
 import desc.io
 from desc.compute import data_index
-from desc.compute.utils import compress, surface_integrals
+from desc.compute.utils import surface_integrals
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
@@ -79,7 +79,7 @@ class TestAxisLimits:
 
         quantity = eq.compute(name, grid=grid)[name]
         if data_index[name]["coordinates"] == "r":
-            quantity = compress(grid, quantity)
+            quantity = grid.compress(quantity)
         else:
             quantity = surface_integrals(grid, np.abs(quantity), expand_out=False)
         # check continuity

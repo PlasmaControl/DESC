@@ -16,7 +16,6 @@ from desc.compute._field import (
     _min_tz_modB,
 )
 from desc.compute._geometry import _V_r_of_r
-from desc.compute.utils import compress, expand
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
@@ -87,20 +86,20 @@ class TestBootstrapCompute:
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                expand(grid, [13**2 + 0.5 * 2.6**2, 9**2 + 0.5 * 3.7**2]),
+                grid.expand([13**2 + 0.5 * 2.6**2, 9**2 + 0.5 * 3.7**2]),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
-                expand(grid, 1 / np.sqrt([13**2 - 2.6**2, 9**2 - 3.7**2])),
+                grid.expand(1 / np.sqrt([13**2 - 2.6**2, 9**2 - 3.7**2])),
             )
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], expand(grid, [13 - 2.6, 9 - 3.7]), rtol=1e-4
+                f_t_data["min_tz |B|"], grid.expand([13 - 2.6, 9 - 3.7]), rtol=1e-4
             )
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], expand(grid, [13 + 2.6, 9 + 3.7]), rtol=1e-4
+                f_t_data["max_tz |B|"], grid.expand([13 + 2.6, 9 + 3.7]), rtol=1e-4
             )
             np.testing.assert_allclose(
-                f_t_data["effective r/R0"], expand(grid, [2.6 / 13, 3.7 / 9]), rtol=1e-3
+                f_t_data["effective r/R0"], grid.expand([2.6 / 13, 3.7 / 9]), rtol=1e-3
             )
 
     @pytest.mark.unit
@@ -146,28 +145,28 @@ class TestBootstrapCompute:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
 
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], expand(grid, B0 / (1 + epsilon))
+                f_t_data["min_tz |B|"], grid.expand(B0 / (1 + epsilon))
             )
             # Looser tolerance for Bmax since there is no grid point there:
             Bmax = B0 / (1 - epsilon)
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], expand(grid, Bmax), rtol=0.001
+                f_t_data["max_tz |B|"], grid.expand(Bmax), rtol=0.001
             )
             np.testing.assert_allclose(
-                f_t_data["effective r/R0"], expand(grid, epsilon), rtol=1e-4
+                f_t_data["effective r/R0"], grid.expand(epsilon), rtol=1e-4
             )
             # Eq (A8):
             fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
-                f_t_data["<|B|^2>"], expand(grid, fsa_B2), rtol=1e-6
+                f_t_data["<|B|^2>"], grid.expand(fsa_B2), rtol=1e-6
             )
             np.testing.assert_allclose(
-                f_t_data["<1/|B|>"], expand(grid, (2 + epsilon**2) / (2 * B0))
+                f_t_data["<1/|B|>"], grid.expand((2 + epsilon**2) / (2 * B0))
             )
             # Note the loose tolerance for this next test since we do not expect precise
             # agreement.
             np.testing.assert_allclose(
-                f_t_data["trapped fraction"], expand(grid, f_t_Kim), rtol=0.1, atol=0.07
+                f_t_data["trapped fraction"], grid.expand(f_t_Kim), rtol=0.1, atol=0.07
             )
 
             # Now compute f_t numerically by a different algorithm:
@@ -189,7 +188,7 @@ class TestBootstrapCompute:
                 f_t[jr] = 1 - 0.75 * fsa_B2[jr] * integral[0]
 
             np.testing.assert_allclose(
-                compress(grid, f_t_data["trapped fraction"])[1:],
+                grid.compress(f_t_data["trapped fraction"])[1:],
                 f_t[1:],
                 rtol=0.001,
                 atol=0.001,
@@ -197,7 +196,7 @@ class TestBootstrapCompute:
 
             plt.plot(epsilon, f_t_Kim, "b", label="Kim")
             plt.plot(
-                epsilon, compress(grid, f_t_data["trapped fraction"]), "r", label="desc"
+                epsilon, grid.compress(f_t_data["trapped fraction"]), "r", label="desc"
             )
             plt.plot(epsilon, f_t, ":g", label="Alternative algorithm")
 
@@ -892,7 +891,7 @@ class TestBootstrapCompute:
             grid=grid,
             helicity=helicity,
         )
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         # The relative error is a bit larger at the boundary, where the
         # absolute magnitude is quite small, so drop those points.
@@ -983,7 +982,7 @@ class TestBootstrapCompute:
             grid=grid,
             helicity=helicity,
         )
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
 
@@ -1077,7 +1076,7 @@ class TestBootstrapCompute:
             grid=grid,
             helicity=helicity,
         )
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
 
@@ -1357,8 +1356,8 @@ class TestBootstrapObjectives:
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
         data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
-        J_dot_B_MHD = compress(grid, data["<J*B>"])
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_MHD = grid.compress(data["<J*B>"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0
@@ -1468,8 +1467,8 @@ class TestBootstrapObjectives:
         scalar_objective = objective.compute_scalar(objective.x(eq))
         assert scalar_objective < 3e-5
         data = eq.compute(["<J*B>", "<J*B> Redl"], grid=grid, helicity=helicity)
-        J_dot_B_MHD = compress(grid, data["<J*B>"])
-        J_dot_B_Redl = compress(grid, data["<J*B> Redl"])
+        J_dot_B_MHD = grid.compress(data["<J*B>"])
+        J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         assert np.max(J_dot_B_MHD) < 4e5
         assert np.max(J_dot_B_MHD) > 0

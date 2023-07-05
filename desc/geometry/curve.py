@@ -439,12 +439,14 @@ class FourierRZCurve(Curve):
         phi = R_transform.grid.nodes[:, 2]
         return jnp.trapz(T, phi)
 
-    def to_xyz(self):
+    def to_xyz(self, N=None):
         """Convert to FourierXYZCurve representation.
 
         Parameters
         ----------
-        None
+        N : int
+            Fourier resolution of the new X,Y,Z representation.
+            Default is the resolution of the old R,Z representation.
 
         Returns
         -------
@@ -452,7 +454,8 @@ class FourierRZCurve(Curve):
             New representation of the curve parameterized by Fourier series for X,Y,Z.
 
         """
-        N = max(self.R_basis.N, self.Z_basis.N)
+        if N is None:
+            N = max(self.R_basis.N, self.Z_basis.N)
         grid = LinearGrid(N=4 * N, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
         xyz = self.compute_coordinates(grid=grid, basis="xyz")
@@ -473,7 +476,7 @@ class FourierXYZCurve(Curve):
     modes : array-like
         mode numbers associated with X_n etc.
     grid : Grid
-        default grid or computation
+        default grid for computation
     name : str
         name for this curve
 

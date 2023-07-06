@@ -48,15 +48,16 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     grid = transforms["grid"]
     modB_over_Bmax = data["|B|"] / data["max_tz |B|"]
     Bmax_squared = grid.compress(data["max_tz |B|"] ** 2)
+    # to resolve indeterminate form of limit at magnetic axis
     sqrt_g = grid.replace_at_axis(data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True)
     V_r = grid.compress(
         grid.replace_at_axis(data["V_r(r)"], lambda: data["V_rr(r)"], copy=True)
     )
-    compute_surface_averages = surface_averages_map(grid, expand_out=False)
+    compute_averages = surface_averages_map(grid, expand_out=False)
 
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
-        flux_surf_avg_term = compute_surface_averages(
+        flux_surf_avg_term = compute_averages(
             jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax), sqrt_g, denominator=V_r
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
@@ -68,11 +69,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     return data
 
 
-def j_dot_B_Redl(
-    geom_data,
-    profile_data,
-    helicity_N=None,
-):
+def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     r"""Compute the bootstrap current.
 
     (specifically :math:`\langle\vec{J}\cdot\vec{B}\rangle`) using the formulae in
@@ -140,7 +137,6 @@ def j_dot_B_Redl(
     ni = ne / Zeff
     pe = ne * Te
     # TODO: this. mark source of nan at axis limit here
-    print(psi_edge)
     d_ne_d_s = profile_data["ne_r"] / (2 * rho)
     d_Te_d_s = profile_data["Te_r"] / (2 * rho)
     d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
@@ -355,7 +351,6 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     and quasi-helical symmetry, but not in other stellarators.
     """
     grid = transforms["grid"]
-
     # Note that the geom_data dictionary provided to j_dot_B_Redl()
     # contains info only as a function of rho, not theta or zeta,
     # i.e. on the compressed grid. In contrast, "data" contains
@@ -373,7 +368,6 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
     geom_data["R"] = (geom_data["G"] + geom_data["iota"] * geom_data["I"]) * geom_data[
         "<1/|B|>"
     ]
-
     profile_data = {
         "rho": grid.compress(data["rho"]),
         "ne": grid.compress(data["ne"]),
@@ -382,20 +376,12 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         "Te_r": grid.compress(data["Te_r"]),
         "Ti": grid.compress(data["Ti"]),
         "Ti_r": grid.compress(data["Ti_r"]),
+        "Z_eff": jnp.ones(grid.num_rho)
+        if profiles["atomic_number"] is None
+        else grid.compress(data["Zeff"]),
     }
-    if profiles["atomic_number"] is None:
-        Zeff = jnp.ones(grid.num_rho)
-    else:
-        Zeff = grid.compress(data["Zeff"])
-    profile_data["Zeff"] = Zeff
-
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
-
-    j_dot_B_data = j_dot_B_Redl(
-        geom_data,
-        profile_data,
-        helicity_N,
-    )
+    j_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)
     data["<J*B> Redl"] = grid.expand(j_dot_B_data["<J*B>"])
     return data

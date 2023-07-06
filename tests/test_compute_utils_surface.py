@@ -371,14 +371,14 @@ class TestComputeUtilsSurface:
         M = [3, 6, 5, 7]
         N = [2, 2, 2, 2]
         NFP = [5, 3, 5, 3]
-        sym = np.asarray([True, True, False, False])
+        sym = np.array([True, True, False, False])
         # to test code not tested on grids made with M=.
         even_number = 4
         n_theta = even_number - sym
 
         # asymmetric spacing
         with pytest.raises(AssertionError):
-            theta = 2 * np.pi * np.asarray([t**2 for t in np.linspace(0, 1, max(M))])
+            theta = 2 * np.pi * np.array([t**2 for t in np.linspace(0, 1, max(M))])
             test(LinearGrid(L=max(L), theta=theta, N=max(N), sym=False))
 
         for i in range(len(L)):
@@ -433,17 +433,15 @@ class TestComputeUtilsSurface:
 
             # random data with specified average on each surface
             coeffs = np.random.rand(basis.num_modes)
-            coeffs[np.where((basis.modes[:, 1:] == [0, 0]).all(axis=1))[0]] = 0
-            coeffs[np.where((basis.modes == [0, 0, 0]).all(axis=1))[0]] = true_avg
+            coeffs[np.all(basis.modes[:, 1:] == [0, 0], axis=1)] = 0
+            coeffs[np.all(basis.modes == [0, 0, 0], axis=1)] = true_avg
 
             # compute average for each surface in grid
             values = transform.transform(coeffs)
             numerical_avg = surface_averages(grid, values, expand_out=False)
-            if isinstance(grid, ConcentricGrid):
-                # values closest to axis are never accurate enough
-                numerical_avg = numerical_avg[1:]
             np.testing.assert_allclose(
-                numerical_avg,
+                # values closest to axis are never accurate enough
+                numerical_avg[isinstance(grid, ConcentricGrid) :],
                 true_avg,
                 err_msg=str(type(grid)) + " " + str(grid.sym),
             )

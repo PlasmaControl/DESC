@@ -112,7 +112,7 @@ def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
         d_current = grid.compress(eq.compute("D_current", grid=grid)["D_current"])
 
         assert (
-            len(np.where(np.sign(d_current) != np.sign(d_current_vmec))[0])
+            np.nonzero(np.sign(d_current) != np.sign(d_current_vmec))[0].size
             <= MAX_SIGN_DIFF
         )
         all_close(d_current, d_current_vmec, rho, rho_range, rtol, atol)
@@ -135,7 +135,7 @@ def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
         d_well = grid.compress(eq.compute("D_well", grid=grid)["D_well"])
 
         assert (
-            len(np.where(np.sign(d_well) != np.sign(d_well_vmec))[0]) <= MAX_SIGN_DIFF
+            np.nonzero(np.sign(d_well) != np.sign(d_well_vmec))[0].size <= MAX_SIGN_DIFF
         )
         all_close(d_well, d_well_vmec, rho, rho_range, rtol, atol)
 
@@ -182,7 +182,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         d_mercier = grid.compress(eq.compute("D_Mercier", grid=grid)["D_Mercier"])
 
         assert (
-            len(np.where(np.sign(d_mercier) != np.sign(d_mercier_vmec))[0])
+            np.nonzero(np.sign(d_mercier) != np.sign(d_mercier_vmec))[0].size
             <= MAX_SIGN_DIFF
         )
         all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
@@ -205,7 +205,8 @@ def test_compute_magnetic_well(DSHAPE_current, HELIOTRON_ex):
             eq.compute("magnetic well", grid=grid)["magnetic well"]
         )
         assert (
-            len(np.where(np.sign(d_well) != np.sign(magnetic_well))[0]) <= MAX_SIGN_DIFF
+            np.nonzero(np.sign(d_well) != np.sign(magnetic_well))[0].size
+            <= MAX_SIGN_DIFF
         )
 
     test(DSHAPE_current)

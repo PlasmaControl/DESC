@@ -89,20 +89,22 @@ class TestBootstrapCompute:
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                grid.expand([13**2 + 0.5 * 2.6**2, 9**2 + 0.5 * 3.7**2]),
+                grid.expand([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
-                grid.expand(1 / np.sqrt([13**2 - 2.6**2, 9**2 - 3.7**2])),
+                grid.expand(1 / np.sqrt([13.0**2 - 2.6**2, 9.0**2 - 3.7**2])),
             )
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], grid.expand([13 - 2.6, 9 - 3.7]), rtol=1e-4
+                f_t_data["min_tz |B|"], grid.expand([13.0 - 2.6, 9.0 - 3.7]), rtol=1e-4
             )
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], grid.expand([13 + 2.6, 9 + 3.7]), rtol=1e-4
+                f_t_data["max_tz |B|"], grid.expand([13.0 + 2.6, 9.0 + 3.7]), rtol=1e-4
             )
             np.testing.assert_allclose(
-                f_t_data["effective r/R0"], grid.expand([2.6 / 13, 3.7 / 9]), rtol=1e-3
+                f_t_data["effective r/R0"],
+                grid.expand([2.6 / 13.0, 3.7 / 9.0]),
+                rtol=1e-3,
             )
 
     @pytest.mark.unit
@@ -175,7 +177,7 @@ class TestBootstrapCompute:
             # Now compute f_t numerically by a different algorithm:
             modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
             sqrt_g = sqrt_g.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
-            fourpisq = 4 * np.pi**2
+            fourpisq = 4 * np.pi * np.pi
             d_V_d_rho = np.mean(sqrt_g, axis=(0, 2)) / fourpisq
             f_t = np.zeros(grid.num_rho)
             for jr in range(grid.num_rho):
@@ -889,11 +891,7 @@ class TestBootstrapCompute:
         )
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-        data = eq.compute(
-            "<J*B> Redl",
-            grid=grid,
-            helicity=helicity,
-        )
+        data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         # The relative error is a bit larger at the boundary, where the
@@ -980,11 +978,7 @@ class TestBootstrapCompute:
         )
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-        data = eq.compute(
-            "<J*B> Redl",
-            grid=grid,
-            helicity=helicity,
-        )
+        data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
@@ -1074,11 +1068,7 @@ class TestBootstrapCompute:
         )
 
         grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
-        data = eq.compute(
-            "<J*B> Redl",
-            grid=grid,
-            helicity=helicity,
-        )
+        data = eq.compute("<J*B> Redl", grid=grid, helicity=helicity)
         J_dot_B_Redl = grid.compress(data["<J*B> Redl"])
 
         np.testing.assert_allclose(J_dot_B_Redl[1:-1], J_dot_B_sfincs[1:-1], rtol=0.1)
@@ -1143,10 +1133,7 @@ class TestBootstrapObjectives:
         )
         # The equilibrium need not be in force balance, so no need to solve().
         grid = QuadratureGrid(
-            L=LMN_resolution,
-            M=LMN_resolution,
-            N=LMN_resolution,
-            NFP=eq.NFP,
+            L=LMN_resolution, M=LMN_resolution, N=LMN_resolution, NFP=eq.NFP
         )
         obj = ObjectiveFunction(
             BootstrapRedlConsistency(grid=grid, helicity=helicity), eq

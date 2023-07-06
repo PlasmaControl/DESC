@@ -160,9 +160,9 @@ class TestGrid:
 
         # non-uniform spacing
         pts = np.linspace(0, 1, 10)
-        rho = np.asarray([r**3 for r in pts])
-        theta = 2 * np.pi * np.asarray([t**1.85 for t in pts])
-        zeta = 2 * np.pi * np.asarray([z**4 for z in pts])
+        rho = np.array([r**3 for r in pts])
+        theta = 2 * np.pi * np.array([t**1.85 for t in pts])
+        zeta = 2 * np.pi * np.array([z**4 for z in pts])
         lg_1 = LinearGrid(rho=rho, theta=theta, zeta=zeta, sym=True)
         lg_2 = LinearGrid(rho=rho, theta=theta[theta <= np.pi], zeta=zeta, sym=True)
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
@@ -355,7 +355,7 @@ class TestGrid:
         lg_2._enforce_symmetry()
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
-        lg_2._scale_weights()
+        lg_2._weights = lg_2._scale_weights()
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
@@ -615,7 +615,7 @@ class TestGrid:
         M = [3, 6, 5, 7]
         N = [2, 2, 2, 2]
         NFP = [5, 3, 5, 3]
-        sym = np.asarray([True, True, False, False])
+        sym = np.array([True, True, False, False])
         # to test code not tested on grids made with M=.
         even_number = 4
         n_theta = even_number - sym

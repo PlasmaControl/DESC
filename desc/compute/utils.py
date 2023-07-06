@@ -751,8 +751,8 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
         grid, surface_label
     )
 
-    # Todo: Define masks as a sparse matrix once sparse matrices are
-    #       are no longer experimental in jax.
+    # Todo: Define masks as a sparse matrix once sparse matrices are no longer
+    #       experimental in jax.
     # The ith row of masks is True only at the indices which correspond to the
     # ith surface. The integral over the ith surface is the dot product of the
     # ith row vector and the vector of integrands of all surfaces.
@@ -767,7 +767,7 @@ def surface_integrals_map(grid, surface_label="rho", expand_out=True):
     # surface will have the correct total area of π+π = 2π.
     #     An edge case exists if the duplicate surface has nodes with
     # different values for the surface label, which only occurs when
-    # has_endpoint_dupe is true. If has_endpoint_dupe is true, this grid
+    # has_endpoint_dupe is true. If ``has_endpoint_dupe`` is true, this grid
     # has a duplicate surface at surface_label=0 and
     # surface_label=max surface value. Although the modulo of these values
     # are equal, their numeric values are not, so the integration
@@ -1151,5 +1151,5 @@ def surface_min(grid, x, surface_label="rho"):
 
     mins = fori_loop(0, inverse_idx.size, body, mins)
     # The above implementation was benchmarked to be more efficient than
-    # alternatives without explicit loops.
+    # alternatives without explicit loops in GitHub pull request #501.
     return grid.expand(mins, surface_label)

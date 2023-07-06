@@ -2562,6 +2562,8 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
 def _grad_B(params, transforms, profiles, data, **kwargs):
     # fixme: Numerically |B|_t is not zero at axis.
     #   think it should be closer. Maybe there's a typo in basis vectors?
+    #   update: for context, i wrote this before our dev meeting where we
+    #   discussed differentiating basis vectors
     # In the axis limit, |B|_t is 0. Cancellation occurs when decomposed into
     # the basis vectors of the lab frame.
     data["grad(|B|)"] = (
@@ -2832,14 +2834,6 @@ def _gradB2_zeta(params, transforms, profiles, data, **kwargs):
     data=["|B|", "grad(|B|)"],
 )
 def _gradB2(params, transforms, profiles, data, **kwargs):
-    # TODO: remove commented code
-    #  For context, I failed to compute the limit of the commented code, so
-    #  I switched to this.
-    # data["grad(|B|^2)"] = (
-    #     data["grad(|B|^2)_rho"] * data["e^rho"].T
-    #     + data["grad(|B|^2)_theta"] * data["e^theta"].T
-    #     + data["grad(|B|^2)_zeta"] * data["e^zeta"].T
-    # ).T
     data["grad(|B|^2)"] = 2 * (data["|B|"] * data["grad(|B|)"].T).T
     return data
 

@@ -389,7 +389,6 @@ class Equilibrium(_Configuration, IOAble):
         Z_1D = np.zeros((grid.num_nodes,))
         L_1D = np.zeros((grid.num_nodes,))
         for rho_i in rho:
-            idx = idx = np.where(grid.nodes[:, 0] == rho_i)[0]
             R_2D, Z_2D, phi0_2D = na_eq.Frenet_to_cylindrical(r * rho_i, ntheta)
             phi_cyl_ax = np.linspace(
                 0, 2 * np.pi / na_eq.nfp, na_eq.nphi, endpoint=False
@@ -397,9 +396,10 @@ class Equilibrium(_Configuration, IOAble):
             nu_B_ax = na_eq.nu_spline(phi_cyl_ax)
             phi_B = phi_cyl_ax + nu_B_ax
             nu_B = phi_B - phi0_2D
-            R_1D[idx] = R_2D.flatten(order="F")
-            Z_1D[idx] = Z_2D.flatten(order="F")
-            L_1D[idx] = nu_B.flatten(order="F") * na_eq.iota
+            idx_mask = grid.nodes[:, 0] == rho_i
+            R_1D[idx_mask] = R_2D.flatten(order="F")
+            Z_1D[idx_mask] = Z_2D.flatten(order="F")
+            L_1D[idx_mask] = nu_B.flatten(order="F") * na_eq.iota
 
         inputs["R_lmn"] = transform_R.fit(R_1D)
         inputs["Z_lmn"] = transform_Z.fit(Z_1D)

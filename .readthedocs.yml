@@ -12,10 +12,8 @@ build:
     python: "3.10"
   jobs:
     pre_build:
-      - cd docs/
-      - python write_optimizers.py
-      - python write_variables.py
-      - cd ..
+      - cd docs/ && python write_optimizers.py
+      - cd docs/ && python write_variables.py
 
 
 # Build documentation in the docs/ directory with Sphinx

@@ -131,7 +131,7 @@ _aliases = {
         "desc.geometry.core.Surface",
         "Surface",
     ],
-    "desc.geometry.surface.ZernikeRZToroidalSection.": [
+    "desc.geometry.surface.ZernikeRZToroidalSection": [
         "desc.geometry.ZernikeRZToroidalSection",
         "ZernikeRZToroidalSection",
         "desc.geometry.core.Surface",

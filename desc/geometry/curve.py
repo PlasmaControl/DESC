@@ -44,10 +44,13 @@ class FourierRZCurve(Curve):
     _io_attrs_ = Curve._io_attrs_ + [
         "_R_n",
         "_Z_n",
+        "_W_n",
         "_R_basis",
         "_Z_basis",
+        "_W_basis",
         "_R_transform",
         "_Z_transform",
+        "_W_transform",
         "_sym",
         "_NFP",
     ]
@@ -56,51 +59,89 @@ class FourierRZCurve(Curve):
         self,
         R_n=10,
         Z_n=0,
+        W_n=0,
         modes_R=None,
         modes_Z=None,
+        modes_W=None,
         NFP=1,
         sym="auto",
         grid=None,
         name="",
     ):
         super().__init__(name)
-        R_n, Z_n = np.atleast_1d(R_n), np.atleast_1d(Z_n)
+        R_n, Z_n, W_n = map(np.atleast_1d, (R_n, Z_n, W_n))
         if modes_R is None:
             modes_R = np.arange(-(R_n.size // 2), R_n.size // 2 + 1)
         if modes_Z is None:
             modes_Z = modes_R
+        if modes_W is None:
+            modes_W = modes_Z
 
         if R_n.size == 0:
             raise ValueError("At least 1 coefficient for R must be supplied")
         if Z_n.size == 0:
             Z_n = np.array([0.0])
             modes_Z = np.array([0])
+        if W_n.size == 0:
+            W_n = np.array([0.0])
+            modes_W = np.array([0])
 
-        modes_R, modes_Z = np.asarray(modes_R), np.asarray(modes_Z)
+        modes_R, modes_Z, modes_W = map(np.asarray, (modes_R, modes_Z, modes_W))
 
         assert issubclass(modes_R.dtype.type, np.integer)
         assert issubclass(modes_Z.dtype.type, np.integer)
+        assert issubclass(modes_W.dtype.type, np.integer)
 
         if sym == "auto":
-            if np.all(R_n[modes_R < 0] == 0) and np.all(Z_n[modes_Z >= 0] == 0):
+            if (
+                np.all(R_n[modes_R < 0] == 0)
+                and np.all(Z_n[modes_Z >= 0] == 0)
+                and np.all(W_n[modes_W >= 0] == 0)
+            ):
                 sym = True
             else:
                 sym = False
         self._sym = sym
         NR = np.max(abs(modes_R))
         NZ = np.max(abs(modes_Z))
-        N = max(NR, NZ)
+        NW = np.max(abs(modes_W))
+        N = max(NR, NZ, NW)
         self._NFP = NFP
         self._R_basis = FourierSeries(NR, NFP, sym="cos" if sym else False)
         self._Z_basis = FourierSeries(NZ, NFP, sym="sin" if sym else False)
+        self._W_basis = FourierSeries(NW, NFP, sym="sin" if sym else False)
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
+        self._W_n = copy_coeffs(W_n, modes_W, self.W_basis.modes[:, 2])
 
         if grid is None:
             grid = LinearGrid(N=2 * N, NFP=self.NFP, endpoint=True)
         self._grid = grid
-        self._R_transform, self._Z_transform = self._get_transforms(grid)
+        self._R_transform, self._Z_transform, self._W_transform = self._get_transforms(
+            grid
+        )
+
+    def _set_up(self):
+        """Set unset attributes after loading.
+
+        To ensure object has all properties needed for current DESC version.
+        Allows for backwards-compatibility with equilibria saved/ran with older
+        DESC versions.
+        """
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
+        if self.W_basis is None:
+            self._W_basis = self.Z_basis.copy()
+            (
+                self._R_transform,
+                self._Z_transform,
+                self._W_transform,
+            ) = self._get_transforms(self.grid)
+
+        if self.W_n is None:
+            self._W_n = np.zeros(self.W_basis.num_modes)
 
     @property
     def sym(self):
@@ -116,6 +157,11 @@ class FourierRZCurve(Curve):
     def Z_basis(self):
         """Spectral basis for Z_fourier series."""
         return self._Z_basis
+
+    @property
+    def W_basis(self):
+        """Spectral basis for W_fourier series."""
+        return self._W_basis
 
     @property
     def NFP(self):
@@ -148,11 +194,12 @@ class FourierRZCurve(Curve):
             )
         self._R_transform.grid = self.grid
         self._Z_transform.grid = self.grid
+        self._W_transform.grid = self.grid
 
     @property
     def N(self):
         """Maximum mode number."""
-        return max(self.R_basis.N, self.Z_basis.N)
+        return max(self.R_basis.N, self.Z_basis.N, self.W_basis.N)
 
     def change_resolution(self, N=None, NFP=None, sym=None):
         """Change the maximum toroidal resolution."""
@@ -167,45 +214,61 @@ class FourierRZCurve(Curve):
             N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
+            W_modes_old = self.W_basis.modes
             self.R_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
             )
             self.Z_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
+            self.W_basis.change_resolution(
+                N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            )
             if hasattr(self.grid, "change_resolution"):
                 self.grid.change_resolution(
                     self.grid.L, self.grid.M, self.grid.N, self.NFP
                 )
-            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
+            (
+                self._R_transform,
+                self._Z_transform,
+                self._W_transform,
+            ) = self._get_transforms(self.grid)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
+            self.W_n = copy_coeffs(self.W_n, W_modes_old, self.W_basis.modes)
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
         n = np.atleast_1d(n).astype(int)
         R = np.zeros_like(n).astype(float)
         Z = np.zeros_like(n).astype(float)
+        W = np.zeros_like(n).astype(float)
 
         idxR = np.where(n[:, np.newaxis] == self.R_basis.modes[:, 2])
         idxZ = np.where(n[:, np.newaxis] == self.Z_basis.modes[:, 2])
+        idxW = np.where(n[:, np.newaxis] == self.W_basis.modes[:, 2])
 
         R[idxR[0]] = self.R_n[idxR[1]]
         Z[idxZ[0]] = self.Z_n[idxZ[1]]
-        return R, Z
+        W[idxZ[0]] = self.W_n[idxW[1]]
+        return R, Z, W
 
-    def set_coeffs(self, n, R=None, Z=None):
+    def set_coeffs(self, n, R=None, Z=None, W=None):
         """Set specific Fourier coefficients."""
-        n, R, Z = np.atleast_1d(n), np.atleast_1d(R), np.atleast_1d(Z)
+        n, R, Z, W = map(np.atleast_1d, (n, R, Z, W))
         R = np.broadcast_to(R, n.shape)
         Z = np.broadcast_to(Z, n.shape)
-        for nn, RR, ZZ in zip(n, R, Z):
+        W = np.broadcast_to(W, n.shape)
+        for nn, RR, ZZ, WW in zip(n, R, Z, W):
             if RR is not None:
                 idxR = self.R_basis.get_idx(0, 0, nn)
                 self.R_n = put(self.R_n, idxR, RR)
             if ZZ is not None:
                 idxZ = self.Z_basis.get_idx(0, 0, nn)
                 self.Z_n = put(self.Z_n, idxZ, ZZ)
+            if WW is not None:
+                idxW = self.W_basis.get_idx(0, 0, nn)
+                self.W_n = put(self.W_n, idxW, WW)
 
     @property
     def R_n(self):
@@ -237,6 +300,21 @@ class FourierRZCurve(Curve):
                 + f"basis with {self.Z_basis.num_modes} modes"
             )
 
+    @property
+    def W_n(self):
+        """Spectral coefficients for Z."""
+        return self._W_n
+
+    @W_n.setter
+    def W_n(self, new):
+        if len(new) == self.W_basis.num_modes:
+            self._W_n = jnp.asarray(new)
+        else:
+            raise ValueError(
+                f"W_n should have the same size as the basis, got {len(new)} for "
+                + f"basis with {self.W_basis.num_modes} modes"
+            )
+
     def _get_transforms(self, grid=None):
         if grid is None:
             return self._R_transform, self._Z_transform
@@ -257,7 +335,12 @@ class FourierRZCurve(Curve):
             self.Z_basis,
             derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
         )
-        return R_transform, Z_transform
+        W_transform = Transform(
+            grid,
+            self.W_basis,
+            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
+        )
+        return R_transform, Z_transform, W_transform
 
     def compute_coordinates(self, R_n=None, Z_n=None, grid=None, dt=0, basis="rpz"):
         """Compute values using specified coefficients.

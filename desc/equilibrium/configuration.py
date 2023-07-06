@@ -756,9 +756,11 @@ class _Configuration(IOAble, ABC):
         # indices where m=0
         idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
         idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
+        idx0_W = np.where(self.W_basis.modes[:, 1] == 0)[0]
         # indices where l=0 & m=0
         idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        idx00_W = np.where((self.W_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
         # this reshaping assumes the FourierZernike bases are sorted
         R_n = np.sum(
             sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
@@ -774,7 +776,18 @@ class _Configuration(IOAble, ABC):
         else:  # catch cases such as axisymmetry with stellarator symmetry
             Z_n = 0
             modes_Z = 0
-        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        if len(idx00_W):
+            W_n = np.sum(
+                sign_l * np.reshape(self.W_lmn[idx0_W], (-1, idx00_W.size), order="F"),
+                axis=0,
+            )
+            modes_W = self.W_basis.modes[idx00_W, 2]
+        else:  # catch cases such as axisymmetry with stellarator symmetry
+            W_n = 0
+            modes_W = 0
+        axis = FourierRZCurve(
+            R_n, Z_n, W_n, modes_R, modes_Z, modes_W, NFP=self.NFP, sym=self.sym
+        )
         return axis
 
     @property
@@ -965,6 +978,15 @@ class _Configuration(IOAble, ABC):
     @Za_n.setter
     def Za_n(self, Za_n):
         self.axis.Z_n = Za_n
+
+    @property
+    def Wa_n(self):
+        """ndarray: W coefficients for axis Fourier series."""
+        return self.axis.W_n
+
+    @Wa_n.setter
+    def Wa_n(self, Wa_n):
+        self.axis.W_n = Wa_n
 
     @property
     def pressure(self):

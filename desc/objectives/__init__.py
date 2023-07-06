@@ -55,6 +55,7 @@ from .linear_objectives import (
     FixSumModesR,
     FixSumModesZ,
     FixThetaSFL,
+    FixZetaSFL,
 )
 from .objective_funs import ObjectiveFunction
 from .utils import (

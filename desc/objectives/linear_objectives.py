@@ -1142,6 +1142,75 @@ class FixThetaSFL(_Objective):
         return "L_lmn"
 
 
+class FixZetaSFL(_Objective):
+    """Fixes omega=0 so that toroidal angle is the SFL toroidal angle.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = True
+    _units = "(radians)"
+    _print_value_fmt = "Zeta - Zeta SFL error: {:10.3e} "
+
+    def __init__(self, eq=None, name="Zeta SFL"):
+
+        super().__init__(eq=eq, target=0, weight=1, name=name)
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        idx = np.arange(eq.W_basis.num_modes)
+        modes_idx = idx
+        self._idx = idx
+
+        self._dim_f = modes_idx.size
+
+        self.target = np.zeros_like(modes_idx)
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, W_lmn, **kwargs):
+        """Compute Zeta SFL errors.
+
+        Parameters
+        ----------
+        W_lmn : ndarray
+            Spectral coefficients of W(rho,theta,zeta) -- toroidal stream function.
+
+        Returns
+        -------
+        f : ndarray
+            Zeta - Zeta SFL errors.
+
+        """
+        fixed_params = W_lmn[self._idx]
+        return fixed_params
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "W_lmn"
+
+
 class FixAxisR(_Objective):
     """Fixes magnetic axis R coefficients.
 

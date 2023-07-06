@@ -17,12 +17,14 @@ from ._equilibrium import (
 )
 from .linear_objectives import (
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
     FixAxisR,
+    FixAxisW,
     FixAxisZ,
     FixBoundaryR,
     FixBoundaryW,
@@ -121,6 +123,8 @@ def maybe_add_self_consistency(eq, constraints):
         constraints += (AxisRSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, AxisZSelfConsistency):
         constraints += (AxisZSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, AxisWSelfConsistency):
+        constraints += (AxisWSelfConsistency(eq=eq),)
     return constraints
 
 
@@ -149,6 +153,7 @@ def get_fixed_axis_constraints(
     constraints = (
         FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixAxisW(eq=eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
@@ -212,6 +217,7 @@ def get_NAE_constraints(
     constraints = (
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixAxisW(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:

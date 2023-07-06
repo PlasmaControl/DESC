@@ -304,7 +304,7 @@ class AxisRSelfConsistency(_Objective):
             normalize_target=False,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -317,6 +317,7 @@ class AxisRSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         ns = eq.axis.R_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
@@ -376,7 +377,7 @@ class AxisZSelfConsistency(_Objective):
             normalize_target=False,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -389,6 +390,7 @@ class AxisZSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         ns = eq.axis.Z_basis.modes[:, 2]
         self._dim_f = ns.size
         self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
@@ -409,6 +411,79 @@ class AxisZSelfConsistency(_Objective):
         """Compute axis Z self consistency errors."""
         params = self._parse_args(*args, **kwargs)
         f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
+        return f
+
+
+class AxisWSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _print_value_fmt = "W axis self consistency error: {:10.3e} (m)"
+
+    def __init__(
+        self,
+        eq=None,
+        name="axis W self consistency",
+    ):
+
+        self._args = ["W_lmn", "Wa_n"]
+        super().__init__(
+            eq=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        ns = eq.axis.W_basis.modes[:, 2]
+        self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.W_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(eq.W_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute axis Z self consistency errors."""
+        params = self._parse_args(*args, **kwargs)
+        f = jnp.dot(self._A, params["W_lmn"]) - params["Wa_n"]
         return f
 
 
@@ -1517,6 +1592,160 @@ class FixAxisZ(_Objective):
     def target_arg(self):
         """str: Name of argument corresponding to the target."""
         return "Za_n"
+
+
+class FixAxisW(_Objective):
+    """Fixes magnetic axis W coefficients.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Magnetic axis coefficients to fix. If None, uses Equilibrium axis coefficients.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of axis modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the axis modes.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _units = "(radians)"
+    _print_value_fmt = "W axis error: {:10.3e} "
+
+    def __init__(
+        self,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        modes=True,
+        name="axis W",
+    ):
+
+        self._modes = modes
+        self._target_from_user = target
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            name=name,
+            normalize=normalize,
+            normalize_target=normalize_target,
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.axis.W_basis.modes
+            idx = np.arange(eq.axis.W_basis.num_modes)
+        else:  # specified modes
+            modes = np.atleast_1d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.axis.W_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.axis.W_basis.modes
+            # and eq.axis.W_n,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.axis.W_basis.modes[idx, :])
+
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the axis, "
+                        + "these modes will not be fixed.",
+                        "yellow",
+                    )
+                )
+
+        self._dim_f = idx.size
+        if self._target_from_user is not None:
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for W axis modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            # rearrange given target to match modes order
+            self.target = self._target_from_user[modes_idx]
+
+        # Ra_lmn -> Ra optimization space
+        self._A = np.eye(eq.axis.W_basis.num_modes)[idx, :]
+
+        # use surface parameters as target if needed
+        if self._target_from_user is None:
+            self.target = eq.axis.W_n[idx]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, Wa_n, **kwargs):
+        """Compute axis W errors.
+
+        Parameters
+        ----------
+        Wa_n : ndarray
+            Spectral coefficients of W(zeta) on axis.
+
+        Returns
+        -------
+        f : ndarray
+            Axis W errors.
+
+        """
+        f = jnp.dot(self._A, Wa_n)
+        return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Wa_n"
 
 
 class FixModeR(_Objective):

@@ -49,7 +49,7 @@ def map_coordinates(eq, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=
     basis_derivs = [f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")]
     for key in basis_derivs:
         assert (
-            key in data_index.keys()
+            key in data_index["desc.equilibrium.equilibrium.Equilibrium"].keys()
         ), f"don't have recipe to compute partial derivative {key}"
 
     # can't use AD or jit compile this because of grid stuff
@@ -352,8 +352,9 @@ def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     if grid is None:
         grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
 
-    transforms = get_transforms("sqrt(g)_PEST", eq=eq, grid=grid)
+    transforms = get_transforms("sqrt(g)_PEST", obj=eq, grid=grid)
     data = compute_fun(
+        "desc.equilibrium.equilibrium.Equilibrium",
         "sqrt(g)_PEST",
         params={
             "R_lmn": R_lmn,

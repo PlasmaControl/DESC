@@ -147,7 +147,6 @@ class _Configuration(IOAble, ABC):
         spectral_indexing=None,
         **kwargs,
     ):
-
         assert spectral_indexing in [None, "ansi", "fringe",], (
             "spectral_indexing should be one of 'ansi', 'fringe', None, got "
             + f"{spectral_indexing}"
@@ -508,22 +507,26 @@ class _Configuration(IOAble, ABC):
             new = copy.copy(self)
         return new
 
-    def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):
+    def change_resolution(
+        self, L=None, M=None, N=None, NFP=None, sym=None, *args, **kwargs
+    ):
         """Set the spectral resolution.
 
         Parameters
         ----------
         L : int
-            maximum radial zernike mode number
+            Maximum radial Zernike mode number.
         M : int
-            maximum poloidal fourier mode number
+            Maximum poloidal Fourier mode number.
         N : int
-            maximum toroidal fourier mode number
+            Maximum toroidal Fourier mode number.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = NFP_change = sym_change = False
         if L is not None and L != self.L:
             L_change = True
             self._L = L
@@ -536,17 +539,26 @@ class _Configuration(IOAble, ABC):
         if NFP is not None and NFP != self.NFP:
             NFP_change = True
             self._NFP = NFP
+        if sym is not None and sym != self.sym:
+            sym_change = True
+            self._sym = sym
 
-        if not np.any([L_change, M_change, N_change, NFP_change]):
+        if not np.any([L_change, M_change, N_change, NFP_change, sym_change]):
             return
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
 
-        self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
+        self.R_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+        )
+        self.Z_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.L_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
 
         for profile in [
             "pressure",
@@ -561,7 +573,9 @@ class _Configuration(IOAble, ABC):
             if hasattr(p, "change_resolution") and L_change:
                 p.change_resolution(max(p.basis.L, self.L))
 
-        self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
+        self.surface.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+        )
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -1094,28 +1108,30 @@ class _Configuration(IOAble, ABC):
             grid = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
 
         if params is None:
-            params = get_params(names, eq=self, has_axis=grid.axis.size)
+            params = get_params(names, obj=self, has_axis=grid.axis.size)
         if profiles is None:
-            profiles = get_profiles(names, eq=self, grid=grid)
+            profiles = get_profiles(names, obj=self, grid=grid)
         if transforms is None:
-            transforms = get_transforms(names, eq=self, grid=grid, **kwargs)
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
         if data is None:
             data = {}
 
         # To avoid the issue of using the wrong grid for surface and volume averages,
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
-        deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
-        dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
-        dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        deps = list(set(get_data_deps(names, obj=p, has_axis=grid.axis.size) + names))
+        dep0d = [dep for dep in deps if data_index[p][dep]["coordinates"] == ""]
+        dep1d = [dep for dep in deps if data_index[p][dep]["coordinates"] == "r"]
 
         if len(dep0d):
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
+                self,
                 dep0d,
                 params=params,
-                transforms=get_transforms(dep0d, eq=self, grid=grid0d, **kwargs),
-                profiles=get_profiles(dep0d, eq=self, grid=grid0d),
+                transforms=get_transforms(dep0d, obj=self, grid=grid0d, **kwargs),
+                profiles=get_profiles(dep0d, obj=self, grid=grid0d),
                 data=None,
                 **kwargs,
             )
@@ -1134,10 +1150,11 @@ class _Configuration(IOAble, ABC):
             # Todo: Pass in data0d as a seed once there are 1d quantities that
             #  depend on 0d quantities in data_index.
             data1d = compute_fun(
+                self,
                 dep1d,
                 params=params,
-                transforms=get_transforms(dep1d, eq=self, grid=grid1d, **kwargs),
-                profiles=get_profiles(dep1d, eq=self, grid=grid1d),
+                transforms=get_transforms(dep1d, obj=self, grid=grid1d, **kwargs),
+                profiles=get_profiles(dep1d, obj=self, grid=grid1d),
                 data=None,
                 **kwargs,
             )
@@ -1153,6 +1170,7 @@ class _Configuration(IOAble, ABC):
         #   needed as inputs for 0d and 1d qtys, unless the user asks for them
         #   specifically?
         data = compute_fun(
+            self,
             names,
             params=params,
             transforms=transforms,

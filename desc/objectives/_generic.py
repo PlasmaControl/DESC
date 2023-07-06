@@ -107,7 +107,7 @@ class ObjectiveFromUser(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -120,6 +120,7 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -134,21 +135,26 @@ class ObjectiveFromUser(_Objective):
 
         self._data_keys = getvars(self._fun)
         dummy_data = {}
+        p = "desc.equilibrium.equilibrium.Equilibrium"
         for key in self._data_keys:
-            assert key in data_index, f"Don't know how to compute {key}"
-            if data_index[key]["dim"] == 0:
+            assert key in data_index[p], f"Don't know how to compute {key}"
+            if data_index[p][key]["dim"] == 0:
                 dummy_data[key] = jnp.array(0.0)
             else:
-                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[key]["dim"]))
+                dummy_data[key] = jnp.empty((grid.num_nodes, data_index[p][key]["dim"]))
 
         self._fun_wrapped = lambda data: self._fun(grid, data)
         import jax
 
         self._dim_f = jax.eval_shape(self._fun_wrapped, dummy_data).size
         self._scalar = self._dim_f == 1
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -167,6 +173,7 @@ class ObjectiveFromUser(_Objective):
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=self._transforms,
@@ -238,9 +245,13 @@ class GenericObjective(_Objective):
             normalize_target=normalize_target,
             name=name,
         )
-        self._units = "(" + data_index[self.f]["units"] + ")"
+        self._units = (
+            "("
+            + data_index["desc.equilibrium.equilibrium.Equilibrium"][self.f]["units"]
+            + ")"
+        )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -253,20 +264,26 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
             grid = self._grid
 
-        if data_index[self.f]["dim"] == 0:
+        p = "desc.equilibrium.equilibrium.Equilibrium"
+        if data_index[p][self.f]["dim"] == 0:
             self._dim_f = 1
             self._scalar = True
         else:
-            self._dim_f = grid.num_nodes * data_index[self.f]["dim"]
+            self._dim_f = grid.num_nodes * data_index[p][self.f]["dim"]
             self._scalar = False
-        self._args = get_params(self.f, has_axis=grid.axis.size)
-        self._profiles = get_profiles(self.f, eq=eq, grid=grid)
-        self._transforms = get_transforms(self.f, eq=eq, grid=grid)
+        self._args = get_params(
+            self.f,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
+        self._profiles = get_profiles(self.f, obj=eq, grid=grid)
+        self._transforms = get_transforms(self.f, obj=eq, grid=grid)
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -285,6 +302,7 @@ class GenericObjective(_Objective):
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self.f,
             params=params,
             transforms=self._transforms,
@@ -354,7 +372,7 @@ class ToroidalCurrent(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -367,6 +385,7 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,
@@ -384,15 +403,19 @@ class ToroidalCurrent(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["current"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -430,6 +453,7 @@ class ToroidalCurrent(_Objective):
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=self._transforms,
@@ -531,7 +555,7 @@ class RotationalTransform(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -544,6 +568,7 @@ class RotationalTransform(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,
@@ -561,15 +586,19 @@ class RotationalTransform(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["iota"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -603,6 +632,7 @@ class RotationalTransform(_Objective):
         """
         params = self._parse_args(*args, **kwargs)
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=self._transforms,

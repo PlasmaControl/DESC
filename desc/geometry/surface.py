@@ -163,6 +163,27 @@ class FourierRZToroidalSurface(Surface):
         )
         self.name = name
 
+    def _set_up(self):
+        """Set unset attributes after loading.
+
+        To ensure object has all properties needed for current DESC version.
+        Allows for backwards-compatibility with equilibria saved/ran with older
+        DESC versions.
+        """
+        for attribute in self._io_attrs_:
+            if not hasattr(self, attribute):
+                setattr(self, attribute, None)
+        if self.W_basis is None:
+            self._W_basis = self.Z_basis.copy()
+            (
+                self._R_transform,
+                self._Z_transform,
+                self._W_transform,
+            ) = self._get_transforms(self.grid)
+
+        if self.W_lmn is None:
+            self._W_lmn = np.zeros(self.W_basis.num_modes)
+
     @property
     def NFP(self):
         """int: Number of (toroidal) field periods."""

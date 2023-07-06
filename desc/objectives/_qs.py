@@ -95,7 +95,7 @@ class QuasisymmetryBoozer(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -108,6 +108,7 @@ class QuasisymmetryBoozer(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         M_booz = self.M_booz or 2 * eq.M
         N_booz = self.N_booz or 2 * eq.N
 
@@ -288,7 +289,7 @@ class QuasisymmetryTwoTerm(_Objective):
             + "{:10.3e} "
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -301,6 +302,7 @@ class QuasisymmetryTwoTerm(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -451,7 +453,7 @@ class QuasisymmetryTripleProduct(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -464,6 +466,7 @@ class QuasisymmetryTripleProduct(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:
@@ -596,7 +599,7 @@ class Isodynamicity(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -609,6 +612,7 @@ class Isodynamicity(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
         else:

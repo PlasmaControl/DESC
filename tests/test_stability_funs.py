@@ -223,6 +223,7 @@ def test_mercier_print(capsys):
     Dmerc = eq.compute("D_Mercier", grid=grid)["D_Mercier"]
 
     mercier_obj = MercierStability(eq=eq, grid=grid)
+    mercier_obj.build()
     np.testing.assert_allclose(mercier_obj.compute(*mercier_obj.xs(eq)), 0)
     mercier_obj.print_value(*mercier_obj.xs(eq))
     out = capsys.readouterr()
@@ -265,6 +266,7 @@ def test_magwell_print(capsys):
     eq = desc.examples.get("HELIOTRON")
     grid = LinearGrid(L=12, M=12, N=6, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
+    obj.build()
 
     magwell = compress(grid, eq.compute("magnetic well", grid=grid)["magnetic well"])
     f = obj.compute(*obj.xs(eq))

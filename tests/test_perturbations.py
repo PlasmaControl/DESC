@@ -23,8 +23,8 @@ def test_perturbation_orders(SOLOVEV):
     """Test that higher-order perturbations are more accurate."""
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
 
-    objective = get_equilibrium_objective()
-    constraints = get_fixed_boundary_constraints()
+    objective = get_equilibrium_objective(eq=eq)
+    constraints = get_fixed_boundary_constraints(eq=eq)
 
     # perturb pressure
     tr_ratio = [0.01, 0.25, 0.25]
@@ -104,8 +104,8 @@ def test_perturb_with_float_without_error():
     # fixed bug where np.concatenate( [float] ) was called resulting in error that
     # np.concatenate cannot concatenate 0-D arrays. This test exercises the fix.
     eq = Equilibrium()
-    objective = get_equilibrium_objective()
-    constraints = get_fixed_boundary_constraints(iota=False)
+    objective = get_equilibrium_objective(eq=eq)
+    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
 
     # perturb Psi with a float
     deltas = {"Psi": float(eq.Psi)}
@@ -130,12 +130,14 @@ def test_optimal_perturb():
     eq1 = desc.examples.get("DSHAPE")
     eq1.change_resolution(N=1, N_grid=5)
     objective = ObjectiveFunction(
-        ToroidalCurrent(grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1)
+        ToroidalCurrent(
+            eq=eq1, grid=QuadratureGrid(eq1.L, eq1.M, eq1.N), target=0, weight=1
+        )
     )
-    constraint = ObjectiveFunction(ForceBalance(target=0))
+    constraint = ObjectiveFunction(ForceBalance(eq=eq1, target=0))
 
-    objective.build(eq1)
-    constraint.build(eq1)
+    objective.build()
+    constraint.build()
 
     R_modes = np.zeros(eq1.surface.R_lmn.size).astype(bool)
     Z_modes = np.zeros(eq1.surface.Z_lmn.size).astype(bool)

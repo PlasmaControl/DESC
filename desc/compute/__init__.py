@@ -30,6 +30,7 @@ from . import (
     _basis_vectors,
     _bootstrap,
     _core,
+    _curve,
     _equil,
     _field,
     _geometry,
@@ -37,6 +38,7 @@ from . import (
     _profiles,
     _qs,
     _stability,
+    _surface,
 )
 from .data_index import data_index
 from .utils import (

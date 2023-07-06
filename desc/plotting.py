@@ -2799,10 +2799,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
+        plot_data = {"n": basis.modes[:, 2], "amplitude": [], "zeta": z}
 
         for fi, n in zip(f.T, basis.modes[:, 2]):
             ax.plot(z, fi, label="$n={:d}$".format(int(n)))
@@ -2842,12 +2839,13 @@ def plot_basis(basis, return_data=False, **kwargs):
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["m"] = basis.modes[:, 1]
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
-        plot_data["theta"] = t
+        plot_data = {
+            "m": basis.modes[:, 1],
+            "n": basis.modes[:, 2],
+            "amplitude": [],
+            "zeta": z,
+            "theta": t,
+        }
 
         for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
             ax[mmax + m, nmax + n] = plt.subplot(gs[mmax + m + 1, n + nmax])

@@ -9,7 +9,7 @@ from desc.transform import Transform
 from .linear_objectives import FixSumModesLambda, FixSumModesR, FixSumModesZ
 
 
-def calc_zeroth_order_lambda(qsc, desc_eq):
+def calc_zeroth_order_lambda(qsc, desc_eq, N=None):
     """Calculate 0th order NAE lambda constraint.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -20,6 +20,9 @@ def calc_zeroth_order_lambda(qsc, desc_eq):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -34,13 +37,20 @@ def calc_zeroth_order_lambda(qsc, desc_eq):
         FourierSeries basis corresponding to L_0_n coefficients
 
     """
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.max([desc_eq.N, N])
+    assert N == int(N), "Toroidal Resolution must be an integer!"
+    N = int(N)
+
     phi = qsc.phi
     dphi = phi[1] - phi[0]
     nfp = qsc.nfp
     if desc_eq.sym:
-        Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Lbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
     else:
-        Lbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Lbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
 
     grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
     Ltrans_sin = Transform(grid, Lbasis_sin, build_pinv=True, method="auto")
@@ -72,7 +82,7 @@ def calc_zeroth_order_lambda(qsc, desc_eq):
     return Lconstraints, L_0_n, Lbasis_sin
 
 
-def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
+def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False, N=None):
     """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -86,6 +96,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
     fix_lambda : bool, default False
         whether to include first order constraints to fix the O(rho) behavior
         of lambda. Defaults to False.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -109,6 +122,12 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
     R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
     dZ0_dphi = qsc.Z0p
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.max([desc_eq.N, N])
+    assert N == int(N), "Toroidal Resolution must be an integer!"
+    N = int(N)
     # normal and binormal vector components
     # Spline interpolants for the cylindrical components of the Frenet-Serret frame:
     # these are functions of phi (toroidal cylindrical angle)
@@ -149,15 +168,15 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda=False):
 
     nfp = qsc.nfp
     if desc_eq.sym:
-        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
-        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Rbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+        Zbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+        Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+        Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
     else:
-        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Rbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+        Zbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+        Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+        Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
 
     grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
     Rtrans = Transform(grid, Rbasis, build_pinv=True, method="auto")
@@ -259,7 +278,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Rconstraints += (Rcon,)
     # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
@@ -271,7 +292,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
     if fix_lambda:
         # L_1_neg1_n
@@ -298,7 +321,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Rconstraints += (Rcon,)
     # Z_1_1_n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
@@ -310,7 +335,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
     if fix_lambda:
         # L_1_1_n
@@ -330,7 +357,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases, fix_lambda=False):
     return Rconstraints, Zconstraints, Lconstraints
 
 
-def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False):
+def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False, N=None):
     """Make the first order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -342,6 +369,9 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False):
     fix_lambda : bool, default False
         whether to include first order constraints to fix the O(rho) behavior
         of lambda. Defaults to False.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -356,7 +386,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False):
     Zconstraints = ()
     Lconstraints = ()
 
-    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda)
+    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, fix_lambda, N=N)
     Rconstraints, Zconstraints, Lconstraints = _make_RZ_cons_order_rho(
         qsc, desc_eq, coeffs, bases, fix_lambda
     )
@@ -367,7 +397,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq, fix_lambda=False):
 """ Order (rho^2)"""
 
 
-def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
+def _calc_2nd_order_NAE_coeffs(qsc, desc_eq, N=None):
     """Calculate 2nd order NAE coefficients' Fourier representations.
 
     Description
@@ -378,6 +408,9 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
     ----------
         qsc (Qsc): Qsc object to use as the NAE constraints on the DESC equilibrium
         desc_eq (Equilibrium): desc equilibrium to constrain
+        N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -394,6 +427,14 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
             since Z(-theta,-phi) = - Z(theta,phi) for Z stellarator symmetry
     """
     # get variables from qsc
+
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.max([desc_eq.N, N])
+    assert N == int(N), "Toroidal Resolution must be an integer!"
+    N = int(N)
+
     phi = qsc.phi
     R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
@@ -864,15 +905,15 @@ def _calc_2nd_order_NAE_coeffs(qsc, desc_eq):
 
     nfp = qsc.nfp
     if desc_eq.sym:
-        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
-        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Rbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+        Zbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+        Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+        Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
     else:
-        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Rbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+        Zbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+        Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+        Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
     bases["Rbasis_cos"] = Rbasis
     bases["Rbasis_sin"] = Rbasis_sin
     bases["Zbasis_cos"] = Zbasis

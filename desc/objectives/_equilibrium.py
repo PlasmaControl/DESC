@@ -89,7 +89,7 @@ class ForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -102,6 +102,7 @@ class ForceBalance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -137,7 +138,7 @@ class ForceBalance(_Objective):
             "F_helical",
             "|e^helical|",
         ]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -271,7 +272,7 @@ class RadialForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -284,6 +285,7 @@ class RadialForceBalance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -313,7 +315,7 @@ class RadialForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_rho", "|grad(rho)|", "sqrt(g)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -444,7 +446,7 @@ class HelicalForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -457,6 +459,7 @@ class HelicalForceBalance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -486,7 +489,7 @@ class HelicalForceBalance(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["F_helical", "|e^helical|", "sqrt(g)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -619,7 +622,7 @@ class Energy(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -632,6 +635,7 @@ class Energy(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern in [
                 "jacobi",
@@ -670,7 +674,7 @@ class Energy(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["W"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:
@@ -805,7 +809,7 @@ class CurrentDensity(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -818,6 +822,7 @@ class CurrentDensity(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -847,7 +852,7 @@ class CurrentDensity(_Objective):
 
         self._dim_f = 3 * grid.num_nodes
         self._data_keys = ["J^rho", "J^theta", "J^zeta", "sqrt(g)"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         timer = Timer()
         if verbose > 0:

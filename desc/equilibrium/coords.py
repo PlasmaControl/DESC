@@ -317,7 +317,7 @@ def compute_flux_coords(
 def is_nested(eq, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
     """Check that an equilibrium has properly nested flux surfaces in a plane.
 
-    Does so by checking coordianate Jacobian (sqrt(g)) sign.
+    Does so by checking coordinate Jacobian (sqrt(g)) sign.
     If coordinate Jacobian switches sign somewhere in the volume, this
     indicates that it is zero at some point, meaning surfaces are touching and
     the equilibrium is not nested.
@@ -426,7 +426,7 @@ def to_sfl(
     N_grid : int, optional
         toroidal spatial resolution to use for fit to new basis. Default = 2*N
     rcond : float, optional
-        cutoff for small singular values in least squares fit.
+        cutoff for small singular values in the least squares fit.
     copy : bool, optional
         Whether to update the existing equilibrium or make a copy (Default).
 

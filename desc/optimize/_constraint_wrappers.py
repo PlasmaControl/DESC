@@ -63,11 +63,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
         self._compiled = False
+        self._eq = eq
 
-        if eq is not None:
-            self.build(eq, verbose=verbose)
-
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq=None, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -81,6 +79,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Linear constraint projection build")
 
@@ -314,6 +313,40 @@ class LinearConstraintProjection(ObjectiveFunction):
         df = self._objective.jac_scaled(x)
         return df[:, self._unfixed_idx] @ self._Z
 
+    def vjp_scaled(self, v, x_reduced):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.vjp_scaled(v, x)
+        return df[self._unfixed_idx] @ self._Z
+
+    def vjp_unscaled(self, v, x_reduced):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x_reduced : ndarray
+            Optimization variables.
+
+        """
+        x = self.recover(x_reduced)
+        df = self._objective.vjp_unscaled(v, x)
+        return df[self._unfixed_idx] @ self._Z
+
     @property
     def target_scaled(self):
         """ndarray: target vector."""
@@ -392,9 +425,7 @@ class ProximalProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
         self._compiled = False
-
-        if eq is not None:
-            self.build(eq, verbose=verbose)
+        self._eq = eq
 
     def set_args(self, *args):
         """Set which arguments the objective should expect.
@@ -477,7 +508,7 @@ class ProximalProjection(ObjectiveFunction):
             dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdZb))
 
-    def build(self, eq, use_jit=None, verbose=1):  # noqa: C901
+    def build(self, eq=None, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
@@ -491,15 +522,19 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
         self._eq = eq.copy()
         self._linear_constraints = get_fixed_boundary_constraints(
+            eq=eq,
             iota=self._eq.iota is not None,
             kinetic=self._eq.electron_temperature is not None,
         )
-        self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
+        self._linear_constraints = maybe_add_self_consistency(
+            eq, self._linear_constraints
+        )
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should
@@ -767,6 +802,36 @@ class ProximalProjection(ObjectiveFunction):
         """
         J = self.jac_scaled(x)
         return J.T @ J
+
+    def vjp_scaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        raise NotImplementedError
+
+    def vjp_unscaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        raise NotImplementedError
 
     @property
     def target_scaled(self):

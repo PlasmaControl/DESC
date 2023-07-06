@@ -148,12 +148,13 @@ class VMECIO:
 
         # apply boundary conditions
         constraints = (
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            BoundaryRSelfConsistency(),
-            BoundaryZSelfConsistency(),
+            FixBoundaryR(eq=eq),
+            FixBoundaryZ(eq=eq),
+            BoundaryRSelfConsistency(eq=eq),
+            BoundaryZSelfConsistency(eq=eq),
         )
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+        objective = ObjectiveFunction(constraints, verbose=0)
+        objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )
@@ -251,8 +252,11 @@ class VMECIO:
         )
 
         ier_flag = file.createVariable("ier_flag", np.int32)
-        ier_flag.long_name = "error flag (0 = solved equilibrium, 1 = unsolved)"
-        ier_flag[:] = int(not eq.solved)
+        ier_flag.long_name = (
+            "error flag (DESC always outputs 0; "
+            + "manually check for a good equilibrium solution)"
+        )
+        ier_flag[:] = 0
 
         lfreeb = file.createVariable("lfreeb__logical__", np.int32)
         lfreeb.long_name = "free boundary logical (0 = fixed boundary)"
@@ -542,26 +546,22 @@ class VMECIO:
         jcuru = file.createVariable("jcuru", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^theta"
         jcuru.units = "A/m^3"
-        jcuru[:] = compress(
+        jcuru[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcuru[0] = 0
 
         jcurv = file.createVariable("jcurv", np.float64, ("radius",))
         jcuru.long_name = "flux surface average of sqrt(g)*J^zeta"
         jcurv.units = "A/m^3"
-        jcurv[:] = compress(
+        jcurv[:] = surface_averages(
             grid,
-            surface_averages(
-                grid,
-                data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
-                sqrt_g=data["sqrt(g)"],
-            ),
+            data["sqrt(g)"] * data["J^zeta"] / (2 * data["rho"]),
+            sqrt_g=data["sqrt(g)"],
+            expand_out=False,
         )
         jcurv[0] = 0
 

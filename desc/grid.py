@@ -158,9 +158,9 @@ class Grid(IOAble):
         _, inverse, counts = np.unique(
             nodes, axis=0, return_inverse=True, return_counts=True
         )
-        duplicates = np.tile(np.atleast_2d(counts[inverse]).T, 3)
-        temp_spacing = np.copy(self.spacing)
-        temp_spacing /= duplicates ** (1 / 3)
+        duplicates = counts[inverse]
+        temp_spacing = self.spacing.copy()
+        temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
         # scale weights sum to full volume
         temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
         self._weights = temp_spacing.prod(axis=1)
@@ -171,7 +171,7 @@ class Grid(IOAble):
         # of columns in grid.spacing.
         # The reduction of weight on duplicate nodes should be accounted for
         # by the 2 columns of spacing which span the surface.
-        self._spacing /= duplicates ** (1 / 2)
+        self._spacing = (self.spacing.T / duplicates ** (1 / 2)).T
         # Note we rescale 3 columns by the factor that 'should' rescale 2 columns,
         # so grid.spacing is valid for integrals over all surface labels.
         # Because a surface integral always ignores 1 column, with this approach,
@@ -186,7 +186,7 @@ class Grid(IOAble):
         # Note we multiply each column by duplicates^(1/6) to account for the extra
         # division by duplicates^(1/2) in one of the columns above.
         self._spacing *= (
-            4 * np.pi**2 / (self.spacing * duplicates ** (1 / 6)).prod(axis=1).sum()
+            4 * np.pi**2 / (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum()
         ) ** (1 / 3)
 
     def _create_nodes(self, nodes):
@@ -675,7 +675,7 @@ class LinearGrid(Grid):
                 axis=len(self.axis) > 0,
                 endpoint=self.endpoint,
             )
-            self._enforce_symmetry()
+            # symmetry handled in create_nodes()
             self._sort_nodes()
             self._find_axis()
             self._scale_weights()

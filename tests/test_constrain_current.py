@@ -6,7 +6,6 @@ import pytest
 import desc.io
 from desc.compute import compute as compute_fun
 from desc.compute import get_params, get_profiles, get_transforms
-from desc.compute.utils import compress
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 
@@ -18,7 +17,7 @@ class _ExactValueProfile:
         self.grid = grid
         self.transforms = get_transforms("current_rr", eq=eq, grid=grid)
         self.profiles = get_profiles("current_rr", eq=eq, grid=grid)
-        self.params = get_params("current_rr", eq=eq)
+        self.params = get_params("current_rr", eq=eq, has_axis=grid.axis.size)
 
     def compute(self, params, dr, *args, **kwargs):
         if dr == 0:
@@ -65,11 +64,23 @@ class TestConstrainCurrent:
 
         def test(stellarator, grid_type):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
-            if grid_type == "quadrature":
+            if grid_type == "Quadrature":
                 grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+            elif grid_type == "Concentric":
+                grid = ConcentricGrid(
+                    L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym
+                )
             else:
-                f = ConcentricGrid if grid_type == "concentric" else LinearGrid
-                grid = f(L=eq.L_grid, M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym)
+                # Todo: set axis to true when every quantity's limit at the axis
+                #  can be computed.
+                grid = LinearGrid(
+                    L=eq.L_grid,
+                    M=eq.M_grid,
+                    N=eq.N_grid,
+                    NFP=eq.NFP,
+                    sym=eq.sym,
+                    axis=False,
+                )
 
             params = {
                 "R_lmn": eq.R_lmn,
@@ -94,31 +105,15 @@ class TestConstrainCurrent:
             # if the equilibrium fixes iota)
             benchmark_data = compute_fun(
                 ["iota", "iota_r", "iota_rr"],
-                params=get_params("iota_rr", eq=eq),
+                params=get_params("iota_rr", eq=eq, has_axis=grid.axis.size),
                 transforms=transforms,
                 profiles=get_profiles("iota_rr", eq=eq, grid=grid),
             )
+            np.testing.assert_allclose(data["iota"], benchmark_data["iota"])
+            np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
+            np.testing.assert_allclose(data["iota_rr"], benchmark_data["iota_rr"])
 
-            if grid_type in "linear":
-                # ignore axis
-                np.testing.assert_allclose(
-                    compress(grid, data["iota"])[1:],
-                    compress(grid, benchmark_data["iota"])[1:],
-                )
-                np.testing.assert_allclose(
-                    compress(grid, data["iota_r"])[1:],
-                    compress(grid, benchmark_data["iota_r"])[1:],
-                )
-                np.testing.assert_allclose(
-                    compress(grid, data["iota_rr"])[1:],
-                    compress(grid, benchmark_data["iota_rr"])[1:],
-                )
-            else:
-                np.testing.assert_allclose(data["iota"], benchmark_data["iota"])
-                np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
-                np.testing.assert_allclose(data["iota_rr"], benchmark_data["iota_rr"])
-
-        for e in ("quadrature", "concentric", "linear"):
+        for e in ("Quadrature", "Concentric", "Linear"):
             # works with any stellarators in desc/examples with fixed iota profiles
             test(DSHAPE, e)
             test(HELIOTRON_vac, e)

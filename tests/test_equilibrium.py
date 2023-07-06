@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 
 import desc.examples
 from desc.__main__ import main
+from desc.backend import sign
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -182,6 +183,52 @@ def test_eq_change_grid_resolution():
 
 
 @pytest.mark.unit
+def test_eq_change_symmetry():
+    """Test changing stellarator symmetry."""
+    eq = Equilibrium(L=2, M=2, N=2, NFP=2, sym=False)
+    idx_sin = np.nonzero(
+        sign(eq.R_basis.modes[:, 1]) * sign(eq.R_basis.modes[:, 2]) < 0
+    )[0]
+    idx_cos = np.nonzero(
+        sign(eq.R_basis.modes[:, 1]) * sign(eq.R_basis.modes[:, 2]) > 0
+    )[0]
+    sin_modes = eq.R_basis.modes[idx_sin, :]
+    cos_modes = eq.R_basis.modes[idx_cos, :]
+
+    # stellarator symmetric
+    eq.change_resolution(sym=True)
+    assert eq.sym
+    assert eq.R_basis.sym == "cos"
+    assert not np.any(
+        [np.any(np.all(i == eq.R_basis.modes, axis=-1)) for i in sin_modes]
+    )
+    assert eq.Z_basis.sym == "sin"
+    assert not np.any(
+        [np.any(np.all(i == eq.Z_basis.modes, axis=-1)) for i in cos_modes]
+    )
+    assert eq.L_basis.sym == "sin"
+    assert not np.any(
+        [np.any(np.all(i == eq.L_basis.modes, axis=-1)) for i in cos_modes]
+    )
+    assert eq.surface.sym
+    assert eq.surface.R_basis.sym == "cos"
+    assert eq.surface.Z_basis.sym == "sin"
+
+    # undo symmetry
+    eq.change_resolution(sym=False)
+    assert not eq.sym
+    assert not eq.R_basis.sym
+    assert np.all([np.any(np.all(i == eq.R_basis.modes, axis=-1)) for i in sin_modes])
+    assert not eq.Z_basis.sym
+    assert np.all([np.any(np.all(i == eq.Z_basis.modes, axis=-1)) for i in cos_modes])
+    assert not eq.L_basis.sym
+    assert np.all([np.any(np.all(i == eq.L_basis.modes, axis=-1)) for i in cos_modes])
+    assert not eq.surface.sym
+    assert not eq.surface.R_basis.sym
+    assert not eq.surface.Z_basis.sym
+
+
+@pytest.mark.unit
 def test_resolution():
     """Test changing equilibrium spectral resolution."""
     eq1 = Equilibrium(L=5, M=6, N=7, L_grid=8, M_grid=9, N_grid=10)
@@ -264,5 +311,5 @@ def test_change_NFP():
         warnings.simplefilter("error")
         eq = desc.examples.get("HELIOTRON")
         eq.change_resolution(NFP=4)
-        obj = get_equilibrium_objective()
-        obj.build(eq)
+        obj = get_equilibrium_objective(eq=eq)
+        obj.build()

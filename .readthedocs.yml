@@ -10,6 +10,12 @@ build:
   os: ubuntu-22.04
   tools:
     python: "3.10"
+  jobs:
+    pre_build:
+      - cd docs/
+      - python write_optimizers.py
+      - python write_variables.py
+      - cd ..
 
 
 # Build documentation in the docs/ directory with Sphinx

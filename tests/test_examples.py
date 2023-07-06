@@ -539,7 +539,7 @@ def test_NAE_QSC_solve():
 
     # this has all the constraints we need,
     #  iota=False specifies we want to fix current instead of iota
-    cs = get_NAE_constraints(eq, qsc, iota=False, order=1)
+    cs = get_NAE_constraints(eq, qsc, iota=False, order=1, N=eq.N)
 
     objectives = ForceBalance(eq=eq)
     obj = ObjectiveFunction(objectives)

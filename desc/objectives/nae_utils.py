@@ -9,7 +9,7 @@ from desc.transform import Transform
 from .linear_objectives import FixSumModesR, FixSumModesZ
 
 
-def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
+def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     """Calculate 1st order NAE coefficients' toroidal Fourier representations.
 
     Uses the passed-in qsc object, and the desc_eq's stellarator symmetry is used.
@@ -20,6 +20,9 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -43,6 +46,12 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
     R0 = qsc.R0_func(phi)
     dR0_dphi = qsc.R0p
     dZ0_dphi = qsc.Z0p
+    if N is None:
+        N = desc_eq.N
+    else:
+        N = np.max([desc_eq.N, N])
+    assert N == int(N), "Toroidal Resolution must be an integer!"
+    N = int(N)
     # normal and binormal vector components
     # Spline interpolants for the cylindrical components of the Frenet-Serret frame:
     # these are functions of phi (toroidal cylindrical angle)
@@ -76,15 +85,15 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq):
 
     nfp = qsc.nfp
     if desc_eq.sym:
-        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym="cos")
-        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
-        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym="sin")
+        Rbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+        Zbasis = FourierSeries(N=N, NFP=nfp, sym="cos")
+        Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
+        Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym="sin")
     else:
-        Rbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Zbasis = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Rbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
-        Zbasis_sin = FourierSeries(N=desc_eq.N, NFP=nfp, sym=False)
+        Rbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+        Zbasis = FourierSeries(N=N, NFP=nfp, sym=False)
+        Rbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
+        Zbasis_sin = FourierSeries(N=N, NFP=nfp, sym=False)
 
     grid = LinearGrid(M=0, L=0, zeta=phi, NFP=nfp)
     Rtrans = Transform(grid, Rbasis, build_pinv=True, method="auto")
@@ -217,7 +226,7 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
     return Rconstraints, Zconstraints
 
 
-def make_RZ_cons_1st_order(qsc, desc_eq):
+def make_RZ_cons_1st_order(qsc, desc_eq, N=None):
     """Make the first order NAE constraints for a DESC equilibrium.
 
     Parameters
@@ -226,6 +235,9 @@ def make_RZ_cons_1st_order(qsc, desc_eq):
         Qsc object to use as the NAE constraints on the DESC equilibrium.
     desc_eq : Equilibrium
         desc equilibrium to constrain.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------

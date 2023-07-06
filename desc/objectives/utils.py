@@ -169,7 +169,14 @@ def get_fixed_axis_constraints(
 
 
 def get_NAE_constraints(
-    desc_eq, qsc_eq, order=1, profiles=True, iota=False, kinetic=False, normalize=True
+    desc_eq,
+    qsc_eq,
+    order=1,
+    profiles=True,
+    iota=False,
+    kinetic=False,
+    normalize=True,
+    N=None,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
 
@@ -190,6 +197,9 @@ def get_NAE_constraints(
         Whether to also fix kinetic profiles.
     normalize : bool
         Whether to apply constraints in normalized units.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -234,7 +244,7 @@ def get_NAE_constraints(
                 FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
             )
     if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
 

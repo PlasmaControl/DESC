@@ -179,16 +179,17 @@ class VMECIO:
         # apply boundary conditions
 
         constraints = (
-            FixAxisR(),
-            FixAxisZ(),
-            AxisRSelfConsistency(),
-            AxisZSelfConsistency(),
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            BoundaryRSelfConsistency(),
-            BoundaryZSelfConsistency(),
+            FixAxisR(eq=eq),
+            FixAxisZ(eq=eq),
+            AxisRSelfConsistency(eq=eq),
+            AxisZSelfConsistency(eq=eq),
+            FixBoundaryR(eq=eq),
+            FixBoundaryZ(eq=eq),
+            BoundaryRSelfConsistency(eq=eq),
+            BoundaryZSelfConsistency(eq=eq),
         )
-        objective = ObjectiveFunction(constraints, eq=eq, verbose=0)
+        objective = ObjectiveFunction(constraints, verbose=0)
+        objective.build()
         _, _, _, _, _, project, recover = factorize_linear_constraints(
             constraints, objective.args
         )

@@ -172,7 +172,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    constraints = maybe_add_self_consistency(constraints)
+    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
     con_args = []
     for con in constraints:
         con_args += con.args
@@ -607,9 +607,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(
-        iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
+        eq=eq, iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
     )
-    constraints = maybe_add_self_consistency(constraints)
+    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
     con_args = []
     for con in constraints:
         con_args += con.args

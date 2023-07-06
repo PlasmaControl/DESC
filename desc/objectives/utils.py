@@ -132,7 +132,7 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
     return constraints
 
 
-def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
+def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1, N=None):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
 
     Parameters
@@ -148,6 +148,9 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
         Whether to add FixIota or FixCurrent as a constraint.
     order : int
         order (in rho) of near-axis behavior to constrain
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
@@ -168,7 +171,7 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
         else:
             constraints += (FixCurrent(),)
     if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
 

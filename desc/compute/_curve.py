@@ -517,7 +517,7 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="frenet_binormal",
-    label="\\mathrm{B}_{\\mathrm{Frenet-Serret}}",
+    label="\\mathbf{B}_{\\mathrm{Frenet-Serret}}",
     units="~",
     units_long="None",
     description="Binormal unit vector to curve in Frenet-Serret frame",
@@ -526,7 +526,7 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
     transforms={"rotmat": []},
     profiles=[],
     coordinates="s",
-    data=["T", "N"],
+    data=["frenet_tangent", "frenet_normal"],
     parameterization="desc.geometry.Curve",
 )
 def _frenet_binormal(params, transforms, profiles, data, **kwargs):

@@ -138,7 +138,7 @@ def _r_rr_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs)
 
 @register_compute_fun(
     name="r_tt",
-    label="\\partial_{\theta \\theta} \\mathbf{r}",
+    label="\\partial_{\\theta \\theta} \\mathbf{r}",
     units="m",
     units_long="meters",
     description="Position vector along surface, second poloidal derivative",
@@ -409,7 +409,7 @@ def _r_rr_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs)
 
 @register_compute_fun(
     name="r_tt",
-    label="\\partial_{\theta \\theta} \\mathbf{r}",
+    label="\\partial_{\\theta \\theta} \\mathbf{r}",
     units="m",
     units_long="meters",
     description="Position vector along surface, second poloidal derivative",

@@ -361,7 +361,7 @@ class Grid(IOAble):
         ----------
         x : ndarray
             The array to compress.
-            Should usually represent a surface function (a function constant over a surface)
+            Should usually represent a surface function (constant over a surface)
             in an array that matches the grid's pattern.
         surface_label : str
             The surface label of rho, theta, or zeta.
@@ -370,9 +370,9 @@ class Grid(IOAble):
         -------
         compress_x : ndarray
             x[grid.unique_surface_label_indices]
-            This array will be sorted such that the
-                first element corresponds to the value associated with the smallest surface
-                last element  corresponds to the value associated with the largest surface
+            This array will be sorted such that the first element corresponds to
+            the value associated with the smallest surface, and the last element
+            corresponds to the value associated with the largest surface.
 
         """
         assert surface_label in {"rho", "theta", "zeta"}
@@ -390,12 +390,12 @@ class Grid(IOAble):
         Parameters
         ----------
         x : ndarray
-            Stores the values of a surface function (a function constant over a surface)
+            Stores the values of a surface function (constant over a surface)
             for all unique surfaces of the specified label on the grid.
             - len(x) should be grid.num_surface_label
-            - x should be sorted such that the
-                first element corresponds to the value associated with the smallest surface
-                last element  corresponds to the value associated with the largest surface
+            - x should be sorted such that the first element corresponds to the
+              value associated with the smallest surface, and the last element
+              corresponds to the value associated with the largest surface.
         surface_label : str
             The surface label of rho, theta, or zeta.
 

@@ -610,7 +610,7 @@ class TestGrid:
         lg_2._enforce_symmetry()
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
-        lg_2._scale_weights()
+        lg_2.weights = lg_2._scale_weights()
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 

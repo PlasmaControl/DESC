@@ -1114,7 +1114,10 @@ def plot_section(
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         phi = np.unique(grid.nodes[:, 2])
         coords = eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         )
         grid = Grid(coords, sort=False)
 
@@ -1123,7 +1126,10 @@ def plot_section(
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         coords = eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         )
         grid = Grid(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
@@ -1368,7 +1374,10 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
         eq.map_coordinates(
-            r_grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            r_grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         ),
         sort=False,
     )
@@ -1385,7 +1394,10 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
             eq.map_coordinates(
-                t_grid.nodes, ["rho", "theta_sfl", "phi"], ["rho", "theta", "zeta"]
+                t_grid.nodes,
+                ["rho", "theta_PEST", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
             ),
             sort=False,
         )
@@ -1569,7 +1581,10 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
         eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         ),
         sort=False,
     )
@@ -1738,7 +1753,10 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
             eqs[i].map_coordinates(
-                grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+                grid.nodes,
+                ["rho", "theta", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
             ),
             sort=False,
         )

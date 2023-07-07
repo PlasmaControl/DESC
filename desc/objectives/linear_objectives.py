@@ -1036,26 +1036,13 @@ class FixLambdaGauge(_Objective):
 class FixOmegaGauge(_Objective):
     """Fixes gauge freedom for omega: and omega(theta=0,zeta=0)=0.
 
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
     Parameters
     ----------
     eq : Equilibrium, optional
         Equilibrium that will be optimized to satisfy the Objective.
-    target : float, ndarray, optional
-        Value to fix omega to at (theta=0,zeta=0)
-    bounds : tuple, optional
-        Lower and upper bounds on the objective. Overrides target.
-        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
-    weight : float, ndarray, optional
-        Weighting to apply to the Objective, relative to other Objectives.
-        len(weight) must be equal to Objective.dim_f
-    normalize : bool
-        Whether to compute the error in physical units or non-dimensionalize.
-        Note: has no effect for this objective.
-    normalize_target : bool
-        Whether target should be normalized before comparing to computed values.
-        if `normalize` is `True` and the target is in physical units, this should also
-        be set to True.
-        Note: has no effect for this objective.
     name : str
         Name of the objective function.
 
@@ -1070,21 +1057,16 @@ class FixOmegaGauge(_Objective):
     def __init__(
         self,
         eq=None,
-        target=0,
-        bounds=None,
-        weight=1,
-        normalize=False,
-        normalize_target=False,
         name="omega gauge",
     ):
 
         super().__init__(
             eq=eq,
-            target=target,
-            bounds=bounds,
-            weight=weight,
-            normalize=normalize,
-            normalize_target=normalize_target,
+            target=0,
+            bounds=None,
+            weight=1,
+            normalize=False,
+            normalize_target=False,
             name=name,
         )
 

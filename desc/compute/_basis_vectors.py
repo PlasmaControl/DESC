@@ -3105,3 +3105,314 @@ def _e_sub_zeta_rzz(params, transforms, profiles, data, **kwargs):
         ]
     ).T
     return data
+
+
+@register_compute_fun(
+    name="e^rho_r",
+    label="\\partial{\\rho} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector, derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_r", "e_zeta_r", "sqrt(g)", "sqrt(g)_r"],
+    axis_limit_data=["e_theta_rr", "sqrt(g)_rr"],
+)
+def _e_sup_rho_r(params, transforms, profiles, data, **kwargs):
+    a = cross(data["e_theta_r"], data["e_zeta"])
+    data["e^rho_r"] = transforms["grid"].replace_at_axis(
+        (
+            (a + cross(data["e_theta"], data["e_zeta_r"])).T / data["sqrt(g)"]
+            - cross(data["e_theta"], data["e_zeta"]).T
+            * data["sqrt(g)_r"]
+            / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                cross(data["e_theta_rr"], data["e_zeta"])
+                + 2 * cross(data["e_theta_r"], data["e_zeta_r"])
+            ).T
+            / (2 * data["sqrt(g)_r"])
+            - a.T * data["sqrt(g)_rr"] / (2 * data["sqrt(g)_r"] ** 2)
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_t",
+    label="\\partial{\\theta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector, derivative wrt poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_t", "e_zeta_t", "sqrt(g)", "sqrt(g)_t"],
+    axis_limit_data=["e_theta_r", "e_theta_rt", "sqrt(g)_r", "sqrt(g)_rt"],
+)
+def _e_sup_rho_t(params, transforms, profiles, data, **kwargs):
+    data["e^rho_t"] = transforms["grid"].replace_at_axis(
+        (
+            (
+                cross(data["e_theta_t"], data["e_zeta"])
+                + cross(data["e_theta"], data["e_zeta_t"])
+            ).T
+            / data["sqrt(g)"]
+            - cross(data["e_theta"], data["e_zeta"]).T
+            * data["sqrt(g)_t"]
+            / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                cross(data["e_theta_r"], data["e_zeta_t"])
+                + cross(data["e_theta_rt"], data["e_zeta"])
+            ).T
+            / data["sqrt(g)_r"]
+            - cross(data["e_theta_r"], data["e_zeta"]).T
+            * data["sqrt(g)_rt"]
+            / data["sqrt(g)_r"] ** 2
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^rho_z",
+    label="\\partial{\\zeta} \\mathbf{e}^{\\rho}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant radial basis vector, derivative wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_theta", "e_zeta", "e_theta_z", "e_zeta_z", "sqrt(g)", "sqrt(g)_z"],
+    axis_limit_data=["e_theta_r", "e_theta_rz", "sqrt(g)_r", "sqrt(g)_rz"],
+)
+def _e_sup_rho_z(params, transforms, profiles, data, **kwargs):
+    data["e^rho_z"] = transforms["grid"].replace_at_axis(
+        (
+            (
+                cross(data["e_theta_z"], data["e_zeta"])
+                + cross(data["e_theta"], data["e_zeta_z"])
+            ).T
+            / data["sqrt(g)"]
+            - cross(data["e_theta"], data["e_zeta"]).T
+            * data["sqrt(g)_z"]
+            / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                cross(data["e_theta_r"], data["e_zeta_z"])
+                + cross(data["e_theta_rz"], data["e_zeta"])
+            ).T
+            / data["sqrt(g)_r"]
+            - cross(data["e_theta_r"], data["e_zeta"]).T
+            * data["sqrt(g)_rz"]
+            / data["sqrt(g)_r"] ** 2
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^theta_r",
+    label="\\partial{\\rho} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant poloidal basis vector, derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "e_rho", "e_zeta_r", "e_rho_r", "sqrt(g)", "sqrt(g)_r"],
+)
+def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
+    data["e^theta_r"] = (
+        (
+            cross(data["e_zeta_r"], data["e_rho"])
+            + cross(data["e_zeta"], data["e_rho_r"])
+        ).T
+        / data["sqrt(g)"]
+        - cross(data["e_zeta"], data["e_rho"]).T
+        * data["sqrt(g)_r"]
+        / data["sqrt(g)"] ** 2
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^theta_t",
+    label="\\partial{\\theta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant poloidal basis vector, derivative wrt poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "e_rho", "e_zeta_t", "e_rho_t", "sqrt(g)", "sqrt(g)_t"],
+)
+def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
+    data["e^theta_t"] = (
+        (
+            cross(data["e_zeta_t"], data["e_rho"])
+            + cross(data["e_zeta"], data["e_rho_t"])
+        ).T
+        / data["sqrt(g)"]
+        - cross(data["e_zeta"], data["e_rho"]).T
+        * data["sqrt(g)_t"]
+        / data["sqrt(g)"] ** 2
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^theta_z",
+    label="\\partial{\\zeta} \\mathbf{e}^{\\theta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant poloidal basis vector, derivative wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_zeta", "e_rho", "e_zeta_z", "e_rho_z", "sqrt(g)", "sqrt(g)_z"],
+)
+def _e_sup_theta_z(params, transforms, profiles, data, **kwargs):
+    data["e^theta_z"] = (
+        (
+            cross(data["e_zeta_z"], data["e_rho"])
+            + cross(data["e_zeta"], data["e_rho_z"])
+        ).T
+        / data["sqrt(g)"]
+        - cross(data["e_zeta"], data["e_rho"]).T
+        * data["sqrt(g)_z"]
+        / data["sqrt(g)"] ** 2
+    ).T
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_r",
+    label="\\partial{\\rho} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt radial coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_rho_r", "e_theta", "e_theta_r", "sqrt(g)", "sqrt(g)_r"],
+    axis_limit_data=["e_theta_rr", "sqrt(g)_rr"],
+)
+def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
+    b = cross(data["e_rho"], data["e_theta_r"])
+    data["e^zeta_r"] = transforms["grid"].replace_at_axis(
+        (
+            (cross(data["e_rho_r"], data["e_theta"]) + b).T / data["sqrt(g)"]
+            - cross(data["e_rho"], data["e_theta"]).T
+            * data["sqrt(g)_r"]
+            / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                2 * cross(data["e_rho_r"], data["e_theta_r"])
+                + cross(data["e_rho"], data["e_theta_rr"])
+            ).T
+            / (2 * data["sqrt(g)_r"])
+            - b.T * data["sqrt(g)_rr"] / (2 * data["sqrt(g)_r"] ** 2)
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_t",
+    label="\\partial{\\theta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt poloidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_rho_t", "e_theta", "e_theta_t", "sqrt(g)", "sqrt(g)_t"],
+    axis_limit_data=["e_theta_r", "e_theta_rt", "sqrt(g)_r", "sqrt(g)_rt"],
+)
+def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_t"] = transforms["grid"].replace_at_axis(
+        (
+            (
+                cross(data["e_rho_t"], data["e_theta"])
+                + cross(data["e_rho"], data["e_theta_t"])
+            ).T
+            / data["sqrt(g)"]
+            - cross(data["e_rho"], data["e_theta"]).T
+            * data["sqrt(g)_t"]
+            / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                cross(data["e_rho_t"], data["e_theta_r"])
+                + cross(data["e_rho"], data["e_theta_rt"])
+            ).T
+            / data["sqrt(g)_r"]
+            - cross(data["e_rho"], data["e_theta_r"]).T
+            * data["sqrt(g)_rt"]
+            / data["sqrt(g)_r"] ** 2
+        ).T,
+    )
+    return data
+
+
+@register_compute_fun(
+    name="e^zeta_z",
+    label="\\partial{\\zeta} \\mathbf{e}^{\\zeta}",
+    units="m^{-1}",
+    units_long="inverse meters",
+    description="Contravariant toroidal basis vector, derivative wrt toroidal coordinate",
+    dim=3,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["e_rho", "e_rho_z", "e_theta", "e_theta_z", "sqrt(g)", "sqrt(g)_z"],
+    axis_limit_data=["e_theta_r", "e_theta_rz", "sqrt(g)_r", "sqrt(g)_rz"],
+)
+def _e_sup_zeta_z(params, transforms, profiles, data, **kwargs):
+    data["e^zeta_z"] = transforms["grid"].replace_at_axis(
+        (
+            (
+                cross(data["e_rho_z"], data["e_theta"])
+                + cross(data["e_rho"], data["e_theta_z"])
+            ).T
+            / data["sqrt(g)"]
+            - cross(data["e_rho"], data["e_theta"]).T
+            * data["sqrt(g)_z"]
+            / data["sqrt(g)"] ** 2
+        ).T,
+        lambda: (
+            (
+                cross(data["e_rho_z"], data["e_theta_r"])
+                + cross(data["e_rho"], data["e_theta_rz"])
+            ).T
+            / data["sqrt(g)_r"]
+            - cross(data["e_rho"], data["e_theta_r"]).T
+            * data["sqrt(g)_rz"]
+            / data["sqrt(g)_r"] ** 2
+        ).T,
+    )
+    return data

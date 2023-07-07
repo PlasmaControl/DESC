@@ -53,8 +53,8 @@ class Grid(IOAble):
 
     def __init__(self, nodes, sort=True):
         # Python 3.3 (PEP 412) introduced key-sharing dictionaries.
-        # This change lets memory usage be reduced measurably for objects
-        # that define all attributes in their __init__ method.
+        # This change measurably reduces memory usage of objects that
+        # define all attributes in their __init__ method.
         self._NFP = 1
         self._sym = False
         self._node_pattern = "custom"

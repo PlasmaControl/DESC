@@ -330,25 +330,24 @@ class Equilibrium(_Configuration, IOAble):
             if ntheta is None:
                 ntheta = 2 * M + 1
 
-            inputs = {}
-            inputs["Psi"] = np.pi * r**2 * na_eq.Bbar
-            inputs["NFP"] = na_eq.nfp
-            inputs["L"] = L
-            inputs["M"] = M
-            inputs["N"] = N
-            inputs["sym"] = not na_eq.lasym
-            inputs["spectral_indexing "] = spectral_indexing
-            inputs["pressure"] = np.array(
-                [[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]
-            )
-            inputs["iota"] = None
-            inputs["current"] = np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]])
-            inputs["axis"] = FourierRZCurve(
-                R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
-                Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
-                NFP=na_eq.nfp,
-            )
-            inputs["surface"] = None
+            inputs = {
+                "Psi": np.pi * r**2 * na_eq.Bbar,
+                "NFP": na_eq.nfp,
+                "L": L,
+                "M": M,
+                "N": N,
+                "sym": not na_eq.lasym,
+                "spectral_indexing ": spectral_indexing,
+                "pressure": np.array([[0, -na_eq.p2 * r**2], [2, na_eq.p2 * r**2]]),
+                "iota": None,
+                "current": np.array([[2, 2 * np.pi / mu_0 * na_eq.I2 * r**2]]),
+                "axis": FourierRZCurve(
+                    R_n=np.concatenate((np.flipud(na_eq.rs[1:]), na_eq.rc)),
+                    Z_n=np.concatenate((np.flipud(na_eq.zs[1:]), na_eq.zc)),
+                    NFP=na_eq.nfp,
+                ),
+                "surface": None,
+            }
         except AttributeError as e:
             raise ValueError("Input must be a pyQSC or pyQIC solution.") from e
 

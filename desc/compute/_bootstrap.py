@@ -376,10 +376,12 @@ def _compute_J_dot_B_Redl(params, transforms, profiles, data, **kwargs):
         "Te_r": grid.compress(data["Te_r"]),
         "Ti": grid.compress(data["Ti"]),
         "Ti_r": grid.compress(data["Ti_r"]),
-        "Z_eff": jnp.ones(grid.num_rho)
-        if profiles["atomic_number"] is None
-        else grid.compress(data["Zeff"]),
     }
+    if profiles["atomic_number"] is None:
+        profile_data["Zeff"] = jnp.ones(grid.num_rho)
+    else:
+        profile_data["Zeff"] = grid.compress(data["Zeff"])
+
     helicity = kwargs.get("helicity", (1, 0))
     helicity_N = helicity[1]
     j_dot_B_data = j_dot_B_Redl(geom_data, profile_data, helicity_N)

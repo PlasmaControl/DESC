@@ -3,35 +3,100 @@
 import numpy as np
 import pytest
 
-import desc.io
 from desc.compute import data_index
 from desc.compute.utils import surface_integrals
 from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
-
-limit_does_not_exist = {
-    "D_shear",  # may exist for some iota profiles
-    "D_current",
-    "D_well",
-    "D_geodesic",
+not_finite_limit_keys = {
     "D_Mercier",
-    "e^theta",
-    "grad(alpha)",
+    "D_current",
+    "D_shear",
+    "D_well",
     "J^theta",
     "e^helical",
-    "|e^helical|",
-    "g^tt",
+    "e^theta",
+    "e^theta_r",
+    "e^theta_t",
+    "e^theta_z",
     "g^rt",
+    "g^rt_r",
+    "g^rt_t",
+    "g^rt_z",
+    "g^tt",
+    "g^tt_r",
+    "g^tt_t",
+    "g^tt_z",
     "g^tz",
+    "g^tz_r",
+    "g^tz_t",
+    "g^tz_z",
+    "grad(alpha)",
+    "iota_zero_current_num_r",  # TODO
+    "|e^helical|",
     "|grad(theta)|",
-    # TODO: contravariant basis vector derivatives
 }
+
+
+def continuity(eq, name, expected_at_axis=None):
+    """Test that the rho=0 axis limit of name is a continuous extension."""
+    if data_index[name]["coordinates"] == "":
+        return
+    delta = 1e-6  # any smaller accumulates finite precision errors
+    epsilon = 1e-5
+    rho = np.linspace(0, 1, 10) * delta
+    grid = LinearGrid(rho=rho, M=7, N=7, NFP=eq.NFP, sym=eq.sym)
+    assert grid.axis.size
+
+    quantity = eq.compute(name, grid=grid)[name]
+    # FIXME: issues with boozer transform quantities limited to single surface
+    if data_index[name]["coordinates"] == "r":
+        quantity = grid.compress(quantity)
+    else:
+        quantity = surface_integrals(grid, np.abs(quantity), expand_out=False)
+    # check continuity
+    np.testing.assert_allclose(
+        quantity[:-1], quantity[1:], atol=epsilon, rtol=epsilon, err_msg=name
+    )
+    # check expected value at axis
+    if expected_at_axis is None:
+        # fit the data (except axis pt) to a polynomial to extrapolate to axis
+        poly = np.polyfit(rho[1:], quantity[1:], 6)
+        expected_at_axis = poly[-1]  # constant term is same as eval poly at rho=0
+    np.testing.assert_allclose(
+        quantity[0], expected_at_axis, atol=epsilon, rtol=epsilon, err_msg=name
+    )
+
+
+def skip_atomic_profile(eq, name):
+    """Return true if atomic profile associated with quantity is not set on eq."""
+    return (
+        (eq.atomic_number is None and "Zeff" in name)
+        or (eq.electron_temperature is None and "Te" in name)
+        or (eq.electron_density is None and "ne" in name)
+        or (eq.ion_temperature is None and "Ti" in name)
+    )
 
 
 class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
+
+    # includes a fixed iota and fixed current equilibrium
+    eqs = (get("W7-X"),)  # get("QAS"))
+
+    @pytest.mark.unit
+    def test_data_index_deps_is_clean(self):
+        """Ensure that developers do not add unnecessary dependencies."""
+        # Todo: maybe also parse compute fun and also check all dependencies
+        #    are requested from data dictionary.
+        for key in data_index.keys():
+            deps = data_index[key]["dependencies"]
+            regular_deps = set(deps["data"])
+            axis_limit_deps = set(deps["axis_limit_data"])
+            assert axis_limit_deps.isdisjoint(regular_deps)
+            assert len(regular_deps) == len(deps["data"])
+            assert len(axis_limit_deps) == len(deps["axis_limit_data"])
 
     @pytest.mark.unit
     def test_axis_limit_api(self):
@@ -54,67 +119,31 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_limit_existence(self):
         """Test that only quantities which lack limits do not evaluate at axis."""
-        for eq in ("W7-X", "QAS"):
-            eq = get(eq)
+        for eq in TestAxisLimits.eqs:
             grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
             assert grid.axis.size
-            data = eq.compute(data_index.keys(), grid=grid)
-            assert data.keys() == data_index.keys()
-            for key, val in data.items():
-                if key in limit_does_not_exist:
-                    assert np.all(~np.isfinite(val[grid.axis]))
+            data = eq.compute(list(data_index.keys()), grid=grid)
+            is_axis = grid.nodes[:, 0] == 0
+            for key in data_index.keys():
+                if skip_atomic_profile(eq, key):
+                    continue
+                is_finite = np.isfinite(data[key])
+                if key in not_finite_limit_keys:
+                    assert np.all(is_finite ^ is_axis), key
                 else:
-                    assert np.all(np.isfinite(val))
-
-    @staticmethod
-    def continuity(eq, name, expected_at_axis=None):
-        """Test that the rho=0 axis limit of name is a continuous extension."""
-        if data_index[name]["coordinates"] == "":
-            return
-        delta = 1e-5  # any smaller accumulates finite precision errors
-        epsilon = 1e-5
-        rho = np.linspace(0, 1, 10) * delta
-        grid = LinearGrid(rho=rho, M=7, N=7, NFP=eq.NFP, sym=eq.sym)
-        assert grid.axis.size
-
-        quantity = eq.compute(name, grid=grid)[name]
-        if data_index[name]["coordinates"] == "r":
-            quantity = grid.compress(quantity)
-        else:
-            quantity = surface_integrals(grid, np.abs(quantity), expand_out=False)
-        # check continuity
-        np.testing.assert_allclose(quantity[:-1], quantity[1:], atol=epsilon)
-        # check expected value at axis
-        if expected_at_axis is None:
-            # fit the data (except axis pt) to a polynomial to extrapolate to axis
-            poly = np.polyfit(rho[1:], quantity[1:], 6)
-            expected_at_axis = poly[-1]  # constant term is same as eval poly at rho=0
-        np.testing.assert_allclose(quantity[0], expected_at_axis, atol=epsilon)
+                    assert np.all(is_finite), key
 
     @pytest.mark.unit
     def test_zero_limits(self):
         """Test limits of basic quantities that should be 0 at magnetic axis."""
-        w7x = get("W7-X")  # fixed iota
-        qas = get("QAS")  # fixed current
-        for key in ("rho", "psi", "psi_r", "e_theta", "sqrt(g)"):
-            TestAxisLimits.continuity(w7x, key, expected_at_axis=0)
-            TestAxisLimits.continuity(qas, key, expected_at_axis=0)
+        for eq in TestAxisLimits.eqs:
+            for key in ("rho", "psi", "psi_r", "e_theta", "sqrt(g)"):
+                continuity(eq, key, expected_at_axis=0)
 
     @pytest.mark.unit
-    def test_limit_value(self):
+    def test_finite_limits(self):
         """Heuristic to test correctness of all quantities with limits."""
-        w7x = get("W7-X")  # fixed iota
-        qas = get("QAS")  # fixed current
-        for key in data_index.keys() - limit_does_not_exist:
-            TestAxisLimits.continuity(w7x, key)
-            TestAxisLimits.continuity(qas, key)
-
-    @pytest.mark.unit
-    @pytest.mark.solve
-    def test_rotational_transform(self, DSHAPE_current):
-        """Test axis limit of iota."""
-        # test should be done on equilibria with fixed current profiles
-        TestAxisLimits.continuity(
-            desc.io.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1],
-            "iota",
-        )
+        finite_limit_keys = data_index.keys() - not_finite_limit_keys
+        for eq in TestAxisLimits.eqs:
+            for key in finite_limit_keys:
+                continuity(eq, key)

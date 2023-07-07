@@ -80,7 +80,7 @@ N = 3
 NFP = 5
 
 
-class TestComputeUtilsSurface:
+class TestSurfaceComputeUtils:
     """Tests for compute utilities related to surface averaging, etc."""
 
     @pytest.mark.unit

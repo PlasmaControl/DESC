@@ -572,23 +572,37 @@ class TestGrid:
     @pytest.mark.unit
     def test_change_resolution(self):
         """Test changing grid resolution."""
+
+        def test(grid, *desired_resolution):
+            assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
+            assert grid.num_rho == grid.unique_rho_idx.size
+            assert grid.num_theta == grid.unique_theta_idx.size
+            assert grid.num_zeta == grid.unique_zeta_idx.size
+            np.testing.assert_equal(
+                (grid.unique_rho_idx, grid.inverse_rho_idx),
+                np.unique(grid.nodes[:, 0], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_theta_idx, grid.inverse_theta_idx),
+                np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_zeta_idx, grid.inverse_zeta_idx),
+                np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_array_equal(
+                grid.axis, np.nonzero(grid.nodes[:, 0] == 0)[0]
+            )
+
         lg = LinearGrid(1, 2, 3)
         lg.change_resolution(2, 3, 4)
-        assert lg.L == 2
-        assert lg.M == 3
-        assert lg.N == 4
-
+        test(lg, 2, 3, 4, lg.NFP)
         qg = QuadratureGrid(1, 2, 3)
         qg.change_resolution(2, 3, 4)
-        assert qg.L == 2
-        assert qg.M == 3
-        assert qg.N == 4
-
+        test(qg, 2, 3, 4, qg.NFP)
         cg = ConcentricGrid(2, 3, 4)
         cg.change_resolution(3, 4, 5)
-        assert cg.L == 3
-        assert cg.M == 4
-        assert cg.N == 5
+        test(cg, 3, 4, 5, cg.NFP)
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):

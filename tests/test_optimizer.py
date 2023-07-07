@@ -353,14 +353,14 @@ def test_overstepping():
             x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
             return x - self._x0
 
+    eq = desc.examples.get("DSHAPE")
+
     np.random.seed(0)
-    objective = ObjectiveFunction(DummyObjective(), use_jit=False)
+    objective = ObjectiveFunction(DummyObjective(eq=eq), use_jit=False)
     # make gradient super noisy so it stalls
     objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
     )
-
-    eq = desc.examples.get("DSHAPE")
 
     n = 10
     R_modes = np.vstack(
@@ -375,12 +375,12 @@ def test_overstepping():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
     ]
     constraints = (
-        ForceBalance(),
-        FixBoundaryR(modes=R_modes),
-        FixBoundaryZ(modes=Z_modes),
-        FixPressure(),
-        FixIota(),
-        FixPsi(),
+        ForceBalance(eq=eq),
+        FixBoundaryR(eq=eq, modes=R_modes),
+        FixBoundaryZ(eq=eq, modes=Z_modes),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
     )
     optimizer = Optimizer("lsq-exact")
     eq1, history = eq.optimize(
@@ -413,16 +413,16 @@ def test_overstepping():
 def test_maxiter_1_and_0_solve():
     """Test that solves with maxiter 1 and 0 terminate correctly."""
     # correctly meaning they terminate, instead of looping infinitely
-    constraints = (
-        FixBoundaryR(),
-        FixBoundaryZ(),
-        FixPressure(),
-        FixIota(),
-        FixPsi(),
-    )
-    objectives = ForceBalance()
-    obj = ObjectiveFunction(objectives)
     eq = desc.examples.get("SOLOVEV")
+    constraints = (
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objectives = ForceBalance(eq=eq)
+    obj = ObjectiveFunction(objectives)
     for opt in ["lsq-exact", "fmin-dogleg-bfgs"]:
         eq, result = eq.solve(
             maxiter=1, constraints=constraints, objective=obj, optimizer=opt, verbose=3
@@ -439,16 +439,17 @@ def test_maxiter_1_and_0_solve():
 @pytest.mark.slow
 def test_scipy_fail_message():
     """Test that scipy fail message does not cause an error (see PR #434)."""
-    constraints = (
-        FixBoundaryR(),
-        FixBoundaryZ(),
-        FixPressure(),
-        FixCurrent(),
-        FixPsi(),
-    )
-    objectives = ForceBalance()
-    obj = ObjectiveFunction(objectives)
     eq = Equilibrium()
+    constraints = (
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+    )
+    objectives = ForceBalance(eq=eq)
+    obj = ObjectiveFunction(objectives)
+
     # should fail on maxiter, and should NOT throw an error
     for opt in ["scipy-trf"]:
         eq, result = eq.solve(
@@ -462,7 +463,7 @@ def test_scipy_fail_message():
             gtol=1e-12,
         )
         assert "Maximum number of iterations has been exceeded" in result["message"]
-    objectives = Energy()
+    objectives = Energy(eq=eq)
     obj = ObjectiveFunction(objectives)
     for opt in ["scipy-trust-exact"]:
         eq, result = eq.solve(
@@ -490,19 +491,20 @@ def test_wrappers():
     """Tests for using wrapped objectives."""
     eq = desc.examples.get("SOLOVEV")
     con = (
-        FixBoundaryR(),
-        FixBoundaryZ(),
-        FixIota(),
-        FixPressure(),
-        FixPsi(),
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
     )
-    con_nl = (ForceBalance(),)
-    obj = ForceBalance()
+    con_nl = (ForceBalance(eq=eq),)
+    obj = ForceBalance(eq=eq)
     with pytest.raises(AssertionError):
         _ = LinearConstraintProjection(obj, con)
     with pytest.raises(ValueError):
         _ = LinearConstraintProjection(ObjectiveFunction(obj), con + con_nl)
     ob = LinearConstraintProjection(ObjectiveFunction(obj), con, eq=eq)
+    ob.build()
     assert ob.built
 
     np.testing.assert_allclose(
@@ -517,14 +519,14 @@ def test_wrappers():
     np.testing.assert_allclose(ob.weights, obj.weight)
 
     con = (
-        FixBoundaryR(),
-        FixBoundaryZ(),
-        FixIota(),
-        FixPressure(),
-        FixPsi(),
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
     )
-    con_nl = (ForceBalance(),)
-    obj = ForceBalance()
+    con_nl = (ForceBalance(eq=eq),)
+    obj = ForceBalance(eq=eq)
     with pytest.raises(AssertionError):
         _ = ProximalProjection(obj, con[0])
     with pytest.raises(AssertionError):
@@ -536,6 +538,7 @@ def test_wrappers():
             ObjectiveFunction(con[0]), ObjectiveFunction(con + con_nl)
         )
     ob = ProximalProjection(ObjectiveFunction(con[0]), ObjectiveFunction(con_nl), eq=eq)
+    ob.build()
     assert ob.built
 
     np.testing.assert_allclose(
@@ -559,16 +562,16 @@ def test_wrappers():
 def test_all_optimizers():
     """Just tests that the optimizers run without error, eg tests for the wrappers."""
     eq = desc.examples.get("SOLOVEV")
-    fobj = ObjectiveFunction(ForceBalance())
-    eobj = ObjectiveFunction(Energy())
-    fobj.build(eq)
-    eobj.build(eq)
+    fobj = ObjectiveFunction(ForceBalance(eq=eq))
+    eobj = ObjectiveFunction(Energy(eq=eq))
+    fobj.build()
+    eobj.build()
     constraints = (
-        FixBoundaryR(),
-        FixBoundaryZ(),
-        FixIota(),
-        FixPressure(),
-        FixPsi(),
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
+        FixIota(eq=eq),
+        FixPressure(eq=eq),
+        FixPsi(eq=eq),
     )
 
     for opt in optimizers:
@@ -602,11 +605,11 @@ def test_scipy_constrained_solve():
     eq._node_pattern = "quad"
 
     constraints = (
-        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
-        FixBoundaryZ(),  # fix Z shape but not R
-        FixPressure(),  # fix pressure profile
-        FixIota(),  # fix rotational transform profile
-        FixPsi(),  # fix total toroidal magnetic flux
+        FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(eq=eq),  # fix Z shape but not R
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -618,11 +621,11 @@ def test_scipy_constrained_solve():
     )["curvature_H"]
     Hbounds = ((1 - 0.05 * np.sign(H)) * H, (1 + 0.05 * np.sign(H)) * abs(H))
     constraints += (
-        Volume(bounds=Vbounds),
-        AspectRatio(bounds=ARbounds),
-        MeanCurvature(bounds=Hbounds),
+        Volume(eq=eq, bounds=Vbounds),
+        AspectRatio(eq=eq, bounds=ARbounds),
+        MeanCurvature(eq=eq, bounds=Hbounds),
     )
-    obj = ObjectiveFunction(ForceBalance())
+    obj = ObjectiveFunction(ForceBalance(eq=eq))
     eq2, result = eq.optimize(
         objective=obj,
         constraints=constraints,
@@ -856,11 +859,11 @@ def test_constrained_AL_lsq():
     eq = desc.examples.get("SOLOVEV")
 
     constraints = (
-        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
-        FixBoundaryZ(),  # fix Z shape but not R
-        FixPressure(),  # fix pressure profile
-        FixIota(),  # fix rotational transform profile
-        FixPsi(),  # fix total toroidal magnetic flux
+        FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(eq=eq),  # fix Z shape but not R
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
     )
     # some random constraints to keep the shape from getting wacky
     V = eq.compute("V")["V"]
@@ -868,15 +871,15 @@ def test_constrained_AL_lsq():
     AR = eq.compute("R0/a")["R0/a"]
     ARbounds = (0.95 * AR, 1.05 * AR)
     constraints += (
-        Volume(bounds=Vbounds),
-        AspectRatio(bounds=ARbounds),
-        MagneticWell(bounds=(0, jnp.inf)),
-        ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
+        Volume(eq=eq, bounds=Vbounds),
+        AspectRatio(eq=eq, bounds=ARbounds),
+        MagneticWell(eq=eq, bounds=(0, jnp.inf)),
+        ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     H = eq.compute(
         "curvature_H", grid=LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
     )["curvature_H"]
-    obj = ObjectiveFunction(MeanCurvature(target=H))
+    obj = ObjectiveFunction(MeanCurvature(eq=eq, target=H))
     ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,
@@ -905,22 +908,22 @@ def test_constrained_AL_scalar():
     eq = desc.examples.get("SOLOVEV")
 
     constraints = (
-        FixBoundaryR(modes=[0, 0, 0]),  # fix specified major axis position
-        FixBoundaryZ(),  # fix Z shape but not R
-        FixPressure(),  # fix pressure profile
-        FixIota(),  # fix rotational transform profile
-        FixPsi(),  # fix total toroidal magnetic flux
+        FixBoundaryR(eq=eq, modes=[0, 0, 0]),  # fix specified major axis position
+        FixBoundaryZ(eq=eq),  # fix Z shape but not R
+        FixPressure(eq=eq),  # fix pressure profile
+        FixIota(eq=eq),  # fix rotational transform profile
+        FixPsi(eq=eq),  # fix total toroidal magnetic flux
     )
     V = eq.compute("V")["V"]
     AR = eq.compute("R0/a")["R0/a"]
     constraints += (
-        Volume(target=V),
-        AspectRatio(target=AR),
-        MagneticWell(bounds=(0, jnp.inf)),
-        ForceBalance(bounds=(-1e-3, 1e-3), normalize_target=False),
+        Volume(eq=eq, target=V),
+        AspectRatio(eq=eq, target=AR),
+        MagneticWell(eq=eq, bounds=(0, jnp.inf)),
+        ForceBalance(eq=eq, bounds=(-1e-3, 1e-3), normalize_target=False),
     )
     # Dummy objective to return 0, we just want a feasible solution.
-    obj = ObjectiveFunction(GenericObjective("0"))
+    obj = ObjectiveFunction(GenericObjective("0", eq=eq))
     ctol = 1e-4
     eq2, result = eq.optimize(
         objective=obj,

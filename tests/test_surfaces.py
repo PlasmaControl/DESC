@@ -208,7 +208,7 @@ class TestZernikeRZToroidalSection:
     def test_curvature(self):
         """Tests for gaussian, mean, principle curvatures.
 
-        (kind of pointless since its a flat surface so its always 0)
+        (kind of pointless since it's a flat surface so its always 0)
         """
         s = ZernikeRZToroidalSection()
         grid = LinearGrid(theta=np.pi / 2, rho=0.5)

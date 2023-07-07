@@ -154,17 +154,25 @@ class FourierRZCurve(Curve):
         """Maximum mode number."""
         return max(self.R_basis.N, self.Z_basis.N)
 
-    def change_resolution(self, N=None, NFP=None):
+    def change_resolution(self, N=None, NFP=None, sym=None):
         """Change the maximum toroidal resolution."""
-        if ((N is not None) and (N != self.N)) or (
-            (NFP is not None) and (NFP != self.NFP)
+        if (
+            ((N is not None) and (N != self.N))
+            or ((NFP is not None) and (NFP != self.NFP))
+            or (sym is not None)
+            and (sym != self.sym)
         ):
             self._NFP = NFP if NFP is not None else self.NFP
+            self._sym = sym if sym is not None else self.sym
             N = N if N is not None else self.N
             R_modes_old = self.R_basis.modes
             Z_modes_old = self.Z_basis.modes
-            self.R_basis.change_resolution(N=N, NFP=self.NFP)
-            self.Z_basis.change_resolution(N=N, NFP=self.NFP)
+            self.R_basis.change_resolution(
+                N=N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+            )
+            self.Z_basis.change_resolution(
+                N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+            )
             if hasattr(self.grid, "change_resolution"):
                 self.grid.change_resolution(
                     self.grid.L, self.grid.M, self.grid.N, self.NFP
@@ -770,7 +778,7 @@ class FourierXYZCurve(Curve):
 
 
 class FourierPlanarCurve(Curve):
-    """Curve that lines in a plane.
+    """Curve that lies in a plane.
 
     Parameterized by a point (the center of the curve), a vector (normal to the plane),
     and a Fourier series defining the radius from the center as a function of

@@ -20,10 +20,10 @@ from .utils import cross, dot
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["B", "n"],
+    data=["B", "n_rho"],
 )
 def _K_vc(params, transforms, profiles, data, **kwargs):
-    data["K_vc"] = cross(data["B"], data["n"]) / mu_0
+    data["K_vc"] = cross(data["B"], data["n_rho"]) / mu_0
     return data
 
 

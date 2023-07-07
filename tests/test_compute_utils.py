@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-from desc.backend import vmap
 from desc.compute.utils import (
     _get_grid_surface,
     compress,
@@ -289,42 +288,31 @@ class TestComputeUtils:
         """
 
         def test(grid):
-            def rho_line_integrals(fix_theta_val):
-                return line_integrals(
-                    grid,
-                    line_label="rho",
-                    fix_surface=("theta", fix_theta_val),
-                    expand_out=False,
-                )
-
-            def theta_line_integrals(fix_zeta_val):
-                return line_integrals(
+            if not isinstance(grid, ConcentricGrid):
+                for theta_val in grid.nodes[grid.unique_theta_idx, 1]:
+                    result = line_integrals(
+                        grid,
+                        line_label="rho",
+                        fix_surface=("theta", theta_val),
+                        expand_out=False,
+                    )
+                    np.testing.assert_allclose(result, 1)
+                for rho_val in grid.nodes[grid.unique_rho_idx, 0]:
+                    result = line_integrals(
+                        grid,
+                        line_label="zeta",
+                        fix_surface=("rho", rho_val),
+                        expand_out=False,
+                    )
+                    np.testing.assert_allclose(result, 2 * np.pi)
+            for zeta_val in grid.nodes[grid.unique_zeta_idx, 2]:
+                result = line_integrals(
                     grid,
                     line_label="theta",
-                    fix_surface=("zeta", fix_zeta_val),
+                    fix_surface=("zeta", zeta_val),
                     expand_out=False,
                 )
-
-            def zeta_line_integrals(fix_rho_val):
-                return line_integrals(
-                    grid,
-                    line_label="zeta",
-                    fix_surface=("rho", fix_rho_val),
-                    expand_out=False,
-                )
-
-            if not isinstance(grid, ConcentricGrid):
-                np.testing.assert_allclose(
-                    vmap(rho_line_integrals)(grid.nodes[grid.unique_theta_idx, 1]), 1
-                )
-                np.testing.assert_allclose(
-                    vmap(zeta_line_integrals)(grid.nodes[grid.unique_rho_idx, 0]),
-                    2 * np.pi,
-                )
-            np.testing.assert_allclose(
-                vmap(theta_line_integrals)(grid.nodes[grid.unique_zeta_idx, 2]),
-                2 * np.pi,
-            )
+                np.testing.assert_allclose(result, 2 * np.pi)
 
         lg = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=False)
         lg_sym = LinearGrid(L=L, M=M, N=N, NFP=NFP, sym=True)

@@ -710,7 +710,7 @@ def test_plot_boozer_surface():
     """Test plotting B in boozer coordinates."""
     eq = get("WISTELL-A")
     fig, ax, data = plot_boozer_surface(
-        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, fill=True
+        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
     )
     for string in [
         "|B|",

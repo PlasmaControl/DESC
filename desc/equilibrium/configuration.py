@@ -149,7 +149,6 @@ class _Configuration(IOAble, ABC):
         spectral_indexing=None,
         **kwargs,
     ):
-
         assert spectral_indexing in [None, "ansi", "fringe",], (
             "spectral_indexing should be one of 'ansi', 'fringe', None, got "
             + f"{spectral_indexing}"
@@ -513,22 +512,26 @@ class _Configuration(IOAble, ABC):
             new = copy.copy(self)
         return new
 
-    def change_resolution(self, L=None, M=None, N=None, NFP=None, *args, **kwargs):
+    def change_resolution(
+        self, L=None, M=None, N=None, NFP=None, sym=None, *args, **kwargs
+    ):
         """Set the spectral resolution.
 
         Parameters
         ----------
         L : int
-            maximum radial zernike mode number
+            Maximum radial Zernike mode number.
         M : int
-            maximum poloidal fourier mode number
+            Maximum poloidal Fourier mode number.
         N : int
-            maximum toroidal fourier mode number
+            Maximum toroidal Fourier mode number.
         NFP : int
             Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = NFP_change = sym_change = False
         if L is not None and L != self.L:
             L_change = True
             self._L = L
@@ -541,8 +544,11 @@ class _Configuration(IOAble, ABC):
         if NFP is not None and NFP != self.NFP:
             NFP_change = True
             self._NFP = NFP
+        if sym is not None and sym != self.sym:
+            sym_change = True
+            self._sym = sym
 
-        if not np.any([L_change, M_change, N_change, NFP_change]):
+        if not np.any([L_change, M_change, N_change, NFP_change, sym_change]):
             return
 
         old_modes_R = self.R_basis.modes
@@ -550,10 +556,18 @@ class _Configuration(IOAble, ABC):
         old_modes_L = self.L_basis.modes
         old_modes_K = self.K_basis.modes
 
-        self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.K_basis.change_resolution(self.M, self.N, self.NFP)
+        self.R_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="cos" if self.sym else self.sym
+        )
+        self.Z_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.L_basis.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
+        self.K_basis.change_resolution(
+            self.M, self.N, NFP=self.NFP, sym="sin" if self.sym else self.sym
+        )
 
         for profile in [
             "pressure",
@@ -568,7 +582,9 @@ class _Configuration(IOAble, ABC):
             if hasattr(p, "change_resolution") and L_change:
                 p.change_resolution(max(p.basis.L, self.L))
 
-        self.surface.change_resolution(self.L, self.M, self.N, NFP=self.NFP)
+        self.surface.change_resolution(
+            self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
+        )
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -1119,10 +1135,31 @@ class _Configuration(IOAble, ABC):
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
         deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
-        dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
-        dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[dep]["coordinates"] == "") and (dep not in data)
+        ]
+        dep1d = [
+            dep
+            for dep in deps
+            if (data_index[dep]["coordinates"] == "r") and (dep not in data)
+        ]
 
-        if len(dep0d):
+        # whether we need to calculate 0d or 1d quantities on a special grid
+        calc0d = bool(len(dep0d))
+        calc1d = bool(len(dep1d))
+        if (  # see if the grid we're already using will work for desired qtys
+            (grid.L >= self.L_grid)
+            and (grid.M >= self.M_grid)
+            and (grid.N >= self.N_grid)
+        ):
+            if isinstance(grid, QuadratureGrid):
+                calc0d = calc1d = False
+            if isinstance(grid, LinearGrid):
+                calc1d = False
+
+        if calc0d:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 dep0d,
@@ -1136,7 +1173,7 @@ class _Configuration(IOAble, ABC):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if len(dep1d):
+        if calc1d:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
@@ -1175,15 +1212,23 @@ class _Configuration(IOAble, ABC):
         )
         return data
 
-    def map_coordinates(
-        self, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6
+    def map_coordinates(  # noqa: C901
+        self,
+        coords,
+        inbasis,
+        outbasis=("rho", "theta", "zeta"),
+        guess=None,
+        period=(np.inf, np.inf, np.inf),
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
         """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
         First solves for the computational coordinates that correspond to inbasis, then
         evaluates outbasis at those locations.
 
-        NOTE: this function cannot currently be JIT compiled or differentiated with AD.
+        NOTE: this function cannot be JIT compiled or differentiated with AD.
 
         Parameters
         ----------
@@ -1192,23 +1237,31 @@ class _Configuration(IOAble, ABC):
             point in space.
         inbasis, outbasis : tuple of str
             Labels for input and output coordinates, eg ("R", "phi", "Z") or
-            ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
-            Labels should be the same as the compute function data key.
+            ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
+            same as the compute function data key
+        guess : None or ndarray, shape(k,3)
+            Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+            coresponding to coords in inbasis. If None, heuristics are used based on
+            in basis and a nearest neighbor search on a coarse grid.
+        period : tuple of float
+            Assumed periodicity for each quantity in inbasis.
+            Use np.inf to denote no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int > 0
             Maximum number of Newton iterations
-        rhomin : float
-            Minimum allowable value of rho (to avoid singularity at rho=0)
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            Coordinates in outbasis. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
+            Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
+            for coordinates where root finding did not succeed, possibly because the
+            coordinate is not in the plasma volume.
 
         """
-        return map_coordinates(self, coords, inbasis, outbasis, tol, maxiter, rhomin)
+        return map_coordinates(
+            self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
+        )
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find geometric theta for given straight field line theta.

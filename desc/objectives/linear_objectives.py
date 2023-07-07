@@ -61,7 +61,7 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -74,6 +74,7 @@ class BoundaryRSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         modes = eq.surface.R_basis.modes
         idx = np.arange(eq.surface.R_basis.num_modes)
 
@@ -143,7 +144,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -156,6 +157,7 @@ class BoundaryZSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         modes = eq.surface.Z_basis.modes
         idx = np.arange(eq.surface.Z_basis.num_modes)
 
@@ -254,7 +256,7 @@ class FixBoundaryR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -267,6 +269,7 @@ class FixBoundaryR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -405,7 +408,7 @@ class FixBoundaryZ(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -418,6 +421,7 @@ class FixBoundaryZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -522,7 +526,7 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -535,6 +539,7 @@ class FixLambdaGauge(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         L_basis = eq.L_basis
 
         if L_basis.sym:
@@ -603,7 +608,7 @@ class FixThetaSFL(_Objective):
 
         super().__init__(eq=eq, target=0, weight=1, name=name)
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -616,6 +621,7 @@ class FixThetaSFL(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         idx = np.arange(eq.L_basis.num_modes)
         modes_idx = idx
         self._idx = idx
@@ -710,7 +716,7 @@ class FixAxisR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -723,6 +729,7 @@ class FixAxisR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         R_basis = eq.R_basis
 
         if self._modes is False or self._modes is None:  # no modes
@@ -871,7 +878,7 @@ class FixAxisZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -884,6 +891,7 @@ class FixAxisZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         Z_basis = eq.Z_basis
 
         if self._modes is False or self._modes is None:  # no modes
@@ -1036,7 +1044,7 @@ class FixModeR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1049,6 +1057,7 @@ class FixModeR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1180,7 +1189,7 @@ class FixModeZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1193,6 +1202,7 @@ class FixModeZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1339,7 +1349,7 @@ class FixSumModesR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1352,6 +1362,7 @@ class FixSumModesR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1503,7 +1514,7 @@ class FixSumModesZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1516,6 +1527,7 @@ class FixSumModesZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1655,7 +1667,7 @@ class _FixProfile(_Objective, ABC):
             name=name,
         )
 
-    def build(self, eq, profile=None, use_jit=False, verbose=1):
+    def build(self, eq=None, profile=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1670,6 +1682,7 @@ class _FixProfile(_Objective, ABC):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = profile
 
@@ -1755,7 +1768,7 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1768,6 +1781,7 @@ class FixPressure(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.pressure is None:
             raise RuntimeError(
                 "Attempting to fix pressure on an equilibrium with no "
@@ -1869,7 +1883,7 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1882,6 +1896,7 @@ class FixIota(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.iota is None:
             raise RuntimeError(
                 "Attempt to fix rotational transform on an equilibrium with no "
@@ -1978,7 +1993,7 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1991,6 +2006,7 @@ class FixCurrent(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.current is None:
             raise RuntimeError(
                 "Attempting to fix toroidal current on an equilibrium with no "
@@ -2090,7 +2106,7 @@ class FixElectronTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2103,6 +2119,7 @@ class FixElectronTemperature(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.electron_temperature is None:
             raise RuntimeError(
                 "Attempting to fix electron temperature on an equilibrium with no "
@@ -2202,7 +2219,7 @@ class FixElectronDensity(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2215,6 +2232,7 @@ class FixElectronDensity(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.electron_density is None:
             raise RuntimeError(
                 "Attempting to fix electron density on an equilibrium with no "
@@ -2314,7 +2332,7 @@ class FixIonTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2327,6 +2345,7 @@ class FixIonTemperature(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.ion_temperature is None:
             raise RuntimeError(
                 "Attempting to fix ion temperature on an equilibrium with no "
@@ -2428,7 +2447,7 @@ class FixAtomicNumber(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2441,6 +2460,7 @@ class FixAtomicNumber(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.atomic_number is None:
             raise RuntimeError(
                 "Attempting to fix atomic number on an equilibrium with no "
@@ -2522,7 +2542,7 @@ class FixPsi(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2535,6 +2555,7 @@ class FixPsi(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         self._dim_f = 1
 
         if self._target_from_user is None:
@@ -2569,49 +2590,63 @@ class FixPsi(_Objective):
 
 
 class FixSurfaceCurrent(_Objective):
-    """Fixes pressure coefficients."""
+    """Fix surface current potential.
 
-    _scalar = False
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, optional
+        Target value(s) of the objective. If None, uses Equilibrium value.
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    weight : float, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+    modes : ndarray, optional
+        Basis modes numbers [l,m,n] of boundary modes to fix.
+        len(target) = len(weight) = len(modes).
+        If True/False uses all/none of the profile modes.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = True
     _linear = True
     _fixed = True
+    _units = "(A)"
+    _print_value_fmt = "Fixed-Surface current error: {:10.3e} "
 
     def __init__(
         self,
         eq=None,
         target=None,
+        bounds=None,
         weight=1,
-        basis=None,
+        normalize=True,
+        normalize_target=True,
         modes=True,
         name="fixed-surface-current",
     ):
-        """Initialize a FixPressure Objective.
-
-        Parameters
-        ----------
-        eq : Equilibrium, optional
-            Equilibrium that will be optimized to satisfy the Objective.
-        target : tuple, float, ndarray, optional
-            Target value(s) of the objective.
-            len(target) = len(weight) = len(modes). If None, uses profile coefficients.
-        weight : float, ndarray, optional
-            Weighting to apply to the Objective, relative to other Objectives.
-            len(target) = len(weight) = len(modes)
-        profile : Profile, optional
-            Profile containing the radial modes to evaluate at.
-        modes : ndarray, optional
-            Basis modes numbers [l,m,n] of boundary modes to fix.
-            len(target) = len(weight) = len(modes).
-            If True/False uses all/none of the profile modes.
-        name : str
-            Name of the objective function.
-
-        """
-        self._basis = basis
         self._modes = modes
-        super().__init__(eq=eq, target=target, weight=weight, name=name)
-        self._callback_fmt = "Fixed-surface-current error: {:10.3e} (Pa)"
+        self._target_from_user = target
+        super().__init__(
+            eq=eq,
+            target=target,
+            bounds=bounds,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2624,68 +2659,76 @@ class FixSurfaceCurrent(_Objective):
             Level of output.
 
         """
-        if self._basis is None or self._basis.num_modes + 2 != len(eq.IGphi_mn):
-            self._basis = eq.K_basis
+        eq = eq or self._eq
+        if self._modes is False or self._modes is None:  # no modes
+            modes = np.array([[]], dtype=int)
+            idx = np.array([], dtype=int)
+        elif self._modes is True:  # all modes
+            modes = eq.K_basis.modes
+            idx = np.arange(eq.K_basis.num_modes + 2)
+        else:  # specified modes
+            modes = np.atleast_2d(self._modes)
+            dtype = {
+                "names": ["f{}".format(i) for i in range(3)],
+                "formats": 3 * [modes.dtype],
+            }
+            _, idx, modes_idx = np.intersect1d(
+                eq.K_basis.modes.astype(modes.dtype).view(dtype),
+                modes.view(dtype),
+                return_indices=True,
+            )
+            # rearrange modes to match order of eq.surface.R_basis.modes
+            # and eq.surface.R_lmn,
+            # necessary so that the A matrix rows match up with the target b
+            modes = np.atleast_2d(eq.K_basis.modes[idx, :])
 
-            if self._modes is False or self._modes is None:  # no modes
-                modes = np.array([[]], dtype=int)
-                self._idx = np.array([], dtype=int)
-                idx = self._idx
-            elif self._modes is True:  # all modes in profile
-                modes = self._basis.modes
-                self._idx = np.arange(self._basis.num_modes + 2)
-                idx = self._idx
-            else:  # specified modes
-                modes = np.atleast_2d(self._modes)
-                dtype = {
-                    "names": ["f{}".format(i) for i in range(3)],
-                    "formats": 3 * [modes.dtype],
-                }
-                _, self._idx, idx = np.intersect1d(
-                    self._basis.modes.astype(modes.dtype).view(dtype),
-                    modes.view(dtype),
-                    return_indices=True,
-                )
-                if self._idx.size < modes.shape[0]:
-                    warnings.warn(
-                        colored(
-                            "Some of the given modes are not in the pressure profile, "
-                            + "these modes will not be fixed.",
-                            "yellow",
-                        )
+            if idx.size < modes.shape[0]:
+                warnings.warn(
+                    colored(
+                        "Some of the given modes are not in the surface current, "
+                        + "these modes will not be fixed.",
+                        "yellow",
                     )
+                )
 
-            self._dim_f = self._idx.size
-            # use given targets and weights if specified
-            if self.target.size == modes.shape[0]:
-                self.target = self._target[idx]
-            if self.weight.size == modes.shape[0]:
-                self.weight = self._weight[idx]
-            # use profile parameters as target if needed
-            if None in self.target or self.target.size != self.dim_f:
-                self.target = eq.IGphi_mn[self._idx]
+        self._idx = idx
+        self._dim_f = idx.size
+        if self._target_from_user is not None:
+            if self._modes is True or self._modes is False:
+                raise RuntimeError(
+                    "Attempting to provide target for Surface current modes without "
+                    + "providing modes array!"
+                    + "You must pass in the modes corresponding to the"
+                    + "provided target"
+                )
+            # rearrange given target to match modes order
+            self.target = self._target_from_user[modes_idx]
 
-        self._check_dimensions()
-        self._set_dimensions(eq)
-        self._set_derivatives(use_jit=use_jit)
-        self._built = True
+        # use surface parameters as target if needed
+        if self._target_from_user is None:
+            self.target = eq.IGPhi_mn[idx]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["J"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, IGphi_mn, **kwargs):
         """Compute fixed-pressure profile errors.
 
         Parameters
         ----------
-        p_l : ndarray
-            Spectral coefficients of p(rho) -- pressure profile.
+        IGPhi_mn : ndarray
+            Spectral coefficients of surface current potential.
 
         Returns
         -------
         f : ndarray
-            Pressure profile errors (Pa).
+            Surface current errors (A).
 
         """
-        p = IGphi_mn[self._idx]
-        return self._shift_scale(p)
+        return IGphi_mn[self._idx]
 
     @property
     def target_arg(self):

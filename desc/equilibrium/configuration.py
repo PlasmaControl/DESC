@@ -305,9 +305,9 @@ class _Configuration(IOAble, ABC):
             self._axis = axis
         elif isinstance(axis, (np.ndarray, jnp.ndarray)):
             self._axis = FourierRZCurve(
-                axis[:, 1],
-                axis[:, 2],
-                axis[:, 0].astype(int),
+                R_n=axis[:, 1],
+                Z_n=axis[:, 2],
+                modes_R=axis[:, 0].astype(int),
                 NFP=self.NFP,
                 sym=self.sym,
                 name="axis",
@@ -322,11 +322,17 @@ class _Configuration(IOAble, ABC):
                     Z_n=self.surface.Z_lmn[
                         np.where(self.surface.Z_basis.modes[:, 1] == 0)
                     ],
+                    W_n=self.surface.W_lmn[
+                        np.where(self.surface.W_basis.modes[:, 1] == 0)
+                    ],
                     modes_R=self.surface.R_basis.modes[
                         np.where(self.surface.R_basis.modes[:, 1] == 0)[0], -1
                     ],
                     modes_Z=self.surface.Z_basis.modes[
                         np.where(self.surface.Z_basis.modes[:, 1] == 0)[0], -1
+                    ],
+                    modes_W=self.surface.W_basis.modes[
+                        np.where(self.surface.W_basis.modes[:, 1] == 0)[0], -1
                     ],
                     NFP=self.NFP,
                 )

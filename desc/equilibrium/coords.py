@@ -62,6 +62,8 @@ def map_coordinates(  # noqa: C901
         coordinate is not in the plasma volume.
 
     """
+    inbasis = list(inbasis)
+    outbasis = list(outbasis)
     assert (
         np.isfinite(maxiter) and maxiter > 0
     ), f"maxiter must be a positive integer, got {maxiter}"
@@ -123,8 +125,8 @@ def map_coordinates(  # noqa: C901
             rho_g = np.linspace(0, 1, eq.L_grid + 1)
         if "theta" in inbasis:
             theta_g = np.unique(coords[:, inbasis.index("theta")])
-        elif "theta_sfl" in inbasis:  # lambda is usually small
-            theta_g = np.unique(coords[:, inbasis.index("theta_sfl")])
+        elif "theta_PEST" in inbasis:  # lambda is usually small
+            theta_g = np.unique(coords[:, inbasis.index("theta_PEST")])
         else:
             theta_g = np.linspace(0, 2 * np.pi, 2 * eq.M_grid + 1)
         if "zeta" in inbasis:

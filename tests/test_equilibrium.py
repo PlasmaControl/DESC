@@ -106,7 +106,7 @@ def test_map_coordinates():
     eq = desc.examples.get("DSHAPE")
 
     inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_sfl", "zeta"]
+    outbasis = ["rho", "theta_PEST", "zeta"]
 
     rho = np.linspace(0.01, 0.99, 100)
     theta = np.linspace(0, np.pi, 100, endpoint=False)
@@ -149,7 +149,7 @@ def test_map_coordinates2():
 
     out = eq.map_coordinates(
         t_grid.nodes,
-        ["rho", "theta_sfl", "phi"],
+        ["rho", "theta_PEST", "phi"],
         ["rho", "theta", "zeta"],
         period=(np.inf, 2 * np.pi, 2 * np.pi),
     )

@@ -593,16 +593,21 @@ class TestGrid:
             np.testing.assert_array_equal(
                 grid.axis, np.nonzero(grid.nodes[:, 0] == 0)[0]
             )
+            # test that changing NFP updated the nodes
+            assert np.isclose(
+                grid.nodes[grid.unique_zeta_idx[-1], 2],
+                (grid.num_zeta - 1) / grid.num_zeta * 2 * np.pi / grid.NFP,
+            )
 
         lg = LinearGrid(1, 2, 3)
-        lg.change_resolution(2, 3, 4)
-        test(lg, 2, 3, 4, lg.NFP)
+        lg.change_resolution(2, 3, 4, 5)
+        test(lg, 2, 3, 4, 5)
         qg = QuadratureGrid(1, 2, 3)
-        qg.change_resolution(2, 3, 4)
-        test(qg, 2, 3, 4, qg.NFP)
+        qg.change_resolution(2, 3, 4, 5)
+        test(qg, 2, 3, 4, 5)
         cg = ConcentricGrid(2, 3, 4)
-        cg.change_resolution(3, 4, 5)
-        test(cg, 3, 4, 5, cg.NFP)
+        cg.change_resolution(3, 4, 5, 2)
+        test(cg, 3, 4, 5, 2)
 
     @pytest.mark.unit
     def test_enforce_symmetry(self):

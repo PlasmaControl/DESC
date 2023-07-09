@@ -3,7 +3,7 @@
 from scipy.constants import elementary_charge
 from scipy.special import roots_legendre
 
-from ..backend import fori_loop, jnp
+from ..backend import fori_loop, jnp, put
 from .data_index import register_compute_fun
 from .utils import surface_averages_map
 
@@ -136,7 +136,6 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     Zeff = jnp.maximum(1 + 1.0e-14, profile_data["Zeff"])
     ni = ne / Zeff
     pe = ne * Te
-    # TODO: this. mark source of nan at axis limit here
     d_ne_d_s = profile_data["ne_r"] / (2 * rho)
     d_Te_d_s = profile_data["Te_r"] / (2 * rho)
     d_Ti_d_s = profile_data["Ti_r"] / (2 * rho)
@@ -326,6 +325,7 @@ def j_dot_B_Redl(geom_data, profile_data, helicity_N=None):
     profiles=["atomic_number"],
     coordinates="r",
     data=[
+        "rho",
         "trapped fraction",
         "G",
         "I",

@@ -52,32 +52,31 @@ def test_total_volume(DummyStellarator):
 def test_enclosed_volumes():
     """Test that the volume enclosed by flux surfaces matches analytic formulas."""
     eq = Equilibrium()  # torus
-    rho = np.linspace(1 / 128, 1, 128)
+    rho = np.linspace(0, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute(["V_rr(r)", "R0", "V(r)", "V_r(r)"], grid=grid)
+    data = eq.compute(["R0", "V(r)", "V_r(r)", "V_rr(r)", "V_rrr(r)"], grid=grid)
     np.testing.assert_allclose(
-        2 * data["R0"] * (np.pi * rho) ** 2,
-        grid.compress(data["V(r)"]),
+        2 * data["R0"] * (np.pi * rho) ** 2, grid.compress(data["V(r)"])
     )
     np.testing.assert_allclose(
-        4 * data["R0"] * np.pi**2 * rho,
-        grid.compress(data["V_r(r)"]),
+        4 * data["R0"] * np.pi**2 * rho, grid.compress(data["V_r(r)"])
     )
-    np.testing.assert_allclose(
-        4 * data["R0"] * np.pi**2,
-        grid.compress(data["V_rr(r)"]),
-    )
+    np.testing.assert_allclose(4 * data["R0"] * np.pi**2, data["V_rr(r)"])
+    np.testing.assert_allclose(0, data["V_rrr(r)"], atol=1e-14)
 
 
 @pytest.mark.unit
 def test_surface_areas():
     """Test that the flux surface areas match known analytic formulas."""
     eq = Equilibrium()  # torus
-    rho = np.linspace(1 / 128, 1, 128)
+    rho = np.linspace(0, 1, 128)
     grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, sym=eq.sym, rho=rho)
-    data = eq.compute(["S(r)", "R0"], grid=grid)
-    S = 4 * data["R0"] * np.pi**2 * rho
-    np.testing.assert_allclose(S, grid.compress(data["S(r)"]))
+    data = eq.compute(["S(r)", "S_r(r)", "S_rr(r)", "R0"], grid=grid)
+    np.testing.assert_allclose(
+        4 * data["R0"] * np.pi**2 * rho, grid.compress(data["S(r)"])
+    )
+    np.testing.assert_allclose(4 * data["R0"] * np.pi**2, data["S_r(r)"])
+    np.testing.assert_allclose(0, data["S_rr(r)"], atol=3e-12)
 
 
 @pytest.mark.unit
@@ -1104,9 +1103,7 @@ def test_compare_quantities_to_vmec():
     grid = LinearGrid(rho=rho, M=eq.M, N=eq.N, NFP=eq.NFP)
     data = eq.compute("<J*B>", grid=grid)
     J_dot_B_desc = grid.compress(data["<J*B>"])
-
-    # Drop first point since desc gives NaN:
-    np.testing.assert_allclose(J_dot_B_desc[1:], J_dot_B_vmec[1:], rtol=0.005)
+    np.testing.assert_allclose(J_dot_B_desc, J_dot_B_vmec, rtol=0.005)
 
 
 @pytest.mark.unit
@@ -1124,7 +1121,7 @@ def test_compute_averages():
     """Test that computing averages uses the correct grid."""
     eq = desc.examples.get("HELIOTRON")
     Vr = eq.get_profile("V_r(r)")
-    rho = np.linspace(0.01, 1, 20)
+    rho = np.linspace(0, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)
     out = eq.compute("V_r(r)", grid=grid)
     np.testing.assert_allclose(Vr(rho), out["V_r(r)"], rtol=1e-4)

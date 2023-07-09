@@ -249,12 +249,6 @@ class TestBootstrapCompute:
         d_ne_d_s = ne(rho, dr=1) / (2 * rho)
         d_Te_d_s = Te(rho, dr=1) / (2 * rho)
         d_Ti_d_s = Ti(rho, dr=1) / (2 * rho)
-        # TODO: remember to remove
-        print("Kaya look a tthis:", ne(np.linspace(0, 1, 20), dr=1))
-        print()
-        print("Kaya look a tthis:", Te(np.linspace(0, 1, 20), dr=1))
-        print()
-        print("Kaya look a tthis:", Ti(np.linspace(0, 1, 20), dr=1))
 
         # Sauter eq (18d)-(18e):
         ln_Lambda_e = 31.3 - np.log(np.sqrt(ne_rho) / Te_rho)

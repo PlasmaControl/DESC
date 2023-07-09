@@ -223,11 +223,11 @@ def _get_plot_axes(grid):
 
     """
     plot_axes = [0, 1, 2]
-    if np.unique(grid.nodes[:, 0]).size == 1:
+    if grid.num_rho == 1:
         plot_axes.remove(0)
-    if np.unique(grid.nodes[:, 1]).size == 1:
+    if grid.num_theta == 1:
         plot_axes.remove(1)
-    if np.unique(grid.nodes[:, 2]).size == 1:
+    if grid.num_zeta == 1:
         plot_axes.remove(2)
 
     return tuple(plot_axes)
@@ -263,11 +263,7 @@ def _compute(eq, name, grid, component=None, reshape=True):
         "Z",
     ], f"component must be one of [None, 'R', 'phi', 'Z'], got {component}"
 
-    components = {
-        "R": 0,
-        "phi": 1,
-        "Z": 2,
-    }
+    components = {"R": 0, "phi": 1, "Z": 2}
 
     label = data_index[name]["label"]
 
@@ -508,9 +504,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
     fig.set_tight_layout(True)
-    plot_data = {}
-    plot_data[xlabel.strip("$").strip("\\")] = grid.nodes[:, plot_axes[0]]
-    plot_data[name] = data
+    plot_data = {xlabel.strip("$").strip("\\"): grid.nodes[:, plot_axes[0]], name: data}
     if return_data:
         return fig, ax, plot_data
 
@@ -657,10 +651,11 @@ def plot_2d(
             )
         )
     fig.set_tight_layout(True)
-    plot_data = {}
-    plot_data[xlabel.strip("$").strip("\\")] = xx
-    plot_data[ylabel.strip("$").strip("\\")] = yy
-    plot_data[name] = data
+    plot_data = {
+        xlabel.strip("$").strip("\\"): xx,
+        ylabel.strip("$").strip("\\"): yy,
+        name: data,
+    }
     if norm_F:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
@@ -846,11 +841,7 @@ def plot_3d(
     ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
     ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
 
-    plot_data = {}
-    plot_data["X"] = X
-    plot_data["Y"] = Y
-    plot_data["Z"] = Z
-    plot_data[name] = data
+    plot_data = {"X": X, "Y": Y, "Z": Z, name: data}
 
     if return_data:
         return fig, ax, plot_data
@@ -945,11 +936,7 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        if data_index[name]["coordinates"] == "r":
-            # OK to plot origin for most quantities denoted as functions of rho
-            rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
-        else:
-            rho = np.linspace(1 / rho, 1, rho)
+        rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
     else:
         rho = np.atleast_1d(rho)
     if M is None:
@@ -977,6 +964,7 @@ def plot_fsa(
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
         plot_data_ylabel_key = f"<{name}>_fsa"
+        # todo: compute limit
         sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
         values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
@@ -1020,9 +1008,7 @@ def plot_fsa(
         )
     fig.set_tight_layout(True)
 
-    plot_data = {}
-    plot_data["rho"] = rho
-    plot_data[plot_data_ylabel_key] = values
+    plot_data = {"rho": rho, plot_data_ylabel_key: values}
     if norm_F:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
@@ -1223,10 +1209,7 @@ def plot_section(
             )
     fig.set_tight_layout(True)
 
-    plot_data = {}
-    plot_data["R"] = R
-    plot_data["Z"] = Z
-    plot_data[name] = data
+    plot_data = {"R": R, "Z": Z, name: data}
     if norm_F:
         plot_data["normalization"] = np.nanmean(np.abs(norm_data))
     else:
@@ -1346,7 +1329,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     plot_theta = bool(theta)
     nfp = eq.NFP
     if isinstance(rho, numbers.Integral):
-        rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
+        rho = np.linspace(0, 1, rho + 1)
     else:
         rho = np.atleast_1d(rho)
     if isinstance(theta, numbers.Integral):
@@ -1420,13 +1403,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(
-        ax,
-        rows=rows,
-        cols=cols,
-        figsize=figsize,
-        equal=True,
-    )
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True)
     ax = np.atleast_1d(ax).flatten()
 
     for i in range(nphi):
@@ -1439,11 +1416,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
                 lw=theta_lw,
             )
         ax[i].plot(
-            Rr[:, :, i],
-            Zr[:, :, i],
-            color=rho_color,
-            linestyle=rho_ls,
-            lw=rho_lw,
+            Rr[:, :, i], Zr[:, :, i], color=rho_color, linestyle=rho_ls, lw=rho_lw
         )
         ax[i].plot(
             Rr[:, -1, i],
@@ -1480,7 +1453,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     return fig, ax
 
 
-def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **kwargs):
+def plot_boundary(eq, phi=None, plot_axis=True, ax=None, return_data=False, **kwargs):
     """Plot stellarator boundary at multiple toroidal coordinates.
 
     Parameters
@@ -1492,7 +1465,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
     plot_axis : bool
-        Whether or not to plot the magnetic axis locations. Default is False.
+        Whether to plot the magnetic axis locations. Default is True.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -1611,13 +1584,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
             ),
         )
         if rho[0] == 0:
-            ax.scatter(
-                R[0, 0, i],
-                Z[0, 0, i],
-                color=colors[i],
-                marker=marker,
-                s=size,
-            )
+            ax.scatter(R[0, 0, i], Z[0, 0, i], color=colors[i], marker=marker, s=size)
 
     ax.set_xlabel(_AXIS_LABELS_RPZ[0], fontsize=label_fontsize)
     ax.set_ylabel(_AXIS_LABELS_RPZ[2], fontsize=label_fontsize)
@@ -1736,11 +1703,10 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     plot_data["Z"] = []
 
     for i in range(neq):
-        grid_kwargs = {
-            "NFP": eqs[i].NFP,
-            "theta": 100,
-            "zeta": phi if eqs[i].N > 0 else 2,
-        }
+        grid_kwargs = {"NFP": eqs[i].NFP, "theta": 100}
+        # Need to assign separately because conditional statements are not
+        # interpreted inside dictionary literals.
+        grid_kwargs["zeta"] = phi if eqs[i].N > 0 else 2
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
@@ -1760,11 +1726,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
 
         for j in range(nz - 1):
             (line,) = ax.plot(
-                R[:, -1, j],
-                Z[:, -1, j],
-                color=colors[i],
-                linestyle=ls[i],
-                lw=lw[i],
+                R[:, -1, j], Z[:, -1, j], color=colors[i], linestyle=ls[i], lw=lw[i]
             )
             if j == 0:
                 line.set_label(labels[i])
@@ -1907,13 +1869,7 @@ def plot_comparison(
     figh = 5 * rows
     if figsize is None:
         figsize = (figw, figh)
-    fig, ax = _format_ax(
-        ax,
-        rows=rows,
-        cols=cols,
-        figsize=figsize,
-        equal=True,
-    )
+    fig, ax = _format_ax(ax, rows=rows, cols=cols, figsize=figsize, equal=True)
     ax = np.atleast_1d(ax).flatten()
 
     plot_data = {}
@@ -2026,9 +1982,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         color = [color]
     fig, ax = _format_ax(ax, True, figsize=figsize)
     if grid is None:
-        grid_kwargs = {
-            "zeta": np.linspace(0, 2 * np.pi, 50),
-        }
+        grid_kwargs = {"zeta": np.linspace(0, 2 * np.pi, 50)}
         grid = _get_grid(**grid_kwargs)
 
     def flatten_coils(coilset):
@@ -2147,9 +2101,9 @@ def plot_boozer_modes(
 
     """
     if rho is None:
-        rho = np.linspace(1, 0, num=20, endpoint=False)
+        rho = np.linspace(1, 0, num=21)
     elif np.isscalar(rho) and rho > 1:
-        rho = np.linspace(1, 0, num=rho, endpoint=False)
+        rho = np.linspace(1, 0, num=rho + 1)
 
     B_mn = np.array([[]])
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
@@ -2321,13 +2275,14 @@ def plot_boozer_surface(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
     divider = make_axes_locatable(ax)
 
-    contourf_kwargs = {}
-    contourf_kwargs["norm"] = matplotlib.colors.Normalize()
-    contourf_kwargs["levels"] = kwargs.pop(
-        "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
-    )
-    contourf_kwargs["cmap"] = kwargs.pop("cmap", "jet")
-    contourf_kwargs["extend"] = "both"
+    contourf_kwargs = {
+        "norm": matplotlib.colors.Normalize(),
+        "levels": kwargs.pop(
+            "levels", np.linspace(np.nanmin(data), np.nanmax(data), ncontours)
+        ),
+        "cmap": kwargs.pop("cmap", "jet"),
+        "extend": "both",
+    }
 
     assert (
         len(kwargs) == 0
@@ -2359,10 +2314,7 @@ def plot_boozer_surface(
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_font_size)
 
     fig.set_tight_layout(True)
-    plot_data = {}
-    plot_data["zeta_Boozer"] = xx
-    plot_data["theta_Boozer"] = yy
-    plot_data["|B|"] = data
+    plot_data = {"zeta_Boozer": xx, "theta_Boozer": yy, "|B|": data}
 
     if return_data:
         return fig, ax, plot_data
@@ -2446,9 +2398,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
 
     """
     if rho is None:
-        rho = np.linspace(1, 0, num=20, endpoint=False)
+        rho = np.linspace(1, 0, num=21)
     elif np.isscalar(rho) and rho > 1:
-        rho = np.linspace(1, 0, num=rho, endpoint=False)
+        rho = np.linspace(1, 0, num=rho + 1)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -2465,7 +2417,6 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     R0 = data["R0"]
     B0 = np.mean(data["|B|"] * data["sqrt(g)"]) / np.mean(data["sqrt(g)"])
 
-    data = None
     f_B = np.array([])
     f_C = np.array([])
     f_T = np.array([])
@@ -2640,7 +2591,7 @@ def plot_grid(grid, return_data=False, **kwargs):
     ), f"plot_grid got unexpected keyword argument: {kwargs.keys()}"
 
     # node locations
-    nodes = grid.nodes[np.where(grid.nodes[:, 2] == 0)]
+    nodes = grid.nodes[grid.nodes[:, 2] == 0]
     ax.scatter(nodes[:, 1], nodes[:, 0], s=4)
     ax.set_ylim(0, 1)
     ax.set_xticks(
@@ -2687,9 +2638,7 @@ def plot_grid(grid, return_data=False, **kwargs):
         )
     fig.set_tight_layout(True)
 
-    plot_data = {}
-    plot_data["rho"] = nodes[:, 0]
-    plot_data["theta"] = nodes[:, 1]
+    plot_data = {"rho": nodes[:, 0], "theta": nodes[:, 1]}
 
     if return_data:
         return fig, ax, plot_data
@@ -2745,16 +2694,14 @@ def plot_basis(basis, return_data=False, **kwargs):
     title_font_size = kwargs.pop("title_font_size", None)
 
     if basis.__class__.__name__ == "PowerSeries":
+        # todo: lmax ununsed
         lmax = abs(basis.modes[:, 0]).max()
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["l"] = basis.modes[:, 0]
-        plot_data["amplitude"] = []
-        plot_data["rho"] = r
+        plot_data = {"l": basis.modes[:, 0], "amplitude": [], "rho": r}
 
         for fi, l in zip(f.T, basis.modes[:, 0]):
             ax.plot(r, fi, label="$l={:d}$".format(int(l)))
@@ -2775,16 +2722,14 @@ def plot_basis(basis, return_data=False, **kwargs):
         return fig, ax
 
     elif basis.__class__.__name__ == "FourierSeries":
+        # todo nmax unused
         nmax = abs(basis.modes[:, 2]).max()
         grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
+        plot_data = {"n": basis.modes[:, 2], "amplitude": [], "zeta": z}
 
         for fi, n in zip(f.T, basis.modes[:, 2]):
             ax.plot(z, fi, label="$n={:d}$".format(int(n)))
@@ -2824,12 +2769,13 @@ def plot_basis(basis, return_data=False, **kwargs):
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["m"] = basis.modes[:, 1]
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
-        plot_data["theta"] = t
+        plot_data = {
+            "m": basis.modes[:, 1],
+            "n": basis.modes[:, 2],
+            "amplitude": [],
+            "zeta": z,
+            "theta": t,
+        }
 
         for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
             ax[mmax + m, nmax + n] = plt.subplot(gs[mmax + m + 1, n + nmax])
@@ -2887,16 +2833,12 @@ def plot_basis(basis, return_data=False, **kwargs):
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
         grid = LinearGrid(rho=100, theta=100, endpoint=True)
-        r = np.unique(grid.nodes[:, 0])
-        v = np.unique(grid.nodes[:, 1])
+        r = grid.num_rho
+        v = grid.num_theta
 
         fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
 
-        plot_data = {}
-
-        plot_data["amplitude"] = []
-        plot_data["rho"] = r
-        plot_data["theta"] = v
+        plot_data = {"amplitude": [], "rho": r, "theta": v}
 
         ax = {i: {} for i in range(lmax + 1)}
         ratios = np.ones(2 * (mmax + 1) + 1)
@@ -2905,7 +2847,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             lmax + 2, 2 * (mmax + 1) + 1, width_ratios=ratios
         )
 
-        modes = basis.modes[np.where(basis.modes[:, 2] == 0)]
+        modes = basis.modes[basis.modes[:, 2] == 0]
         plot_data["l"] = basis.modes[:, 0]
         plot_data["m"] = basis.modes[:, 1]
         Zs = basis.evaluate(grid.nodes, modes=modes)
@@ -3251,6 +3193,7 @@ def plot_field_lines_sfl(
         )
 
     """
+    # TODO: can this be removed now?
     if rho == 0:
         raise NotImplementedError(
             "Currently does not support field line tracing of the magnetic axis, "

@@ -12,7 +12,7 @@ from desc.grid import LinearGrid
 not_finite_limit_keys = {
     "D_Mercier",
     "D_current",
-    "D_shear",
+    "D_shear",  # may exist for some configurations
     "D_well",
     "J^theta",
     "e^helical",
@@ -33,9 +33,9 @@ not_finite_limit_keys = {
     "g^tz_t",
     "g^tz_z",
     "grad(alpha)",
-    "iota_zero_current_num_r",  # TODO
     "|e^helical|",
     "|grad(theta)|",
+    "<J*B> Redl",  # may exist for some configurations
 }
 
 
@@ -76,6 +76,7 @@ def skip_atomic_profile(eq, name):
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.pressure is not None and "<J*B> Redl" in name)
     )
 
 
@@ -83,7 +84,7 @@ class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
 
     # includes a fixed iota and fixed current equilibrium
-    eqs = (get("W7-X"),)  # get("QAS"))
+    eqs = (get("W7-X"), get("QAS"))
 
     @pytest.mark.unit
     def test_data_index_deps_is_clean(self):
@@ -92,11 +93,11 @@ class TestAxisLimits:
         #    are requested from data dictionary.
         for key in data_index.keys():
             deps = data_index[key]["dependencies"]
-            regular_deps = set(deps["data"])
-            axis_limit_deps = set(deps["axis_limit_data"])
-            assert axis_limit_deps.isdisjoint(regular_deps)
-            assert len(regular_deps) == len(deps["data"])
-            assert len(axis_limit_deps) == len(deps["axis_limit_data"])
+            data = set(deps["data"])
+            axis_limit_data = set(deps["axis_limit_data"])
+            assert data.isdisjoint(axis_limit_data), key
+            assert len(data) == len(deps["data"]), key
+            assert len(axis_limit_data) == len(deps["axis_limit_data"]), key
 
     @pytest.mark.unit
     def test_axis_limit_api(self):
@@ -129,7 +130,7 @@ class TestAxisLimits:
                     continue
                 is_finite = np.isfinite(data[key])
                 if key in not_finite_limit_keys:
-                    assert np.all(is_finite ^ is_axis), key
+                    assert np.all(is_finite.T ^ is_axis), key
                 else:
                     assert np.all(is_finite), key
 
@@ -144,6 +145,36 @@ class TestAxisLimits:
     def test_finite_limits(self):
         """Heuristic to test correctness of all quantities with limits."""
         finite_limit_keys = data_index.keys() - not_finite_limit_keys
+        limit_is_continuous_extension_keys = finite_limit_keys - {
+            # Limit of these keys are computed as limit of their derivative.
+            "iota_zero_current_num",
+            "iota_zero_current_den",
+        }
         for eq in TestAxisLimits.eqs:
-            for key in finite_limit_keys:
+            for key in limit_is_continuous_extension_keys:
                 continuity(eq, key)
+
+    @pytest.mark.unit
+    def test_iota_zero_current_limit(self):
+        """Limit of zero current terms should remain limit of their derivative."""
+        # So nobody changes this thinking it was a bug later.
+        eq = TestAxisLimits.eqs[-1]  # fixed current
+        grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
+        assert grid.axis.size
+        data = eq.compute(
+            [
+                "iota_zero_current_num",
+                "iota_zero_current_num_r",
+                "iota_zero_current_den",
+                "iota_zero_current_den_r",
+            ],
+            grid=grid,
+        )
+        np.testing.assert_array_equal(
+            data["iota_zero_current_num"][grid.axis],
+            data["iota_zero_current_num_r"][grid.axis],
+        )
+        np.testing.assert_array_equal(
+            data["iota_zero_current_den"][grid.axis],
+            data["iota_zero_current_den_r"][grid.axis],
+        )

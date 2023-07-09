@@ -49,7 +49,7 @@ def _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=None):
     if N is None:
         N = desc_eq.N
     else:
-        N = np.max([desc_eq.N, N])
+        N = np.min([desc_eq.N, N])
     assert N == int(N), "Toroidal Resolution must be an integer!"
     N = int(N)
     # normal and binormal vector components
@@ -251,7 +251,7 @@ def make_RZ_cons_1st_order(qsc, desc_eq, N=None):
     Rconstraints = ()
     Zconstraints = ()
 
-    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq)
+    coeffs, bases = _calc_1st_order_NAE_coeffs(qsc, desc_eq, N=N)
     Rconstraints, Zconstraints = _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases)
 
     return Rconstraints + Zconstraints

@@ -923,8 +923,8 @@ def _R_rtz(params, transforms, profiles, data, **kwargs):
     label="\\partial_{\\rho \\rho \\theta \\zeta} R",
     units="m",
     units_long="meters",
-    description="Major radius in lab frame, fourth derivative wrt radius twice, poloidal "
-    "angle, and toroidal angle",
+    description="Major radius in lab frame, fourth derivative wrt radius twice,"
+                " poloidal angle, and toroidal angle",
     dim=1,
     params=["R_lmn"],
     transforms={"R": [[2, 1, 1]]},

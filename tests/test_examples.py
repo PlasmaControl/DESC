@@ -10,7 +10,6 @@ from qic import Qic
 from qsc import Qsc
 
 import desc.examples
-from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid

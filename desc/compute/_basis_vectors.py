@@ -249,24 +249,6 @@ def _b(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="n_rho",
-    label="\\hat{\\mathbf{n}}_{\\rho}",
-    units="~",
-    units_long="None",
-    description="Unit vector normal to constant rho surface (direction of e^rho)",
-    dim=3,
-    params=[],
-    transforms={},
-    profiles=[],
-    coordinates="rtz",
-    data=["e^rho"],
-)
-def _n_rho(params, transforms, profiles, data, **kwargs):
-    data["n_rho"] = (data["e^rho"].T / jnp.linalg.norm(data["e^rho"], axis=-1)).T
-    return data
-
-
-@register_compute_fun(
     name="grad(alpha)",
     label="\\nabla \\alpha",
     units="m^{-1}",
@@ -3272,7 +3254,8 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
     label="\\partial{\\theta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant poloidal basis vector, derivative wrt poloidal coordinate",
+    description="Contravariant poloidal basis vector, derivative wrt poloidal"
+                " coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -3299,7 +3282,8 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
     label="\\partial{\\zeta} \\mathbf{e}^{\\theta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant poloidal basis vector, derivative wrt toroidal coordinate",
+    description="Contravariant poloidal basis vector, derivative wrt toroidal"
+                " coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -3361,7 +3345,8 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     label="\\partial{\\theta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant toroidal basis vector, derivative wrt poloidal coordinate",
+    description="Contravariant toroidal basis vector, derivative wrt poloidal"
+                " coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -3401,7 +3386,8 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     label="\\partial{\\zeta} \\mathbf{e}^{\\zeta}",
     units="m^{-1}",
     units_long="inverse meters",
-    description="Contravariant toroidal basis vector, derivative wrt toroidal coordinate",
+    description="Contravariant toroidal basis vector, derivative wrt toroidal"
+                " coordinate",
     dim=3,
     params=[],
     transforms={},

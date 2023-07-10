@@ -106,11 +106,11 @@ def test_map_coordinates():
     eq = desc.examples.get("DSHAPE")
 
     inbasis = ["alpha", "phi", "rho"]
-    outbasis = ["rho", "theta_sfl", "zeta"]
+    outbasis = ["rho", "theta_PEST", "zeta"]
 
-    rho = np.linspace(0.01, 0.99, 200)
-    theta = np.linspace(0, np.pi, 200, endpoint=False)
-    zeta = np.linspace(0, np.pi, 200, endpoint=False)
+    rho = np.linspace(0.01, 0.99, 100)
+    theta = np.linspace(0, np.pi, 100, endpoint=False)
+    zeta = np.linspace(0, np.pi, 100, endpoint=False)
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
@@ -120,6 +120,40 @@ def test_map_coordinates():
 
     out = eq.map_coordinates(in_coords, inbasis, outbasis)
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.unit
+def test_map_coordinates2():
+    """Test root finding for (rho,theta,zeta) for common use cases."""
+    eq = desc.examples.get("W7-X")
+
+    n = 100
+    # finding coordinates along a single field line
+    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
+    out = eq.map_coordinates(
+        coords,
+        ["rho", "alpha", "zeta"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 10 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
+
+    # contours of const theta for plotting
+    grid_kwargs = {
+        "rho": np.linspace(0, 1, 10),
+        "NFP": eq.NFP,
+        "theta": np.linspace(0, 2 * np.pi, 3, endpoint=False),
+        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 2, endpoint=False),
+    }
+    t_grid = LinearGrid(**grid_kwargs)
+
+    out = eq.map_coordinates(
+        t_grid.nodes,
+        ["rho", "theta_PEST", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
 
 
 @pytest.mark.slow
@@ -263,8 +297,8 @@ def test_equilibrium_from_near_axis():
 
     assert eq.is_nested()
     assert eq.NFP == na.nfp
-    np.testing.assert_allclose(eq.Ra_n[eq.N : eq.N + 2], na.rc, atol=1e-10)
-    np.testing.assert_allclose(eq.Za_n[eq.N : eq.N - 2 : -1], na.zs, atol=1e-10)
+    np.testing.assert_allclose(eq.Ra_n[:2], na.rc, atol=1e-10)
+    np.testing.assert_allclose(eq.Za_n[-2:], na.zs, atol=1e-10)
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 

@@ -5,6 +5,7 @@ import pytest
 
 import desc.examples
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierRZCurve
 from desc.grid import ConcentricGrid, QuadratureGrid
 from desc.objectives import (
     ForceBalance,
@@ -179,3 +180,33 @@ def test_optimal_perturb():
 
     np.testing.assert_allclose(surf1.R_lmn, surf2.R_lmn, atol=1e-12, rtol=1e-12)
     np.testing.assert_allclose(surf1.Z_lmn, surf2.Z_lmn, atol=1e-12, rtol=1e-12)
+
+
+@pytest.mark.unit
+def test_perturb_axis():
+    """Test that perturbing the axis gives correct soln and changes boundary."""
+    ax1 = FourierRZCurve(10.0, 0.0, sym=False)
+    eq = Equilibrium(L=2, M=2, N=0, sym=False, axis=ax1)
+    ax2 = FourierRZCurve(10.25, 0.25, sym=False)
+
+    from desc.perturbations import get_deltas
+
+    deltas = get_deltas({"axis": eq.axis}, {"axis": ax2})
+
+    eq_new = eq.perturb(deltas, copy=True)
+
+    assert eq_new.is_nested()
+
+    np.testing.assert_allclose(eq_new.axis.R_n, ax2.R_n)
+    np.testing.assert_allclose(eq_new.axis.Z_n, ax2.Z_n)
+    np.testing.assert_allclose(eq_new.get_axis().R_n, ax2.R_n)
+    np.testing.assert_allclose(eq_new.get_axis().Z_n, ax2.Z_n)
+
+    assert np.max(np.abs(eq.Rb_lmn - eq_new.Rb_lmn)) > 0.2
+    assert np.max(np.abs(eq.Zb_lmn - eq_new.Zb_lmn)) > 0.2
+
+    eq.change_resolution(N=2)
+    assert eq.axis.N == 2
+    assert ax2.N == 0
+    eq.axis = ax2
+    assert eq.axis.N == 2

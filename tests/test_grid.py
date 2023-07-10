@@ -355,7 +355,7 @@ class TestGrid:
         lg_2._enforce_symmetry()
         np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
-        lg_2.weights = lg_2._scale_weights()
+        lg_2._weights = lg_2._scale_weights()
         np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
         np.testing.assert_allclose(lg_1.weights, lg_2.weights)
 
@@ -715,6 +715,9 @@ class TestGrid:
         cg = ConcentricGrid(2, 3, 4)
         cg.change_resolution(3, 4, 5, 2)
         test(cg, 3, 4, 5, 2)
+        cg = ConcentricGrid(2, 3, 4)
+        cg.change_resolution(cg.L, cg.M, cg.N, NFP=5)
+        test(cg, cg.L, cg.M, cg.N, 5)
 
     @pytest.mark.unit
     def test_compress_expand_inverse_op(self):

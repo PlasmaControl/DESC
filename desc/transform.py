@@ -85,8 +85,8 @@ class Transform(IOAble):
 
     def _set_up(self):
 
-        self.method = self._method  # FIXME: isn't this line redundant
-        n = np.max(self.derivatives) + 1  # TODO: check
+        self.method = self._method  # assign according to logic in setter function
+        n = np.max(self.derivatives) + 1
         self._matrices = {
             "direct1": {
                 i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)

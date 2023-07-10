@@ -146,11 +146,6 @@ Then, we install DESC:
     # optionally install developer requirements (if you want to run tests)
     pip install -r devtools/dev-requirements.txt
 
-**Note: To run DESC on GPU on Della, it was found to be necessary to load the following modules before running DESC on a node on which you've requested a GPU:**
-
-.. code-block:: sh
-
-    module load cudatoolkit/11.7 cudnn/cuda-11.x/8.2.0
 
 Stellar Cluster (Princeton)
 +++++++++++++++++++++++++++

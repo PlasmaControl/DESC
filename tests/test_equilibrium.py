@@ -297,8 +297,8 @@ def test_equilibrium_from_near_axis():
 
     assert eq.is_nested()
     assert eq.NFP == na.nfp
-    np.testing.assert_allclose(eq.Ra_n[eq.N : eq.N + 2], na.rc, atol=1e-10)
-    np.testing.assert_allclose(eq.Za_n[eq.N : eq.N - 2 : -1], na.zs, atol=1e-10)
+    np.testing.assert_allclose(eq.Ra_n[:2], na.rc, atol=1e-10)
+    np.testing.assert_allclose(eq.Za_n[-2:], na.zs, atol=1e-10)
     np.testing.assert_allclose(data["|B|"][0], na.B_mag(r, 0, 0), rtol=2e-2)
 
 

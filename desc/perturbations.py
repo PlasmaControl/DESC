@@ -8,7 +8,6 @@ from desc.backend import jnp, put, use_jax
 from desc.compute import arg_order, profile_names
 from desc.objectives import (
     BoundaryRSelfConsistency,
-    BoundaryWSelfConsistency,
     BoundaryZSelfConsistency,
     get_fixed_boundary_constraints,
 )
@@ -55,8 +54,6 @@ def get_deltas(things1, things2):
                 deltas["Rb_lmn"] = s2.R_lmn - s1.R_lmn
             if not jnp.allclose(s2.Z_lmn, s1.Z_lmn):
                 deltas["Zb_lmn"] = s2.Z_lmn - s1.Z_lmn
-            if not jnp.allclose(s2.W_lmn, s1.W_lmn):
-                deltas["Wb_lmn"] = s2.W_lmn - s1.W_lmn
 
     for key, val in profile_names.items():
         if key in things1:
@@ -158,7 +155,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     if not objective.built:
         objective.build(eq, verbose=verbose)
-    constraints = maybe_add_self_consistency(constraints)
+    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
     con_args = []
     for con in constraints:
         con_args += con.args
@@ -215,16 +212,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Zb_lmn"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
-    if "Wb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryWSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["W_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dc = deltas["Wb_lmn"]
-        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["W_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
-    other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn", "Wb_lmn"]]
+    other_args = [arg for arg in arg_order if arg not in ["Rb_lmn", "Zb_lmn"]]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(
             [
@@ -263,11 +252,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                     w,
                     objective.x_idx["L_lmn"],
                     (abs(eq.L_basis.modes[:, :2]).sum(axis=1) + 1),
-                )
-                w = put(
-                    w,
-                    objective.x_idx["W_lmn"],
-                    (abs(eq.W_basis.modes[:, :2]).sum(axis=1) + 1),
                 )
             weight = w
         weight = jnp.atleast_1d(weight)
@@ -417,13 +401,11 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     dR=False,
     dZ=False,
     dL=False,
-    dW=False,
     dp=False,
     di=False,
     dPsi=False,
     dRb=False,
     dZb=False,
-    dWb=False,
     subspace=None,
     order=2,
     tr_ratio=[0.1, 0.25],
@@ -441,7 +423,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Objective function to satisfy.
     objective_g : ObjectiveFunction
         Objective function to optimize.
-    dR, dZ, dL, dW, dp, di, dPsi, dRb, dZb, dWb : ndarray or bool, optional
+    dR, dZ, dL, dp, di, dPsi, dRb, dZb : ndarray or bool, optional
         Array of indices of modes to include in the perturbations of R, Z, lambda,
         pressure, rotational transform, total magnetic flux, R_boundary, and Z_boundary.
         Setting to True (False) includes (excludes) all modes.
@@ -508,11 +490,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             deltas["L_lmn"] = jnp.ones((objective_f.dimensions["L_lmn"],), dtype=bool)
     elif jnp.any(dL):
         deltas["L_lmn"] = dL
-    if type(dW) is bool or dW is None:
-        if dW is True:
-            deltas["W_lmn"] = jnp.ones((objective_f.dimensions["W_lmn"],), dtype=bool)
-    elif jnp.any(dW):
-        deltas["W_lmn"] = dW
     if type(dp) is bool or dp is None:
         if dp is True:
             deltas["p_l"] = jnp.ones((objective_f.dimensions["p_l"],), dtype=bool)
@@ -536,11 +513,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             deltas["Zb_lmn"] = jnp.ones((objective_f.dimensions["Zb_lmn"],), dtype=bool)
     elif jnp.any(dZb):
         deltas["Zb_lmn"] = dZb
-    if type(dWb) is bool or dWb is None:
-        if dWb is True:
-            deltas["Wb_lmn"] = jnp.ones((objective_f.dimensions["Wb_lmn"],), dtype=bool)
-    elif jnp.any(dWb):
-        deltas["Wb_lmn"] = dWb
 
     if not len(deltas):
         raise ValueError("At least one input must be a free variable for optimization.")
@@ -573,9 +545,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
 
     # FIXME: generalize to other constraints
     constraints = get_fixed_boundary_constraints(
-        iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
+        eq=eq, iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
     )
-    constraints = maybe_add_self_consistency(constraints)
+    constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
     con_args = []
     for con in constraints:
         con_args += con.args
@@ -615,7 +587,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if len(
         [
             arg
-            for arg in ("R_lmn", "Z_lmn", "L_lmn", "W_lmn", "p_l", "i_l", "Psi")
+            for arg in ("R_lmn", "Z_lmn", "L_lmn", "p_l", "i_l", "Psi")
             if arg in deltas.keys()
         ]
     ):
@@ -640,14 +612,6 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Ainv = jnp.linalg.pinv(A)
         dxdZb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["Z_lmn"]] @ Ainv
         dxdc = jnp.hstack((dxdc, dxdZb))
-    if "Wb_lmn" in deltas.keys():
-        con = get_instance(constraints, BoundaryWSelfConsistency)
-        A = con.derivatives["jac_unscaled"]["W_lmn"](
-            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
-        )
-        Ainv = jnp.linalg.pinv(A)
-        dxdWb = jnp.eye(objective_f.dim_x)[:, objective_f.x_idx["W_lmn"]] @ Ainv
-        dxdc = jnp.hstack((dxdc, dxdWb))
 
     # 1st order
     if order > 0:

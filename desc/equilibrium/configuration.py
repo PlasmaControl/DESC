@@ -109,11 +109,9 @@ class _Configuration(IOAble, ABC):
         "_R_lmn",
         "_Z_lmn",
         "_L_lmn",
-        "_W_lmn",
         "_R_basis",
         "_Z_basis",
         "_L_basis",
-        "_W_basis",
         "_surface",
         "_axis",
         "_pressure",
@@ -244,14 +242,6 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self.spectral_indexing,
         )
         self._L_basis = FourierZernikeBasis(
-            L=self.L,
-            M=self.M,
-            N=self.N,
-            NFP=self.NFP,
-            sym=self._Z_sym,
-            spectral_indexing=self.spectral_indexing,
-        )
-        self._W_basis = FourierZernikeBasis(
             L=self.L,
             M=self.M,
             N=self.N,
@@ -428,7 +418,6 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
-        self._W_lmn = np.zeros(self.W_basis.num_modes)
         self.set_initial_guess()
         if "R_lmn" in kwargs:
             self.R_lmn = kwargs.pop("R_lmn")
@@ -436,8 +425,6 @@ class _Configuration(IOAble, ABC):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
-        if "W_lmn" in kwargs:
-            self.W_lmn = kwargs.pop("W_lmn")
 
     # TODO: allow user to pass in arrays for surface, axis? or R_lmn etc?
     # TODO: make this kwargs instead?
@@ -451,10 +438,6 @@ class _Configuration(IOAble, ABC):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
-        if self.W_basis is None:
-            self._W_basis = self.L_basis.copy()
-        if self.W_lmn is None:
-            self._W_lmn = np.zeros(self.W_basis.num_modes)
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
@@ -558,12 +541,10 @@ class _Configuration(IOAble, ABC):
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
         old_modes_L = self.L_basis.modes
-        old_modes_W = self.W_basis.modes
 
         self.R_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.Z_basis.change_resolution(self.L, self.M, self.N, self.NFP)
         self.L_basis.change_resolution(self.L, self.M, self.N, self.NFP)
-        self.W_basis.change_resolution(self.L, self.M, self.N, self.NFP)
 
         for profile in [
             "pressure",
@@ -583,7 +564,6 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
-        self._W_lmn = copy_coeffs(self.W_lmn, old_modes_W, self.W_basis.modes)
 
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
@@ -609,7 +589,6 @@ class _Configuration(IOAble, ABC):
 
             AR = np.zeros((surface.R_basis.num_modes, self.R_basis.num_modes))
             AZ = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
-            AW = np.zeros((surface.Z_basis.num_modes, self.Z_basis.num_modes))
 
             for i, (l, m, n) in enumerate(self.R_basis.modes):
                 j = np.argwhere(
@@ -628,20 +607,10 @@ class _Configuration(IOAble, ABC):
                     )
                 )
                 AZ[j, i] = zernike_radial(rho, l, m)
-            for i, (l, m, n) in enumerate(self.Z_basis.modes):
-                j = np.argwhere(
-                    np.logical_and(
-                        surface.W_basis.modes[:, 1] == m,
-                        surface.W_basis.modes[:, 2] == n,
-                    )
-                )
-                AW[j, i] = zernike_radial(rho, l, m)
             Rb = AR @ self.R_lmn
             Zb = AZ @ self.Z_lmn
-            Wb = AW @ self.W_lmn
             surface.R_lmn = Rb
             surface.Z_lmn = Zb
-            surface.W_lmn = Wb
             surface.grid = LinearGrid(
                 rho=rho, M=2 * surface.M, N=2 * surface.N, endpoint=True, NFP=self.NFP
             )
@@ -838,15 +807,6 @@ class _Configuration(IOAble, ABC):
         self._L_lmn[:] = L_lmn
 
     @property
-    def W_lmn(self):
-        """ndarray: Spectral coefficients of omega."""
-        return self._W_lmn
-
-    @W_lmn.setter
-    def W_lmn(self, W_lmn):
-        self._W_lmn[:] = W_lmn
-
-    @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
         return self.surface.R_lmn
@@ -863,15 +823,6 @@ class _Configuration(IOAble, ABC):
     @Zb_lmn.setter
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
-
-    @property
-    def Wb_lmn(self):
-        """ndarray: Spectral coefficients of omega at the boundary."""
-        return self.surface.W_lmn
-
-    @Wb_lmn.setter
-    def Wb_lmn(self, Wb_lmn):
-        self.surface.W_lmn = Wb_lmn
 
     @property
     def Ra_n(self):
@@ -1100,11 +1051,6 @@ class _Configuration(IOAble, ABC):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
 
-    @property
-    def W_basis(self):
-        """FourierZernikeBasis: Spectral basis for lambda."""
-        return self._W_basis
-
     def compute(
         self,
         names,
@@ -1193,7 +1139,7 @@ class _Configuration(IOAble, ABC):
                 data=None,
                 **kwargs,
             )
-            # need to make this data broadcast with the data on the original grid
+            # need to make this data broadcastable with the data on the original grid
             data1d = {
                 key: grid.expand(grid1d.compress(val))
                 for key, val in data1d.items()
@@ -1305,7 +1251,7 @@ class _Configuration(IOAble, ABC):
         )
 
     def is_nested(
-        self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, W_lmn=None, msg=None
+        self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None
     ):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
@@ -1322,9 +1268,8 @@ class _Configuration(IOAble, ABC):
         grid : Grid, optional
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
-        R_lmn, Z_lmn, L_lmn, W_lmn : ndarray, optional
-            spectral coefficients for R and Z, lambda, omega. Defaults to eq.R_lmn,
-            eq.Z_lmn etc.
+        R_lmn, Z_lmn, L_lmn : ndarray, optional
+            spectral coefficients for R and Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn etc.
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 
@@ -1334,7 +1279,7 @@ class _Configuration(IOAble, ABC):
             whether the surfaces are nested
 
         """
-        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, W_lmn, msg)
+        return is_nested(self, grid, R_lmn, Z_lmn, L_lmn, msg)
 
     def to_sfl(
         self,

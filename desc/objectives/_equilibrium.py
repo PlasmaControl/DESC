@@ -89,7 +89,7 @@ class ForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -102,6 +102,7 @@ class ForceBalance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -271,7 +272,7 @@ class RadialForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -284,6 +285,7 @@ class RadialForceBalance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -444,7 +446,7 @@ class HelicalForceBalance(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -457,6 +459,7 @@ class HelicalForceBalance(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",
@@ -619,7 +622,7 @@ class Energy(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -632,6 +635,7 @@ class Energy(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern in [
                 "jacobi",
@@ -805,7 +809,7 @@ class CurrentDensity(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -818,6 +822,7 @@ class CurrentDensity(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             if eq.node_pattern is None or eq.node_pattern in [
                 "jacobi",

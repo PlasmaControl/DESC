@@ -10,7 +10,7 @@ from .utils import dot, surface_integrals_map
 
 @register_compute_fun(
     name="D_shear",
-    label="D_{shear}",
+    label="D_{\\mathrm{shear}}",
     units="Wb^{-2}",
     units_long="Inverse Webers squared",
     description="Mercier stability criterion magnetic shear term",
@@ -33,7 +33,7 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="D_current",
-    label="D_{current}",
+    label="D_{\\mathrm{current}}",
     units="Wb^{-2}",
     units_long="Inverse Webers squared",
     description="Mercier stability criterion toroidal current term",
@@ -64,7 +64,7 @@ def _D_current(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="D_well",
-    label="D_{well}",
+    label="D_{\\mathrm{well}}",
     units="Wb^{-2}",
     units_long="Inverse Webers squared",
     description="Mercier stability criterion magnetic well term",
@@ -113,7 +113,7 @@ def _D_well(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="D_geodesic",
-    label="D_{geodesic}",
+    label="D_{\\mathrm{geodesic}}",
     units="Wb^{-2}",
     units_long="Inverse Webers squared",
     description="Mercier stability criterion geodesic curvature term",
@@ -149,7 +149,7 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="D_Mercier",
-    label="D_{Mercier}",
+    label="D_{\\mathrm{Mercier}}",
     units="Wb^{-2}",
     units_long="Inverse Webers squared",
     description="Mercier stability criterion (positive/negative value "
@@ -173,7 +173,7 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="magnetic well",
-    label="Magnetic Well",
+    label="\\mathrm{Magnetic~Well}",
     units="~",
     units_long="None",
     description="Magnetic well proxy for MHD stability (positive/negative value "

@@ -260,7 +260,7 @@ def _zeta_z(params, transforms, profiles, data, **kwargs):
     data=["theta", "lambda"],
 )
 def _theta_PEST(params, transforms, profiles, data, **kwargs):
-    data["theta_PEST"] = data["theta"] + data["lambda"]
+    data["theta_PEST"] = (data["theta"] + data["lambda"]) % (2 * jnp.pi)
     return data
 
 
@@ -326,16 +326,16 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
     label="\\alpha",
     units="~",
     units_long="None",
-    description="Field line label",
+    description="Field line label, defined on [0, 2pi)",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST", "phi", "iota"],
+    data=["theta_PEST", "zeta", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
-    data["alpha"] = data["theta_PEST"] - data["iota"] * data["phi"]
+    data["alpha"] = (data["theta_PEST"] - data["iota"] * data["zeta"]) % (2 * jnp.pi)
     return data
 
 

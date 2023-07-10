@@ -10,6 +10,7 @@ from netCDF4 import Dataset
 
 import desc.examples
 from desc.__main__ import main
+from desc.backend import sign
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.grid import Grid, LinearGrid
 from desc.io import InputReader
@@ -107,9 +108,9 @@ def test_map_coordinates():
     inbasis = ["alpha", "phi", "rho"]
     outbasis = ["rho", "theta_PEST", "zeta"]
 
-    rho = np.linspace(0.01, 0.99, 200)
-    theta = np.linspace(0, np.pi, 200, endpoint=False)
-    zeta = np.linspace(0, np.pi, 200, endpoint=False)
+    rho = np.linspace(0.01, 0.99, 100)
+    theta = np.linspace(0, np.pi, 100, endpoint=False)
+    zeta = np.linspace(0, np.pi, 100, endpoint=False)
 
     grid = Grid(np.vstack([rho, theta, zeta]).T, sort=False)
     in_data = eq.compute(inbasis, grid=grid)
@@ -119,6 +120,40 @@ def test_map_coordinates():
 
     out = eq.map_coordinates(in_coords, inbasis, outbasis)
     np.testing.assert_allclose(out, out_coords, rtol=1e-4, atol=1e-4)
+
+
+@pytest.mark.unit
+def test_map_coordinates2():
+    """Test root finding for (rho,theta,zeta) for common use cases."""
+    eq = desc.examples.get("W7-X")
+
+    n = 100
+    # finding coordinates along a single field line
+    coords = np.array([np.ones(n), np.zeros(n), np.linspace(0, 10 * np.pi, n)]).T
+    out = eq.map_coordinates(
+        coords,
+        ["rho", "alpha", "zeta"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 10 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
+
+    # contours of const theta for plotting
+    grid_kwargs = {
+        "rho": np.linspace(0, 1, 10),
+        "NFP": eq.NFP,
+        "theta": np.linspace(0, 2 * np.pi, 3, endpoint=False),
+        "zeta": np.linspace(0, 2 * np.pi / eq.NFP, 2, endpoint=False),
+    }
+    t_grid = LinearGrid(**grid_kwargs)
+
+    out = eq.map_coordinates(
+        t_grid.nodes,
+        ["rho", "theta_PEST", "phi"],
+        ["rho", "theta", "zeta"],
+        period=(np.inf, 2 * np.pi, 2 * np.pi),
+    )
+    assert not np.any(np.isnan(out))
 
 
 @pytest.mark.slow
@@ -179,6 +214,52 @@ def test_eq_change_grid_resolution():
     assert eq.L_grid == 10
     assert eq.M_grid == 10
     assert eq.N_grid == 10
+
+
+@pytest.mark.unit
+def test_eq_change_symmetry():
+    """Test changing stellarator symmetry."""
+    eq = Equilibrium(L=2, M=2, N=2, NFP=2, sym=False)
+    idx_sin = np.nonzero(
+        sign(eq.R_basis.modes[:, 1]) * sign(eq.R_basis.modes[:, 2]) < 0
+    )[0]
+    idx_cos = np.nonzero(
+        sign(eq.R_basis.modes[:, 1]) * sign(eq.R_basis.modes[:, 2]) > 0
+    )[0]
+    sin_modes = eq.R_basis.modes[idx_sin, :]
+    cos_modes = eq.R_basis.modes[idx_cos, :]
+
+    # stellarator symmetric
+    eq.change_resolution(sym=True)
+    assert eq.sym
+    assert eq.R_basis.sym == "cos"
+    assert not np.any(
+        [np.any(np.all(i == eq.R_basis.modes, axis=-1)) for i in sin_modes]
+    )
+    assert eq.Z_basis.sym == "sin"
+    assert not np.any(
+        [np.any(np.all(i == eq.Z_basis.modes, axis=-1)) for i in cos_modes]
+    )
+    assert eq.L_basis.sym == "sin"
+    assert not np.any(
+        [np.any(np.all(i == eq.L_basis.modes, axis=-1)) for i in cos_modes]
+    )
+    assert eq.surface.sym
+    assert eq.surface.R_basis.sym == "cos"
+    assert eq.surface.Z_basis.sym == "sin"
+
+    # undo symmetry
+    eq.change_resolution(sym=False)
+    assert not eq.sym
+    assert not eq.R_basis.sym
+    assert np.all([np.any(np.all(i == eq.R_basis.modes, axis=-1)) for i in sin_modes])
+    assert not eq.Z_basis.sym
+    assert np.all([np.any(np.all(i == eq.Z_basis.modes, axis=-1)) for i in cos_modes])
+    assert not eq.L_basis.sym
+    assert np.all([np.any(np.all(i == eq.L_basis.modes, axis=-1)) for i in cos_modes])
+    assert not eq.surface.sym
+    assert not eq.surface.R_basis.sym
+    assert not eq.surface.Z_basis.sym
 
 
 @pytest.mark.unit
@@ -264,5 +345,5 @@ def test_change_NFP():
         warnings.simplefilter("error")
         eq = desc.examples.get("HELIOTRON")
         eq.change_resolution(NFP=4)
-        obj = get_equilibrium_objective()
-        obj.build(eq)
+        obj = get_equilibrium_objective(eq=eq)
+        obj.build()

@@ -107,7 +107,7 @@ class ObjectiveFromUser(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -120,6 +120,7 @@ class ObjectiveFromUser(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -240,7 +241,7 @@ class GenericObjective(_Objective):
         )
         self._units = "(" + data_index[self.f]["units"] + ")"
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -253,6 +254,7 @@ class GenericObjective(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(eq.L_grid, eq.M_grid, eq.N_grid, eq.NFP)
         else:
@@ -354,7 +356,7 @@ class ToroidalCurrent(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -367,6 +369,7 @@ class ToroidalCurrent(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,
@@ -527,7 +530,7 @@ class RotationalTransform(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -540,6 +543,7 @@ class RotationalTransform(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 L=eq.L_grid,

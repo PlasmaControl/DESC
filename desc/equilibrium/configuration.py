@@ -339,6 +339,7 @@ class _Configuration(IOAble, ABC):
                 )
         else:
             raise TypeError("Got unknown axis type {}".format(axis))
+        self._axis.change_resolution(self.N)
 
         # profiles
         self._pressure = None
@@ -574,6 +575,7 @@ class _Configuration(IOAble, ABC):
         self.surface.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
+        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -703,6 +705,40 @@ class _Configuration(IOAble, ABC):
             x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
         )
 
+    def get_axis(self):
+        """Return a representation for the magnetic axis.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            object representing the magnetic axis.
+        """
+        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
+        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
+        # indices where m=0
+        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
+        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
+        # indices where l=0 & m=0
+        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        # this reshaping assumes the FourierZernike bases are sorted
+        R_n = np.sum(
+            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
+            axis=0,
+        )
+        modes_R = self.R_basis.modes[idx00_R, 2]
+        if len(idx00_Z):
+            Z_n = np.sum(
+                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
+                axis=0,
+            )
+            modes_Z = self.Z_basis.modes[idx00_Z, 2]
+        else:  # catch cases such as axisymmetry with stellarator symmetry
+            Z_n = 0
+            modes_Z = 0
+        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        return axis
+
     @property
     def surface(self):
         """Surface: Geometric surface defining boundary conditions."""
@@ -719,6 +755,24 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError(
                 f"surfaces should be of type Surface or a subclass, got {new}"
+            )
+
+    @property
+    def axis(self):
+        """Curve: object representing the magnetic axis."""
+        return self._axis
+
+    @axis.setter
+    def axis(self, new):
+        if isinstance(new, FourierRZCurve):
+            assert (
+                self.sym == new.sym
+            ), "Surface and Equilibrium must have the same symmetry"
+            new.change_resolution(self.N)
+            self._axis = new
+        else:
+            raise TypeError(
+                f"axis should be of type FourierRZCurve or a subclass, got {new}"
             )
 
     @property
@@ -843,41 +897,18 @@ class _Configuration(IOAble, ABC):
         """ndarray: R coefficients for axis Fourier series."""
         return self.axis.R_n
 
+    @Ra_n.setter
+    def Ra_n(self, Ra_n):
+        self.axis.R_n = Ra_n
+
     @property
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
         return self.axis.Z_n
 
-    @property
-    def axis(self):
-        """Curve: object representing the magnetic axis."""
-        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
-        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
-        # indices where m=0
-        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
-        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
-        # indices where l=0 & m=0
-        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
-        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
-        # this reshaping assumes the FourierZernike bases are sorted
-        R_n = np.sum(
-            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
-            axis=0,
-        )
-        modes_R = self.R_basis.modes[idx00_R, 2]
-        if len(idx00_Z):
-            Z_n = np.sum(
-                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
-                axis=0,
-            )
-            modes_Z = self.Z_basis.modes[idx00_Z, 2]
-        else:  # catch cases such as axisymmetry with stellarator symmetry
-            Z_n = 0
-            modes_Z = 0
-        self._axis = FourierRZCurve(
-            R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym
-        )
-        return self._axis
+    @Za_n.setter
+    def Za_n(self, Za_n):
+        self.axis.Z_n = Za_n
 
     @property
     def pressure(self):

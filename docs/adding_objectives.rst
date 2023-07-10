@@ -116,7 +116,11 @@ A full example objective with comments describing key points is given below:
             # What data from desc.compute is needed? Here we want the QS triple product.
             self._data_keys = ["f_T"]
             # what arguments should be passed to self.compute
-            self._args = get_params(self._data_keys, has_axis=self.grid.axis.size)
+            self._args = get_params(
+                self._data_keys,
+                obj="desc.equilibrium.equilibrium.Equilibrium",
+                has_axis=grid.axis.size,
+            )
 
             # some helper code for profiling and logging
             timer = Timer()
@@ -127,8 +131,8 @@ A full example objective with comments describing key points is given below:
             # helper functions for building transforms etc to compute given
             # quantities. Alternatively, these can be created manually based on the
             # equilibrium, though in most cases that isn't necessary.
-            self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-            self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+            self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
+            self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
 
             timer.stop("Precomputing transforms")
             if verbose > 1:
@@ -181,6 +185,7 @@ A full example objective with comments describing key points is given below:
 
             # here we get the physics quantities from ``desc.compute.compute``
             data = compute_fun(
+                "desc.equilibrium.equilibrium.Equilibrium",
                 self._data_keys,                 # quantities we want
                 params=params,                   # params from previous line
                 transforms=self._transforms,     # transforms and profiles from self.build

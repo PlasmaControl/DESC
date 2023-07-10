@@ -565,7 +565,7 @@ def _iota_r(params, transforms, profiles, data, **kwargs):
             supplement_r
             + data["iota_zero_current_num_r"]
             - data["iota"] * data["iota_zero_current_den_r"]
-        ) / data["iota_zero_current_den"]
+        ) / data["iota_zero_current_den"]  # FIXME denominator limit wrong, actually 0...
     return data
 
 
@@ -625,7 +625,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
             + data["iota_zero_current_num_rr"]
             - 2 * data["iota_r"] * data["iota_zero_current_den_r"]
             - data["iota"] * data["iota_zero_current_den_rr"]
-        ) / data["iota_zero_current_den"]
+        ) / data["iota_zero_current_den"]  # FIXME denominator limit wrong, actually 0...
     return data
 
 

@@ -3,7 +3,7 @@
 from scipy.constants import elementary_charge
 from scipy.special import roots_legendre
 
-from ..backend import fori_loop, jnp, put
+from ..backend import fori_loop, jnp
 from .data_index import register_compute_fun
 from .utils import surface_averages_map
 

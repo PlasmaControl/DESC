@@ -47,7 +47,7 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
 def _D_current(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.17 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
-    Xi = mu_0 * data["J"] - jnp.atleast_2d(data["I_r"] / data["psi_r"]).T * data["B"]
+    Xi = mu_0 * data["J"] - (data["I_r"] / data["psi_r"] * data["B"].T).T
     integrate = surface_integrals_map(transforms["grid"])
     data["D_current"] = (
         -jnp.sign(data["G"])
@@ -198,6 +198,7 @@ def _magnetic_well(params, transforms, profiles, data, **kwargs):
     # The surface average operation is an additive homomorphism.
     # Thermal pressure is constant over a rho surface.
     # surface average(pressure) = thermal + surface average(magnetic)
+    # The sign of sqrt(g) is enforced to be non-negative.
     data["magnetic well"] = transforms["grid"].replace_at_axis(
         data["V(r)"]
         * (2 * mu_0 * data["p_r"] + data["<|B|^2>_r"])

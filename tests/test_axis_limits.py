@@ -145,36 +145,6 @@ class TestAxisLimits:
     def test_finite_limits(self):
         """Heuristic to test correctness of all quantities with limits."""
         finite_limit_keys = data_index.keys() - not_finite_limit_keys
-        limit_is_continuous_extension_keys = finite_limit_keys - {
-            # Limit of these keys are computed as limit of their derivative.
-            "iota_zero_current_num",
-            "iota_zero_current_den",
-        }
         for eq in TestAxisLimits.eqs:
-            for key in limit_is_continuous_extension_keys:
+            for key in finite_limit_keys:
                 continuity(eq, key)
-
-    @pytest.mark.unit
-    def test_iota_zero_current_limit(self):
-        """Limit of zero current terms should remain limit of their derivative."""
-        # So nobody changes this thinking it was a bug later.
-        eq = TestAxisLimits.eqs[-1]  # fixed current
-        grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
-        assert grid.axis.size
-        data = eq.compute(
-            [
-                "iota_zero_current_num",
-                "iota_zero_current_num_r",
-                "iota_zero_current_den",
-                "iota_zero_current_den_r",
-            ],
-            grid=grid,
-        )
-        np.testing.assert_array_equal(
-            data["iota_zero_current_num"][grid.axis],
-            data["iota_zero_current_num_r"][grid.axis],
-        )
-        np.testing.assert_array_equal(
-            data["iota_zero_current_den"][grid.axis],
-            data["iota_zero_current_den_r"][grid.axis],
-        )

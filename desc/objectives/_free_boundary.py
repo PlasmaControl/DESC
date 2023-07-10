@@ -92,7 +92,7 @@ class BoundaryErrorBIEST(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -105,6 +105,7 @@ class BoundaryErrorBIEST(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -150,21 +151,25 @@ class BoundaryErrorBIEST(_Objective):
             "zeta",
             "Z",
             "e^rho",
-            "n",
+            "n_rho",
             "|e_theta x e_zeta|",
             "p",
         ]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._src_profiles = get_profiles(self._data_keys, eq=eq, grid=src_grid)
-        self._src_transforms = get_transforms(self._data_keys, eq=eq, grid=src_grid)
-        self._eval_profiles = get_profiles(self._data_keys, eq=eq, grid=eval_grid)
-        self._eval_transforms = get_transforms(self._data_keys, eq=eq, grid=eval_grid)
+        self._src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+        self._src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
+        self._eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        self._eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
         self._constants = {
             "eval_transforms": self._eval_transforms,
@@ -226,12 +231,14 @@ class BoundaryErrorBIEST(_Objective):
         if constants is None:
             constants = self.constants
         src_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["src_transforms"],
             profiles=constants["src_profiles"],
         )
         eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["eval_transforms"],
@@ -253,7 +260,7 @@ class BoundaryErrorBIEST(_Objective):
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(x)
         Bex_total = Bext + Bplasma
-        Bn = jnp.sum(Bex_total * eval_data["n"], axis=-1)
+        Bn = jnp.sum(Bex_total * eval_data["n_rho"], axis=-1)
 
         bsq_out = jnp.sum(Bex_total * Bex_total, axis=-1)
         bsq_in = eval_data["|B|^2"]
@@ -338,7 +345,7 @@ class QuadraticFlux(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -351,6 +358,7 @@ class QuadraticFlux(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._src_grid is None:
             src_grid = LinearGrid(
                 rho=np.array([1.0]),
@@ -388,18 +396,30 @@ class QuadraticFlux(_Objective):
             )
             self._interpolator = DFTInterpolator(eval_grid, src_grid, self._s, self._q)
 
-        self._data_keys = ["K_vc", "R", "zeta", "Z", "e^rho", "n", "|e_theta x e_zeta|"]
-        self._args = get_params(self._data_keys)
+        self._data_keys = [
+            "K_vc",
+            "R",
+            "zeta",
+            "Z",
+            "e^rho",
+            "n_rho",
+            "|e_theta x e_zeta|",
+        ]
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._src_profiles = get_profiles(self._data_keys, eq=eq, grid=src_grid)
-        self._src_transforms = get_transforms(self._data_keys, eq=eq, grid=src_grid)
-        self._eval_profiles = get_profiles(self._data_keys, eq=eq, grid=eval_grid)
-        self._eval_transforms = get_transforms(self._data_keys, eq=eq, grid=eval_grid)
+        self._src_profiles = get_profiles(self._data_keys, obj=eq, grid=src_grid)
+        self._src_transforms = get_transforms(self._data_keys, obj=eq, grid=src_grid)
+        self._eval_profiles = get_profiles(self._data_keys, obj=eq, grid=eval_grid)
+        self._eval_transforms = get_transforms(self._data_keys, obj=eq, grid=eval_grid)
 
         self._constants = {
             "eval_transforms": self._eval_transforms,
@@ -461,12 +481,14 @@ class QuadraticFlux(_Objective):
         if constants is None:
             constants = self.constants
         src_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["src_transforms"],
             profiles=constants["src_profiles"],
         )
         eval_data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["eval_transforms"],
@@ -487,7 +509,7 @@ class QuadraticFlux(_Objective):
         Bplasma = xyz2rpz_vec(Bplasma, phi=eval_data["zeta"])
         x = jnp.array([eval_data["R"], eval_data["zeta"], eval_data["Z"]]).T
         Bext = constants["ext_field"].compute_magnetic_field(x)
-        return jnp.sum((Bext + Bplasma) * eval_data["n"], axis=-1)
+        return jnp.sum((Bext + Bplasma) * eval_data["n_rho"], axis=-1)
 
 
 class ToroidalFlux(_Objective):
@@ -550,7 +572,7 @@ class ToroidalFlux(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -563,21 +585,26 @@ class ToroidalFlux(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = QuadratureGrid(L=eq.L_grid, M=eq.M_grid, N=0)
         else:
             grid = self._grid
 
         self._data_keys = ["R", "zeta", "Z", "e^zeta", "|e_rho x e_theta|"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "profiles": self._profiles,
@@ -638,6 +665,7 @@ class ToroidalFlux(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],
@@ -730,7 +758,7 @@ class BoundaryErrorNESTOR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -743,6 +771,7 @@ class BoundaryErrorNESTOR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         self.mf = eq.M + 1 if self.mf is None else self.mf
         self.nf = eq.N if self.nf is None else self.nf
         self.ntheta = 4 * eq.M + 1 if self.ntheta is None else self.ntheta
@@ -755,15 +784,19 @@ class BoundaryErrorNESTOR(_Objective):
         eq._sym = True
         self.grid = LinearGrid(rho=1, theta=self.ntheta, zeta=self.nzeta, NFP=eq.NFP)
         self._data_keys = ["current", "|B|^2", "p", "|e_theta x e_zeta|"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=False,
+        )
 
         timer = Timer()
         if verbose > 0:
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=self.grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=self.grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
 
         self._constants = {
             "profiles": self._profiles,
@@ -823,6 +856,7 @@ class BoundaryErrorNESTOR(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

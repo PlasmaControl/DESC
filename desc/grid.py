@@ -321,27 +321,15 @@ class Grid(IOAble):
         """ndarray: Node coordinates, in (rho,theta,zeta)."""
         return self.__dict__.setdefault("_nodes", np.array([]).reshape((0, 3)))
 
-    @nodes.setter
-    def nodes(self, nodes):
-        self._nodes = nodes
-
     @property
     def spacing(self):
         """ndarray: Node spacing, in (rho,theta,zeta)."""
         return self.__dict__.setdefault("_spacing", np.array([]).reshape((0, 3)))
 
-    @spacing.setter
-    def spacing(self, spacing):
-        self._spacing = spacing
-
     @property
     def weights(self):
         """ndarray: Weight for each node, either exact quadrature or volume based."""
         return self.__dict__.setdefault("_weights", np.array([]).reshape((0, 3)))
-
-    @weights.setter
-    def weights(self, weights):
-        self._weights = weights
 
     def __repr__(self):
         """str: string form of the object."""

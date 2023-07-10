@@ -114,8 +114,8 @@ class _Configuration(IOAble, ABC):
         "_R_basis",
         "_Z_basis",
         "_L_basis",
-        "K_basis",
-        "IGphi_mn",
+        "_K_basis",
+        "_IGPhi_mn",
         "_surface",
         "_axis",
         "_pressure",
@@ -253,8 +253,8 @@ class _Configuration(IOAble, ABC):
             spectral_indexing=self.spectral_indexing,
         )
 
-        self.K_basis = DoubleFourierSeries(self.M, self.N, self.NFP, sym=self._Z_sym)
-        self.IGphi_mn = jnp.zeros(self.K_basis.num_modes + 2)
+        self._K_basis = DoubleFourierSeries(self.M, self.N, self.NFP, sym=self._Z_sym)
+        self._IGPhi_mn = jnp.zeros(self.K_basis.num_modes + 2)
 
         # surface
         if surface is None:
@@ -445,6 +445,12 @@ class _Configuration(IOAble, ABC):
         for attribute in self._io_attrs_:
             if not hasattr(self, attribute):
                 setattr(self, attribute, None)
+        if self.K_basis is None:
+            self._K_basis = DoubleFourierSeries(
+                self.M, self.N, self.NFP, sym=self._Z_sym
+            )
+        if self.IGPhi_mn is None:
+            self._IGPhi_mn = np.zeros(self.K_basis.num_modes + 2)
 
     def set_initial_guess(self, *args):
         """Set the initial guess for the flux surfaces, eg R_lmn, Z_lmn, L_lmn.
@@ -591,10 +597,10 @@ class _Configuration(IOAble, ABC):
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
-        self.IGphi_mn = np.concatenate(
+        self._IGPhi_mn = np.concatenate(
             [
-                self.IGphi_mn[:2],
-                copy_coeffs(self.IGphi_mn[2:], old_modes_K, self.K_basis.modes),
+                self.IGPhi_mn[:2],
+                copy_coeffs(self.IGPhi_mn[2:], old_modes_K, self.K_basis.modes),
             ]
         )
 
@@ -910,6 +916,15 @@ class _Configuration(IOAble, ABC):
         self.surface.Z_lmn = Zb_lmn
 
     @property
+    def IGPhi_mn(self):
+        """ndarray: Spectral coefficients of surface current potential."""
+        return self._IGPhi_mn
+
+    @IGPhi_mn.setter
+    def IGPhi_mn(self, IGPhi_mn):
+        self._IGPhi_mn[:] = IGPhi_mn
+
+    @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
         return self.axis.R_n
@@ -1112,6 +1127,11 @@ class _Configuration(IOAble, ABC):
     def L_basis(self):
         """FourierZernikeBasis: Spectral basis for lambda."""
         return self._L_basis
+
+    @property
+    def K_basis(self):
+        """DoubleFourierSeries: Spectral basis for current potential."""
+        return self._K_basis
 
     def compute(
         self,

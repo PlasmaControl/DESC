@@ -25,6 +25,7 @@ arg_order = (
     "ne_l",
     "Ti_l",
     "Zeff_l",
+    "IGPhi_mn",
     "Ra_n",
     "Za_n",
     "Rb_lmn",

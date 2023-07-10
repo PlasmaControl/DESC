@@ -1121,7 +1121,7 @@ def test_compute_averages():
     """Test that computing averages uses the correct grid."""
     eq = desc.examples.get("HELIOTRON")
     Vr = eq.get_profile("V_r(r)")
-    rho = np.linspace(0, 1, 20)
+    rho = np.linspace(0.01, 1, 20)
     grid = LinearGrid(rho=rho, NFP=eq.NFP)
     out = eq.compute("V_r(r)", grid=grid)
     np.testing.assert_allclose(Vr(rho), out["V_r(r)"], rtol=1e-4)

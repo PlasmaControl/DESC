@@ -1214,11 +1214,7 @@ class TestBootstrapObjectives:
         def test(grid_type, kwargs, L, M, N):
             grid = grid_type(L=L, M=M, N=N, NFP=eq.NFP, **kwargs)
             obj = ObjectiveFunction(
-                BootstrapRedlConsistency(
-                    eq=eq,
-                    grid=grid,
-                    helicity=helicity
-                )
+                BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
             )
             obj.build()
             scalar_objective = obj.compute_scalar(obj.x(eq))
@@ -1331,11 +1327,7 @@ class TestBootstrapObjectives:
             NFP=eq.NFP,
         )
         objective = ObjectiveFunction(
-            BootstrapRedlConsistency(
-                eq=eq,
-                grid=grid,
-                helicity=helicity
-            )
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
         eq, _ = eq.optimize(
             verbose=3,
@@ -1443,11 +1435,7 @@ class TestBootstrapObjectives:
         # grid for bootstrap consistency objective:
         grid = QuadratureGrid(L=current_L * 2, M=eq.M * 2, N=eq.N * 2, NFP=eq.NFP)
         objective = ObjectiveFunction(
-            BootstrapRedlConsistency(
-                eq=eq,
-                grid=grid,
-                helicity=helicity
-            )
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
         eq, _ = eq.optimize(
             verbose=3,

@@ -16,7 +16,6 @@ arg_order = (
     "R_lmn",
     "Z_lmn",
     "L_lmn",
-    "W_lmn",
     "p_l",
     "i_l",
     "c_l",
@@ -27,7 +26,6 @@ arg_order = (
     "Zeff_l",
     "Rb_lmn",
     "Zb_lmn",
-    "Wb_lmn",
 )
 # map from profile name to equilibrium parameter name
 profile_names = {
@@ -314,7 +312,7 @@ def get_transforms(keys, eq, grid, **kwargs):
     keys = [keys] if isinstance(keys, str) else keys
     derivs = get_derivs(keys, has_axis=grid.axis.size)
     transforms = {"grid": grid}
-    for c in ["R", "L", "Z", "W"]:
+    for c in ["R", "L", "Z"]:
         if c in derivs:
             transforms[c] = Transform(
                 grid, getattr(eq, c + "_basis"), derivs=derivs[c], build=True
@@ -401,7 +399,7 @@ def _has_profiles(qty, profiles):
 def _has_transforms(qty, transforms):
     flags = {}
     derivs = data_index[qty]["dependencies"]["transforms"]
-    for key in ["R", "Z", "L", "W", "w", "B"]:
+    for key in ["R", "Z", "L", "w", "B"]:
         if key not in derivs:
             flags[key] = True
         elif key not in transforms:

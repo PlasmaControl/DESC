@@ -1224,7 +1224,7 @@ class _Configuration(IOAble, ABC):
             same as the compute function data key
         guess : None or ndarray, shape(k,3)
             Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
-            coresponding to coords in inbasis. If None, heuristics are used based on
+            corresponding to coords in inbasis. If None, heuristics are used based on
             in basis and a nearest neighbor search on a coarse grid.
         period : tuple of float
             Assumed periodicity for each quantity in inbasis.

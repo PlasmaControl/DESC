@@ -16,6 +16,8 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
@@ -109,6 +111,10 @@ def maybe_add_self_consistency(eq, constraints):
         constraints += (BoundaryZSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=eq),)
+    if not _is_any_instance(constraints, AxisRSelfConsistency):
+        constraints += (AxisRSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, AxisZSelfConsistency):
+        constraints += (AxisZSelfConsistency(eq=eq),)
     return constraints
 
 
@@ -124,7 +130,7 @@ def get_fixed_axis_constraints(
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
-        Whether to also fix kinetic profiles.
+        Whether to add constraints to fix kinetic profiles or pressure
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -135,10 +141,10 @@ def get_fixed_axis_constraints(
 
     """
     constraints = (
-        FixSurfaceCurrent(eq=eq),
-        FixAxisR(eq=eq),
-        FixAxisZ(eq=eq),
-        FixPsi(eq=eq),
+        FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixSurfaceCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         if kinetic:
@@ -198,7 +204,6 @@ def get_NAE_constraints(
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
     """
-
     constraints = (
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),

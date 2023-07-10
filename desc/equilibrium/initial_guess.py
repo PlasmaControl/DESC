@@ -149,6 +149,13 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
             eq.L_lmn = copy_coeffs(eq1.L_lmn, eq1.L_basis.modes, eq.L_basis.modes)
+            eq.Ra_n = copy_coeffs(
+                eq1.Ra_n, eq1.axis.R_basis.modes, eq.axis.R_basis.modes
+            )
+            eq.Za_n = copy_coeffs(
+                eq1.Za_n, eq1.axis.Z_basis.modes, eq.axis.Z_basis.modes
+            )
+
         elif isinstance(args[0], (str, os.PathLike)):
             # from file
             path = args[0]
@@ -184,6 +191,12 @@ def set_initial_guess(eq, *args):  # noqa: C901 - FIXME: simplify this
             eq.R_lmn = copy_coeffs(eq1.R_lmn, eq1.R_basis.modes, eq.R_basis.modes)
             eq.Z_lmn = copy_coeffs(eq1.Z_lmn, eq1.Z_basis.modes, eq.Z_basis.modes)
             eq.L_lmn = copy_coeffs(eq1.L_lmn, eq1.L_basis.modes, eq.L_basis.modes)
+            eq.Ra_n = copy_coeffs(
+                eq1.Ra_n, eq1.axis.R_basis.modes, eq.axis.R_basis.modes
+            )
+            eq.Za_n = copy_coeffs(
+                eq1.Za_n, eq1.axis.Z_basis.modes, eq.axis.Z_basis.modes
+            )
 
         elif nargs > 2:  # assume we got nodes and ndarray of points
             grid = args[0]

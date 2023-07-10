@@ -1267,7 +1267,7 @@ class _Configuration(IOAble, ABC):
             Grid on which to evaluate the coordinate Jacobian and check for the sign.
             (Default to QuadratureGrid with eq's current grid resolutions)
         R_lmn, Z_lmn, L_lmn : ndarray, optional
-            spectral coefficients for R and Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn etc.
+            spectral coefficients for R, Z, lambda. Defaults to eq.R_lmn, eq.Z_lmn etc.
         msg : {None, "auto", "manual"}
             Warning to throw if unnested.
 

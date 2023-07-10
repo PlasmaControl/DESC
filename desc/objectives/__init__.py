@@ -10,6 +10,7 @@ from ._equilibrium import (
 )
 from ._free_boundary import (
     BoundaryErrorBIEST,
+    BoundaryErrorBIESTSC,
     BoundaryErrorNESTOR,
     QuadraticFlux,
     ToroidalFlux,

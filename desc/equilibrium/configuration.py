@@ -1250,9 +1250,7 @@ class _Configuration(IOAble, ABC):
             self, real_coords, R_lmn, Z_lmn, tol, maxiter, rhomin
         )
 
-    def is_nested(
-        self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None
-    ):
+    def is_nested(self, grid=None, R_lmn=None, Z_lmn=None, L_lmn=None, msg=None):
         """Check that an equilibrium has properly nested flux surfaces in a plane.
 
         Does so by checking coordinate Jacobian (sqrt(g)) sign.

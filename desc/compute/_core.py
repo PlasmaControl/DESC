@@ -2239,14 +2239,14 @@ def _lambda_rtz(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 0, 0]]},
+    params=[],  # ["W_lmn"],
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega(params, transforms, profiles, data, **kwargs):
-    data["omega"] = transforms["W"].transform(params["W_lmn"], 0, 0, 0)
+    data["omega"] = data["0"]
     return data
 
 
@@ -2257,14 +2257,14 @@ def _omega(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, first radial derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 0, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_r(params, transforms, profiles, data, **kwargs):
-    data["omega_r"] = transforms["W"].transform(params["W_lmn"], 1, 0, 0)
+    data["omega_r"] = data["0"]
     return data
 
 
@@ -2275,14 +2275,14 @@ def _omega_r(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, first poloidal derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 1, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_t(params, transforms, profiles, data, **kwargs):
-    data["omega_t"] = transforms["W"].transform(params["W_lmn"], 0, 1, 0)
+    data["omega_t"] = data["0"]
     return data
 
 
@@ -2293,14 +2293,14 @@ def _omega_t(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, first toroidal derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 0, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_z(params, transforms, profiles, data, **kwargs):
-    data["omega_z"] = transforms["W"].transform(params["W_lmn"], 0, 0, 1)
+    data["omega_z"] = data["0"]
     return data
 
 
@@ -2311,14 +2311,14 @@ def _omega_z(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, second radial derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[2, 0, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rr(params, transforms, profiles, data, **kwargs):
-    data["omega_rr"] = transforms["W"].transform(params["W_lmn"], 2, 0, 0)
+    data["omega_rr"] = data["0"]
     return data
 
 
@@ -2329,14 +2329,14 @@ def _omega_rr(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, second poloidal derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 2, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_tt(params, transforms, profiles, data, **kwargs):
-    data["omega_tt"] = transforms["W"].transform(params["W_lmn"], 0, 2, 0)
+    data["omega_tt"] = data["0"]
     return data
 
 
@@ -2347,14 +2347,14 @@ def _omega_tt(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, second toroidal derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 0, 2]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_zz(params, transforms, profiles, data, **kwargs):
-    data["omega_zz"] = transforms["W"].transform(params["W_lmn"], 0, 0, 2)
+    data["omega_zz"] = data["0"]
     return data
 
 
@@ -2366,14 +2366,14 @@ def _omega_zz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, second derivative wrt radius and "
     "poloidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 1, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rt(params, transforms, profiles, data, **kwargs):
-    data["omega_rt"] = transforms["W"].transform(params["W_lmn"], 1, 1, 0)
+    data["omega_rt"] = data["0"]
     return data
 
 
@@ -2385,14 +2385,14 @@ def _omega_rt(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, second derivative wrt radius and "
     "toroidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 0, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rz(params, transforms, profiles, data, **kwargs):
-    data["omega_rz"] = transforms["W"].transform(params["W_lmn"], 1, 0, 1)
+    data["omega_rz"] = data["0"]
     return data
 
 
@@ -2404,14 +2404,14 @@ def _omega_rz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, second derivative wrt poloidal and "
     "toroidal angles",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 1, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_tz(params, transforms, profiles, data, **kwargs):
-    data["omega_tz"] = transforms["W"].transform(params["W_lmn"], 0, 1, 1)
+    data["omega_tz"] = data["0"]
     return data
 
 
@@ -2422,14 +2422,14 @@ def _omega_tz(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, third radial derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[3, 0, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrr(params, transforms, profiles, data, **kwargs):
-    data["omega_rrr"] = transforms["W"].transform(params["W_lmn"], 3, 0, 0)
+    data["omega_rrr"] = data["0"]
     return data
 
 
@@ -2440,14 +2440,14 @@ def _omega_rrr(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, fourth radial derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[4, 0, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrrr(params, transforms, profiles, data, **kwargs):
-    data["omega_rrrr"] = transforms["W"].transform(params["W_lmn"], 4, 0, 0)
+    data["omega_rrrr"] = data["0"]
     return data
 
 
@@ -2459,14 +2459,14 @@ def _omega_rrrr(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative wrt radial coordinate"
     " thrice and poloidal once",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[3, 1, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrrt(params, transforms, profiles, data, **kwargs):
-    data["omega_rrrt"] = transforms["W"].transform(params["W_lmn"], 3, 1, 0)
+    data["omega_rrrt"] = data["0"]
     return data
 
 
@@ -2478,14 +2478,14 @@ def _omega_rrrt(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative wrt radial coordinate"
     " thrice and toroidal once",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[3, 0, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrrz(params, transforms, profiles, data, **kwargs):
-    data["omega_rrrz"] = transforms["W"].transform(params["W_lmn"], 3, 0, 1)
+    data["omega_rrrz"] = data["0"]
     return data
 
 
@@ -2496,14 +2496,14 @@ def _omega_rrrz(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, third poloidal derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 3, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_ttt(params, transforms, profiles, data, **kwargs):
-    data["omega_ttt"] = transforms["W"].transform(params["W_lmn"], 0, 3, 0)
+    data["omega_ttt"] = data["0"]
     return data
 
 
@@ -2514,14 +2514,14 @@ def _omega_ttt(params, transforms, profiles, data, **kwargs):
     units_long="radians",
     description="Toroidal stream function, third toroidal derivative",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 0, 3]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_zzz(params, transforms, profiles, data, **kwargs):
-    data["omega_zzz"] = transforms["W"].transform(params["W_lmn"], 0, 0, 3)
+    data["omega_zzz"] = data["0"]
     return data
 
 
@@ -2533,14 +2533,14 @@ def _omega_zzz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative, wrt radius twice "
     "and poloidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[2, 1, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrt(params, transforms, profiles, data, **kwargs):
-    data["omega_rrt"] = transforms["W"].transform(params["W_lmn"], 2, 1, 0)
+    data["omega_rrt"] = data["0"]
     return data
 
 
@@ -2552,14 +2552,14 @@ def _omega_rrt(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative, wrt radius twice "
     "and poloidal angle twice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[2, 2, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrtt(params, transforms, profiles, data, **kwargs):
-    data["omega_rrtt"] = transforms["W"].transform(params["W_lmn"], 2, 2, 0)
+    data["omega_rrtt"] = data["0"]
     return data
 
 
@@ -2571,14 +2571,14 @@ def _omega_rrtt(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt radius and "
     "poloidal angle twice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 2, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rtt(params, transforms, profiles, data, **kwargs):
-    data["omega_rtt"] = transforms["W"].transform(params["W_lmn"], 1, 2, 0)
+    data["omega_rtt"] = data["0"]
     return data
 
 
@@ -2590,14 +2590,14 @@ def _omega_rtt(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative wrt radius once, "
     "poloidal angle twice, and toroidal angle once",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 2, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rttz(params, transforms, profiles, data, **kwargs):
-    data["omega_rttz"] = transforms["W"].transform(params["W_lmn"], 1, 2, 1)
+    data["omega_rttz"] = data["0"]
     return data
 
 
@@ -2609,14 +2609,14 @@ def _omega_rttz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt radius and "
     "poloidal angle thrice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 3, 0]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rttt(params, transforms, profiles, data, **kwargs):
-    data["omega_rttt"] = transforms["W"].transform(params["W_lmn"], 1, 3, 0)
+    data["omega_rttt"] = data["0"]
     return data
 
 
@@ -2628,14 +2628,14 @@ def _omega_rttt(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative, wrt radius twice "
     "and toroidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[2, 0, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrz(params, transforms, profiles, data, **kwargs):
-    data["omega_rrz"] = transforms["W"].transform(params["W_lmn"], 2, 0, 1)
+    data["omega_rrz"] = data["0"]
     return data
 
 
@@ -2647,14 +2647,14 @@ def _omega_rrz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative, wrt radius twice "
     "and toroidal angle twice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[2, 0, 2]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrzz(params, transforms, profiles, data, **kwargs):
-    data["omega_rrzz"] = transforms["W"].transform(params["W_lmn"], 2, 0, 2)
+    data["omega_rrzz"] = data["0"]
     return data
 
 
@@ -2666,14 +2666,14 @@ def _omega_rrzz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt radius and "
     "toroidal angle twice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 0, 2]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rzz(params, transforms, profiles, data, **kwargs):
-    data["omega_rzz"] = transforms["W"].transform(params["W_lmn"], 1, 0, 2)
+    data["omega_rzz"] = data["0"]
     return data
 
 
@@ -2685,14 +2685,14 @@ def _omega_rzz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt radius and "
     "toroidal angle thrice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 0, 3]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rzzz(params, transforms, profiles, data, **kwargs):
-    data["omega_rzzz"] = transforms["W"].transform(params["W_lmn"], 1, 0, 3)
+    data["omega_rzzz"] = data["0"]
     return data
 
 
@@ -2704,14 +2704,14 @@ def _omega_rzzz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt poloidal angle "
     "twice and toroidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 2, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_ttz(params, transforms, profiles, data, **kwargs):
-    data["omega_ttz"] = transforms["W"].transform(params["W_lmn"], 0, 2, 1)
+    data["omega_ttz"] = data["0"]
     return data
 
 
@@ -2723,14 +2723,14 @@ def _omega_ttz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt poloidal angle "
     "and toroidal angle twice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[0, 1, 2]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_tzz(params, transforms, profiles, data, **kwargs):
-    data["omega_tzz"] = transforms["W"].transform(params["W_lmn"], 0, 1, 2)
+    data["omega_tzz"] = data["0"]
     return data
 
 
@@ -2742,14 +2742,14 @@ def _omega_tzz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, third derivative wrt radius, poloidal"
     " angle, and toroidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 1, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rtz(params, transforms, profiles, data, **kwargs):
-    data["omega_rtz"] = transforms["W"].transform(params["W_lmn"], 1, 1, 1)
+    data["omega_rtz"] = data["0"]
     return data
 
 
@@ -2761,14 +2761,14 @@ def _omega_rtz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative wrt radius twice,"
     " poloidal angle, and toroidal angle",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[2, 1, 1]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rrtz(params, transforms, profiles, data, **kwargs):
-    data["omega_rrtz"] = transforms["W"].transform(params["W_lmn"], 2, 1, 1)
+    data["omega_rrtz"] = data["0"]
     return data
 
 
@@ -2780,12 +2780,12 @@ def _omega_rrtz(params, transforms, profiles, data, **kwargs):
     description="Toroidal stream function, fourth derivative wrt radius, poloidal"
     " angle, and toroidal angle twice",
     dim=1,
-    params=["W_lmn"],
-    transforms={"W": [[1, 1, 2]]},
+    params=[],  # ["W_lmn"]
+    transforms={},
     profiles=[],
     coordinates="rtz",
-    data=[],
+    data=["0"],
 )
 def _omega_rtzz(params, transforms, profiles, data, **kwargs):
-    data["omega_rtzz"] = transforms["W"].transform(params["W_lmn"], 1, 1, 2)
+    data["omega_rtzz"] = data["0"]
     return data

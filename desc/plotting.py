@@ -316,6 +316,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
 
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
+        xlabel_fontsize: integer, font size of the x axis label
 
     Returns
     -------
@@ -352,6 +353,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
 
     fig, ax = _format_ax(ax, rows=1, cols=3, figsize=kwargs.pop("figsize", None))
     title_fontsize = kwargs.pop("title_fontsize", None)
+    xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
 
     assert (
         len(kwargs) == 0
@@ -367,9 +369,9 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         np.sum(np.abs(eq.L_basis.modes[:, lmn]), axis=1), np.abs(eq.L_lmn), "bo"
     )
 
-    ax[0, 0].set_xlabel(xlabel)
-    ax[0, 1].set_xlabel(xlabel)
-    ax[0, 2].set_xlabel(xlabel)
+    ax[0, 0].set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax[0, 1].set_xlabel(xlabel, fontsize=xlabel_fontsize)
+    ax[0, 2].set_xlabel(xlabel, fontsize=xlabel_fontsize)
 
     ax[0, 0].set_title("$|R_{lmn}|$", fontsize=title_fontsize)
     ax[0, 1].set_title("$|Z_{lmn}|$", fontsize=title_fontsize)
@@ -542,13 +544,13 @@ def plot_2d(
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``title_fontsize``: integer, font size of the title
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
-        * ``levels``: int or array-like, passed to contourf
+        * ``title_fontsize``: integer, font size of the title
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+        * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
+        * ``levels``: int or array-like, passed to contourf
 
     Returns
     -------
@@ -703,14 +705,14 @@ def plot_3d(
           matplotlib)
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
-        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
         * ``title_fontsize``: integer, font size of the title
-        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
-        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
-        * ``dist``: float, distance from the camera to the center point of the plot
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``zlabel_fontsize``: float, fontsize of the zlabel
+        * ``alpha``: float btwn [0,1.0], the transparency of the plotted surface
+        * ``elev``: float, elevation orientation angle of 3D plot (in the z plane)
+        * ``azim``: float, azimuthal orientation angle of 3D plot (in the x,y plane)
+        * ``dist``: float, distance from the camera to the center point of the plot
 
     Returns
     -------
@@ -1061,13 +1063,13 @@ def plot_section(
           matplotlib)
         * ``component``: str, one of [None, 'R', 'phi', 'Z'], For vector variables,
           which element to plot. Default is the norm of the vector.
+        * ``title_fontsize``: integer, font size of the title
+        * ``xlabel_fontsize``: float, fontsize of the xlabel
+        * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
         * ``nphi``: int, number of equispaced phi planes to plot sections at (default
           1 for axisymmetry and 6 for non-axisymmetry)
-        * ``title_fontsize``: integer, font size of the title
-        * ``xlabel_fontsize``: float, fontsize of the xlabel
-        * ``ylabel_fontsize``: float, fontsize of the ylabel
 
     Returns
     -------
@@ -1511,15 +1513,15 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
+        * ``xlabel_fontsize``: float, fontsize of the x label
+        * ``ylabel_fontsize``: float, fontsize of the y label
+        * ``legend_fontsize``: float, fontsize of the legend
         * ``cmap``: colormap to use for plotting, discretized into len(phi) colors
         * ``color``: array of colors to use for each phi angle
         * ``ls``: array of line styles to use for each phi angle
         * ``lw``: array of line widths to use for each phi angle
         * ``marker``: str, marker style to use for the axis plotted points
         * ``size``: float, marker size to use for the axis plotted points
-        * ``xlabel_fontsize``: float, fontsize of the x label
-        * ``ylabel_fontsize``: float, fontsize of the y label
-        * ``legend_fontsize``: float, fontsize of the legend
 
     Returns
     -------
@@ -1673,14 +1675,14 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
 
         * ``figsize``: tuple of length 2, the size of the figure (to be passed to
           matplotlib)
-        * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
-        * ``color``: list of colors to use for each Equilibrium
-        * ``ls``: list of str, line styles to use for each Equilibrium
-        * ``lw``: list of floats, line widths to use for each Equilibrium
         * ``xlabel_fontsize``: float, fontsize of the x label
         * ``ylabel_fontsize``: float, fontsize of the y label
         * ``legend``: bool, whether to display legend or not
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
+        * ``cmap``: colormap to use for plotting, discretized into len(eqs) colors
+        * ``color``: list of colors to use for each Equilibrium
+        * ``ls``: list of str, line styles to use for each Equilibrium
+        * ``lw``: list of floats, line widths to use for each Equilibrium
 
     Returns
     -------

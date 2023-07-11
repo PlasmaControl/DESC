@@ -102,6 +102,25 @@ _AXIS_LABELS_RPZ = [r"$R ~(\mathrm{m})$", r"$\phi$", r"$Z ~(\mathrm{m})$"]
 _AXIS_LABELS_XYZ = [r"$X ~(\mathrm{m})$", r"$Y ~(\mathrm{m})$", r"$Z ~(\mathrm{m})$"]
 
 
+def _set_tight_layout(fig):
+    # compat layer to deal with API changes in mpl 3.6.0
+    if int(matplotlib._version.version.split(".")[1]) < 6:
+        fig.set_tight_layout(True)
+    else:
+        fig.set_layout_engine("tight")
+
+
+def _get_cmap(name, n=None):
+    # compat layer to deal with API changes in mpl 3.6.0
+    if int(matplotlib._version.version.split(".")[1]) < 6:
+        return matplotlib.cm.get_cmap(name, n)
+    else:
+        c = matplotlib.colormaps[name]
+        if n is not None:
+            c = c.resampled(n)
+        return c
+
+
 def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     """Check type of ax argument. If ax is not a matplotlib AxesSubplot, initalize one.
 
@@ -374,8 +393,7 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
     ax[0, 0].set_title("$|R_{lmn}|$", fontsize=title_font_size)
     ax[0, 1].set_title("$|Z_{lmn}|$", fontsize=title_font_size)
     ax[0, 2].set_title("$|\\lambda_{lmn}|$", fontsize=title_font_size)
-
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     return fig, ax
 
@@ -500,7 +518,7 @@ def plot_1d(eq, name, grid=None, log=False, ax=None, return_data=False, **kwargs
     xlabel = _AXIS_LABELS_RTZ[plot_axes[0]]
     ax.set_xlabel(xlabel, fontsize=xlabel_fontsize)
     ax.set_ylabel(label, fontsize=ylabel_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = grid.nodes[:, plot_axes[0]]
     plot_data[name] = data
@@ -649,7 +667,7 @@ def plot_2d(
                 "$" + data_index[norm_name]["label"] + "$",
             )
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data[xlabel.strip("$").strip("\\")] = xx
     plot_data[ylabel.strip("$").strip("\\")] = yy
@@ -812,7 +830,7 @@ def plot_3d(
     ax.set_ylabel(_AXIS_LABELS_XYZ[1], fontsize=ylabel_fontsize)
     ax.set_zlabel(_AXIS_LABELS_XYZ[2], fontsize=zlabel_fontsize)
     ax.set_title(label, fontsize=title_font_size)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()
@@ -1011,7 +1029,7 @@ def plot_fsa(
             ),
             fontsize=ylabel_fontsize,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["rho"] = rho
@@ -1220,7 +1238,7 @@ def plot_section(
                 ),
                 fontsize=title_font_size,
             )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["R"] = R
@@ -1475,7 +1493,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
             "$\\phi \\cdot NFP/2\\pi = {:.3f}$".format(nfp * phi[i] / (2 * np.pi)),
             fontsize=title_font_size,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data["rho_R_coords"] = Rr
     plot_data["rho_Z_coords"] = Zr
@@ -1589,7 +1607,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     )
 
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
+        colors = _get_cmap(cmap, nz - 1)(np.linspace(0, 1, nz - 1))
     if lw is None:
         lw = 1
     if isinstance(lw, int):
@@ -1632,7 +1650,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     ax.tick_params(labelbottom=True, labelleft=True)
 
     fig.legend(fontsize=legend_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["R"] = R
@@ -1727,7 +1745,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     if labels is None:
         labels = [str(i) for i in range(neq)]
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+        colors = _get_cmap(cmap, neq)(np.linspace(0, 1, neq))
     if lw is None:
         lw = 1
     if np.isscalar(lw):
@@ -1784,7 +1802,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     ax.tick_params(labelbottom=True, labelleft=True)
 
     fig.legend(fontsize=legend_fontsize)
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     if return_data:
         return fig, ax, plot_data
@@ -1891,7 +1909,7 @@ def plot_comparison(
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
     neq = len(eqs)
     if colors is None:
-        colors = matplotlib.cm.get_cmap(cmap, neq)(np.linspace(0, 1, neq))
+        colors = _get_cmap(cmap, neq)(np.linspace(0, 1, neq))
     if lws is None:
         lws = [1 for i in range(neq)]
     if linestyles is None:
@@ -2001,7 +2019,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         * ``lw``: float, linewidth of plotted coils
         * ``ls``: str, linestyle of plotted coils
         * ``color``: str, color of plotted coils
-        * ``cmap``: str, colormap to be passed to matplotlib.cm.get_cmap()
+        * ``cmap``: str, name of colormap
 
     Returns
     -------
@@ -2021,7 +2039,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     cbar = False
     if color == "current":
         cbar = True
-        cmap = matplotlib.cm.get_cmap(kwargs.pop("cmap", "Spectral"))
+        cmap = _get_cmap(kwargs.pop("cmap", "Spectral"))
         currents = flatten_list(coils.current)
         norm = matplotlib.colors.Normalize(vmin=np.min(currents), vmax=np.max(currents))
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
@@ -2233,7 +2251,7 @@ def plot_boozer_modes(
         len(kwargs) == 0
     ), f"plot boozer modes got unexpected keyword argument: {kwargs.keys()}"
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     if return_data:
         return fig, ax, plot_data
 
@@ -2395,7 +2413,7 @@ def plot_boozer_surface(
     ax.set_ylabel(r"$\theta_{Boozer}$")
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_font_size)
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     plot_data = {}
     plot_data["zeta_Boozer"] = zz
     plot_data["theta_Boozer"] = tt
@@ -2619,7 +2637,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         len(kwargs) == 0
     ), f"plot qs error got unexpected keyword argument: {kwargs.keys()}"
 
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
     if return_data:
         return fig, ax, plot_data
 
@@ -2721,7 +2739,7 @@ def plot_grid(grid, return_data=False, **kwargs):
             pad=20,
             fontsize=title_font_size,
         )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     plot_data = {}
     plot_data["rho"] = nodes[:, 0]
@@ -2803,7 +2821,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             "{}, $L={}$".format(basis.__class__.__name__, basis.L),
             fontsize=title_font_size,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -2832,7 +2850,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             "{}, $N={}$, $NFP={}$".format(basis.__class__.__name__, basis.N, basis.NFP),
             fontsize=title_font_size,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -2971,7 +2989,7 @@ def plot_basis(basis, return_data=False, **kwargs):
             y=0.98,
             fontsize=title_font_size,
         )
-        fig.set_tight_layout(True)
+        _set_tight_layout(fig)
         if return_data:
             return fig, ax, plot_data
 
@@ -3364,7 +3382,7 @@ def plot_field_lines_sfl(
     ax.set_title(
         "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
     )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()
@@ -3555,7 +3573,7 @@ def plot_field_lines_real_space(
     ax.set_title(
         "%d Magnetic Field Lines Traced On $\\rho=%1.2f$ Surface" % (n_lines, rho)
     )
-    fig.set_tight_layout(True)
+    _set_tight_layout(fig)
 
     # need this stuff to make all the axes equal, ax.axis('equal') doesnt work for 3d
     x_limits = ax.get_xlim3d()

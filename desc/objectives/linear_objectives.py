@@ -253,7 +253,7 @@ class AxisRSelfConsistency(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute axis R self consistency errors."""
-        params = self._parse_args(*args, **kwargs)
+        params, _ = self._parse_args(*args, **kwargs)
         f = jnp.dot(self._A, params["R_lmn"]) - params["Ra_n"]
         return f
 
@@ -326,7 +326,7 @@ class AxisZSelfConsistency(_Objective):
 
     def compute(self, *args, **kwargs):
         """Compute axis Z self consistency errors."""
-        params = self._parse_args(*args, **kwargs)
+        params, _ = self._parse_args(*args, **kwargs)
         f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
         return f
 

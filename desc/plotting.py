@@ -1068,8 +1068,9 @@ def plot_section(
         * ``ylabel_fontsize``: float, fontsize of the ylabel
         * ``cmap``: str, matplotib colormap scheme to use, passed to ax.contourf
         * ``levels``: int or array-like, passed to contourf
-        * ``nphi``: int, number of equispaced phi planes to plot sections at (default
-          1 for axisymmetry and 6 for non-axisymmetry)
+        * ``phi``: float, int or array-like. Toroidal angles to plot. If an integer,
+          plot that number equally spaced in [0,2pi/NFP). Default 1 for axisymmetry and
+          6 for non-axisymmetry
 
     Returns
     -------
@@ -1093,27 +1094,36 @@ def plot_section(
     if "nzeta" in kwargs:
         warnings.warn(
             FutureWarning(
-                "argument nzeta has been renamed to nphi, "
+                "argument nzeta has been renamed to phi, "
                 + "nzeta will be removed in a future release"
             )
         )
-        kwargs["nphi"] = kwargs.pop("nzeta")
+        kwargs["phi"] = kwargs.pop("nzeta")
+    if "nphi" in kwargs:
+        warnings.warn(
+            FutureWarning(
+                "argument nphi has been renamed to phi, "
+                + "nphi will be removed in a future release"
+            )
+        )
+        kwargs["phi"] = kwargs.pop("nphi")
+
+    phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
+    nphi = len(phi)
     if grid is None:
-        if eq.N == 0:
-            nphi = int(kwargs.pop("nphi", 1))
-        else:
-            nphi = int(kwargs.pop("nphi", 6))
         nfp = eq.NFP
         grid_kwargs = {
             "L": 25,
             "NFP": nfp,
             "axis": False,
             "theta": np.linspace(0, 2 * np.pi, 91, endpoint=True),
-            "zeta": np.linspace(0, 2 * np.pi / nfp, nphi, endpoint=False),
+            "zeta": phi,
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
-        phi = np.unique(grid.nodes[:, 2])
         coords = eq.map_coordinates(
             grid.nodes,
             ["rho", "theta", "phi"],
@@ -1252,7 +1262,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     theta : int or array-like
         Values of theta to plot contours of.
         If an integer, plot that many contours linearly spaced in (0,2pi).
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot contours at.
         If an integer, plot that many contours linearly spaced in (0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
@@ -1348,21 +1358,15 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     nfp = eq.NFP
     if isinstance(rho, numbers.Integral):
         rho = np.linspace(0, 1, rho + 1)  # offset to ignore axis
-    else:
-        rho = np.atleast_1d(rho)
+    rho = np.atleast_1d(rho)
     if isinstance(theta, numbers.Integral):
         theta = np.linspace(0, 2 * np.pi, theta, endpoint=False)
-    else:
-        theta = np.atleast_1d(theta)
+    theta = np.atleast_1d(theta)
+
+    phi = (1 if eq.N == 0 else 6) if phi is None else phi
     if isinstance(phi, numbers.Integral):
-        phi = np.linspace(0, 2 * np.pi / nfp, phi)
-    elif phi is None:
-        if eq.N == 0:
-            phi = np.array([0])
-        else:
-            phi = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
-    else:
-        phi = np.atleast_1d(phi)
+        phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
+    phi = np.atleast_1d(phi)
     nphi = len(phi)
 
     grid_kwargs = {
@@ -1494,7 +1498,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     ----------
     eq : Equilibrium
         Object from which to plot.
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
@@ -1567,15 +1571,10 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         len(kwargs) == 0
     ), f"plot boundary got unexpected keyword argument: {kwargs.keys()}"
 
+    phi = (1 if eq.N == 0 else 4 + 1) if phi is None else phi
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
-    elif phi is None:
-        if eq.N == 0:
-            phi = np.array([0])
-        else:
-            phi = np.linspace(0, 2 * np.pi / eq.NFP, 4 + 1)
-    else:
-        phi = np.atleast_1d(phi)
+    phi = np.atleast_1d(phi)
     nphi = len(phi)
 
     rho = np.array([0.0, 1.0]) if plot_axis else np.array([1.0])
@@ -1658,7 +1657,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         Equilibria to plot.
     labels : array-like
         Array the same length as eqs of labels to apply to each equilibrium.
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot boundary surface at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 4 for non-axisymmetry.
@@ -1720,10 +1719,12 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
-    if phi is None:
-        phi = 4
-    if isinstance(phi, int):
-        phi = phi + 1  # include phi = 2*pi
+    phi = (1 if eqs[-1].N == 0 else 4 + 1) if phi is None else phi
+    if isinstance(phi, numbers.Integral):
+        phi = np.linspace(
+            0, 2 * np.pi / eqs[-1].NFP, phi + 1
+        )  # +1 to include pi and 2pi
+    phi = np.atleast_1d(phi)
 
     neq = len(eqs)
 
@@ -1749,7 +1750,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         grid_kwargs = {
             "NFP": eqs[i].NFP,
             "theta": 100,
-            "zeta": phi if eqs[i].N > 0 else 2,
+            "zeta": phi,
         }
         grid = _get_grid(**grid_kwargs)
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
@@ -1826,7 +1827,7 @@ def plot_comparison(
     theta : int or array-like
         Values of theta to plot contours of.
         If an integer, plot that many contours linearly spaced in (0,2pi).
-    phi : int or array-like or None
+    phi : float, int or array-like or None
         Values of phi to plot contours at.
         If an integer, plot that many contours linearly spaced in [0,2pi).
         Default is 1 contour for axisymmetric equilibria or 6 for non-axisymmetry.
@@ -1908,16 +1909,13 @@ def plot_comparison(
         labels = [str(i) for i in range(neq)]
     N = np.max([eq.N for eq in eqs])
     nfp = eqs[0].NFP
+
+    phi = (1 if N == 0 else 6) if phi is None else phi
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / nfp, phi, endpoint=False)
-    elif phi is None:
-        if N == 0:
-            phi = np.array([0])
-        else:
-            phi = np.linspace(0, 2 * np.pi / nfp, 6, endpoint=False)
-    else:
-        phi = np.atleast_1d(phi)
+    phi = np.atleast_1d(phi)
     nphi = len(phi)
+
     rows = np.floor(np.sqrt(nphi)).astype(int)
     cols = np.ceil(nphi / rows).astype(int)
 

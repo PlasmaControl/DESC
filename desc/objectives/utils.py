@@ -403,7 +403,10 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
         res = con.compute_scaled_error(**xp_dict)
         x = np.concatenate([xp_dict[arg] for arg in con.args])
         # stuff like density is O(1e19) so need some adjustable tolerance here.
-        atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
+        if x.size:
+            atol = max(1e-8, np.finfo(x.dtype).eps * np.linalg.norm(x) / x.size)
+        else:
+            atol = 0
         np.testing.assert_allclose(
             res,
             0,

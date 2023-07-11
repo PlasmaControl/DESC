@@ -12,7 +12,7 @@ from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
 from desc.transform import Transform
 
-save = True
+save = False
 model = True
 fields = True
 ripple = True
@@ -161,10 +161,11 @@ if model:
     ax2.set_xlabel(r"$\zeta_B$")
     ax2.set_ylabel(r"$\theta_B$")
     fig.tight_layout()
-    plt.show()
     if save:
         plt.savefig("publications/dudt2023/model.png")
         plt.savefig("publications/dudt2023/model.eps")
+    else:
+        plt.show()
 
 # Boozer surfaces =====================================================================
 
@@ -414,10 +415,11 @@ if fields:
         bbox=props,
     )
     fig.tight_layout()
-    plt.show()
     if save:
         plt.savefig("publications/dudt2023/fields.png")
         plt.savefig("publications/dudt2023/fields.eps")
+    else:
+        plt.show()
 
 # effective ripple ====================================================================
 
@@ -451,10 +453,11 @@ if ripple:
     ax.set_xlabel(r"Normalized toroidal flux = $\rho^2$")
     ax.set_ylabel(r"$\epsilon_{eff}^{3/2}$")
     fig.tight_layout()
-    plt.show()
     if save:
         plt.savefig("publications/dudt2023/ripple.png")
         plt.savefig("publications/dudt2023/ripple.eps")
+    else:
+        plt.show()
 
 # particle losses =====================================================================
 
@@ -530,10 +533,11 @@ if losses:
         verticalalignment="top",
     )
     fig.tight_layout()
-    plt.show()
     if save:
         plt.savefig("publications/dudt2023/losses.png")
         plt.savefig("publications/dudt2023/losses.eps")
+    else:
+        plt.show()
 
 # boundaries ==========================================================================
 
@@ -630,10 +634,11 @@ if boundaries:
     ax[2].set_xlabel(r"$R$ (m)")
     ax[2].set_title(r"$M=1,~N=0$")
     fig.tight_layout()
-    plt.show()
     if save:
         plt.savefig("publications/dudt2023/boundaries.png")
         plt.savefig("publications/dudt2023/boundaries.eps")
+    else:
+        plt.show()
 
 # =====================================================================================
 

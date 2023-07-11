@@ -1619,6 +1619,15 @@ def test_bootstrap_objective_build():
     with pytest.warns(UserWarning):
         BootstrapRedlConsistency(eq=eq).build()
 
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        NFP=2,
+        electron_temperature=1e3,
+        electron_density=1e21,
+        ion_temperature=1e3,
+    )
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes

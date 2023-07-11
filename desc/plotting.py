@@ -31,6 +31,7 @@ __all__ = [
     "plot_boundaries",
     "plot_boundary",
     "plot_coefficients",
+    "plot_coils",
     "plot_comparison",
     "plot_fsa",
     "plot_grid",

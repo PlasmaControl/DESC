@@ -51,7 +51,8 @@ def SOLOVEV_vac(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "--numpy", "-vv"]
-    main(args)
+    with pytest.warns(UserWarning, match="Left handed coordinates"):
+        main(args)
 
     SOLOVEV_vac_out = {
         "input_path": input_path,
@@ -256,8 +257,7 @@ def HELIOTRON_vac2(tmpdir_factory):
     print("cwd=", cwd)
 
     args = ["-o", str(desc_h5_path), input_filename, "-vv"]
-    with pytest.warns(UserWarning, match="Vacuum objective does not use any profiles"):
-        main(args)
+    main(args)
 
     HELIOTRON_vacuum2_out = {
         "input_path": input_path,

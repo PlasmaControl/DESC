@@ -1,9 +1,23 @@
 """Tests for compute functions evaluated at limits."""
+import inspect
+import re
 
 import numpy as np
 import pytest
 
-from desc.compute import data_index
+from desc.compute import (
+    _basis_vectors,
+    _bootstrap,
+    _core,
+    _equil,
+    _field,
+    _geometry,
+    _metric,
+    _profiles,
+    _qs,
+    _stability,
+    data_index,
+)
 from desc.compute.utils import surface_integrals
 from desc.equilibrium import Equilibrium
 from desc.examples import get
@@ -12,7 +26,8 @@ from desc.grid import LinearGrid
 not_finite_limit_keys = {
     "D_Mercier",
     "D_current",
-    "D_shear",  # may exist for some configurations
+    "D_geodesic",
+    "D_shear",  # may not exist for all configurations
     "D_well",
     "J^theta",
     "e^helical",
@@ -35,7 +50,7 @@ not_finite_limit_keys = {
     "grad(alpha)",
     "|e^helical|",
     "|grad(theta)|",
-    "<J*B> Redl",  # may exist for some configurations
+    "<J*B> Redl",  # may not exist for all configurations
 }
 
 
@@ -88,16 +103,49 @@ class TestAxisLimits:
 
     @pytest.mark.unit
     def test_data_index_deps_is_clean(self):
-        """Ensure that developers do not add unnecessary dependencies."""
-        # Todo: maybe also parse compute fun and also check all dependencies
-        #    are requested from data dictionary.
+        """Ensure developers do not add extra (or forget needed) dependencies."""
+
+        def get_vars(fun, pattern):
+            src = inspect.getsource(fun)
+            # remove comments
+            src = "\n".join(line.partition("#")[0] for line in src.splitlines())
+            variables = re.findall(pattern, src)
+            variables = set((s.replace("'", "").replace('"', "") for s in variables))
+            return variables
+
+        queried_deps = {}
+        for module in (
+            _basis_vectors,
+            _bootstrap,
+            _core,
+            _equil,
+            _field,
+            _geometry,
+            _metric,
+            _profiles,
+            _qs,
+            _stability,
+        ):
+            for _, fun in inspect.getmembers(module, inspect.isfunction):
+                # For every function, referenced by fun, inside the given module,
+                # get the quantities that this function computes and adds to the
+                # data dictionary. (Typically, there is only one key added to data
+                # per function. A couple curvature functions add two.)
+                keys = get_vars(fun, r"(?<!_)data\[(.*?)\] =")
+                for key in keys:
+                    # Map each key to the dependencies queried in source code of func.
+                    # Excludes dependencies inside data dictionary with leading
+                    # underscores, for example geom_data.
+                    queried_deps[key] = get_vars(fun, r"(?<!_)data\[(.*?)\]") - keys
+
         for key in data_index.keys():
             deps = data_index[key]["dependencies"]
             data = set(deps["data"])
-            axis_limit_data = set(deps["axis_limit_data"])
-            assert data.isdisjoint(axis_limit_data), key
             assert len(data) == len(deps["data"]), key
+            axis_limit_data = set(deps["axis_limit_data"])
             assert len(axis_limit_data) == len(deps["axis_limit_data"]), key
+            assert data.isdisjoint(axis_limit_data), key
+            assert queried_deps[key] == data | axis_limit_data, key
 
     @pytest.mark.unit
     def test_axis_limit_api(self):

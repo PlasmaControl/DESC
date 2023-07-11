@@ -47,7 +47,7 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
 
     grid = transforms["grid"]
     modB_over_Bmax = data["|B|"] / data["max_tz |B|"]
-    Bmax_squared = grid.compress(data["max_tz |B|"] ** 2)
+    Bmax_squared = grid.compress(data["max_tz |B|"]) ** 2
     # to resolve indeterminate form of limit at magnetic axis
     sqrt_g = grid.replace_at_axis(data["sqrt(g)"], lambda: data["sqrt(g)_r"], copy=True)
     V_r = grid.compress(

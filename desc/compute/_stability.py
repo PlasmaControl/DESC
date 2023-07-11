@@ -25,9 +25,10 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.16 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
     data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
-    # Limit at magnetic axis is iota_rrr / (32 pi^2 psi_rr^2)
-    # if iota_r = iota_rr = 0 at axis and does not converge otherwise.
-    # Since this is stellarator dependent, we do not implement it here.
+    # Existence of limit at magnetic axis requires iota_r = 0 at axis.
+    # If iota_rr = 0 at axis as well, then the limit is
+    # iota_rrr / (32 pi^2 psi_rr^2).
+    # Since this seems configuration dependent, we do not implement it here.
     return data
 
 
@@ -128,21 +129,28 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
     # Implements equations 4.19 in M. Landreman & R. Jorge (2020)
     # doi:10.1017/S002237782000121X.
     integrate = surface_integrals_map(transforms["grid"])
-    data["D_geodesic"] = (
-        integrate(
-            data["|e_theta x e_zeta|"] * mu_0 * data["J*B"] / data["|grad(psi)|"] ** 3
+    data["D_geodesic"] = transforms["grid"].replace_at_axis(
+        (
+            integrate(
+                data["|e_theta x e_zeta|"]
+                * mu_0
+                * data["J*B"]
+                / data["|grad(psi)|"] ** 3
+            )
+            ** 2
+            - integrate(
+                data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3
+            )
+            * integrate(
+                data["|e_theta x e_zeta|"]
+                * mu_0**2
+                * data["J*B"] ** 2
+                / (data["|B|^2"] * data["|grad(psi)|"] ** 3),
+            )
         )
-        ** 2
-        - integrate(
-            data["|e_theta x e_zeta|"] * data["|B|^2"] / data["|grad(psi)|"] ** 3
-        )
-        * integrate(
-            data["|e_theta x e_zeta|"]
-            * mu_0**2
-            * data["J*B"] ** 2
-            / (data["|B|^2"] * data["|grad(psi)|"] ** 3),
-        )
-    ) / (2 * jnp.pi) ** 6
+        / (2 * jnp.pi) ** 6,
+        jnp.nan,  # enforce manually because our integration replaces nan with 0
+    )
     # Axis limit does not exist as 1/|grad(psi)| terms dominate.
     return data
 

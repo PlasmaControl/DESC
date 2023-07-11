@@ -126,14 +126,14 @@ class ObjectiveFromUser(_Objective):
         else:
             grid = self._grid
 
-        def getvars(fun):
+        def get_vars(fun):
             pattern = r"data\[(.*?)\]"
             src = inspect.getsource(fun)
             variables = re.findall(pattern, src)
-            variables = [s.replace("'", "").replace('"', "") for s in variables]
+            variables = list(set((s.replace("'", "").replace('"', "") for s in variables)))
             return variables
 
-        self._data_keys = getvars(self._fun)
+        self._data_keys = get_vars(self._fun)
         dummy_data = {}
         for key in self._data_keys:
             assert key in data_index, f"Don't know how to compute {key}"

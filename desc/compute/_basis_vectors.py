@@ -3255,7 +3255,7 @@ def _e_sup_theta_r(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt poloidal"
-                " coordinate",
+    " coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -3283,7 +3283,7 @@ def _e_sup_theta_t(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant poloidal basis vector, derivative wrt toroidal"
-                " coordinate",
+    " coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -3346,7 +3346,7 @@ def _e_sup_zeta_r(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt poloidal"
-                " coordinate",
+    " coordinate",
     dim=3,
     params=[],
     transforms={},
@@ -3387,7 +3387,7 @@ def _e_sup_zeta_t(params, transforms, profiles, data, **kwargs):
     units="m^{-1}",
     units_long="inverse meters",
     description="Contravariant toroidal basis vector, derivative wrt toroidal"
-                " coordinate",
+    " coordinate",
     dim=3,
     params=[],
     transforms={},

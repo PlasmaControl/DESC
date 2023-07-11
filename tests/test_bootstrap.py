@@ -52,9 +52,6 @@ def trapped_fraction(grid, modB, sqrt_g):
     params = None
     transforms = {"grid": grid}
     profiles = None
-    # TODO: check if messes data_index limit deps stuff
-    #  because these functions are actually wrapped with
-    #  register_compute_fun decorator
     data = _V_r_of_r(params, transforms, profiles, data)
     data = _B2_fsa(params, transforms, profiles, data)
     data = _1_over_B_fsa(params, transforms, profiles, data)

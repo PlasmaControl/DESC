@@ -13,6 +13,7 @@ from scipy.integrate import solve_ivp
 from scipy.interpolate import Rbf
 from termcolor import colored
 
+from desc.backend import sign
 from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
@@ -119,7 +120,6 @@ def _format_ax(ax, is3d=False, rows=1, cols=1, figsize=None, equal=False):
     equal : bool
         Whether axes should have equal scales for x and y.
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -180,7 +180,6 @@ def _get_grid(**kwargs):
     kwargs
          Any arguments taken by LinearGrid.
 
-
     Returns
     -------
     grid : LinearGrid
@@ -215,7 +214,6 @@ def _get_plot_axes(grid):
     grid : Grid
         Grid of coordinates to evaluate at.
 
-
     Returns
     -------
     axes : tuple of int
@@ -246,7 +244,6 @@ def _compute(eq, name, grid, component=None, reshape=True):
         Grid of coordinates to evaluate at.
     component : str, optional
         For vector variables, which element to plot. Default is the norm of the vector.
-
 
     Returns
     -------
@@ -310,7 +307,6 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         Whether to include toroidal mode numbers in the x-axis or not.
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
-
     **kwargs : fig,ax and plotting properties
         Specify properties of the figure, axis, and plot appearance e.g.::
 
@@ -321,15 +317,12 @@ def plot_coefficients(eq, L=True, M=True, N=True, ax=None, **kwargs):
         figsize: tuple of length 2, the size of the figure (to be passed to matplotlib)
         title_fontsize: integer, font size of the title
 
-
-
     Returns
     -------
     fig : matplotlib.figure.Figure
         Figure being plotted to.
     ax : matplotlib.axes.Axes or ndarray of Axes
         Axes being plotted to.
-
 
     Examples
     --------
@@ -972,20 +965,20 @@ def plot_fsa(
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
+        values = compress(grid, values)
     elif with_sqrt_g:
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
-        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-        values = surface_averages(grid, q=values, sqrt_g=sqrt_g)
         plot_data_ylabel_key = f"<{name}>_fsa"
+        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+        values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
         # theta average
         label = (
             r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
         )
-        values = surface_averages(grid, q=values)
         plot_data_ylabel_key = f"<{name}>_fsa"
-    values = compress(grid, values)
+        values = surface_averages(grid, q=values, expand_out=False)
 
     if norm_F:
         # normalize force by B pressure gradient
@@ -1120,7 +1113,10 @@ def plot_section(
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         phi = np.unique(grid.nodes[:, 2])
         coords = eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         )
         grid = Grid(coords, sort=False)
 
@@ -1129,7 +1125,10 @@ def plot_section(
         nphi = phi.size
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         coords = eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         )
         grid = Grid(coords, sort=False)
     rows = np.floor(np.sqrt(nphi)).astype(int)
@@ -1374,7 +1373,10 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
     rnr, rnt, rnz = r_grid.num_rho, r_grid.num_theta, r_grid.num_zeta
     r_grid = Grid(
         eq.map_coordinates(
-            r_grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            r_grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         ),
         sort=False,
     )
@@ -1385,13 +1387,16 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         "zeta": phi,
     }
     if plot_theta:
-        # Note: theta* (also known as vartheta) is the poloidal straight field-line
+        # Note: theta* (also known as vartheta) is the poloidal straight field line
         # angle in PEST-like flux coordinates
         t_grid = _get_grid(**grid_kwargs)
         tnr, tnt, tnz = t_grid.num_rho, t_grid.num_theta, t_grid.num_zeta
         v_grid = Grid(
             eq.map_coordinates(
-                t_grid.nodes, ["rho", "theta_sfl", "phi"], ["rho", "theta", "zeta"]
+                t_grid.nodes,
+                ["rho", "theta_PEST", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
             ),
             sort=False,
         )
@@ -1578,7 +1583,10 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
     nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
     grid = Grid(
         eq.map_coordinates(
-            grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+            grid.nodes,
+            ["rho", "theta", "phi"],
+            ["rho", "theta", "zeta"],
+            period=(np.inf, 2 * np.pi, 2 * np.pi),
         ),
         sort=False,
     )
@@ -1674,7 +1682,6 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         * ``legend``: bool, whether to display legend or not
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -1746,7 +1753,10 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         nr, nt, nz = grid.num_rho, grid.num_theta, grid.num_zeta
         grid = Grid(
             eqs[i].map_coordinates(
-                grid.nodes, ["rho", "theta", "phi"], ["rho", "theta", "zeta"]
+                grid.nodes,
+                ["rho", "theta", "phi"],
+                ["rho", "theta", "zeta"],
+                period=(np.inf, 2 * np.pi, 2 * np.pi),
             ),
             sort=False,
         )
@@ -2007,6 +2017,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
         Axes being plotted to
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
+
     """
     figsize = kwargs.pop("figsize", None)
     lw = kwargs.pop("lw", 2)
@@ -2112,7 +2123,7 @@ def plot_boozer_modes(
     norm : bool, optional
         Whether to normalize the magnitudes such that B0=1 Tesla.
     num_modes : int, optional
-        How many modes to include. Default (-1) is all.
+        How many modes to include. Use -1 for all modes.
     rho : int or ndarray, optional
         Radial coordinates of the flux surfaces to evaluate at,
         or number of surfaces in (0,1]
@@ -2135,6 +2146,7 @@ def plot_boozer_modes(
         * ``legend_kw``: dict, any keyword arguments to be pased to ax.legend()
         * ``xlabel_fontsize``: float, fontsize of the xlabel
         * ``ylabel_fontsize``: float, fontsize of the ylabel
+
 
     Returns
     -------
@@ -2246,8 +2258,10 @@ def plot_boozer_surface(
     eq,
     grid_compute=None,
     grid_plot=None,
+    rho=1,
     fill=False,
-    ncontours=100,
+    ncontours=30,
+    fieldlines=0,
     ax=None,
     return_data=False,
     **kwargs,
@@ -2262,10 +2276,14 @@ def plot_boozer_surface(
         grid to use for computing boozer spectrum
     grid_plot : Grid, optional
         grid to plot on
+    rho : float, optional
+        Radial coordinate of flux surface. Used only if grids are not specified.
     fill : bool, optional
         Whether the contours are filled, i.e. whether to use `contourf` or `contour`.
     ncontours : int, optional
         Number of contours to plot.
+    fieldlines : int, optional
+        Number of (linearly spaced) magnetic fieldlines to plot. Default is 0 (none).
     ax : matplotlib AxesSubplot, optional
         Axis to plot on.
     return_data : bool
@@ -2306,14 +2324,21 @@ def plot_boozer_surface(
     """
     if grid_compute is None:
         grid_kwargs = {
-            "M": 6 * eq.M + 1,
-            "N": 6 * eq.N + 1,
+            "rho": rho,
+            "M": 4 * eq.M,
+            "N": 4 * eq.N,
             "NFP": eq.NFP,
             "endpoint": False,
         }
         grid_compute = _get_grid(**grid_kwargs)
     if grid_plot is None:
-        grid_kwargs = {"M": 100, "N": 100, "NFP": eq.NFP, "endpoint": True}
+        grid_kwargs = {
+            "rho": rho,
+            "theta": 91,
+            "zeta": 91,
+            "NFP": eq.NFP,
+            "endpoint": True,
+        }
         grid_plot = _get_grid(**grid_kwargs)
 
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
@@ -2331,6 +2356,7 @@ def plot_boozer_surface(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
+    iota = compress(grid_compute, data["iota"])
     data = transforms_plot["B"].transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 
@@ -2351,34 +2377,46 @@ def plot_boozer_surface(
 
     cax_kwargs = {"size": "5%", "pad": 0.05}
 
-    xx = (
+    zz = (
         grid_plot.nodes[:, 2]
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
-    yy = (
+    tt = (
         grid_plot.nodes[:, 1]
         .reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
         .squeeze()
     )
 
     if fill:
-        im = ax.contourf(xx, yy, data, **contourf_kwargs)
+        im = ax.contourf(zz, tt, data, **contourf_kwargs)
     else:
-        im = ax.contour(xx, yy, data, **contourf_kwargs)
+        im = ax.contour(zz, tt, data, **contourf_kwargs)
     cax = divider.append_axes("right", **cax_kwargs)
     cbar = fig.colorbar(im, cax=cax)
     cbar.update_ticks()
 
+    if fieldlines:
+        theta0 = np.linspace(0, 2 * np.pi, fieldlines, endpoint=False)
+        zeta = np.linspace(0, 2 * np.pi / grid_plot.NFP, 100)
+        alpha = np.atleast_2d(theta0) + iota * np.atleast_2d(zeta).T
+        alpha1 = np.where(np.logical_and(alpha >= 0, alpha <= 2 * np.pi), alpha, np.nan)
+        alpha2 = np.where(
+            np.logical_or(alpha < 0, alpha > 2 * np.pi),
+            alpha % (sign(iota) * 2 * np.pi) + (sign(iota) < 0) * (2 * np.pi),
+            np.nan,
+        )
+        alphas = np.hstack((alpha1, alpha2))
+        ax.plot(zeta, alphas, color="k", ls="-", lw=2)
+
     ax.set_xlabel(r"$\zeta_{Boozer}$", fontsize=xlabel_fontsize)
     ax.set_ylabel(r"$\theta_{Boozer}$", fontsize=ylabel_fontsize)
-
     ax.set_title(r"$|\mathbf{B}|~(T)$", fontsize=title_fontsize)
 
     fig.set_tight_layout(True)
     plot_data = {}
-    plot_data["zeta_Boozer"] = xx
-    plot_data["theta_Boozer"] = yy
+    plot_data["zeta_Boozer"] = zz
+    plot_data["theta_Boozer"] = tt
     plot_data["|B|"] = data
 
     if return_data:
@@ -2498,7 +2536,7 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     f_T = np.array([])
     plot_data = {}
     for i, r in enumerate(rho):
-        grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=np.array(r))
+        grid = LinearGrid(M=2 * eq.M_grid, N=2 * eq.N_grid, NFP=eq.NFP, rho=np.array(r))
         if fB:
             transforms = get_transforms(
                 "|B|_mn", eq=eq, grid=grid, M_booz=M_booz, N_booz=N_booz
@@ -2645,7 +2683,6 @@ def plot_grid(grid, return_data=False, **kwargs):
           matplotlib)
         * ``title_fontsize``: integer, font size of the title
 
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -2765,7 +2802,6 @@ def plot_basis(basis, return_data=False, **kwargs):
     plot_data : dict
         dictionary of the data plotted, only returned if ``return_data=True``
 
-
     Examples
     --------
     .. image:: ../../_static/images/plotting/plot_basis.png
@@ -2817,10 +2853,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         fig, ax = plt.subplots(figsize=kwargs.get("figsize", (6, 4)))
 
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
+        plot_data = {"n": basis.modes[:, 2], "amplitude": [], "zeta": z}
 
         for fi, n in zip(f.T, basis.modes[:, 2]):
             ax.plot(z, fi, label="$n={:d}$".format(int(n)))
@@ -2860,12 +2893,13 @@ def plot_basis(basis, return_data=False, **kwargs):
         )
         ax = np.empty((2 * mmax + 1, 2 * nmax + 1), dtype=object)
         f = basis.evaluate(grid.nodes)
-        plot_data = {}
-        plot_data["m"] = basis.modes[:, 1]
-        plot_data["n"] = basis.modes[:, 2]
-        plot_data["amplitude"] = []
-        plot_data["zeta"] = z
-        plot_data["theta"] = t
+        plot_data = {
+            "m": basis.modes[:, 1],
+            "n": basis.modes[:, 2],
+            "amplitude": [],
+            "zeta": z,
+            "theta": t,
+        }
 
         for fi, m, n in zip(f.T, basis.modes[:, 1], basis.modes[:, 2]):
             ax[mmax + m, nmax + n] = plt.subplot(gs[mmax + m + 1, n + nmax])
@@ -3222,7 +3256,7 @@ def plot_field_lines_sfl(
 
     Traces field lines at specified initial vartheta (:math:`\\vartheta`) seed
     locations, then plots them.
-    Field lines traced by first finding the corresponding straight-field-line (SFL)
+    Field lines traced by first finding the corresponding straight field line (SFL)
     coordinates :math:`(\\rho,\\vartheta,\\phi)` for each field line, then
     converting those to the computational :math:`(\\rho,\\theta,\\phi)` coordinates,
     then finally computing from those the toroidal :math:`(R,\\phi,Z)` coordinates of
@@ -3451,8 +3485,6 @@ def plot_field_lines_real_space(
         will also return the dictionary of interpolating radial basis functions
         interpolating the magnetic field in (R,phi,Z)
 
-
-
     Returns
     -------
     fig : matplotlib.figure.Figure
@@ -3607,8 +3639,6 @@ def _find_idx(rho0, theta0, phi0, grid):
     grid : Grid
         grid to find closest point on
 
-
-
     Returns
     -------
     idx_pt : int
@@ -3643,6 +3673,7 @@ def _field_line_Rbf(rho, theta0, phi_end, grid, Rs, Zs, B_interp, phi0=0):
     Takes the initial poloidal angle you want to seed a field line at (at phi=0),
     and integrates along the field line to the specified phi_end. returns fR,fZ,fPhi,
     the R,Z,Phi coordinates of the field line trajectory.
+
     """
     fR = []
     fZ = []

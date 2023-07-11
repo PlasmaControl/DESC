@@ -8,7 +8,12 @@ from ._equilibrium import (
     HelicalForceBalance,
     RadialForceBalance,
 )
-from ._generic import GenericObjective, RotationalTransform, ToroidalCurrent
+from ._generic import (
+    GenericObjective,
+    ObjectiveFromUser,
+    RotationalTransform,
+    ToroidalCurrent,
+)
 from ._geometry import (
     AspectRatio,
     BScaleLength,
@@ -26,6 +31,8 @@ from ._qs import (
 )
 from ._stability import MagneticWell, MercierStability
 from .linear_objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,

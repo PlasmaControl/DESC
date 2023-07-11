@@ -73,6 +73,7 @@ class Optimizer(IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
+        ctol=None,
         x_scale="auto",
         verbose=1,
         maxiter=None,
@@ -102,6 +103,10 @@ class Optimizer(IOAble):
             Absolute tolerance for termination by the norm of the gradient.
             Optimizer terminates when ``norm(g) < gtol``, where
             If None, defaults to 1e-8.
+        ctol : float or None, optional
+            Stopping tolerance on infinity norm of the constraint violation.
+            Optimization will stop when ctol and one of the other tolerances
+            are satisfied. If None, defaults to 1e-4.
         x_scale : array_like or ``'auto'``, optional
             Characteristic scale of each variable. Setting ``x_scale`` is equivalent
             to reformulating the problem in scaled variables ``xs = x / x_scale``.
@@ -139,17 +144,17 @@ class Optimizer(IOAble):
 
         linear_constraints, nonlinear_constraint = _parse_constraints(constraints)
         objective, nonlinear_constraint = _maybe_wrap_nonlinear_constraints(
-            objective, nonlinear_constraint, self.method, options
+            eq, objective, nonlinear_constraint, self.method, options
         )
 
         if not isinstance(objective, ProximalProjection):
             # need to include self consistency constraints
-            linear_constraints = maybe_add_self_consistency(linear_constraints)
+            linear_constraints = maybe_add_self_consistency(eq, linear_constraints)
         if len(linear_constraints):
-            objective = LinearConstraintProjection(objective, linear_constraints)
+            objective = LinearConstraintProjection(objective, linear_constraints, eq=eq)
             if nonlinear_constraint is not None:
                 nonlinear_constraint = LinearConstraintProjection(
-                    nonlinear_constraint, linear_constraints
+                    nonlinear_constraint, linear_constraints, eq=eq
                 )
         if not objective.built:
             objective.build(eq, verbose=verbose)
@@ -204,7 +209,7 @@ class Optimizer(IOAble):
             ftol,
             xtol,
             gtol,
-            None,
+            ctol,
             maxiter,
             options,
         )
@@ -226,6 +231,8 @@ class Optimizer(IOAble):
 
         if verbose > 0:
             print("Starting optimization")
+            print("Using method: " + str(self.method))
+
         timer.start("Solution time")
 
         result = optimizers[method]["fun"](
@@ -320,7 +327,9 @@ def _parse_constraints(constraints):
     return linear_constraints, nonlinear_constraints
 
 
-def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, options):
+def _maybe_wrap_nonlinear_constraints(
+    eq, objective, nonlinear_constraint, method, options
+):
     """Use ProximalProjection to handle nonlinear constraints."""
     wrapper, method = _parse_method(method)
     if nonlinear_constraint is None:
@@ -350,6 +359,7 @@ def _maybe_wrap_nonlinear_constraints(objective, nonlinear_constraint, method, o
             constraint=nonlinear_constraint,
             perturb_options=perturb_options,
             solve_options=solve_options,
+            eq=eq,
         )
         nonlinear_constraint = None
     return objective, nonlinear_constraint

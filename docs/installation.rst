@@ -123,7 +123,7 @@ specific JAX GPU installation instructions, as that is the main installation dif
 
 Della Cluster (Princeton)
 +++++++++++++++++++++++++
-These instructions were tested and confirmed to work on the Della cluster at Princeton as of 5-3-2023.
+These instructions were tested and confirmed to work on the Della cluster at Princeton as of 7-11-2023.
 
 First, install JAX (commands taken from `this tutorial <https://github.com/PrincetonUniversity/intro_ml_libs/tree/master/jax>`__ ):
 
@@ -191,7 +191,7 @@ The following are instructions tested to work on the Traverse supercomputer at P
     conda create --name desc-env python=3.8
     conda activate desc-env
     # install what you can of the requirements with conda, ends up being all but jax, jaxlib and nvgpu
-    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0" psutil "scipy>=1.5.0" termcolor
+    conda install colorama "h5py>=3.0.0" "matplotlib>=3.3.0,<=3.6.0,!=3.4.3" "mpmath>=1.0.0" "netcdf4>=1.5.4" "numpy>=1.20.0,<1.25.0" psutil "scipy>=1.5.0,<1.11.0" termcolor
     pip install nvgpu
 
 Build and install JAX with GPU support:

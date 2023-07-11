@@ -341,6 +341,7 @@ class _Configuration(IOAble, ABC):
                 )
         else:
             raise TypeError("Got unknown axis type {}".format(axis))
+        self._axis.change_resolution(self.N)
 
         # profiles
         self._pressure = None
@@ -576,6 +577,7 @@ class _Configuration(IOAble, ABC):
         self.surface.change_resolution(
             self.L, self.M, self.N, NFP=self.NFP, sym=self.sym
         )
+        self.axis.change_resolution(self.N, NFP=self.NFP, sym=self.sym)
 
         self._R_lmn = copy_coeffs(self.R_lmn, old_modes_R, self.R_basis.modes)
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
@@ -705,6 +707,40 @@ class _Configuration(IOAble, ABC):
             x, grid.nodes[grid.unique_rho_idx, 0], grid=grid, name=name
         )
 
+    def get_axis(self):
+        """Return a representation for the magnetic axis.
+
+        Returns
+        -------
+        axis : FourierRZCurve
+            object representing the magnetic axis.
+        """
+        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
+        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
+        # indices where m=0
+        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
+        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
+        # indices where l=0 & m=0
+        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
+        # this reshaping assumes the FourierZernike bases are sorted
+        R_n = np.sum(
+            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
+            axis=0,
+        )
+        modes_R = self.R_basis.modes[idx00_R, 2]
+        if len(idx00_Z):
+            Z_n = np.sum(
+                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
+                axis=0,
+            )
+            modes_Z = self.Z_basis.modes[idx00_Z, 2]
+        else:  # catch cases such as axisymmetry with stellarator symmetry
+            Z_n = 0
+            modes_Z = 0
+        axis = FourierRZCurve(R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym)
+        return axis
+
     @property
     def surface(self):
         """Surface: Geometric surface defining boundary conditions."""
@@ -721,6 +757,24 @@ class _Configuration(IOAble, ABC):
         else:
             raise TypeError(
                 f"surfaces should be of type Surface or a subclass, got {new}"
+            )
+
+    @property
+    def axis(self):
+        """Curve: object representing the magnetic axis."""
+        return self._axis
+
+    @axis.setter
+    def axis(self, new):
+        if isinstance(new, FourierRZCurve):
+            assert (
+                self.sym == new.sym
+            ), "Surface and Equilibrium must have the same symmetry"
+            new.change_resolution(self.N)
+            self._axis = new
+        else:
+            raise TypeError(
+                f"axis should be of type FourierRZCurve or a subclass, got {new}"
             )
 
     @property
@@ -845,41 +899,18 @@ class _Configuration(IOAble, ABC):
         """ndarray: R coefficients for axis Fourier series."""
         return self.axis.R_n
 
+    @Ra_n.setter
+    def Ra_n(self, Ra_n):
+        self.axis.R_n = Ra_n
+
     @property
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
         return self.axis.Z_n
 
-    @property
-    def axis(self):
-        """Curve: object representing the magnetic axis."""
-        # value of Zernike polynomials at rho=0 for unique radial modes (+/-1)
-        sign_l = np.atleast_2d(((np.arange(0, self.L + 1, 2) / 2) % 2) * -2 + 1).T
-        # indices where m=0
-        idx0_R = np.where(self.R_basis.modes[:, 1] == 0)[0]
-        idx0_Z = np.where(self.Z_basis.modes[:, 1] == 0)[0]
-        # indices where l=0 & m=0
-        idx00_R = np.where((self.R_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
-        idx00_Z = np.where((self.Z_basis.modes[:, :2] == [0, 0]).all(axis=1))[0]
-        # this reshaping assumes the FourierZernike bases are sorted
-        R_n = np.sum(
-            sign_l * np.reshape(self.R_lmn[idx0_R], (-1, idx00_R.size), order="F"),
-            axis=0,
-        )
-        modes_R = self.R_basis.modes[idx00_R, 2]
-        if len(idx00_Z):
-            Z_n = np.sum(
-                sign_l * np.reshape(self.Z_lmn[idx0_Z], (-1, idx00_Z.size), order="F"),
-                axis=0,
-            )
-            modes_Z = self.Z_basis.modes[idx00_Z, 2]
-        else:  # catch cases such as axisymmetry with stellarator symmetry
-            Z_n = 0
-            modes_Z = 0
-        self._axis = FourierRZCurve(
-            R_n, Z_n, modes_R, modes_Z, NFP=self.NFP, sym=self.sym
-        )
-        return self._axis
+    @Za_n.setter
+    def Za_n(self, Za_n):
+        self.axis.Z_n = Za_n
 
     @property
     def pressure(self):
@@ -1120,10 +1151,31 @@ class _Configuration(IOAble, ABC):
         # we first figure out what needed qtys are flux functions or volume integrals
         # and compute those first on a full grid
         deps = list(set(get_data_deps(names, has_axis=grid.axis.size) + names))
-        dep0d = [dep for dep in deps if data_index[dep]["coordinates"] == ""]
-        dep1d = [dep for dep in deps if data_index[dep]["coordinates"] == "r"]
+        dep0d = [
+            dep
+            for dep in deps
+            if (data_index[dep]["coordinates"] == "") and (dep not in data)
+        ]
+        dep1d = [
+            dep
+            for dep in deps
+            if (data_index[dep]["coordinates"] == "r") and (dep not in data)
+        ]
 
-        if len(dep0d):
+        # whether we need to calculate 0d or 1d quantities on a special grid
+        calc0d = bool(len(dep0d))
+        calc1d = bool(len(dep1d))
+        if (  # see if the grid we're already using will work for desired qtys
+            (grid.L >= self.L_grid)
+            and (grid.M >= self.M_grid)
+            and (grid.N >= self.N_grid)
+        ):
+            if isinstance(grid, QuadratureGrid):
+                calc0d = calc1d = False
+            if isinstance(grid, LinearGrid):
+                calc1d = False
+
+        if calc0d:
             grid0d = QuadratureGrid(self.L_grid, self.M_grid, self.N_grid, self.NFP)
             data0d = compute_fun(
                 dep0d,
@@ -1137,7 +1189,7 @@ class _Configuration(IOAble, ABC):
             data0d = {key: val for key, val in data0d.items() if key in dep0d}
             data.update(data0d)
 
-        if len(dep1d):
+        if calc1d:
             grid1d = LinearGrid(
                 rho=grid.nodes[grid.unique_rho_idx, 0],
                 M=self.M_grid,
@@ -1176,15 +1228,23 @@ class _Configuration(IOAble, ABC):
         )
         return data
 
-    def map_coordinates(
-        self, coords, inbasis, outbasis, tol=1e-6, maxiter=30, rhomin=1e-6
+    def map_coordinates(  # noqa: C901
+        self,
+        coords,
+        inbasis,
+        outbasis=("rho", "theta", "zeta"),
+        guess=None,
+        period=(np.inf, np.inf, np.inf),
+        tol=1e-6,
+        maxiter=30,
+        **kwargs,
     ):
         """Given coordinates in inbasis, compute corresponding coordinates in outbasis.
 
         First solves for the computational coordinates that correspond to inbasis, then
         evaluates outbasis at those locations.
 
-        NOTE: this function cannot currently be JIT compiled or differentiated with AD.
+        NOTE: this function cannot be JIT compiled or differentiated with AD.
 
         Parameters
         ----------
@@ -1193,23 +1253,31 @@ class _Configuration(IOAble, ABC):
             point in space.
         inbasis, outbasis : tuple of str
             Labels for input and output coordinates, eg ("R", "phi", "Z") or
-            ("rho", "alpha", "zeta") or any other combination of 3 coordinates.
-            Labels should be the same as the compute function data key.
+            ("rho", "alpha", "zeta") or any combination thereof. Labels should be the
+            same as the compute function data key
+        guess : None or ndarray, shape(k,3)
+            Initial guess for the computational coordinates ['rho', 'theta', 'zeta']
+            coresponding to coords in inbasis. If None, heuristics are used based on
+            in basis and a nearest neighbor search on a coarse grid.
+        period : tuple of float
+            Assumed periodicity for each quantity in inbasis.
+            Use np.inf to denote no periodicity.
         tol : float
             Stopping tolerance.
         maxiter : int > 0
             Maximum number of Newton iterations
-        rhomin : float
-            Minimum allowable value of rho (to avoid singularity at rho=0)
 
         Returns
         -------
         coords : ndarray, shape(k,3)
-            Coordinates in outbasis. If Newton method doesn't converge for
-            a given coordinate nan will be returned for those values
+            Coordinates mapped from inbasis to outbasis. Values of NaN will be returned
+            for coordinates where root finding did not succeed, possibly because the
+            coordinate is not in the plasma volume.
 
         """
-        return map_coordinates(self, coords, inbasis, outbasis, tol, maxiter, rhomin)
+        return map_coordinates(
+            self, coords, inbasis, outbasis, guess, period, tol, maxiter, **kwargs
+        )
 
     def compute_theta_coords(self, flux_coords, L_lmn=None, tol=1e-6, maxiter=20):
         """Find geometric theta for given straight field line theta.

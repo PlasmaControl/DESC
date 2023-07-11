@@ -130,7 +130,9 @@ class ObjectiveFromUser(_Objective):
             pattern = r"data\[(.*?)\]"
             src = inspect.getsource(fun)
             variables = re.findall(pattern, src)
-            variables = list(set((s.replace("'", "").replace('"', "") for s in variables)))
+            variables = list(
+                set(s.replace("'", "").replace('"', "") for s in variables)
+            )
             return variables
 
         self._data_keys = get_vars(self._fun)

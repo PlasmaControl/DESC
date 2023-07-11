@@ -110,7 +110,7 @@ class TestAxisLimits:
             # remove comments
             src = "\n".join(line.partition("#")[0] for line in src.splitlines())
             variables = re.findall(pattern, src)
-            variables = set((s.replace("'", "").replace('"', "") for s in variables))
+            variables = set(s.replace("'", "").replace('"', "") for s in variables)
             return variables
 
         queried_deps = {}
@@ -129,8 +129,7 @@ class TestAxisLimits:
             for _, fun in inspect.getmembers(module, inspect.isfunction):
                 # For every function, referenced by fun, inside the given module,
                 # get the quantities that this function computes and adds to the
-                # data dictionary. (Typically, there is only one key added to data
-                # per function. A couple curvature functions add two.)
+                # data dictionary.
                 keys = get_vars(fun, r"(?<!_)data\[(.*?)\] =")
                 for key in keys:
                     # Map each key to the dependencies queried in source code of func.

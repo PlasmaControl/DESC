@@ -1211,12 +1211,18 @@ class VMECIO:
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))
         bdotgradv[:] = np.zeros((file.dimensions["radius"].size,))
+        bdotgradv.long_name = "Not Implemented: This output is hard-coded to 0!"
+        bdotgradv.units = "None"
         # beta_vol = something like p/(B^2-p) ? It's not <beta>_vol(r)
         beta_vol = file.createVariable("beta_vol", np.float64, ("radius",))
         beta_vol[:] = np.zeros((file.dimensions["radius"].size,))
+        beta_vol.long_name = "Not Implemented: This output is hard-coded to 0!"
+        beta_vol.units = "None"
         # betaxis = beta_vol at the axis?
         betaxis = file.createVariable("betaxis", np.float64)
         betaxis[:] = 0
+        betaxis.long_name = "Not Implemented: This output is hard-coded to 0!"
+        betaxis.units = "None"
         """
         IonLarmor = file.createVariable("IonLarmor", np.float64)
         IonLarmor[:] = 0.0

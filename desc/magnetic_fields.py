@@ -225,8 +225,8 @@ class ToroidalMagneticField(MagneticField):
     _io_attrs_ = MagneticField._io_attrs_ + ["_B0", "_R0"]
 
     def __init__(self, B0, R0):
-        assert np.isscalar(B0), "B0 must be a scalar"
-        assert np.isscalar(R0), "R0 must be a scalar"
+        assert float(B0) == B0, "B0 must be a scalar"
+        assert float(R0) == R0, "R0 must be a scalar"
         self._B0 = B0
         self._R0 = R0
 

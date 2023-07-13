@@ -9,6 +9,7 @@ import desc.examples
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry.utils import rpz2xyz_vec
 from desc.grid import LinearGrid, QuadratureGrid
 
 # convolve kernel is reverse of FD coeffs
@@ -146,9 +147,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
             "B",
             "B_r",
             "B_rr",
+            "phi",
         ],
         grid=grid,
     )
+    data["B"] = rpz2xyz_vec(data["B"], phi=data["phi"])
+    data["B_r"] = rpz2xyz_vec(data["B_r"], phi=data["phi"])
+    data["B_rr"] = rpz2xyz_vec(data["B_rr"], phi=data["phi"])
 
     B_sup_theta_r = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / drho
     B_sup_theta_rr = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / drho**2
@@ -279,9 +284,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
             "B",
             "B_t",
             "B_tt",
+            "phi",
         ],
         grid=grid,
     )
+    data["B"] = rpz2xyz_vec(data["B"], phi=data["phi"])
+    data["B_t"] = rpz2xyz_vec(data["B_t"], phi=data["phi"])
+    data["B_tt"] = rpz2xyz_vec(data["B_tt"], phi=data["phi"])
 
     B_sup_theta_t = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dtheta
     B_sup_theta_tt = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dtheta**2
@@ -412,9 +421,13 @@ def test_magnetic_field_derivatives(DummyStellarator):
             "B",
             "B_z",
             "B_zz",
+            "phi",
         ],
         grid=grid,
     )
+    data["B"] = rpz2xyz_vec(data["B"], phi=data["phi"])
+    data["B_z"] = rpz2xyz_vec(data["B_z"], phi=data["phi"])
+    data["B_zz"] = rpz2xyz_vec(data["B_zz"], phi=data["phi"])
 
     B_sup_theta_z = np.convolve(data["B^theta"], FD_COEF_1_4, "same") / dzeta
     B_sup_theta_zz = np.convolve(data["B^theta"], FD_COEF_2_4, "same") / dzeta**2
@@ -540,9 +553,12 @@ def test_magnetic_field_derivatives(DummyStellarator):
             "|B|_rt",
             "B",
             "B_rt",
+            "phi",
         ],
         grid=grid,
     )
+    data["B"] = rpz2xyz_vec(data["B"], phi=data["phi"])
+    data["B_rt"] = rpz2xyz_vec(data["B_rt"], phi=data["phi"])
 
     B_sup_theta = data["B^theta"].reshape((num_rho, num_theta))
     B_sup_zeta = data["B^zeta"].reshape((num_rho, num_theta))
@@ -658,9 +674,12 @@ def test_magnetic_field_derivatives(DummyStellarator):
             "|B|_tz",
             "B",
             "B_tz",
+            "phi",
         ],
         grid=grid,
     )
+    data["B"] = rpz2xyz_vec(data["B"], phi=data["phi"])
+    data["B_tz"] = rpz2xyz_vec(data["B_tz"], phi=data["phi"])
 
     B_sup_theta = data["B^theta"].reshape((num_zeta, num_theta))
     B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_theta))
@@ -776,9 +795,12 @@ def test_magnetic_field_derivatives(DummyStellarator):
             "|B|_rz",
             "B",
             "B_rz",
+            "phi",
         ],
         grid=grid,
     )
+    data["B"] = rpz2xyz_vec(data["B"], phi=data["phi"])
+    data["B_rz"] = rpz2xyz_vec(data["B_rz"], phi=data["phi"])
 
     B_sup_theta = data["B^theta"].reshape((num_zeta, num_rho))
     B_sup_zeta = data["B^zeta"].reshape((num_zeta, num_rho))

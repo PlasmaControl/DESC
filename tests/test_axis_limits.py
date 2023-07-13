@@ -61,7 +61,7 @@ def continuity(
     names : iterable, str
         A list of names of the quantities to test for continuity.
     delta: float, optional
-        Spacing between grid points.
+        Closeness to magnetic axis.
         Smaller values accumulate finite precision error.
     rtol : float, optional
         Relative tolerance.
@@ -79,9 +79,8 @@ def continuity(
     rho = np.linspace(0, 1, 10) * delta
     grid = LinearGrid(rho=rho, M=8, N=8, NFP=eq.NFP, sym=eq.sym)
     assert grid.axis.size
-
-    data = eq.compute(names, grid=grid)
     integrate = surface_integrals_map(grid, expand_out=False)
+    data = eq.compute(names, grid=grid)
 
     should_compute_fit = desired_at_axis is None
     for name in names:
@@ -96,7 +95,7 @@ def continuity(
         if should_compute_fit:
             if np.ndim(data_index[name]["dim"]):
                 # can't polyfit tensor arrays like grad(B)
-                continue
+                desired_at_axis = (quantity[0] + quantity[1]) / 2
             else:
                 # fit the data to a polynomial to extrapolate to axis
                 poly = np.polyfit(rho[1:], quantity[1:], 6)

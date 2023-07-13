@@ -18,7 +18,7 @@ from desc.basis import fourier, zernike_radial_poly
 from desc.compute import data_index, get_transforms
 from desc.compute.utils import compress, surface_averages
 from desc.grid import Grid, LinearGrid
-from desc.utils import flatten_list
+from desc.utils import flatten_list, parse_argname_change
 from desc.vmec_utils import ptolemy_linear_transform
 
 __all__ = [
@@ -1092,24 +1092,10 @@ def plot_section(
         fig, ax = plot_section(eq, "J^rho")
 
     """
-    if "nzeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument nzeta has been renamed to phi, "
-                + "nzeta will be removed in a future release"
-            )
-        )
-        kwargs["phi"] = kwargs.pop("nzeta")
-    if "nphi" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument nphi has been renamed to phi, "
-                + "nphi will be removed in a future release"
-            )
-        )
-        kwargs["phi"] = kwargs.pop("nphi")
-
     phi = kwargs.pop("phi", (1 if eq.N == 0 else 6))
+    phi = parse_argname_change(phi, kwargs, "nzeta", "phi")
+    phi = parse_argname_change(phi, kwargs, "nphi", "phi")
+
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi, endpoint=False)
     phi = np.atleast_1d(phi)
@@ -1321,14 +1307,7 @@ def plot_surfaces(eq, rho=8, theta=8, phi=None, ax=None, return_data=False, **kw
         fig, ax = plot_surfaces(eq)
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     NR = kwargs.pop("NR", 50)
     NT = kwargs.pop("NT", 180)
@@ -1547,14 +1526,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         fig, ax = plot_boundary(eq)
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
@@ -1703,14 +1675,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
         fig, ax = plot_boundaries((eq1, eq2, eq3))
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
 
     figsize = kwargs.pop("figsize", None)
     cmap = kwargs.pop("cmap", "rainbow")
@@ -1886,14 +1851,10 @@ def plot_comparison(
                                  )
 
     """
-    if "zeta" in kwargs:
-        warnings.warn(
-            FutureWarning(
-                "argument zeta has been renamed to phi, "
-                + "zeta will be removed in a future release"
-            )
-        )
-        phi = kwargs.pop("zeta")
+    phi = parse_argname_change(phi, kwargs, "zeta", "phi")
+    color = parse_argname_change(color, kwargs, "colors", "color")
+    ls = parse_argname_change(ls, kwargs, "linestyles", "ls")
+    lw = parse_argname_change(lw, kwargs, "lws", "lw")
 
     figsize = kwargs.pop("figsize", None)
     title_fontsize = kwargs.pop("title_fontsize", None)
@@ -2506,6 +2467,12 @@ def plot_qs_error(  # noqa: 16 fxn too complex
         fig, ax = plot_qs_error(eq, helicity=(1, eq.NFP), log=True)
 
     """
+    colors = kwargs.pop("color", ["r", "b", "g"])
+    markers = kwargs.pop("marker", ["o", "o", "o"])
+    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
+    colors = parse_argname_change(colors, kwargs, "colors", "color")
+    markers = parse_argname_change(markers, kwargs, "markers", "marker")
+
     if rho is None:
         rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
@@ -2520,10 +2487,6 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     ylabel = kwargs.pop("ylabel", False)
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("yxlabel_fontsize", None)
-
-    colors = kwargs.pop("color", ["r", "b", "g"])
-    markers = kwargs.pop("marker", ["o", "o", "o"])
-    labels = kwargs.pop("labels", [r"$\hat{f}_B$", r"$\hat{f}_C$", r"$\hat{f}_T$"])
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

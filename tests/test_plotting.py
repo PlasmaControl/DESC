@@ -53,6 +53,15 @@ def test_kwarg_warning(DummyStellarator):
 
 
 @pytest.mark.unit
+def test_kwarg_future_warning(DummyStellarator):
+    """Test that passing in deprecated kwargs throws a warning."""
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    with pytest.warns(FutureWarning):
+        fig, ax = plot_surfaces(eq, zeta=2)
+    return None
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_p(SOLOVEV):

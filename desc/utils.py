@@ -474,3 +474,16 @@ def is_broadcastable(shp1, shp2):
 def get_instance(things, cls):
     """Get thing from a collection of things that is the instance of a given class."""
     return [t for t in things if isinstance(t, cls)][0]
+
+
+def parse_argname_change(arg, kwargs, oldname, newname):
+    """Warn and parse arguemnts whose names have changed."""
+    if oldname in kwargs:
+        warnings.warn(
+            FutureWarning(
+                f"argument {oldname} has been renamed to {newname}, "
+                + f"{oldname} will be removed in a future release"
+            )
+        )
+        arg = kwargs.pop(oldname)
+    return arg

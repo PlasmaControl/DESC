@@ -55,7 +55,7 @@ from .utils import (
 # compute something, it's easier to just do it once for all quantities when we first
 # import the compute module.
 def _build_data_index():
-    for key in data_index.keys():
+    for key in data_index:
         full = {
             "data": get_data_deps(key, has_axis=False),
             "transforms": get_derivs(key, has_axis=False),

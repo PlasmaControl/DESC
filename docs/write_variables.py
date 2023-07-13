@@ -22,15 +22,14 @@ with open("variables.csv", "w", newline="") as f:
     writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
 
     writer.writeheader()
-    keys = data_index.keys()
-    for key in keys:
-        d = {}
-        d["Name"] = "``" + key + "``"
-        d["Label"] = ":math:`" + data_index[key]["label"].replace("$", "") + "`"
-        d["Units"] = data_index[key]["units_long"]
-        d["Description"] = data_index[key]["description"]
-        d["Module"] = "``" + data_index[key]["fun"].__module__ + "``"
-
+    for key, val in data_index.items():
+        d = {
+            "Name": "``" + key + "``",
+            "Label": ":math:`" + val["label"].replace("$", "") + "`",
+            "Units": val["units_long"],
+            "Description": val["description"],
+            "Module": "``" + val["fun"].__module__ + "``",
+        }
         # stuff like |x| is interpreted as a substitution by rst, need to escape
         d["Description"] = _escape(d["Description"])
         writer.writerow(d)

@@ -2549,8 +2549,6 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["|B|_rt", "sqrt(g)_r"],
 )
 def _grad_B(params, transforms, profiles, data, **kwargs):
-    # fixme: Numerically |B|_t is not zero at axis.
-    #   think it should be closer. Maybe there's a typo in basis vectors?
     # In the axis limit, |B|_t is 0. Cancellation occurs when decomposed into
     # the basis vectors of the lab frame.
     data["grad(|B|)"] = (

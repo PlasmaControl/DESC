@@ -72,7 +72,7 @@ def map_coordinates(  # noqa: C901
     basis_derivs = [f"{X}_{d}" for X in inbasis for d in ("r", "t", "z")]
     for key in basis_derivs:
         assert (
-            key in data_index.keys()
+            key in data_index
         ), f"don't have recipe to compute partial derivative {key}"
 
     rhomin = kwargs.pop("rhomin", tol / 10)

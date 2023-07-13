@@ -166,7 +166,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Rconstraints += (Rcon,)
     # Z_1_neg1_n
     for n, NAEcoeff in zip(Zbasis_cos.modes[:, 2], coeffs["Z_1_neg1_n"]):
@@ -178,7 +180,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
 
     # R_1_neg1_n
@@ -191,7 +195,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Rcon = FixSumModesR(target=target, sum_weights=sum_weights, modes=modes)
+        Rcon = FixSumModesR(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Rconstraints += (Rcon,)
     # Z_1_1_n
     for n, NAEcoeff in zip(Zbasis_sin.modes[:, 2], coeffs["Z_1_1_n"]):
@@ -203,7 +209,9 @@ def _make_RZ_cons_order_rho(qsc, desc_eq, coeffs, bases):
             sum_weights.append([(-1) ** k * k])
         modes = np.atleast_2d(modes)
         sum_weights = -np.atleast_1d(sum_weights)
-        Zcon = FixSumModesZ(target=target, sum_weights=sum_weights, modes=modes)
+        Zcon = FixSumModesZ(
+            eq=desc_eq, target=target, sum_weights=sum_weights, modes=modes
+        )
         Zconstraints += (Zcon,)
 
     return Rconstraints, Zconstraints

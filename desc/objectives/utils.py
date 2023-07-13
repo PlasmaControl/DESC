@@ -16,6 +16,8 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
@@ -107,6 +109,10 @@ def maybe_add_self_consistency(eq, constraints):
         constraints += (BoundaryZSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, FixLambdaGauge):
         constraints += (FixLambdaGauge(eq=eq),)
+    if not _is_any_instance(constraints, AxisRSelfConsistency):
+        constraints += (AxisRSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, AxisZSelfConsistency):
+        constraints += (AxisZSelfConsistency(eq=eq),)
     return constraints
 
 
@@ -122,7 +128,7 @@ def get_fixed_axis_constraints(
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
-        Whether to also fix kinetic profiles.
+        Whether to add constraints to fix kinetic profiles or pressure
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -133,10 +139,9 @@ def get_fixed_axis_constraints(
 
     """
     constraints = (
-        FixAxisR(eq=eq),
-        FixAxisZ(eq=eq),
-        FixLambdaGauge(eq=eq),
-        FixPsi(eq=eq),
+        FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         if kinetic:
@@ -169,7 +174,14 @@ def get_fixed_axis_constraints(
 
 
 def get_NAE_constraints(
-    desc_eq, qsc_eq, order=1, profiles=True, iota=False, kinetic=False, normalize=True
+    desc_eq,
+    qsc_eq,
+    order=1,
+    profiles=True,
+    iota=False,
+    kinetic=False,
+    normalize=True,
+    N=None,
 ):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
 
@@ -190,13 +202,15 @@ def get_NAE_constraints(
         Whether to also fix kinetic profiles.
     normalize : bool
         Whether to apply constraints in normalized units.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
     """
-
     constraints = (
         FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
         FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
@@ -234,7 +248,7 @@ def get_NAE_constraints(
                 FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
             )
     if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
 

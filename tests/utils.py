@@ -119,7 +119,7 @@ def area_difference(Rr1, Rr2, Zr1, Zr2, Rv1, Rv2, Zv1, Zv2):
     # for some reason shapely sometimes throws a warning here on CI but not locally,
     # see https://github.com/shapely/shapely/issues/1345
     with warnings.catch_warnings():
-        warnings.simplefilter(
+        warnings.filterwarnings(
             "ignore", message="invalid value encountered in intersection"
         )
         intersect_rho = np.array(

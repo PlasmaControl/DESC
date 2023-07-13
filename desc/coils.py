@@ -505,55 +505,110 @@ class CoilSet(Coil, MutableSequence):
 
         return CoilSet(*coils)
 
-    def save_in_MAKEGRID_format(self, coilsFilename, params={}):
+    def save_in_MAKEGRID_format(self, coilsFilename, NFP=1, num_pts=100):
         """Save CoilSet of as a MAKEGRID-formatted coil txtfile.
+
+        By default, each coil is assigned to the same Coilgroup in MAKEGRID
+        with the name "Modular". For more details see the MAKEGRID documentation
+        https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
 
         Parameters
         ----------
         filename : str or path-like
             path save CoilSet as a file in MAKEGRID txt format
-        params : dict or array-like of dict, optional
-            parameters to pass to curves, either the same for all curves,
-            or one for each member
+        NFP : int, default 1
+            If > 1, assumes that the CoilSet is the coils for a coilset
+            with a discrete toroidal symmetry of NFP, and so will only
+            save the first len(coils)/NFP coils in the MAKEGRID file.
+        num_pts: int,
+            number of sample points along each coil to save.
         """
-        if isinstance(params, dict):
-            params = [params] * len(self)
-        assert len(params) == len(self)
+        assert (
+            int(len(self.coils) / NFP) == len(self.coils) / NFP
+        ), "Number of coils in coilset must be evenly divisible by NFP!"
 
-        with open(coilsFilename, "w") as f:
-            f.write("periods " + str(1) + "\n")
-            f.write("begin filament\n")
-            f.write("mirror NIL\n")
+        header = (
+            # number of field period
+            "periods "
+            + str(NFP)
+            + "\n"
+            + "begin filament\n"
+            # not 100% sure of what this line is, neither is MAKEGRID,
+            # but it is needed and expected by other codes
+            # "The third line is read by MAKEGRID but ignored"
+            # https://princetonuniversity.github.io/STELLOPT/MAKEGRID.html
+            + "mirror NIL"
+        )
+        footer = "end\n"
 
-            # FIXME: proper way to pass in params?
-            # or just do grid as a param, since we want to use the current coils?
-            # TODO: use numpy to make this faster? instead of line by line
-            for coil, par in zip(self.coils, params):
-                if isinstance(coil, XYZCoil):
-                    contour_X = coil.X[0:-1]
-                    contour_Y = coil.Y[0:-1]
-                    contour_Z = coil.Z[0:-1]
-                else:
-                    coords = coil.compute_coordinates(basis="xyz")
-                    contour_X = coords[0:-1, 0]
-                    contour_Y = coords[0:-1, 1]
-                    contour_Z = coords[0:-1, 2]
+        # TODO: use numpy to make this faster? instead of line by line
 
-                for k in range(contour_X.size):
-                    f.write(
-                        "{:14.22e} {:14.22e} {:14.22e} {:14.22e}\n".format(
-                            contour_X[k], contour_Y[k], contour_Z[k], coil.current
-                        )
-                    )
-                # Close the loop
-                k = 0
-                f.write(
-                    "{:14.22e} {:14.22e} {:14.22e} {:14.22e} 1 Modular\n".format(
-                        contour_X[k], contour_Y[k], contour_Z[k], 0
-                    )
+        x_arr = []
+        y_arr = []
+        z_arr = []
+        currents_arr = []
+        coil_end_inds = []  # indices where the coils end, need to track these
+        # to place the coilgroup number and name later, which MAKEGRID expects
+        # at the end of each individual coil
+        for i in range(int(len(self.coils) / NFP)):
+            coil = self.coils[i]
+            if isinstance(coil, XYZCoil):
+                # TODO: once spline is implemented for XYZCoil, change this
+                # to be the same as the other block
+                contour_X = coil.X[0:-1]
+                contour_Y = coil.Y[0:-1]
+                contour_Z = coil.Z[0:-1]
+            elif isinstance(coil, Coil):
+                coords = coil.compute_coordinates(basis="xyz")
+                contour_X = coords[0:-1, 0]
+                contour_Y = coords[0:-1, 1]
+                contour_Z = coords[0:-1, 2]
+            else:
+                raise TypeError(
+                    "Can only save Coil objects to a MAKEGRID file,"
+                    + f"got object of type {type(coil)}"
                 )
+            currents = np.ones_like(contour_X) * coil.current
+            # close the curves
+            contour_X = np.append(contour_X, contour_X[0])
+            contour_Y = np.append(contour_Y, contour_Y[0])
+            contour_Z = np.append(contour_Z, contour_Z[0])
+            currents = np.append(currents, 0)  # this last point must have 0 current
 
-            f.write("end\n")
+            coil_end_inds.append(contour_X.size)
+
+            x_arr.append(contour_X)
+            y_arr.append(contour_Y)
+            z_arr.append(contour_Z)
+            currents_arr.append(currents)
+        # form full array to save
+        x_arr = np.concatenate(x_arr)
+        y_arr = np.concatenate(y_arr)
+        z_arr = np.concatenate(z_arr)
+        currents_arr = np.concatenate(currents_arr)
+
+        save_arr = np.vstack((x_arr, y_arr, z_arr, currents_arr)).T
+        # save initial file
+        np.savetxt(
+            coilsFilename,
+            save_arr,
+            delimiter=" ",
+            header=header,
+            footer=footer,
+            fmt="%14.22e",
+            comments="",  # to avoid the # appended to the start of the header/footer
+        )
+        # now need to re-load the file and place coilgroup markers at end of each coil
+        with open(coilsFilename) as f:
+            lines = f.readlines()
+        for i in range(len(coil_end_inds)):
+            real_end_ind = int(
+                np.sum(coil_end_inds[0 : i + 1]) + 2
+            )  # to account for the 3 header lines
+            lines[real_end_ind] = lines[real_end_ind].strip("\n") + " 1 Modular\n"
+        with open(coilsFilename, "w") as f:
+            f.writelines(lines)
+
         print(f"Saved coils file at : {coilsFilename}")
 
     # FIXME: implement this properly for all coiltypes

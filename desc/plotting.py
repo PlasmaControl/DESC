@@ -1544,7 +1544,7 @@ def plot_boundary(eq, phi=None, plot_axis=False, ax=None, return_data=False, **k
         len(kwargs) == 0
     ), f"plot boundary got unexpected keyword argument: {kwargs.keys()}"
 
-    phi = (1 if eq.N == 0 else 4 + 1) if phi is None else phi
+    phi = (1 if eq.N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(0, 2 * np.pi / eq.NFP, phi + 1)  # +1 to include pi and 2pi
     phi = np.atleast_1d(phi)
@@ -1685,7 +1685,7 @@ def plot_boundaries(eqs, labels=None, phi=None, ax=None, return_data=False, **kw
     xlabel_fontsize = kwargs.pop("xlabel_fontsize", None)
     ylabel_fontsize = kwargs.pop("ylabel_fontsize", None)
 
-    phi = (1 if eqs[-1].N == 0 else 4 + 1) if phi is None else phi
+    phi = (1 if eqs[-1].N == 0 else 4) if phi is None else phi
     if isinstance(phi, numbers.Integral):
         phi = np.linspace(
             0, 2 * np.pi / eqs[-1].NFP, phi + 1

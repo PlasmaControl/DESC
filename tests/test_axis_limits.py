@@ -12,6 +12,12 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
+# Unless explicitly mentioned (in the source code of the compute function or
+# elsewhere), the only assumptions made to compute the magnetic axis limit of
+# quantities are that these functions tend toward zero as the magnetic axis
+# is approached, and that the limit of their derivatives is not zero.
+zero_limit_keys = {"rho", "psi", "psi_r", "e_theta"}
+
 not_finite_limit_keys = {
     "D_Mercier",
     "D_current",
@@ -43,25 +49,35 @@ not_finite_limit_keys = {
 }
 
 
-def continuity(
+def get_matches(fun, pattern):
+    src = inspect.getsource(fun)
+    # remove comments
+    src = "\n".join(line.partition("#")[0] for line in src.splitlines())
+    matches = re.findall(pattern, src)
+    matches = set(s.replace("'", "").replace('"', "") for s in matches)
+    return matches
+
+
+def is_continuous(
     eq,
     names,
     delta=1e-5,
     rtol=1e-4,
     atol=1e-5,
     desired_at_axis=None,
+    kwargs=None,
 ):
     """
-    Test that the rho=0 axis limits of names are continuous extensions.
+    Asserts that the rho=0 axis limits of names are continuous extensions.
 
     Parameters
     ----------
     eq : Equilibrium
-        The equilibrium object used to compute.
-    names : iterable, str
+        The equilibrium object used for the computation.
+    names : list, str
         A list of names of the quantities to test for continuity.
     delta: float, optional
-        Closeness to magnetic axis.
+        Max distance from magnetic axis.
         Smaller values accumulate finite precision error.
     rtol : float, optional
         Relative tolerance.
@@ -69,11 +85,25 @@ def continuity(
         Absolute tolerance.
     desired_at_axis : float, optional
         If not provided, the values are extrapolated with a polynomial fit.
+    kwargs : dict, optional
+        Keyword arguments to override the parameters above for given names.
+        The dictionary should have the following structure:
+        {
+            "name1": {
+                "rtol": custom_rtol1,
+                "atol": custom_atol1,
+                "desired_at_axis": custom_desired_at_axis1
+            },
+            "name2": {"rtol": custom_rtol2},
+            ...
+        }
 
     """
-    # TODO: remove when boozer transform works with multiple surfaces
+    if kwargs is None:
+        kwargs = {}
     if isinstance(names, str):
         names = [names]
+    # TODO: remove when boozer transform works with multiple surfaces
     names = [x for x in names if not ("Boozer" in x or "_mn" in x or x == "B modes")]
 
     rho = np.linspace(0, 1, 10) * delta
@@ -82,28 +112,31 @@ def continuity(
     integrate = surface_integrals_map(grid, expand_out=False)
     data = eq.compute(names, grid=grid)
 
-    should_compute_fit = desired_at_axis is None
     for name in names:
         if data_index[name]["coordinates"] == "":
-            # useless to check if global scalar is continuous
+            # can't check global scalars
             continue
         quantity = (
             grid.compress(data[name])
             if data_index[name]["coordinates"] == "r"
             else integrate(data[name])
         )
-        if should_compute_fit:
+        fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
+        if fit is None:
             if np.ndim(data_index[name]["dim"]):
                 # can't polyfit tensor arrays like grad(B)
-                desired_at_axis = (quantity[0] + quantity[1]) / 2
+                fit = (quantity[0] + quantity[1]) / 2
             else:
                 # fit the data to a polynomial to extrapolate to axis
                 poly = np.polyfit(rho[1:], quantity[1:], 6)
                 # constant term is the same as evaluating polynomial at rho=0
-                desired_at_axis = poly[-1]
-
+                fit = poly[-1]
         np.testing.assert_allclose(
-            quantity[0], desired_at_axis, atol=atol, rtol=rtol, err_msg=name
+            quantity[0],
+            fit,
+            rtol=kwargs.get(name, {}).get("rtol", rtol),
+            atol=kwargs.get(name, {}).get("atol", atol),
+            err_msg=name,
         )
 
 
@@ -116,23 +149,14 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_data_index_deps(self):
         """Ensure developers do not add extra (or forget needed) dependencies."""
-
-        def get_vars(fun, pattern):
-            src = inspect.getsource(fun)
-            # remove comments
-            src = "\n".join(line.partition("#")[0] for line in src.splitlines())
-            variables = re.findall(pattern, src)
-            variables = set(s.replace("'", "").replace('"', "") for s in variables)
-            return variables
-
         queried_deps = {}
         for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
             if module_name[0] == "_":
                 for _, fun in inspect.getmembers(module, inspect.isfunction):
                     # quantities that this function computes
-                    keys = get_vars(fun, r"(?<!_)data\[(.*?)\] =")
+                    keys = get_matches(fun, r"(?<!_)data\[(.*?)\] =")
                     # dependencies queried in source code of this function
-                    deps = get_vars(fun, r"(?<!_)data\[(.*?)\]") - keys
+                    deps = get_matches(fun, r"(?<!_)data\[(.*?)\]") - keys
                     for key in keys:
                         queried_deps[key] = deps
 
@@ -148,19 +172,17 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_axis_limit_api(self):
         """Test that axis limit dependencies are computed only when necessary."""
+        deps = {"B0", "psi_r", "sqrt(g)"}
+        axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()
         grid = LinearGrid(L=2, M=2, N=2, axis=False)
         assert not grid.axis.size
-        data = eq.compute("B0", grid=grid)
-        assert "B0" in data and "psi_r" in data and "sqrt(g)" in data
-        # assert axis limit dependencies are not in data
-        assert "psi_rr" not in data and "sqrt(g)_r" not in data
+        data = eq.compute("B0", grid=grid).keys()
+        assert deps <= data and axis_limit_deps.isdisjoint(data)
         grid = LinearGrid(L=2, M=2, N=2, axis=True)
         assert grid.axis.size
         data = eq.compute("B0", grid=grid)
-        assert "B0" in data and "psi_r" in data and "sqrt(g)" in data
-        # assert axis limit dependencies are in data
-        assert "psi_rr" in data and "sqrt(g)_r" in data
+        assert deps | axis_limit_deps <= data.keys()
         assert np.all(np.isfinite(data["B0"]))
 
     @pytest.mark.unit
@@ -191,16 +213,6 @@ class TestAxisLimits:
                     assert np.all(is_finite), key
 
     @pytest.mark.unit
-    def test_zero_limits(self):
-        """Test limits of basic quantities that should be 0 at magnetic axis."""
-        for eq in TestAxisLimits.eqs:
-            continuity(
-                eq,
-                names=["rho", "psi", "psi_r", "e_theta", "sqrt(g)"],
-                desired_at_axis=0,
-            )
-
-    @pytest.mark.unit
     def test_continuous_limits(self):
         """Heuristic to test correctness of all quantities with limits."""
         finite_discontinuous = {"curvature_k1", "curvature_k2"}
@@ -216,7 +228,7 @@ class TestAxisLimits:
             searching = len(finite_discontinuous) > size
         continuous -= finite_discontinuous
 
-        weak_tolerance = {
+        weaker_tolerance = {
             "B^zeta_rr": {"rtol": 5e-02},
             "F_rho": {"atol": 1e00},
             "|B|_rr": {"rtol": 5e-02},
@@ -234,7 +246,8 @@ class TestAxisLimits:
             "B^theta_rr": {"rtol": 5e-02},
             "J_R": {"atol": 1e00},
         }
+        kwargs = weaker_tolerance | dict.fromkeys(
+            zero_limit_keys, {"desired_at_axis": 0}
+        )
         for eq in TestAxisLimits.eqs:
-            continuity(eq, names=continuous - weak_tolerance.keys())
-            for key in weak_tolerance:
-                continuity(eq, names=key, **weak_tolerance[key])
+            is_continuous(eq, names=continuous, kwargs=kwargs)

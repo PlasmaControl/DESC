@@ -84,7 +84,7 @@ def register_compute_fun(
             flag = False
             for base_name, aliases in _aliases.items():
                 if p in aliases:
-                    data_index[base_name][name] = d
+                    data_index[base_name][name] = d.copy()
                     flag = True
             if not flag:
                 raise ValueError(

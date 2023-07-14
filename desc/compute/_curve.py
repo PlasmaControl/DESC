@@ -2,6 +2,7 @@ from desc.backend import jnp
 from desc.geometry.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 from .data_index import register_compute_fun
+from .utils import cross, dot
 
 
 @register_compute_fun(
@@ -516,7 +517,9 @@ def _r_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.Curve",
 )
 def _frenet_tangent(params, transforms, profiles, data, **kwargs):
-    data["frenet_tangent"] = data["r_s"] / jnp.linalg.norm(data["r_s"])[:, None]
+    data["frenet_tangent"] = (
+        data["r_s"] / jnp.linalg.norm(data["r_s"], axis=-1)[:, None]
+    )
     return data
 
 
@@ -535,7 +538,9 @@ def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.Curve",
 )
 def _frenet_normal(params, transforms, profiles, data, **kwargs):
-    data["frenet_normal"] = data["r_ss"] / jnp.linalg.norm(data["r_ss"])[:, None]
+    data["frenet_normal"] = (
+        data["r_ss"] / jnp.linalg.norm(data["r_ss"], axis=-1)[:, None]
+    )
     return data
 
 
@@ -554,9 +559,9 @@ def _frenet_normal(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.Curve",
 )
 def _frenet_binormal(params, transforms, profiles, data, **kwargs):
-    data["frenet_binormal"] = jnp.cross(data["T"], data["N"], axis=1) * jnp.linalg.det(
-        transforms["rotmat"]
-    )
+    data["frenet_binormal"] = cross(
+        data["frenet_tangent"], data["frenet_normal"]
+    ) * jnp.linalg.det(transforms["rotmat"])
     return data
 
 
@@ -575,10 +580,8 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.Curve",
 )
 def _curvature(params, transforms, profiles, data, **kwargs):
-    dxn = jnp.linalg.norm(data["r_s"], axis=1)[:, jnp.newaxis]
-    data["curvature"] = jnp.linalg.norm(
-        jnp.cross(data["r_s"], data["r_ss"], axis=1) / dxn**3, axis=1
-    )
+    dxn = jnp.linalg.norm(data["r_s"], axis=-1)[:, jnp.newaxis]
+    data["curvature"] = jnp.linalg.norm(cross(data["r_s"], data["r_ss"]) / dxn**3)
     return data
 
 
@@ -597,10 +600,9 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.Curve",
 )
 def _torsion(params, transforms, profiles, data, **kwargs):
-    dxd2x = jnp.cross(data["r_s"], data["r_ss"], axis=1)
+    dxd2x = cross(data["r_s"], data["r_ss"])
     data["torsion"] = (
-        jnp.sum(dxd2x * data["r_sss"], axis=1)
-        / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
+        dot(dxd2x, data["r_sss"]) / jnp.linalg.norm(dxd2x, axis=-1)[:, jnp.newaxis] ** 2
     )
     return data
 
@@ -620,6 +622,6 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     parameterization="desc.geometry.Curve",
 )
 def _length(params, transforms, profiles, data, **kwargs):
-    T = jnp.linalg.norm(data["r_s"], axis=1)
+    T = jnp.linalg.norm(data["r_s"], axis=-1)
     data["length"] = jnp.trapz(T, data["s"])
     return data

@@ -9,6 +9,7 @@ import desc.examples
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
 from desc.grid import LinearGrid, QuadratureGrid
 
 # convolve kernel is reverse of FD coeffs
@@ -1118,6 +1119,21 @@ def test_compute_everything():
     for key in data_index["desc.equilibrium.equilibrium.Equilibrium"].keys():
         data = eq.compute(key, grid=grid)
         assert key in data
+
+
+@pytest.mark.unit
+def test_curve_compute_everything():
+    """Make sure we can compute every curve thing without errors."""
+    curves = {
+        "desc.geometry.curve.FourierXYZCurve": FourierXYZCurve(),
+        "desc.geometry.curve.FourierRZCurve": FourierRZCurve(),
+        "desc.geometry.curve.FourierPlanarCurve": FourierPlanarCurve(),
+    }
+
+    for p, thing in curves.items():
+        for key in data_index[p].keys():
+            data = thing.compute(key)
+            assert key in data
 
 
 @pytest.mark.unit

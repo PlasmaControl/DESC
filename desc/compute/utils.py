@@ -86,7 +86,7 @@ def compute(parameterization, names, params, transforms, profiles, data=None, **
     for name in names:
         if name not in data_index[p]:
             raise ValueError("Unrecognized value '{}'.".format(name))
-    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma"}
+    allowed_kwargs = {"helicity", "M_booz", "N_booz", "gamma", "basis"}
     bad_kwargs = kwargs.keys() - allowed_kwargs
     if len(bad_kwargs) > 0:
         raise ValueError(f"Unrecognized argument(s): {bad_kwargs}")

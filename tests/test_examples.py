@@ -662,7 +662,7 @@ def test_NAE_QIC_solve():
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
-    grid = LinearGrid(L=10, M=20, N=20, eq=eq.NFP, sym=True, axis=False)
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 
     np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)

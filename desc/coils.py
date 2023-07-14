@@ -541,8 +541,6 @@ class CoilSet(Coil, MutableSequence):
         )
         footer = "end\n"
 
-        # TODO: use numpy to make this faster? instead of line by line
-
         x_arr = []
         y_arr = []
         z_arr = []
@@ -558,8 +556,10 @@ class CoilSet(Coil, MutableSequence):
                 contour_X = coil.X[0:-1]
                 contour_Y = coil.Y[0:-1]
                 contour_Z = coil.Z[0:-1]
+            # FIXME: implement this properly for all coiltypes
+            # i.e. use numpts
             elif isinstance(coil, Coil):
-                coords = coil.compute_coordinates(basis="xyz")
+                coords = coil.compute_coordinates(basis="xyz", grid=num_pts)
                 contour_X = coords[0:-1, 0]
                 contour_Y = coords[0:-1, 1]
                 contour_Z = coords[0:-1, 2]
@@ -610,8 +610,6 @@ class CoilSet(Coil, MutableSequence):
             f.writelines(lines)
 
         print(f"Saved coils file at : {coilsFilename}")
-
-    # FIXME: implement this properly for all coiltypes
 
     def __add__(self, other):
         if isinstance(other, (CoilSet)):

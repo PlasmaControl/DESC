@@ -7,6 +7,7 @@ import numpy as np
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from desc.grid import Grid, LinearGrid
+from desc.interpolate import _approx_df, interp1d
 from desc.transform import Transform
 from desc.utils import copy_coeffs
 
@@ -1184,12 +1185,27 @@ class FourierPlanarCurve(Curve):
 
 
 class XYZCurve(Curve):
-    """Curve parameterized by points in X,Y,Z.
+    """Curve parameterized by spline knots in X,Y,Z.
 
     Parameters
     ----------
     X, Y, Z: array-like
-        points for X, Y, Z descriving a closed curve
+        points for X, Y, Z describing a closed curve
+    knots : ndarray
+        arbitrary theta values to use for spline knots,
+         should be an 1D ndarray of same length as the input.
+        If None, defaults to using an equal-arclength angle as the knot
+    period: float
+        period of the theta variable used for the spline knots.
+        if knots is None, this defaults to 2pi. If knots is not None, this must be
+        supplied by the user
+     method : str
+        method of interpolation
+        - `'nearest'`: nearest neighbor interpolation
+        - `'linear'`: linear interpolation
+        - `'cubic'`: C1 cubic splines (aka local splines)
+        - `'cubic2'`: C2 cubic splines (aka natural splines)
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
     name : str
         name for this curve
 
@@ -1202,16 +1218,56 @@ class XYZCurve(Curve):
         X,
         Y,
         Z,
+        knots=None,
+        period=None,
         grid=None,
+        method="cubic2",
         name="",
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
+        assert np.allclose(X[-1], X[0], atol=1e-15), "Must pass in a closed curve!"
+        assert np.allclose(Y[-1], Y[0], atol=1e-15), "Must pass in a closed curve!"
+        assert np.allclose(Z[-1], Z[0], atol=1e-15), "Must pass in a closed curve!"
+
+        if knots is None:
+            # find equal arclength angle-like variable, and use that as theta
+            # L_along_curve / L = theta / 2pi
+            lengths = jnp.sqrt(
+                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
+            )
+            thetas = 2 * jnp.pi * np.cumsum(lengths) / jnp.sum(lengths)
+            thetas = np.insert(thetas, 0, 0)
+            knots = thetas
+            self._period = 2 * np.pi
+        else:
+            knots = np.atleast_1d(knots)
+            assert (
+                period is not None
+            ), "Must specify period if using user-supplied knots!"
+            self._period = period
+        self._knots = knots
+
+        self._method = method
+        self._Dx = _approx_df(
+            self._knots, np.eye(self._knots.size), self._method, axis=0
+        )
 
         self._X = X
         self._Y = Y
         self._Z = Z
-        self._grid = None
+        if grid is None:
+            self._grid = Grid(
+                jnp.vstack(
+                    (
+                        jnp.zeros_like(self._knots),
+                        jnp.zeros_like(self._knots),
+                        self._knots,
+                    )
+                ).T
+            )
+        else:
+            self._grid = grid
 
     @property
     def X(self):
@@ -1220,7 +1276,13 @@ class XYZCurve(Curve):
 
     @X.setter
     def X(self, new):
-        self._X = jnp.asarray(new)
+        if len(new) == len(self._knots):
+            self._X = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "X should have the same size as the knots, "
+                + f"got {len(new)} X values for {len(self._knots)} knots"
+            )
 
     @property
     def Y(self):
@@ -1229,7 +1291,13 @@ class XYZCurve(Curve):
 
     @Y.setter
     def Y(self, new):
-        self._Y = jnp.asarray(new)
+        if len(new) == len(self._knots):
+            self._Y = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "Y should have the same size as the knots, "
+                + f"got {len(new)} Y values for {len(self._knots)} knots"
+            )
 
     @property
     def Z(self):
@@ -1238,11 +1306,14 @@ class XYZCurve(Curve):
 
     @Z.setter
     def Z(self, new):
-        self._Z = jnp.asarray(new)
+        if len(new) == len(self._knots):
+            self._Z = jnp.asarray(new)
+        else:
+            raise ValueError(
+                "Z should have the same size as the knots, "
+                + f"got {len(new)} Z values for {len(self._knots)} knots"
+            )
 
-    # FIXME: Make this be the given points by default,
-    # but once spline interpolation is added
-    # let this be the interpolation points of the spline
     @property
     def grid(self):
         """Default grid for computation."""
@@ -1259,14 +1330,31 @@ class XYZCurve(Curve):
                 f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
             )
 
-    def compute_coordinates(self, X=None, Y=None, Z=None, dt=0, basis="xyz"):
+    def _get_xq(self, grid):
+        if grid is None:
+            return self.grid.nodes[:, 2]
+        if isinstance(grid, Grid):
+            return grid.nodes[:, 2]
+        if np.isscalar(grid):
+            return np.linspace(0, self._period, grid)
+        grid = np.atleast_1d(grid)
+        if grid.ndim == 1:
+            return grid
+        return grid[:, 2]
+
+    def compute_coordinates(self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"):
         """Compute values using specified coefficients.
 
         Parameters
         ----------
         X, Y, Z: array-like
-            coordinates for X, Y, Z. If not given, defaults to values given
+            coordinate values at the knots for X, Y, Z.
+             If not given, defaults to values given
             by X, Y, Z attributes
+        grid : Grid, int or array-like
+            locations to compute values at. Defaults to self.grid
+            if int, uses a linearly spaced grid with specified number of points
+            between 0 and self.period
         dt: int
             derivative order to compute
         basis : {"rpz", "xyz"}
@@ -1283,26 +1371,60 @@ class XYZCurve(Curve):
             Y = self._Y
         if Z is None:
             Z = self._Z
+        xq = self._get_xq(grid)
+        df_X = self._Dx @ X
+        df_Y = self._Dx @ Y
+        df_Z = self._Dx @ Z
 
-        coords = jnp.stack([X, Y, Z], axis=1)
+        Xq = interp1d(
+            xq,
+            self._knots,
+            X,
+            method=self._method,
+            derivative=dt,
+            period=self._period,
+            df=df_X,
+        )
+        Yq = interp1d(
+            xq,
+            self._knots,
+            Y,
+            method=self._method,
+            derivative=dt,
+            period=self._period,
+            df=df_Y,
+        )
+        Zq = interp1d(
+            xq,
+            self._knots,
+            Z,
+            method=self._method,
+            derivative=dt,
+            period=self._period,
+            df=df_Z,
+        )
+
+        coords = jnp.stack([Xq, Yq, Zq], axis=1)
         coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
         if basis.lower() == "rpz":
-            if dt > 0:
-                raise NotImplementedError("Derivatives not implemented for XYZCurve ")
-            else:
-                coords = xyz2rpz(coords)
-        return self.coords
+            coords = xyz2rpz(coords)
+        return coords
 
     def compute_frenet_frame(
-        self, X_n=None, Y_n=None, Z_n=None, grid=None, basis="xyz"
+        self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"
     ):
-        """Compute Frenet frame vectors using specified coefficients.
+        """Compute Frenet frame vectors using specified values.
 
         Parameters
         ----------
         X, Y, Z: array-like
-            coordinates for X, Y, Z. If not given, defaults to values given
+            coordinate values at the knots for X, Y, Z.
+             If not given, defaults to values given
             by X, Y, Z attributes
+        grid : Grid, int or array-like
+            locations to compute values at. Defaults to self.grid
+            if int, uses a linearly spaced grid with specified number of points
+            between 0 and self.period
         dt: int
             derivative order to compute
         basis : {"rpz", "xyz"}
@@ -1317,14 +1439,19 @@ class XYZCurve(Curve):
         """
         raise NotImplementedError("Frenet Frame not implemented for XYZCurve ")
 
-    def compute_curvature(self, X_n=None, Y_n=None, Z_n=None, grid=None):
+    def compute_curvature(self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"):
         """Compute curvature using specified coefficients.
 
         Parameters
         ----------
         X, Y, Z: array-like
-            coordinates for X, Y, Z. If not given, defaults to values given
+            coordinate values at the knots for X, Y, Z.
+             If not given, defaults to values given
             by X, Y, Z attributes
+        grid : Grid, int or array-like
+            locations to compute values at. Defaults to self.grid
+            if int, uses a linearly spaced grid with specified number of points
+            between 0 and self.period
         dt: int
             derivative order to compute
         basis : {"rpz", "xyz"}
@@ -1337,14 +1464,19 @@ class XYZCurve(Curve):
         """
         raise NotImplementedError("Curvature not implemented for XYZCurve ")
 
-    def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
+    def compute_torsion(self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"):
         """Compute torsion using specified coefficientsnp.empty((0, 3)).
 
         Parameters
         ----------
         X, Y, Z: array-like
-            coordinates for X, Y, Z. If not given, defaults to values given
+            coordinate values at the knots for X, Y, Z.
+             If not given, defaults to values given
             by X, Y, Z attributes
+        grid : Grid, int or array-like
+            locations to compute values at. Defaults to self.grid
+            if int, uses a linearly spaced grid with specified number of points
+            between 0 and self.period
         dt: int
             derivative order to compute
         basis : {"rpz", "xyz"}
@@ -1357,20 +1489,26 @@ class XYZCurve(Curve):
         """
         raise NotImplementedError("Torsion not implemented for XYZCurve ")
 
-    def compute_length(self, X=None, Y=None, Z=None):
-        """Compute the length of the curve specified by given cartesian points.
+    def compute_length(self, X=None, Y=None, Z=None, grid=None):
+        """Compute the length of the curve specified by given cartesian spline points.
 
         Parameters
         ----------
         X, Y, Z: array-like
-            coordinates for X, Y, Z. If not given, defaults to values given
+            coordinate values at the knots for X, Y, Z.
+             If not given, defaults to values given
             by X, Y, Z attributes
+        grid : Grid, int or array-like
+            locations to compute values at. Defaults to self.grid
+            if int, uses a linearly spaced grid with specified number of points
+            between 0 and self.period
 
         Returns
         -------
         length : float
             length of the curve.
         """
+        # get default spline params if not passed in
         if X is None:
             X = self._X
         if Y is None:
@@ -1378,12 +1516,11 @@ class XYZCurve(Curve):
         if Z is None:
             Z = self._Z
 
-        length = jnp.sum(
-            jnp.sqrt(
-                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
-            )
-        )
+        coords = self.compute_coordinates(X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=1)
+        # sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )
+        integrand = jnp.linalg.norm(coords, axis=1)
+        ts = self._get_xq(grid)
 
-        return length
+        return jnp.trapz(integrand, ts)
 
     # TODO: methods for converting between representations

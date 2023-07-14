@@ -39,7 +39,7 @@ def _rotation_matrix_from_normal(normal):
 
 
 @register_compute_fun(
-    name="r",
+    name="x",
     label="\\mathbf{r}",
     units="m",
     units_long="meters",
@@ -56,7 +56,7 @@ def _rotation_matrix_from_normal(normal):
     data=["s"],
     parameterization="desc.geometry.FourierPlanarCurve",
 )
-def _r_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+def _x_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     # create planar curve at z==0
     r = transforms["r"].transform(params["r_n"], dz=0)
     Z = jnp.zeros_like(r)
@@ -73,12 +73,12 @@ def _r_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
         xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
-    data["r"] = coords
+    data["x"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_s",
+    name="x_s",
     label="\\partial_{s} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -95,7 +95,7 @@ def _r_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     data=["s"],
     parameterization="desc.geometry.FourierPlanarCurve",
 )
-def _r_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+def _x_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     r = transforms["r"].transform(params["r_n"], dz=0)
     dr = transforms["r"].transform(params["r_n"], dz=1)
     dX = dr * jnp.cos(data["s"]) - r * jnp.sin(data["s"])
@@ -114,12 +114,12 @@ def _r_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
         xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
-    data["r_s"] = coords
+    data["x_s"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_ss",
+    name="x_ss",
     label="\\partial_{ss} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -136,7 +136,7 @@ def _r_s_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     data=["s"],
     parameterization="desc.geometry.FourierPlanarCurve",
 )
-def _r_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+def _x_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     r = transforms["r"].transform(params["r_n"], dz=0)
     dr = transforms["r"].transform(params["r_n"], dz=1)
     d2r = transforms["r"].transform(params["r_n"], dz=2)
@@ -160,12 +160,12 @@ def _r_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
         xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
-    data["r_ss"] = coords
+    data["x_ss"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_sss",
+    name="x_sss",
     label="\\partial_{sss} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -182,7 +182,7 @@ def _r_ss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     data=["s"],
     parameterization="desc.geometry.FourierPlanarCurve",
 )
-def _r_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
+def _x_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     r = transforms["r"].transform(params["r_n"], dz=0)
     dr = transforms["r"].transform(params["r_n"], dz=1)
     d2r = transforms["r"].transform(params["r_n"], dz=2)
@@ -213,12 +213,12 @@ def _r_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
         xyzcoords = jnp.matmul(xyzcoords, transforms["rotmat"].T) + transforms["shift"]
         x, y, z = xyzcoords.T
         coords = xyz2rpz_vec(coords, x=x, y=y)
-    data["r_sss"] = coords
+    data["x_sss"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r",
+    name="x",
     label="\\mathbf{r}",
     units="m",
     units_long="meters",
@@ -237,7 +237,7 @@ def _r_sss_FourierPlanarCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierRZCurve",
 )
-def _r_FourierRZCurve(params, transforms, profiles, data, **kwargs):
+def _x_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_n"], dz=0)
     Z = transforms["Z"].transform(params["Z_n"], dz=0)
     phi = transforms["grid"].nodes[:, 2]
@@ -247,12 +247,12 @@ def _r_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
-    data["r"] = coords
+    data["x"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_s",
+    name="x_s",
     label="\\partial_{s} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -270,8 +270,7 @@ def _r_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierRZCurve",
 )
-def _r_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
-
+def _x_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
     dR = transforms["R"].transform(params["R_n"], dz=1)
     dZ = transforms["Z"].transform(params["Z_n"], dz=1)
@@ -282,12 +281,12 @@ def _r_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ transforms["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
-    data["r_s"] = coords
+    data["x_s"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_ss",
+    name="x_ss",
     label="\\partial_{ss} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -305,7 +304,7 @@ def _r_s_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierRZCurve",
 )
-def _r_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
+def _x_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
     dR = transforms["R"].transform(params["R_n"], dz=1)
     d2R = transforms["R"].transform(params["R_n"], dz=2)
@@ -320,12 +319,12 @@ def _r_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ transforms["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
-    data["r_ss"] = coords
+    data["x_ss"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_sss",
+    name="x_sss",
     label="\\partial_{sss} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -343,7 +342,7 @@ def _r_ss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierRZCurve",
 )
-def _r_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
+def _x_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_n"], dz=0)
     dR = transforms["R"].transform(params["R_n"], dz=1)
     d2R = transforms["R"].transform(params["R_n"], dz=2)
@@ -358,12 +357,12 @@ def _r_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ transforms["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz_vec(coords, phi=transforms["grid"].nodes[:, 2])
-    data["r_sss"] = coords
+    data["x_sss"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r",
+    name="x",
     label="\\mathbf{r}",
     units="m",
     units_long="meters",
@@ -382,7 +381,7 @@ def _r_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
-def _r_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     X = transforms["X"].transform(params["X_n"], dz=0)
     Y = transforms["Y"].transform(params["Y_n"], dz=0)
     Z = transforms["Z"].transform(params["Z_n"], dz=0)
@@ -390,12 +389,12 @@ def _r_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
     if kwargs.get("basis", "rpz").lower() == "rpz":
         coords = xyz2rpz(coords)
-    data["r"] = coords
+    data["x"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_s",
+    name="x_s",
     label="\\partial_{s} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -414,7 +413,7 @@ def _r_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
-def _r_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     X = transforms["X"].transform(params["X_n"], dz=1)
     Y = transforms["Y"].transform(params["Y_n"], dz=1)
     Z = transforms["Z"].transform(params["Z_n"], dz=1)
@@ -426,12 +425,12 @@ def _r_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
             x=coords[:, 1] + transforms["shift"][0],
             y=coords[:, 1] + transforms["shift"][1],
         )
-    data["r_s"] = coords
+    data["x_s"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_ss",
+    name="x_ss",
     label="\\partial_{ss} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -450,7 +449,7 @@ def _r_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
-def _r_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     X = transforms["X"].transform(params["X_n"], dz=2)
     Y = transforms["Y"].transform(params["Y_n"], dz=2)
     Z = transforms["Z"].transform(params["Z_n"], dz=2)
@@ -462,12 +461,12 @@ def _r_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
             x=coords[:, 1] + transforms["shift"][0],
             y=coords[:, 1] + transforms["shift"][1],
         )
-    data["r_ss"] = coords
+    data["x_ss"] = coords
     return data
 
 
 @register_compute_fun(
-    name="r_sss",
+    name="x_sss",
     label="\\partial_{sss} \\mathbf{r}",
     units="m",
     units_long="meters",
@@ -486,7 +485,7 @@ def _r_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
-def _r_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
+def _x_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     X = transforms["X"].transform(params["X_n"], dz=3)
     Y = transforms["Y"].transform(params["Y_n"], dz=3)
     Z = transforms["Z"].transform(params["Z_n"], dz=3)
@@ -498,7 +497,7 @@ def _r_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
             x=coords[:, 1] + transforms["shift"][0],
             y=coords[:, 1] + transforms["shift"][1],
         )
-    data["r_sss"] = coords
+    data["x_sss"] = coords
     return data
 
 
@@ -513,12 +512,12 @@ def _r_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["r_s"],
+    data=["x_s"],
     parameterization="desc.geometry.Curve",
 )
 def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     data["frenet_tangent"] = (
-        data["r_s"] / jnp.linalg.norm(data["r_s"], axis=-1)[:, None]
+        data["x_s"] / jnp.linalg.norm(data["x_s"], axis=-1)[:, None]
     )
     return data
 
@@ -534,12 +533,12 @@ def _frenet_tangent(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["r_ss"],
+    data=["x_ss"],
     parameterization="desc.geometry.Curve",
 )
 def _frenet_normal(params, transforms, profiles, data, **kwargs):
     data["frenet_normal"] = (
-        data["r_ss"] / jnp.linalg.norm(data["r_ss"], axis=-1)[:, None]
+        data["x_ss"] / jnp.linalg.norm(data["x_ss"], axis=-1)[:, None]
     )
     return data
 
@@ -576,12 +575,12 @@ def _frenet_binormal(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["r_s", "r_ss"],
+    data=["x_s", "x_ss"],
     parameterization="desc.geometry.Curve",
 )
 def _curvature(params, transforms, profiles, data, **kwargs):
-    dxn = jnp.linalg.norm(data["r_s"], axis=-1)[:, jnp.newaxis]
-    data["curvature"] = jnp.linalg.norm(cross(data["r_s"], data["r_ss"]) / dxn**3)
+    dxn = jnp.linalg.norm(data["x_s"], axis=-1)[:, jnp.newaxis]
+    data["curvature"] = jnp.linalg.norm(cross(data["x_s"], data["x_ss"]) / dxn**3)
     return data
 
 
@@ -596,13 +595,13 @@ def _curvature(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["r_s", "r_ss", "r_sss"],
+    data=["x_s", "x_ss", "x_sss"],
     parameterization="desc.geometry.Curve",
 )
 def _torsion(params, transforms, profiles, data, **kwargs):
-    dxd2x = cross(data["r_s"], data["r_ss"])
+    dxd2x = cross(data["x_s"], data["x_ss"])
     data["torsion"] = (
-        dot(dxd2x, data["r_sss"]) / jnp.linalg.norm(dxd2x, axis=-1)[:, jnp.newaxis] ** 2
+        dot(dxd2x, data["x_sss"]) / jnp.linalg.norm(dxd2x, axis=-1)[:, jnp.newaxis] ** 2
     )
     return data
 
@@ -618,10 +617,10 @@ def _torsion(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="s",
-    data=["s", "r_s"],
+    data=["s", "x_s"],
     parameterization="desc.geometry.Curve",
 )
 def _length(params, transforms, profiles, data, **kwargs):
-    T = jnp.linalg.norm(data["r_s"], axis=-1)
+    T = jnp.linalg.norm(data["x_s"], axis=-1)
     data["length"] = jnp.trapz(T, data["s"])
     return data

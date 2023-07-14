@@ -369,16 +369,22 @@ def _r_sss_FourierRZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve",
     dim=3,
     params=["X_n", "Y_n", "Z_n"],
-    transforms={"r": [[0, 0, 0]], "rotmat": [], "shift": []},
+    transforms={
+        "X": [[0, 0, 0]],
+        "Y": [[0, 0, 0]],
+        "Z": [[0, 0, 0]],
+        "rotmat": [],
+        "shift": [],
+    },
     profiles=[],
     coordinates="s",
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
 def _r_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
-    X = transforms["r"].transform(params["X_n"], dz=0)
-    Y = transforms["r"].transform(params["Y_n"], dz=0)
-    Z = transforms["r"].transform(params["Z_n"], dz=0)
+    X = transforms["X"].transform(params["X_n"], dz=0)
+    Y = transforms["Y"].transform(params["Y_n"], dz=0)
+    Z = transforms["Z"].transform(params["Z_n"], dz=0)
     coords = jnp.stack([X, Y, Z], axis=1)
     coords = coords @ transforms["rotmat"].T + transforms["shift"][jnp.newaxis, :]
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -395,16 +401,22 @@ def _r_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, first derivative",
     dim=3,
     params=["X_n", "Y_n", "Z_n"],
-    transforms={"r": [[0, 0, 1]], "rotmat": [], "shift": []},
+    transforms={
+        "X": [[0, 0, 1]],
+        "Y": [[0, 0, 1]],
+        "Z": [[0, 0, 1]],
+        "rotmat": [],
+        "shift": [],
+    },
     profiles=[],
     coordinates="s",
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
 def _r_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
-    X = transforms["r"].transform(params["X_n"], dz=1)
-    Y = transforms["r"].transform(params["Y_n"], dz=1)
-    Z = transforms["r"].transform(params["Z_n"], dz=1)
+    X = transforms["X"].transform(params["X_n"], dz=1)
+    Y = transforms["Y"].transform(params["Y_n"], dz=1)
+    Z = transforms["Z"].transform(params["Z_n"], dz=1)
     coords = jnp.stack([X, Y, Z], axis=1)
     coords = coords @ transforms["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -425,16 +437,22 @@ def _r_s_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, second derivative",
     dim=3,
     params=["X_n", "Y_n", "Z_n"],
-    transforms={"r": [[0, 0, 2]], "rotmat": [], "shift": []},
+    transforms={
+        "X": [[0, 0, 2]],
+        "Y": [[0, 0, 2]],
+        "Z": [[0, 0, 2]],
+        "rotmat": [],
+        "shift": [],
+    },
     profiles=[],
     coordinates="s",
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
 def _r_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
-    X = transforms["r"].transform(params["X_n"], dz=2)
-    Y = transforms["r"].transform(params["Y_n"], dz=2)
-    Z = transforms["r"].transform(params["Z_n"], dz=2)
+    X = transforms["X"].transform(params["X_n"], dz=2)
+    Y = transforms["Y"].transform(params["Y_n"], dz=2)
+    Z = transforms["Z"].transform(params["Z_n"], dz=2)
     coords = jnp.stack([X, Y, Z], axis=1)
     coords = coords @ transforms["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":
@@ -455,16 +473,22 @@ def _r_ss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
     description="Position vector along curve, third derivative",
     dim=3,
     params=["X_n", "Y_n", "Z_n"],
-    transforms={"r": [[0, 0, 3]], "rotmat": [], "shift": []},
+    transforms={
+        "X": [[0, 0, 3]],
+        "Y": [[0, 0, 3]],
+        "Z": [[0, 0, 3]],
+        "rotmat": [],
+        "shift": [],
+    },
     profiles=[],
     coordinates="s",
     data=[],
     parameterization="desc.geometry.FourierXYZCurve",
 )
 def _r_sss_FourierXYZCurve(params, transforms, profiles, data, **kwargs):
-    X = transforms["r"].transform(params["X_n"], dz=3)
-    Y = transforms["r"].transform(params["Y_n"], dz=3)
-    Z = transforms["r"].transform(params["Z_n"], dz=3)
+    X = transforms["X"].transform(params["X_n"], dz=3)
+    Y = transforms["Y"].transform(params["Y_n"], dz=3)
+    Z = transforms["Z"].transform(params["Z_n"], dz=3)
     coords = jnp.stack([X, Y, Z], axis=1)
     coords = coords @ transforms["rotmat"].T
     if kwargs.get("basis", "rpz").lower() == "rpz":

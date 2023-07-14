@@ -475,14 +475,19 @@ class FourierXYZCurve(Curve):
         Fourier coefficients for X, Y, Z
     modes : array-like
         mode numbers associated with X_n etc.
-    grid : Grid
-        default grid for computation
     name : str
         name for this curve
 
     """
 
-    _io_attrs_ = Curve._io_attrs_ + ["_X_n", "_Y_n", "_Z_n", "_basis", "_transform"]
+    _io_attrs_ = Curve._io_attrs_ + [
+        "_X_n",
+        "_Y_n",
+        "_Z_n",
+        "_X_basis",
+        "_Y_basis",
+        "_Z_basis",
+    ]
 
     def __init__(
         self,
@@ -503,54 +508,44 @@ class FourierXYZCurve(Curve):
         assert issubclass(modes.dtype.type, np.integer)
 
         N = np.max(abs(modes))
-        self._basis = FourierSeries(N, NFP=1, sym=False)
-        self._X_n = copy_coeffs(X_n, modes, self.basis.modes[:, 2])
-        self._Y_n = copy_coeffs(Y_n, modes, self.basis.modes[:, 2])
-        self._Z_n = copy_coeffs(Z_n, modes, self.basis.modes[:, 2])
-
-        if grid is None:
-            grid = LinearGrid(N=2 * N, endpoint=True)
-        self._grid = grid
-        self._transform = self._get_transforms(grid)
+        self._X_basis = FourierSeries(N, NFP=1, sym=False)
+        self._Y_basis = FourierSeries(N, NFP=1, sym=False)
+        self._Z_basis = FourierSeries(N, NFP=1, sym=False)
+        self._X_n = copy_coeffs(X_n, modes, self.X_basis.modes[:, 2])
+        self._Y_n = copy_coeffs(Y_n, modes, self.Y_basis.modes[:, 2])
+        self._Z_n = copy_coeffs(Z_n, modes, self.Z_basis.modes[:, 2])
 
     @property
-    def basis(self):
-        """Spectral basis for Fourier series."""
-        return self._basis
+    def X_basis(self):
+        """Spectral basis for X Fourier series."""
+        return self._X_basis
 
     @property
-    def grid(self):
-        """Default grid for computation."""
-        return self._grid
+    def Y_basis(self):
+        """Spectral basis for Y Fourier series."""
+        return self._Y_basis
 
-    @grid.setter
-    def grid(self, new):
-        if isinstance(new, Grid):
-            self._grid = new
-        elif jnp.isscalar(new):
-            self._grid = LinearGrid(N=new, endpoint=True)
-        elif isinstance(new, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(new, sort=False)
-        else:
-            raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
-            )
-        self._transform.grid = self.grid
+    @property
+    def Z_basis(self):
+        """Spectral basis for Z Fourier series."""
+        return self._Z_basis
 
     @property
     def N(self):
         """Maximum mode number."""
-        return self.basis.N
+        return max(self.X_basis.N, self.Y_basis.N, self.Z_basis.N)
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
         if (N is not None) and (N != self.N):
             modes_old = self.basis.modes
-            self.basis.change_resolution(N=N)
+            self.X_basis.change_resolution(N=N)
+            self.Y_basis.change_resolution(N=N)
+            self.Z_basis.change_resolution(N=N)
             self._transform = self._get_transforms(self.grid)
-            self.X_n = copy_coeffs(self.X_n, modes_old, self.basis.modes)
-            self.Y_n = copy_coeffs(self.Y_n, modes_old, self.basis.modes)
-            self.Z_n = copy_coeffs(self.Z_n, modes_old, self.basis.modes)
+            self.X_n = copy_coeffs(self.X_n, modes_old, self.X_basis.modes)
+            self.Y_n = copy_coeffs(self.Y_n, modes_old, self.Y_basis.modes)
+            self.Z_n = copy_coeffs(self.Z_n, modes_old, self.Z_basis.modes)
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -593,12 +588,12 @@ class FourierXYZCurve(Curve):
 
     @X_n.setter
     def X_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(new) == self.X_basis.num_modes:
             self._X_n = jnp.asarray(new)
         else:
             raise ValueError(
                 f"X_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self._basis.num_modes} modes."
+                + f"basis with {self.X_basis.num_modes} modes."
             )
 
     @property
@@ -608,12 +603,12 @@ class FourierXYZCurve(Curve):
 
     @Y_n.setter
     def Y_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(new) == self.Y_basis.num_modes:
             self._Y_n = jnp.asarray(new)
         else:
             raise ValueError(
                 f"Y_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self._basis.num_modes} modes."
+                + f"basis with {self.Y_basis.num_modes} modes."
             )
 
     @property
@@ -623,12 +618,12 @@ class FourierXYZCurve(Curve):
 
     @Z_n.setter
     def Z_n(self, new):
-        if len(new) == self._basis.num_modes:
+        if len(new) == self.Z_basis.num_modes:
             self._Z_n = jnp.asarray(new)
         else:
             raise ValueError(
                 f"Z_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self._basis.num_modes} modes."
+                + f"basis with {self.Z_basis.num_modes} modes."
             )
 
     def _get_transforms(self, grid=None):
@@ -839,8 +834,7 @@ class FourierPlanarCurve(Curve):
         "_r_n",
         "_center",
         "_normal",
-        "_basis",
-        "_transform",
+        "_r_basis",
     ]
 
     # Reference frame is centered at the origin with normal in the +Z direction.
@@ -863,52 +857,29 @@ class FourierPlanarCurve(Curve):
         assert issubclass(modes.dtype.type, np.integer)
 
         N = np.max(abs(modes))
-        self._basis = FourierSeries(N, NFP=1, sym=False)
-        self._r_n = copy_coeffs(r_n, modes, self.basis.modes[:, 2])
+        self._r_basis = FourierSeries(N, NFP=1, sym=False)
+        self._r_n = copy_coeffs(r_n, modes, self.r_basis.modes[:, 2])
 
         self.normal = normal
         self.center = center
-        if grid is None:
-            grid = LinearGrid(N=2 * self.N, endpoint=True)
-        self._grid = grid
-        self._transform = self._get_transforms(grid)
 
     @property
-    def basis(self):
+    def r_basis(self):
         """Spectral basis for Fourier series."""
-        return self._basis
-
-    @property
-    def grid(self):
-        """Default grid for computation."""
-        return self._grid
-
-    @grid.setter
-    def grid(self, new):
-        if isinstance(new, Grid):
-            self._grid = new
-        elif jnp.isscalar(new):
-            self._grid = LinearGrid(N=new, endpoint=True)
-        elif isinstance(new, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(new, sort=False)
-        else:
-            raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
-            )
-        self._transform.grid = self.grid
+        return self._r_basis
 
     @property
     def N(self):
         """Maximum mode number."""
-        return self.basis.N
+        return self.r_basis.N
 
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
         if (N is not None) and (N != self.N):
-            modes_old = self.basis.modes
-            self.basis.change_resolution(N=N)
+            modes_old = self.r_basis.modes
+            self.r_basis.change_resolution(N=N)
             self._transform = self._get_transforms(self.grid)
-            self.r_n = copy_coeffs(self.r_n, modes_old, self.basis.modes)
+            self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
 
     @property
     def center(self):
@@ -945,12 +916,12 @@ class FourierPlanarCurve(Curve):
 
     @r_n.setter
     def r_n(self, new):
-        if len(np.asarray(new)) == self._basis.num_modes:
+        if len(np.asarray(new)) == self.r_basis.num_modes:
             self._r_n = jnp.asarray(new)
         else:
             raise ValueError(
                 f"r_n should have the same size as the basis, got {len(new)} for "
-                + f"basis with {self._basis.num_modes} modes."
+                + f"basis with {self.r_basis.num_modes} modes."
             )
 
     def get_coeffs(self, n):

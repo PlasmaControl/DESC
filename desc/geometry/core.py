@@ -13,7 +13,7 @@ from .utils import reflection_matrix, rotation_matrix
 class Curve(IOAble, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
-    _io_attrs_ = ["_name", "_grid", "shift", "rotmat"]
+    _io_attrs_ = ["_name", "shift", "rotmat"]
 
     def __init__(self, name=""):
         self.shift = jnp.array([0, 0, 0])
@@ -76,14 +76,14 @@ class Curve(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, grid={})".format(self.name, self.grid)
+            + " (name={})".format(self.name)
         )
 
 
 class Surface(IOAble, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
-    _io_attrs_ = ["_name", "_grid", "_sym", "_L", "_M", "_N"]
+    _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]
 
     @property
     def name(self):
@@ -207,5 +207,5 @@ class Surface(IOAble, ABC):
             type(self).__name__
             + " at "
             + str(hex(id(self)))
-            + " (name={}, grid={})".format(self.name, self.grid)
+            + " (name={})".format(self.name)
         )

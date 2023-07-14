@@ -6,12 +6,11 @@ import numpy as np
 
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
-from desc.grid import Grid, LinearGrid
+from desc.grid import LinearGrid
 from desc.transform import Transform
 from desc.utils import copy_coeffs
 
 from .core import Curve
-from .utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 
 __all__ = [
     "FourierRZCurve",
@@ -35,8 +34,6 @@ class FourierRZCurve(Curve):
         Number of field periods.
     sym : bool
         Whether to enforce stellarator symmetry.
-    grid : Grid
-        Default grid for computation.
     name : str
         Name for this curve.
 
@@ -47,8 +44,6 @@ class FourierRZCurve(Curve):
         "_Z_n",
         "_R_basis",
         "_Z_basis",
-        "_R_transform",
-        "_Z_transform",
         "_sym",
         "_NFP",
     ]
@@ -61,7 +56,6 @@ class FourierRZCurve(Curve):
         modes_Z=None,
         NFP=1,
         sym="auto",
-        grid=None,
         name="",
     ):
         super().__init__(name)
@@ -92,16 +86,11 @@ class FourierRZCurve(Curve):
         NZ = np.max(abs(modes_Z))
         N = max(NR, NZ)
         self._NFP = NFP
-        self._R_basis = FourierSeries(NR, NFP, sym="cos" if sym else False)
-        self._Z_basis = FourierSeries(NZ, NFP, sym="sin" if sym else False)
+        self._R_basis = FourierSeries(N, NFP, sym="cos" if sym else False)
+        self._Z_basis = FourierSeries(N, NFP, sym="sin" if sym else False)
 
         self._R_n = copy_coeffs(R_n, modes_R, self.R_basis.modes[:, 2])
         self._Z_n = copy_coeffs(Z_n, modes_Z, self.Z_basis.modes[:, 2])
-
-        if grid is None:
-            grid = LinearGrid(N=2 * N, NFP=self.NFP, endpoint=True)
-        self._grid = grid
-        self._R_transform, self._Z_transform = self._get_transforms(grid)
 
     @property
     def sym(self):
@@ -129,26 +118,6 @@ class FourierRZCurve(Curve):
             isinstance(new, numbers.Real) and int(new) == new and new > 0
         ), f"NFP should be a positive integer, got {type(new)}"
         self.change_resolution(NFP=new)
-
-    @property
-    def grid(self):
-        """Default grid for computation."""
-        return self._grid
-
-    @grid.setter
-    def grid(self, new):
-        if isinstance(new, Grid):
-            self._grid = new
-        elif jnp.isscalar(new):
-            self._grid = LinearGrid(N=new, endpoint=True)
-        elif isinstance(new, (np.ndarray, jnp.ndarray)):
-            self._grid = Grid(new, sort=False)
-        else:
-            raise TypeError(
-                f"grid should be a Grid or subclass, or ndarray, got {type(new)}"
-            )
-        self._R_transform.grid = self.grid
-        self._Z_transform.grid = self.grid
 
     @property
     def N(self):
@@ -238,207 +207,6 @@ class FourierRZCurve(Curve):
                 + f"basis with {self.Z_basis.num_modes} modes"
             )
 
-    def _get_transforms(self, grid=None):
-        if grid is None:
-            return self._R_transform, self._Z_transform
-        if not isinstance(grid, Grid):
-            if np.isscalar(grid):
-                grid = np.linspace(0, 2 * np.pi, grid)
-            grid = np.atleast_1d(grid)
-            if grid.ndim == 1:
-                grid = np.pad(grid[:, np.newaxis], ((0, 0), (2, 0)))
-            grid = Grid(grid, sort=False)
-        R_transform = Transform(
-            grid,
-            self.R_basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
-        Z_transform = Transform(
-            grid,
-            self.Z_basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
-        return R_transform, Z_transform
-
-    def compute_coordinates(self, R_n=None, Z_n=None, grid=None, dt=0, basis="rpz"):
-        """Compute values using specified coefficients.
-
-        Parameters
-        ----------
-        R_n, Z_n: array-like
-            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
-        grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        values : ndarray, shape(k,3)
-            R, phi, Z or x, y, z coordinates of the curve at specified grid locations
-            in phi.
-
-        """
-        assert basis.lower() in ["rpz", "xyz"]
-        if R_n is None:
-            R_n = self.R_n
-        if Z_n is None:
-            Z_n = self.Z_n
-        R_transform, Z_transform = self._get_transforms(grid)
-        if dt == 0:
-            R = R_transform.transform(R_n, dz=0)
-            Z = Z_transform.transform(Z_n, dz=0)
-            phi = R_transform.grid.nodes[:, 2]
-            coords = jnp.stack([R, phi, Z], axis=1)
-        elif dt == 1:
-            R0 = R_transform.transform(R_n, dz=0)
-            dR = R_transform.transform(R_n, dz=dt)
-            dZ = Z_transform.transform(Z_n, dz=dt)
-            dphi = R0
-            coords = jnp.stack([dR, dphi, dZ], axis=1)
-        elif dt == 2:
-            R0 = R_transform.transform(R_n, dz=0)
-            dR = R_transform.transform(R_n, dz=1)
-            d2R = R_transform.transform(R_n, dz=2)
-            d2Z = Z_transform.transform(Z_n, dz=2)
-            R = d2R - R0
-            Z = d2Z
-            # 2nd derivative wrt phi = 0
-            phi = 2 * dR
-            coords = jnp.stack([R, phi, Z], axis=1)
-        elif dt == 3:
-            R0 = R_transform.transform(R_n, dz=0)
-            dR = R_transform.transform(R_n, dz=1)
-            d2R = R_transform.transform(R_n, dz=2)
-            d3R = R_transform.transform(R_n, dz=3)
-            d3Z = Z_transform.transform(Z_n, dz=3)
-            R = d3R - 3 * dR
-            Z = d3Z
-            phi = 3 * d2R - R0
-            coords = jnp.stack([R, phi, Z], axis=1)
-        else:
-            raise NotImplementedError(
-                "Derivatives higher than 3 have not been implemented in "
-                + "cylindrical coordinates."
-            )
-        # convert to xyz for displacement and rotation
-        if dt > 0:
-            coords = rpz2xyz_vec(coords, phi=R_transform.grid.nodes[:, 2])
-        else:
-            coords = rpz2xyz(coords)
-        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
-        if basis.lower() == "rpz":
-            if dt > 0:
-                coords = xyz2rpz_vec(coords, phi=R_transform.grid.nodes[:, 2])
-            else:
-                coords = xyz2rpz(coords)
-        return coords
-
-    def compute_frenet_frame(self, R_n=None, Z_n=None, grid=None, basis="rpz"):
-        """Compute Frenet frame vectors using specified coefficients.
-
-        Parameters
-        ----------
-        R_n, Z_n: array-like
-            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
-        grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
-        basis : {"rpz", "xyz"}
-            basis vectors to use for Frenet vector representation
-
-        Returns
-        -------
-        T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid
-            locations in phi
-
-        """
-        T = self.compute_coordinates(R_n, Z_n, grid, dt=1, basis=basis)
-        N = self.compute_coordinates(R_n, Z_n, grid, dt=2, basis=basis)
-
-        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
-        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
-
-        return T, N, B
-
-    def compute_curvature(self, R_n=None, Z_n=None, grid=None):
-        """Compute curvature using specified coefficients.
-
-        Parameters
-        ----------
-        R_n, Z_n: array-like
-            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
-        grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        kappa : ndarray, shape(k,)
-            curvature of the curve at specified grid locations in phi
-
-        """
-        dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
-        d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
-        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
-        return kappa
-
-    def compute_torsion(self, R_n=None, Z_n=None, grid=None):
-        """Compute torsion using specified coefficients.
-
-        Parameters
-        ----------
-        R_n, Z_n: array-like
-            Fourier coefficients for R, Z. Defaults to self.R_n, self.Z_n
-        grid : Grid or array-like
-            toroidal coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        tau : ndarray, shape(k,)
-            torsion of the curve at specified grid locations in phi
-
-        """
-        dx = self.compute_coordinates(R_n, Z_n, grid, dt=1)
-        d2x = self.compute_coordinates(R_n, Z_n, grid, dt=2)
-        d3x = self.compute_coordinates(R_n, Z_n, grid, dt=3)
-        dxd2x = jnp.cross(dx, d2x, axis=1)
-        tau = (
-            jnp.sum(dxd2x * d3x, axis=1)
-            / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
-        )
-        return tau
-
-    def compute_length(self, R_n=None, Z_n=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature.
-
-        Parameters
-        ----------
-        R_n, Z_n: array-like
-            Fourier coefficients for R, Z. If not given, defaults to values given
-            by R_n, Z_n attributes
-        grid : Grid or array-like
-            Toroidal coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        length : float
-            length of the curve approximated by quadrature
-
-        """
-        R_transform, Z_transform = self._get_transforms(grid)
-        T = self.compute_coordinates(R_n, Z_n, grid, dt=1)
-        T = jnp.linalg.norm(T, axis=1)
-        phi = R_transform.grid.nodes[:, 2]
-        return jnp.trapz(T, phi)
-
     def to_FourierXYZCurve(self, N=None):
         """Convert to FourierXYZCurve representation.
 
@@ -495,7 +263,6 @@ class FourierXYZCurve(Curve):
         Y_n=[0, 0, 0],
         Z_n=[-2, 0, 0],
         modes=None,
-        grid=None,
         name="",
     ):
         super().__init__(name)
@@ -626,182 +393,6 @@ class FourierXYZCurve(Curve):
                 + f"basis with {self.Z_basis.num_modes} modes."
             )
 
-    def _get_transforms(self, grid=None):
-        if grid is None:
-            return self._transform
-        if not isinstance(grid, Grid):
-            if np.isscalar(grid):
-                grid = np.linspace(0, 2 * np.pi, grid)
-            grid = np.atleast_1d(grid)
-            if grid.ndim == 1:
-                grid = np.pad(grid[:, np.newaxis], ((0, 0), (2, 0)))
-            grid = Grid(grid, sort=False)
-        transform = Transform(
-            grid,
-            self.basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
-        return transform
-
-    def compute_coordinates(
-        self, X_n=None, Y_n=None, Z_n=None, grid=None, dt=0, basis="xyz"
-    ):
-        """Compute values using specified coefficients.
-
-        Parameters
-        ----------
-        X_n, Y_n, Z_n: array-like
-            Fourier coefficients for X, Y, Z. If not given, defaults to values given
-            by X_n, Y_n, Z_n attributes
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        values : ndarray, shape(k,3)
-            X, Y, Z or R, phi, Z coordinates of the curve at specified grid locations
-            in phi.
-
-        """
-        assert basis.lower() in ["rpz", "xyz"]
-        if X_n is None:
-            X_n = self.X_n
-        if Y_n is None:
-            Y_n = self.Y_n
-        if Z_n is None:
-            Z_n = self.Z_n
-
-        transform = self._get_transforms(grid)
-        X = transform.transform(X_n, dz=dt)
-        Y = transform.transform(Y_n, dz=dt)
-        Z = transform.transform(Z_n, dz=dt)
-
-        coords = jnp.stack([X, Y, Z], axis=1)
-        coords = coords @ self.rotmat.T + (self.shift[jnp.newaxis, :] * (dt == 0))
-        if basis.lower() == "rpz":
-            if dt > 0:
-                coords = xyz2rpz_vec(
-                    coords,
-                    x=coords[:, 1] + self.shift[0],
-                    y=coords[:, 1] + self.shift[1],
-                )
-            else:
-                coords = xyz2rpz(coords)
-        return coords
-
-    def compute_frenet_frame(
-        self, X_n=None, Y_n=None, Z_n=None, grid=None, basis="xyz"
-    ):
-        """Compute Frenet frame vectors using specified coefficients.
-
-        Parameters
-        ----------
-        X_n, Y_n, Z_n: array-like
-            Fourier coefficients for X, Y, Z. If not given, defaults to values given
-            by X_n, Y_n, Z_n attributes
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-        basis : {"rpz", "xyz"}
-            basis vectors to use for Frenet vector representation
-
-        Returns
-        -------
-        T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid
-            locations
-
-        """
-        T = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1, basis=basis)
-        N = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2, basis=basis)
-
-        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
-        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
-
-        return T, N, B
-
-    def compute_curvature(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute curvature using specified coefficients.
-
-        Parameters
-        ----------
-        X_n, Y_n, Z_n: array-like
-            Fourier coefficients for X, Y, Z. If not given, defaults to values given
-            by X_n, Y_n, Z_n attributes
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        kappa : ndarray, shape(k,)
-            curvature of the curve at specified grid locations in phi
-
-        """
-        dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
-        d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
-        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
-        return kappa
-
-    def compute_torsion(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute torsion using specified coefficientsnp.empty((0, 3)).
-
-        Parameters
-        ----------
-        X_n, Y_n, Z_n: array-like
-            Fourier coefficients for X, Y, Z. If not given, defaults to values given
-            by X_n, Y_n, Z_n attributes
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        tau : ndarray, shape(k,)
-            torsion of the curve at specified grid locations in phi
-
-        """
-        dx = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
-        d2x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=2)
-        d3x = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=3)
-        dxd2x = jnp.cross(dx, d2x, axis=1)
-        tau = (
-            jnp.sum(dxd2x * d3x, axis=1)
-            / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
-        )
-        return tau
-
-    def compute_length(self, X_n=None, Y_n=None, Z_n=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature.
-
-        Parameters
-        ----------
-        X_n, Y_n, Z_n: array-like
-            Fourier coefficients for X, Y, Z. If not given, defaults to values given
-            by X_n, Y_n, Z_n attributes
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        length : float
-            length of the curve approximated by quadrature
-
-        """
-        transform = self._get_transforms(grid)
-        T = self.compute_coordinates(X_n, Y_n, Z_n, grid, dt=1)
-        T = jnp.linalg.norm(T, axis=1)
-        theta = transform.grid.nodes[:, 2]
-        return jnp.trapz(T, theta)
-
     # TODO: to_rz method for converting to FourierRZCurve representation
     # (might be impossible to parameterize with toroidal angle phi)
 
@@ -823,8 +414,6 @@ class FourierPlanarCurve(Curve):
         Fourier coefficients for radius from center as function of polar angle
     modes : array-like
         mode numbers associated with r_n
-    grid : Grid
-        default grid for computation
     name : str
         name for this curve
 
@@ -845,7 +434,6 @@ class FourierPlanarCurve(Curve):
         normal=[0, 1, 0],
         r_n=2,
         modes=None,
-        grid=None,
         name="",
     ):
         super().__init__(name)
@@ -942,250 +530,3 @@ class FourierPlanarCurve(Curve):
             idx = self.basis.get_idx(0, 0, nn)
             if rr is not None:
                 self.r_n = put(self.r_n, idx, rr)
-
-    def _normal_rotmat(self, normal=None):
-        """Rotation matrix to rotate z axis into plane normal."""
-        nx, ny, nz = normal
-        nxny = jnp.sqrt(nx**2 + ny**2)
-
-        R = jnp.array(
-            [
-                [ny / nxny, -nx / nxny, 0],
-                [nx * nx / nxny, ny * nz / nxny, -nxny],
-                [nx, ny, nz],
-            ]
-        ).T
-        return jnp.where(nxny == 0, jnp.eye(3), R)
-
-    def _get_transforms(self, grid=None):
-        if grid is None:
-            return self._transform
-        if not isinstance(grid, Grid):
-            if np.isscalar(grid):
-                grid = np.linspace(0, 2 * np.pi, grid)
-            grid = np.atleast_1d(grid)
-            if grid.ndim == 1:
-                grid = np.pad(grid[:, np.newaxis], ((0, 0), (2, 0)))
-            grid = Grid(grid, sort=False)
-        transform = Transform(
-            grid,
-            self.basis,
-            derivs=np.array([[0, 0, 0], [0, 0, 1], [0, 0, 2], [0, 0, 3]]),
-        )
-        return transform
-
-    def compute_coordinates(
-        self, center=None, normal=None, r_n=None, grid=None, dt=0, basis="xyz"
-    ):
-        """Compute values using specified coefficients.
-
-        Parameters
-        ----------
-        center : array-like, shape(3,)
-            x,y,z coordinates of center of curve. If not given, defaults to self.center
-        normal : array-like, shape(3,)
-            x,y,z components of normal vector to planar surface. If not given, defaults
-            to self.normal
-        r_n : array-like
-            Fourier coefficients for radius from center as function of polar angle.
-            If not given defaults to self.r_n
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-        dt: int
-            derivative order to compute
-        basis : {"rpz", "xyz"}
-            coordinate system for returned points
-
-        Returns
-        -------
-        values : ndarray, shape(k,3)
-            X, Y, Z or R, phi, Z coordinates of the curve at specified grid locations
-            in theta.
-
-        """
-        assert basis.lower() in ["rpz", "xyz"]
-        if center is None:
-            center = self.center
-        if normal is None:
-            normal = self.normal
-        if r_n is None:
-            r_n = self.r_n
-        transform = self._get_transforms(grid)
-        r = transform.transform(r_n, dz=0)
-        t = transform.grid.nodes[:, -1]
-        Z = np.zeros_like(r)
-
-        if dt == 0:
-            X = r * jnp.cos(t)
-            Y = r * jnp.sin(t)
-            coords = jnp.array([X, Y, Z]).T
-        elif dt == 1:
-            dr = transform.transform(r_n, dz=1)
-            dX = dr * jnp.cos(t) - r * jnp.sin(t)
-            dY = dr * jnp.sin(t) + r * jnp.cos(t)
-            coords = jnp.array([dX, dY, Z]).T
-        elif dt == 2:
-            dr = transform.transform(r_n, dz=1)
-            d2r = transform.transform(r_n, dz=2)
-            d2X = d2r * jnp.cos(t) - 2 * dr * jnp.sin(t) - r * jnp.cos(t)
-            d2Y = d2r * jnp.sin(t) + 2 * dr * jnp.cos(t) - r * jnp.sin(t)
-            coords = jnp.array([d2X, d2Y, Z]).T
-        elif dt == 3:
-            dr = transform.transform(r_n, dz=1)
-            d2r = transform.transform(r_n, dz=2)
-            d3r = transform.transform(r_n, dz=3)
-            d3X = (
-                d3r * jnp.cos(t)
-                - 3 * d2r * jnp.sin(t)
-                - 3 * dr * jnp.cos(t)
-                + r * jnp.sin(t)
-            )
-            d3Y = (
-                d3r * jnp.sin(t)
-                + 3 * d2r * jnp.cos(t)
-                - 3 * dr * jnp.sin(t)
-                - r * jnp.cos(t)
-            )
-            coords = jnp.array([d3X, d3Y, Z]).T
-        else:
-            raise NotImplementedError(
-                "Derivatives higher than 3 have not been implemented for planar curves."
-            )
-        R = self._normal_rotmat(normal)
-        coords = jnp.matmul(coords, R.T) + (center * (dt == 0))
-        coords = jnp.matmul(coords, self.rotmat.T) + (self.shift * (dt == 0))
-
-        if basis.lower() == "rpz":
-            X = r * jnp.cos(t)
-            Y = r * jnp.sin(t)
-            xyzcoords = jnp.array([X, Y, Z]).T
-            xyzcoords = jnp.matmul(xyzcoords, R.T) + center
-            xyzcoords = jnp.matmul(xyzcoords, self.rotmat.T) + self.shift
-            x, y, z = xyzcoords.T
-            coords = xyz2rpz_vec(coords, x=x, y=y)
-
-        return coords
-
-    def compute_frenet_frame(
-        self, center=None, normal=None, r_n=None, grid=None, basis="xyz"
-    ):
-        """Compute Frenet frame vectors using specified coefficients.
-
-        Parameters
-        ----------
-        center : array-like, shape(3,)
-            x,y,z coordinates of center of curve. If not given, defaults to self.center
-        normal : array-like, shape(3,)
-            x,y,z components of normal vector to planar surface. If not given, defaults
-            to self.normal
-        r_n : array-like
-            Fourier coefficients for radius from center as function of polar angle.
-            If not given defaults to self.r_n
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-        basis : {"rpz", "xyz"}
-            basis vectors to use for Frenet vector representation
-
-        Returns
-        -------
-        T, N, B : ndarrays, shape(k,3)
-            tangent, normal, and binormal vectors of the curve at specified grid
-            locations in theta.
-
-        """
-        T = self.compute_coordinates(center, normal, r_n, grid, dt=1, basis=basis)
-        N = self.compute_coordinates(center, normal, r_n, grid, dt=2, basis=basis)
-
-        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
-        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
-        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
-
-        return T, N, B
-
-    def compute_curvature(self, center=None, normal=None, r_n=None, grid=None):
-        """Compute curvature using specified coefficients.
-
-        Parameters
-        ----------
-        center : array-like, shape(3,)
-            x,y,z coordinates of center of curve. If not given, defaults to self.center
-        normal : array-like, shape(3,)
-            x,y,z components of normal vector to planar surface. If not given, defaults
-            to self.normal
-        r_n : array-like
-            Fourier coefficients for radius from center as function of polar angle.
-            If not given defaults to self.r_n
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        kappa : ndarray, shape(k,)
-            curvature of the curve at specified grid locations in theta
-
-        """
-        dx = self.compute_coordinates(center, normal, r_n, grid, dt=1)
-        d2x = self.compute_coordinates(center, normal, r_n, grid, dt=2)
-        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
-        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
-        return kappa
-
-    def compute_torsion(self, center=None, normal=None, r_n=None, grid=None):
-        """Compute torsion using specified coefficients.
-
-        Parameters
-        ----------
-        center : array-like, shape(3,)
-            x,y,z coordinates of center of curve. If not given, defaults to self.center
-        normal : array-like, shape(3,)
-            x,y,z components of normal vector to planar surface. If not given, defaults
-            to self.normal
-        r_n : array-like
-            Fourier coefficients for radius from center as function of polar angle.
-            If not given defaults to self.r_n
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        tau : ndarray, shape(k,)
-            torsion of the curve at specified grid locations in phi
-
-        """
-        # torsion is zero for planar curves
-        transform = self._get_transforms(grid)
-        torsion = jnp.zeros_like(transform.grid.nodes[:, -1])
-        return torsion
-
-    def compute_length(self, center=None, normal=None, r_n=None, grid=None):
-        """Compute the length of the curve using specified nodes for quadrature.
-
-        Parameters
-        ----------
-        center : array-like, shape(3,)
-            x,y,z coordinates of center of curve. If not given, defaults to self.center
-        normal : array-like, shape(3,)
-            x,y,z components of normal vector to planar surface. If not given, defaults
-            to self.normal
-        r_n : array-like
-            Fourier coefficients for radius from center as function of polar angle.
-            If not given defaults to self.r_n
-        grid : Grid or array-like
-            dependent coordinates to compute at. Defaults to self.grid
-            If an integer, assumes that many linearly spaced points in (0,2pi)
-
-        Returns
-        -------
-        length : float
-            length of the curve approximated by quadrature
-
-        """
-        transform = self._get_transforms(grid)
-        T = self.compute_coordinates(center, normal, r_n, grid, dt=1)
-        T = jnp.linalg.norm(T, axis=1)
-        theta = transform.grid.nodes[:, 2]
-        return jnp.trapz(T, theta)

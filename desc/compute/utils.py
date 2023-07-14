@@ -313,7 +313,10 @@ def get_params(keys, obj, has_axis=False, **kwargs):
     params = []
     for key in deps:
         params += data_index[p][key]["dependencies"]["params"]
-    params = _sort_args(list(set(params)))
+    if p == "desc.equilibrium.equilibrium.Equilibrium":
+        # probably need some way to distinguish between params from different instances
+        # of the same class?
+        params = _sort_args(list(set(params)))
     if isinstance(obj, str) or inspect.isclass(obj):
         return params
     params = {name: np.atleast_1d(getattr(obj, name)).copy() for name in params}
@@ -376,6 +379,11 @@ def get_transforms(keys, obj, grid, **kwargs):
                 build=True,
                 build_pinv=True,
             )
+        elif c == "rotmat":
+            transforms["rotmat"] = obj.rotmat
+        elif c == "shift":
+            transforms["shift"] = obj.shift
+
     return transforms
 
 

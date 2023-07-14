@@ -1,5 +1,6 @@
 """Base classes for curves and surfaces."""
 
+import numbers
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -32,11 +33,6 @@ class Curve(IOAble, ABC):
     def name(self, new):
         self._name = new
 
-    @property
-    @abstractmethod
-    def grid(self):
-        """Grid: Nodes for computation."""
-
     def compute(
         self,
         names,
@@ -52,8 +48,9 @@ class Curve(IOAble, ABC):
         ----------
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
-        grid : Grid, optional
+        grid : Grid or int, optional
             Grid of coordinates to evaluate at. Defaults to the Linear grid.
+            If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
         transforms : dict of Transform
@@ -72,6 +69,9 @@ class Curve(IOAble, ABC):
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
             grid = LinearGrid(N=2 * self.N + 5, NFP=NFP, endpoint=True)
+        if isinstance(grid, numbers.Integral):
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            grid = LinearGrid(N=grid, NFP=NFP, endpoint=True)
 
         if params is None:
             params = get_params(names, obj=self)

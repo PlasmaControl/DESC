@@ -143,11 +143,6 @@ class FourierRZCurve(Curve):
             self.Z_basis.change_resolution(
                 N=N, NFP=self.NFP, sym="sin" if self.sym else self.sym
             )
-            if hasattr(self.grid, "change_resolution"):
-                self.grid.change_resolution(
-                    self.grid.L, self.grid.M, self.grid.N, self.NFP
-                )
-            self._R_transform, self._Z_transform = self._get_transforms(self.grid)
             self.R_n = copy_coeffs(self.R_n, R_modes_old, self.R_basis.modes)
             self.Z_n = copy_coeffs(self.Z_n, Z_modes_old, self.Z_basis.modes)
 
@@ -226,7 +221,7 @@ class FourierRZCurve(Curve):
             N = max(self.R_basis.N, self.Z_basis.N)
         grid = LinearGrid(N=4 * N, NFP=1, sym=False)
         basis = FourierSeries(N=N, NFP=1, sym=False)
-        xyz = self.compute_coordinates(grid=grid, basis="xyz")
+        xyz = self.compute("x", grid=grid, basis="xyz")["x"]
         transform = Transform(grid, basis, build_pinv=True)
         X_n = transform.fit(xyz[:, 0])
         Y_n = transform.fit(xyz[:, 1])
@@ -305,14 +300,15 @@ class FourierXYZCurve(Curve):
     def change_resolution(self, N=None):
         """Change the maximum angular resolution."""
         if (N is not None) and (N != self.N):
-            modes_old = self.basis.modes
+            Xmodes_old = self.X_basis.modes
+            Ymodes_old = self.Y_basis.modes
+            Zmodes_old = self.Z_basis.modes
             self.X_basis.change_resolution(N=N)
             self.Y_basis.change_resolution(N=N)
             self.Z_basis.change_resolution(N=N)
-            self._transform = self._get_transforms(self.grid)
-            self.X_n = copy_coeffs(self.X_n, modes_old, self.X_basis.modes)
-            self.Y_n = copy_coeffs(self.Y_n, modes_old, self.Y_basis.modes)
-            self.Z_n = copy_coeffs(self.Z_n, modes_old, self.Z_basis.modes)
+            self.X_n = copy_coeffs(self.X_n, Xmodes_old, self.X_basis.modes)
+            self.Y_n = copy_coeffs(self.Y_n, Ymodes_old, self.Y_basis.modes)
+            self.Z_n = copy_coeffs(self.Z_n, Zmodes_old, self.Z_basis.modes)
 
     def get_coeffs(self, n):
         """Get Fourier coefficients for given mode number(s)."""
@@ -321,11 +317,13 @@ class FourierXYZCurve(Curve):
         Y = np.zeros_like(n).astype(float)
         Z = np.zeros_like(n).astype(float)
 
-        idx = np.where(n[:, np.newaxis] == self.basis.modes[:, 2])
+        Xidx = np.where(n[:, np.newaxis] == self.X_basis.modes[:, 2])
+        Yidx = np.where(n[:, np.newaxis] == self.Y_basis.modes[:, 2])
+        Zidx = np.where(n[:, np.newaxis] == self.Z_basis.modes[:, 2])
 
-        X[idx[0]] = self.X_n[idx[1]]
-        Y[idx[0]] = self.Y_n[idx[1]]
-        Z[idx[0]] = self.Z_n[idx[1]]
+        X[Xidx[0]] = self.X_n[Xidx[1]]
+        Y[Yidx[0]] = self.Y_n[Yidx[1]]
+        Z[Zidx[0]] = self.Z_n[Zidx[1]]
         return X, Y, Z
 
     def set_coeffs(self, n, X=None, Y=None, Z=None):
@@ -339,12 +337,18 @@ class FourierXYZCurve(Curve):
         X = np.broadcast_to(X, n.shape)
         Y = np.broadcast_to(Y, n.shape)
         Z = np.broadcast_to(Z, n.shape)
-        for nn, XX, YY, ZZ in zip(n, X, Y, Z):
-            idx = self.basis.get_idx(0, 0, nn)
+        for nn, XX in zip(n, X):
+            idx = self.X_basis.get_idx(0, 0, nn)
             if XX is not None:
                 self.X_n = put(self.X_n, idx, XX)
+
+        for nn, YY in zip(n, Y):
+            idx = self.Y_basis.get_idx(0, 0, nn)
             if YY is not None:
                 self.Y_n = put(self.Y_n, idx, YY)
+
+        for nn, ZZ in zip(n, Z):
+            idx = self.Z_basis.get_idx(0, 0, nn)
             if ZZ is not None:
                 self.Z_n = put(self.Z_n, idx, ZZ)
 
@@ -466,7 +470,6 @@ class FourierPlanarCurve(Curve):
         if (N is not None) and (N != self.N):
             modes_old = self.r_basis.modes
             self.r_basis.change_resolution(N=N)
-            self._transform = self._get_transforms(self.grid)
             self.r_n = copy_coeffs(self.r_n, modes_old, self.r_basis.modes)
 
     @property
@@ -517,7 +520,7 @@ class FourierPlanarCurve(Curve):
         n = np.atleast_1d(n).astype(int)
         r = np.zeros_like(n).astype(float)
 
-        idx = np.where(n[:, np.newaxis] == self.basis.modes[:, 2])
+        idx = np.where(n[:, np.newaxis] == self.r_basis.modes[:, 2])
 
         r[idx[0]] = self.r_n[idx[1]]
         return r
@@ -527,6 +530,6 @@ class FourierPlanarCurve(Curve):
         n, r = np.atleast_1d(n), np.atleast_1d(r)
         r = np.broadcast_to(r, n.shape)
         for nn, rr in zip(n, r):
-            idx = self.basis.get_idx(0, 0, nn)
+            idx = self.r_basis.get_idx(0, 0, nn)
             if rr is not None:
                 self.r_n = put(self.r_n, idx, rr)

@@ -142,6 +142,27 @@ _aliases = {
         "desc.geometry.Surface",
         "Surface",
     ],
+    "desc.coils.FourierRZCoil": [
+        "desc.geometry.FourierRZCurve",
+        "FourierRZCurve",
+        "desc.geometry.core.Curve",
+        "desc.geometry.Curve",
+        "Curve",
+    ],
+    "desc.coils.FourierXYZCoil": [
+        "desc.geometry.FourierXYZCurve",
+        "FourierXYZCurve",
+        "desc.geometry.core.Curve",
+        "desc.geometry.Curve",
+        "Curve",
+    ],
+    "desc.coils.FourierPlanarCoil": [
+        "desc.geometry.FourierPlanarCurve",
+        "FourierPlanarCurve",
+        "desc.geometry.core.Curve",
+        "desc.geometry.Curve",
+        "Curve",
+    ],
 }
 
 data_index = {p: {} for p in _aliases.keys()}

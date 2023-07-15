@@ -147,6 +147,34 @@ def _A(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="S",
+    label="S",
+    units="m^{2}",
+    units_long="square meters",
+    description="Surface area of outermost flux surface",
+    dim=0,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="",
+    data=["|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
+)
+def _S(params, transforms, profiles, data, **kwargs):
+    data["S"] = jnp.max(
+        surface_integrals(
+            transforms["grid"],
+            data["|e_theta x e_zeta|"],
+            expand_out=False,
+        )
+    )
+    return data
+
+
+@register_compute_fun(
     name="S(r)",
     label="S(\\rho)",
     units="m^{2}",
@@ -158,10 +186,6 @@ def _A(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
-    parameterization=[
-        "desc.equilibrium.equilibrium.Equilibrium",
-        "desc.geometry.surface.FourierRZToroidalSurface",
-    ],
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])

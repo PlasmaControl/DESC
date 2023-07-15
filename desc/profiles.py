@@ -885,8 +885,12 @@ class SplineProfile(Profile):
             return jnp.zeros_like(xq)
         x = self._knots
         f = params
-        df = self._Dx @ f
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
+        if self._method == "monotonic":
+            df = None  # must create the df at compute time since the BCs
+            #  contain logic depending on f
+        else:
+            df = self._Dx @ f
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, fx=df)
         return fq
 
 

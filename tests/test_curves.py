@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve, XYZCurve
 from desc.grid import LinearGrid
 
 
@@ -134,8 +134,29 @@ class TestRZCurve:
         with pytest.raises(TypeError):
             c.grid = [1, 2, 3]
 
+    @pytest.mark.unit
+    def test_to_FourierXYZCurve(self):
+        """Test conversion to XYZCurve."""
+        rz = FourierRZCurve(R_n=[0, 10, 1], Z_n=[-1, 0, 0])
+        xyz = rz.to_FourierXYZCurve(N=2)
 
-class TestXYZCurve:
+        np.testing.assert_allclose(
+            rz.compute_curvature(), xyz.compute_curvature(grid=rz.grid)
+        )
+        np.testing.assert_allclose(
+            rz.compute_torsion(), xyz.compute_torsion(grid=rz.grid)
+        )
+        np.testing.assert_allclose(
+            rz.compute_length(), xyz.compute_length(grid=rz.grid)
+        )
+        np.testing.assert_allclose(
+            rz.compute_coordinates(basis="rpz"),
+            xyz.compute_coordinates(basis="rpz", grid=rz.grid),
+            atol=1e-12,
+        )
+
+
+class TestFourierXYZCurve:
     """Tests for FourierXYZCurve class."""
 
     @pytest.mark.unit
@@ -201,6 +222,34 @@ class TestXYZCurve:
         np.testing.assert_allclose(r, np.sqrt(1**2 + 11**2))
         np.testing.assert_allclose(p, np.arctan2(-11, 1))
         np.testing.assert_allclose(z, 1)
+
+    @pytest.mark.unit
+    def test_from_XYZCurve(self):
+        """Test fitting FourierXYZCurve from XYZCurve object."""
+        npts = 4000
+        # make a simple circular curve of radius 2
+        R = 2
+        phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
+        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        c2 = FourierXYZCurve.from_XYZCurve(c, N=1, grid=100)
+        c3 = c.to_FourierXYZCurve(N=1, grid=100)
+
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        np.testing.assert_allclose(
+            c2.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        np.testing.assert_allclose(
+            c3.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        grid = LinearGrid(N=20, endpoint=True)
+        coords1 = c.compute_coordinates(grid=grid)
+        coords2 = c2.compute_coordinates(grid=grid)
+        coords3 = c3.compute_coordinates(grid=grid)
+
+        np.testing.assert_allclose(coords1, coords2, atol=1e-10)
+        np.testing.assert_allclose(coords2, coords3)
 
     @pytest.mark.unit
     def test_misc(self):
@@ -356,3 +405,115 @@ class TestPlanarCurve:
             c.center = [4]
         with pytest.raises(ValueError):
             c.normal = [4]
+
+
+class TestXYZCurve:
+    """Tests for XYZCurve class."""
+
+    @pytest.mark.unit
+    def test_length(self):
+        """Test length of circular curve."""
+        npts = 4000
+        # make a simple circular curve of radius 2
+        R = 2
+        phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
+        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+
+        # make a simple circular curve of radius 2 with supplied knots as phi
+        R = 2
+        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+        c = XYZCurve(
+            X=R * np.cos(phi),
+            Y=R * np.sin(phi),
+            Z=np.zeros_like(phi),
+            knots=phi,
+            period=2 * np.pi,
+        )
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        c.translate([1, 1, 1])
+        c.rotate(angle=np.pi)
+        c.flip([0, 1, 0])
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+
+    @pytest.mark.unit
+    def test_coords(self):
+        """Test lab frame coordinates of circular curve."""
+        # make a simple circular curve of radius 2
+        R = 3
+        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        x, y, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="xyz").T
+        np.testing.assert_allclose(x, R)
+        np.testing.assert_allclose(y, 0, atol=1e-15)
+        np.testing.assert_allclose(z, 0, atol=1e-15)
+        c.rotate(angle=np.pi / 2)
+        c.flip([0, 1, 0])
+        c.translate([1, 1, 1])
+        r, p, z = c.compute_coordinates(grid=np.array([[0.0, 0.0, 0.0]]), basis="rpz").T
+        np.testing.assert_allclose(r, np.sqrt(1**2 + (R - 1) ** 2))
+        np.testing.assert_allclose(p, np.arctan2(-(R - 1), 1))
+        np.testing.assert_allclose(z, 1)
+
+    @pytest.mark.unit
+    def test_from_FourierXYZCurve(self):
+        """Test converting FourierXYZCurve to XYZCurve object."""
+        npts = 4000
+        # make a simple circular curve of radius 2
+        R = 2
+        c = FourierXYZCurve()
+        c2 = XYZCurve.from_FourierXYZCurve(c, grid=1000)
+        c3 = c.to_XYZCurve(grid=1000)
+
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        np.testing.assert_allclose(
+            c2.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        np.testing.assert_allclose(
+            c3.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        grid = LinearGrid(N=20, endpoint=True)
+        coords1 = c.compute_coordinates(grid=grid)
+        coords2 = c2.compute_coordinates(grid=grid)
+        coords3 = c3.compute_coordinates(grid=grid)
+
+        np.testing.assert_allclose(coords1, coords2, atol=1e-10)
+        np.testing.assert_allclose(coords2, coords3)
+
+    @pytest.mark.unit
+    def test_asserts(self):
+        """Test error checking when creating or setting properties of XYZCurve."""
+        # make a simple circular curve of radius 2
+        R = 2
+        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        with pytest.raises(TypeError):
+            c.grid = [1, 2, 3]
+        with pytest.raises(AssertionError):
+            XYZCurve(
+                X=R * np.cos(phi[:-1]),
+                Y=R * np.sin(phi[:-1]),
+                Z=np.zeros_like(phi[:-1]),
+            )
+        with pytest.raises(AssertionError):
+            XYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots=phi,
+                period=None,
+            )

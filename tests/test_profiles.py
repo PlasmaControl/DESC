@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 from scipy.constants import elementary_charge
+from scipy.interpolate import interp1d
 
 from desc.equilibrium import Equilibrium
 from desc.grid import LinearGrid
@@ -79,6 +80,42 @@ class TestProfiles:
         np.testing.assert_allclose(sp3(x), pp3(x), rtol=1e-5, atol=1e-3)
         sp4 = mp.to_spline()
         np.testing.assert_allclose(sp3(x), sp4(x), rtol=1e-5, atol=1e-2)
+
+    @pytest.mark.unit
+    def test_SplineProfile_methods(self):
+        """Test that all methods of SplineProfile work as intended without errors."""
+        pp = PowerSeriesProfile(
+            modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
+        )  # base profile to work off of
+        knots = np.linspace(0, 1.0, 20, endpoint=True)
+        x = np.linspace(0, 0.9, 25)
+
+        method = "nearest"
+        sp = pp.to_spline(knots=knots, method=method)
+        # should be exactly same if evaluated at knots + eps
+        np.testing.assert_allclose(pp(knots), sp(knots + 0.02))
+
+        method = "linear"
+        sp = pp.to_spline(knots=knots, method=method)
+        # should match linear interpolation
+        scipy_interp = interp1d(x=knots, y=pp(knots))
+        np.testing.assert_allclose(scipy_interp(x), sp(x))
+
+        method = "cubic"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "cubic2"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "catmull-rom"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "cardinal"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
 
     @pytest.mark.unit
     def test_repr(self):

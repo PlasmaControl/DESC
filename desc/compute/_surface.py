@@ -21,6 +21,7 @@ from .data_index import register_compute_fun
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
@@ -48,6 +49,7 @@ def _x_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -72,6 +74,7 @@ def _e_rho_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_theta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dt=1)
@@ -101,6 +104,7 @@ def _e_theta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_zeta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_lmn"], dz=0)
@@ -129,6 +133,7 @@ def _e_zeta_FourierRZToroidalSurface(params, transforms, profiles, data, **kwarg
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -151,6 +156,7 @@ def _e_rho_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -173,6 +179,7 @@ def _e_rho_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -195,6 +202,7 @@ def _e_rho_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwar
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -219,6 +227,7 @@ def _e_theta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dt=2)
@@ -248,6 +257,7 @@ def _e_theta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     dR = transforms["R"].transform(params["R_lmn"], dt=1, dz=1)
@@ -275,6 +285,7 @@ def _e_theta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kw
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -299,6 +310,7 @@ def _e_zeta_r_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     dR = transforms["R"].transform(params["R_lmn"], dt=1, dz=1)
@@ -328,6 +340,7 @@ def _e_zeta_t_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     coordinates="tz",
     data=[],
     parameterization="desc.geometry.FourierRZToroidalSurface",
+    basis="basis",
 )
 def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
     R0 = transforms["R"].transform(params["R_lmn"], dz=0)
@@ -359,6 +372,7 @@ def _e_zeta_z_FourierRZToroidalSurface(params, transforms, profiles, data, **kwa
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"])
@@ -388,6 +402,7 @@ def _x_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_rho_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dr=1)
@@ -417,6 +432,7 @@ def _e_rho_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_theta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dt=1)
@@ -444,6 +460,7 @@ def _e_theta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -468,6 +485,7 @@ def _e_zeta_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwarg
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_rho_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dr=2)
@@ -497,6 +515,7 @@ def _e_rho_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_rho_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dr=1, dt=1)
@@ -524,6 +543,7 @@ def _e_rho_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_rho_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -548,6 +568,7 @@ def _e_rho_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwar
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_theta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dr=1, dt=1)
@@ -577,6 +598,7 @@ def _e_theta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_theta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     R = transforms["R"].transform(params["R_lmn"], dt=2)
@@ -604,6 +626,7 @@ def _e_theta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -626,6 +649,7 @@ def _e_theta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kw
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_zeta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -648,6 +672,7 @@ def _e_zeta_r_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwa
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_zeta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))
@@ -670,6 +695,7 @@ def _e_zeta_t_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwa
     coordinates="rt",
     data=[],
     parameterization="desc.geometry.ZernikeRZToroidalSection",
+    basis="basis",
 )
 def _e_zeta_z_ZernikeRZToroidalSection(params, transforms, profiles, data, **kwargs):
     coords = jnp.zeros((transforms["grid"].num_nodes, 3))

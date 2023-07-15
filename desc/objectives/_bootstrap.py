@@ -94,7 +94,7 @@ class BootstrapRedlConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -107,6 +107,7 @@ class BootstrapRedlConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -123,7 +124,7 @@ class BootstrapRedlConsistency(_Objective):
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
-        self._args = get_params(self._data_keys)
+        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
 
         if eq.electron_temperature is None:
             raise RuntimeError(

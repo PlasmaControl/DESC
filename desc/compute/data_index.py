@@ -15,6 +15,7 @@ def register_compute_fun(
     profiles,
     coordinates,
     data,
+    axis_limit_data=None,
     **kwargs
 ):
     """Decorator to wrap a function and add it to the list of things we can compute.
@@ -45,18 +46,21 @@ def register_compute_fun(
         Coordinate dependency. IE, "rtz" for a function of rho, theta, zeta, or "r" for
         a flux function, etc.
     data : list of str
-        Names of other items in the data index needed to compute qty
+        Names of other items in the data index needed to compute qty.
+    axis_limit_data : list of str
+        Names of other items in the data index needed to compute axis limit of qty.
 
     Notes
     -----
     Should only list *direct* dependencies. The full dependencies will be built
-    recursively at runtime using each quantities direct dependencies.
+    recursively at runtime using each quantity's direct dependencies.
     """
     deps = {
         "params": params,
         "transforms": transforms,
         "profiles": profiles,
         "data": data,
+        "axis_limit_data": [] if axis_limit_data is None else axis_limit_data,
         "kwargs": list(kwargs.values()),
     }
 

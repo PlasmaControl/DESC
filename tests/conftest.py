@@ -17,7 +17,6 @@ from desc.vmec import VMECIO
 
 # print full tracebacks to help find sources of warnings
 def _warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-
     log = file if hasattr(file, "write") else sys.stderr
     traceback.print_stack(file=log)
     log.write(warnings.formatwarning(message, category, filename, lineno, line))
@@ -363,7 +362,6 @@ def VMEC_save(SOLOVEV, tmpdir_factory):
     vmec = Dataset(str(SOLOVEV["vmec_nc_path"]), mode="r")
     eq = EquilibriaFamily.load(load_from=str(SOLOVEV["desc_h5_path"]))[-1]
     eq.change_resolution(M=vmec.variables["mpol"][:] - 1, N=vmec.variables["ntor"][:])
-    eq._solved = True
     VMECIO.save(
         eq, str(SOLOVEV["desc_nc_path"]), surfs=vmec.variables["ns"][:], verbose=0
     )

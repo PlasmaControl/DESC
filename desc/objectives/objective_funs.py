@@ -1,5 +1,6 @@
 """Base classes for objectives."""
 
+import warnings
 from abc import ABC, abstractmethod
 from inspect import getfullargspec
 
@@ -21,8 +22,6 @@ class ObjectiveFunction(IOAble):
     ----------
     objectives : tuple of Objective
         List of objectives to be minimized.
-    eq : Equilibrium, optional
-        Equilibrium that will be optimized to satisfy the objectives.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
     deriv_mode : {"batched", "blocked"}
@@ -35,26 +34,20 @@ class ObjectiveFunction(IOAble):
 
     _io_attrs_ = ["_objectives"]
 
-    def __init__(
-        self, objectives, eq=None, use_jit=True, deriv_mode="batched", verbose=1
-    ):
-
+    def __init__(self, objectives, use_jit=True, deriv_mode="batched", verbose=1):
         if not isinstance(objectives, (tuple, list)):
             objectives = (objectives,)
         assert all(
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "blocked"}
+        assert deriv_mode in {"batched", "blocked", "looped"}
 
         self._objectives = objectives
         self._use_jit = use_jit
         self._deriv_mode = deriv_mode
         self._built = False
         self._compiled = False
-
-        if eq is not None:
-            self.build(eq, use_jit=self._use_jit, verbose=verbose)
 
     def set_args(self, *args):
         """Set which arguments the objective should expect.
@@ -137,11 +130,15 @@ class ObjectiveFunction(IOAble):
             self._hess = lambda x: block_diag(
                 *[self._derivatives["hess"][arg](x) for arg in self.args]
             )
-        if self._deriv_mode == "batched":
+        if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
+        if self._deriv_mode == "batched":
             self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
             self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
+        if self._deriv_mode == "looped":
+            self._jac_scaled = Derivative(self.compute_scaled, mode="looped")
+            self._jac_unscaled = Derivative(self.compute_unscaled, mode="looped")
 
     def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
@@ -214,11 +211,23 @@ class ObjectiveFunction(IOAble):
             pass
         self.jvp_unscaled = jit(self.jvp_unscaled)
 
+        try:
+            del self.vjp_scaled
+        except AttributeError:
+            pass
+        self.vjp_scaled = jit(self.vjp_scaled)
+
+        try:
+            del self.vjp_unscaled
+        except AttributeError:
+            pass
+        self.vjp_unscaled = jit(self.vjp_unscaled)
+
         for obj in self._objectives:
             if obj._use_jit:
                 obj.jit()
 
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq=None, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -473,6 +482,36 @@ class ObjectiveFunction(IOAble):
         else:
             raise NotImplementedError("Cannot compute JVP higher than 3rd order.")
 
+    def vjp_scaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the scaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        return Derivative.compute_vjp(self.compute_scaled, 0, v, x)
+
+    def vjp_unscaled(self, v, x):
+        """Compute vector-Jacobian product of the objective function.
+
+        Uses the unscaled form of the objective.
+
+        Parameters
+        ----------
+        v : ndarray
+            Vector to left-multiply the Jacobian by.
+        x : ndarray
+            Optimization variables.
+
+        """
+        return Derivative.compute_vjp(self.compute_unscaled, 0, v, x)
+
     def compile(self, mode="auto", verbose=1):
         """Call the necessary functions to ensure the function is compiled.
 
@@ -645,7 +684,7 @@ class _Objective(IOAble, ABC):
 
     Parameters
     ----------
-    eq : Equilibrium, optional
+    eq : Equilibrium
         Equilibrium that will be optimized to satisfy the Objective.
     target : float, ndarray, optional
         Target value(s) of the objective. Only used if bounds is None.
@@ -690,7 +729,6 @@ class _Objective(IOAble, ABC):
         normalize_target=True,
         name=None,
     ):
-
         assert np.all(np.asarray(weight) > 0)
         assert normalize in {True, False}
         assert normalize_target in {True, False}
@@ -711,8 +749,14 @@ class _Objective(IOAble, ABC):
             "_args",
             [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
         )
-        if eq is not None:
-            self.build(eq)
+        self._eq = eq
+        if eq is None:
+            warnings.warn(
+                FutureWarning(
+                    "Creating an Objective without specifying the Equilibrium to"
+                    " optimize is deprecated, in the future this will raise an error."
+                )
+            )
 
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""
@@ -839,8 +883,9 @@ class _Objective(IOAble, ABC):
             self.jit()
 
     @abstractmethod
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays."""
+        eq = eq or self._eq
         self._check_dimensions()
         self._set_dimensions(eq)
         self._set_derivatives()

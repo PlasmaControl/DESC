@@ -1,6 +1,8 @@
 """Functions for getting common objectives and constraints."""
 
 import numpy as np
+from jax import lax
+from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
 from desc.compute import arg_order
@@ -14,6 +16,8 @@ from ._equilibrium import (
     RadialForceBalance,
 )
 from .linear_objectives import (
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAnisotropy,
@@ -36,20 +40,22 @@ from .objective_funs import ObjectiveFunction
 
 
 def get_fixed_boundary_constraints(
-    profiles=True, iota=True, kinetic=False, anisotropy=False, normalize=True
+    eq=None, profiles=True, iota=True, kinetic=False, anisotropy=True, normalize=True
 ):
     """Get the constraints necessary for a typical fixed-boundary equilibrium problem.
 
     Parameters
     ----------
+    eq : Equilibrium
+        Equilibrium to constraint.
     profiles : bool
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
     kinetic : bool
-        Whether to add constraints to fix kinetic profiles or pressure
+        Whether to also fix kinetic profiles.
     anisotropy : bool
-        Whether to add constraint to fix anisotropic pressure
+        Whether to add constraint to fix anisotropic pressure.
     normalize : bool
         Whether to apply constraints in normalized units.
 
@@ -60,52 +66,68 @@ def get_fixed_boundary_constraints(
 
     """
     constraints = (
-        FixBoundaryR(normalize=normalize, normalize_target=normalize),
-        FixBoundaryZ(normalize=normalize, normalize_target=normalize),
-        FixPsi(normalize=normalize, normalize_target=normalize),
+        FixBoundaryR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixBoundaryZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
         if kinetic:
             constraints += (
-                FixElectronDensity(normalize=normalize, normalize_target=normalize),
-                FixElectronTemperature(normalize=normalize, normalize_target=normalize),
-                FixIonTemperature(normalize=normalize, normalize_target=normalize),
-                FixAtomicNumber(normalize=normalize, normalize_target=normalize),
+                FixElectronDensity(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixElectronTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixIonTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
             )
         else:
             constraints += (
-                FixPressure(normalize=normalize, normalize_target=normalize),
+                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
             )
             if anisotropy:
-                constraints += FixAnisotropy(
-                    normalize=normalize, normalize_target=normalize
+                constraints += (
+                    FixAnisotropy(
+                        eq=eq, normalize=normalize, normalize_target=normalize
+                    ),
                 )
 
         if iota:
-            constraints += (FixIota(normalize=normalize, normalize_target=normalize),)
+            constraints += (
+                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
         else:
             constraints += (
-                FixCurrent(normalize=normalize, normalize_target=normalize),
+                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
             )
     return constraints
 
 
-def maybe_add_self_consistency(constraints):
+def maybe_add_self_consistency(eq, constraints):
     """Add self consistency constraints if needed."""
 
     def _is_any_instance(things, cls):
         return any([isinstance(t, cls) for t in things])
 
     if not _is_any_instance(constraints, BoundaryRSelfConsistency):
-        constraints += (BoundaryRSelfConsistency(),)
+        constraints += (BoundaryRSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, BoundaryZSelfConsistency):
-        constraints += (BoundaryZSelfConsistency(),)
+        constraints += (BoundaryZSelfConsistency(eq=eq),)
     if not _is_any_instance(constraints, FixLambdaGauge):
-        constraints += (FixLambdaGauge(),)
+        constraints += (FixLambdaGauge(eq=eq),)
+    if not _is_any_instance(constraints, AxisRSelfConsistency):
+        constraints += (AxisRSelfConsistency(eq=eq),)
+    if not _is_any_instance(constraints, AxisZSelfConsistency):
+        constraints += (AxisZSelfConsistency(eq=eq),)
     return constraints
 
 
-def get_fixed_axis_constraints(profiles=True, iota=True):
+def get_fixed_axis_constraints(
+    eq=None, profiles=True, iota=True, kinetic=False, anisotropy=True, normalize=True
+):
     """Get the constraints necessary for a fixed-axis equilibrium problem.
 
     Parameters
@@ -114,6 +136,12 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
+    kinetic : bool
+        Whether to add constraints to fix kinetic profiles or pressure
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure.
+    normalize : bool
+        Whether to apply constraints in normalized units.
 
     Returns
     -------
@@ -122,22 +150,57 @@ def get_fixed_axis_constraints(profiles=True, iota=True):
 
     """
     constraints = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixLambdaGauge(),
-        FixPsi(),
+        FixAxisR(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixAxisZ(eq=eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (FixPressure(),)
+        if kinetic:
+            constraints += (
+                FixElectronDensity(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixElectronTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixIonTemperature(
+                    eq=eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixAtomicNumber(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+        else:
+            constraints += (
+                FixPressure(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
+            if anisotropy:
+                constraints += (
+                    FixAnisotropy(
+                        eq=eq, normalize=normalize, normalize_target=normalize
+                    ),
+                )
 
         if iota:
-            constraints += (FixIota(),)
+            constraints += (
+                FixIota(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
         else:
-            constraints += (FixCurrent(),)
+            constraints += (
+                FixCurrent(eq=eq, normalize=normalize, normalize_target=normalize),
+            )
     return constraints
 
 
-def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
+def get_NAE_constraints(
+    desc_eq,
+    qsc_eq,
+    order=1,
+    profiles=True,
+    iota=False,
+    kinetic=False,
+    anisotropy=True,
+    normalize=True,
+    N=None,
+):
     """Get the constraints necessary for fixing NAE behavior in an equilibrium problem. # noqa D205
 
     Parameters
@@ -147,40 +210,78 @@ def get_NAE_constraints(desc_eq, qsc_eq, profiles=True, iota=False, order=1):
         (assumed to be a fit from the NAE equil using .from_near_axis()).
     qsc_eq : Qsc
         Qsc object defining the near-axis equilibrium to constrain behavior to.
+    order : int
+        order (in rho) of near-axis behavior to constrain
     profiles : bool
         Whether to also return constraints to fix input profiles.
     iota : bool
         Whether to add FixIota or FixCurrent as a constraint.
-    order : int
-        order (in rho) of near-axis behavior to constrain
+    kinetic : bool
+        Whether to also fix kinetic profiles.
+    anisotropy : bool
+        Whether to add constraint to fix anisotropic pressure.
+    normalize : bool
+        Whether to apply constraints in normalized units.
+    N : int,
+        max toroidal resolution to constrain.
+        If None, defaults to equilibrium's toroidal resolution
 
     Returns
     -------
     constraints, tuple of _Objectives
         A list of the linear constraints used in fixed-axis problems.
     """
-
     constraints = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixPsi(),
+        FixAxisR(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixAxisZ(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+        FixPsi(eq=desc_eq, normalize=normalize, normalize_target=normalize),
     )
     if profiles:
-        constraints += (FixPressure(),)
+        if kinetic:
+            constraints += (
+                FixElectronDensity(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixElectronTemperature(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixIonTemperature(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+                FixAtomicNumber(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+            )
+        else:
+            constraints += (
+                FixPressure(
+                    eq=desc_eq, normalize=normalize, normalize_target=normalize
+                ),
+            )
+            if anisotropy:
+                constraints += (
+                    FixAnisotropy(
+                        eq=desc_eq, normalize=normalize, normalize_target=normalize
+                    ),
+                )
 
         if iota:
-            constraints += (FixIota(),)
+            constraints += (
+                FixIota(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+            )
         else:
-            constraints += (FixCurrent(),)
+            constraints += (
+                FixCurrent(eq=desc_eq, normalize=normalize, normalize_target=normalize),
+            )
     if order >= 1:  # first order constraints
-        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq)
+        constraints += make_RZ_cons_1st_order(qsc=qsc_eq, desc_eq=desc_eq, N=N)
     if order >= 2:  # 2nd order constraints
         raise NotImplementedError("NAE constraints only implemented up to O(rho) ")
 
     return constraints
 
 
-def get_equilibrium_objective(mode="force", normalize=True):
+def get_equilibrium_objective(eq=None, mode="force", normalize=True):
     """Get the objective function for a typical force balance equilibrium problem.
 
     Parameters
@@ -198,16 +299,20 @@ def get_equilibrium_objective(mode="force", normalize=True):
         An objective function with default force balance objectives.
     """
     if mode == "energy":
-        objectives = Energy(normalize=normalize, normalize_target=normalize)
+        objectives = Energy(eq=eq, normalize=normalize, normalize_target=normalize)
     elif mode == "force":
-        objectives = ForceBalance(normalize=normalize, normalize_target=normalize)
+        objectives = ForceBalance(
+            eq=eq, normalize=normalize, normalize_target=normalize
+        )
     elif mode == "forces":
         objectives = (
-            RadialForceBalance(normalize=normalize, normalize_target=normalize),
-            HelicalForceBalance(normalize=normalize, normalize_target=normalize),
+            RadialForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
+            HelicalForceBalance(eq=eq, normalize=normalize, normalize_target=normalize),
         )
     elif mode == "vacuum":
-        objectives = CurrentDensity(normalize=normalize, normalize_target=normalize)
+        objectives = CurrentDensity(
+            eq=eq, normalize=normalize, normalize_target=normalize
+        )
     else:
         raise ValueError("got an unknown equilibrium objective type '{}'".format(mode))
     return ObjectiveFunction(objectives)
@@ -320,7 +425,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
 
     def project(x):
         """Project a full state vector into the reduced optimization vector."""
-        x_reduced = jnp.dot(Z.T, (x - xp)[unfixed_idx])
+        x_reduced = Z.T @ ((x - xp)[unfixed_idx])
         return jnp.atleast_1d(jnp.squeeze(x_reduced))
 
     def recover(x_reduced):
@@ -376,6 +481,60 @@ def align_jacobian(Fx, objective_f, objective_g):
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
     A = jnp.concatenate([A[arg] for arg in allargs])
     return A.T
+
+
+def jax_softmax(arr, alpha):
+    """JAX softmax implementation.
+
+    Inspired by https://www.johndcook.com/blog/2010/01/13/soft-maximum/
+    and https://www.johndcook.com/blog/2010/01/20/how-to-compute-the-soft-maximum/
+
+    Will automatically multiply array values by 2 / min_val if the min_val of
+    the array is <1. This is to avoid inaccuracies that arise when values <1
+    are present in the softmax, which can cause inaccurate maxes or even incorrect
+    signs of the softmax versus the actual max.
+
+    Parameters
+    ----------
+    arr: ndarray, the array which we would like to apply the softmax function to.
+    alpha: float, the parameter smoothly transitioning the function to a hardmax.
+        as alpha increases, the value returned will come closer and closer to
+        max(arr).
+
+    Returns
+    -------
+    softmax: float, the soft-maximum of the array.
+    """
+    arr_times_alpha = alpha * arr
+    min_val = jnp.min(jnp.abs(arr_times_alpha)) + 1e-4  # buffer value in case min is 0
+    return lax.cond(
+        jnp.any(min_val < 1),
+        lambda arr_times_alpha: logsumexp(
+            arr_times_alpha / min_val * 2
+        )  # adjust to make vals>1
+        / alpha
+        * min_val
+        / 2,
+        lambda arr_times_alpha: logsumexp(arr_times_alpha) / alpha,
+        arr_times_alpha,
+    )
+
+
+def jax_softmin(arr, alpha):
+    """JAX softmin implementation, by taking negative of softmax(-arr).
+
+    Parameters
+    ----------
+    arr: ndarray, the array which we would like to apply the softmin function to.
+    alpha: float, the parameter smoothly transitioning the function to a hardmin.
+        as alpha increases, the value returned will come closer and closer to
+        min(arr).
+
+    Returns
+    -------
+    softmin: float, the soft-minimum of the array.
+    """
+    return -jax_softmax(-arr, alpha)
 
 
 def combine_args(*objectives):

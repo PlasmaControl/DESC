@@ -23,6 +23,34 @@ def _V(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="V",
+    label="V",
+    units="m^{3}",
+    units_long="cubic meters",
+    description="Volume",
+    dim=1,
+    params=[],
+    transforms={"grid": []},
+    profiles=[],
+    coordinates="r",
+    data=["e_theta", "e_zeta", "x"],
+    parameterization="desc.geometry.surface.FourierRZToroidalSurface",
+)
+def _V_FourierRZToroidalSurface(params, transforms, profiles, data, **kwargs):
+    # divergence theorem: integral(dV div [0, 0, Z]) = integral(dS dot [0, 0, Z])
+    data["V"] = jnp.max(  # take max in case there are multiple surfaces for some reason
+        jnp.abs(
+            surface_integrals(
+                transforms["grid"],
+                cross(data["e_theta"], data["e_zeta"])[:, 2] * data["x"][:, 2],
+                expand_out=False,
+            )
+        )
+    )
+    return data
+
+
+@register_compute_fun(
     name="V(r)",
     label="V(\\rho)",
     units="m^{3}",
@@ -98,6 +126,10 @@ def _V_rr_of_r(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="",
     data=["|e_rho x e_theta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _A(params, transforms, profiles, data, **kwargs):
     data["A"] = jnp.mean(
@@ -109,6 +141,9 @@ def _A(params, transforms, profiles, data, **kwargs):
         )
     )
     return data
+
+
+# TODO: compute cross section area for toroidal surface using stokes?
 
 
 @register_compute_fun(
@@ -123,6 +158,10 @@ def _A(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="r",
     data=["|e_theta x e_zeta|"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _S_of_r(params, transforms, profiles, data, **kwargs):
     data["S(r)"] = surface_integrals(transforms["grid"], data["|e_theta x e_zeta|"])
@@ -245,6 +284,10 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["n_rho", "e_theta_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _L_sff_rho(params, transforms, profiles, data, **kwargs):
     data["L_sff_rho"] = dot(data["e_theta_t"], data["n_rho"])
@@ -263,6 +306,10 @@ def _L_sff_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["n_rho", "e_theta_z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _M_sff_rho(params, transforms, profiles, data, **kwargs):
     data["M_sff_rho"] = dot(data["e_theta_z"], data["n_rho"])
@@ -281,6 +328,10 @@ def _M_sff_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["n_rho", "e_zeta_z"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _N_sff_rho(params, transforms, profiles, data, **kwargs):
     data["N_sff_rho"] = dot(data["e_zeta_z"], data["n_rho"])
@@ -299,6 +350,10 @@ def _N_sff_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g_tt", "g_tz", "g_zz", "L_sff_rho", "M_sff_rho", "N_sff_rho"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
@@ -331,6 +386,10 @@ def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g_tt", "g_tz", "g_zz", "L_sff_rho", "M_sff_rho", "N_sff_rho"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
@@ -363,6 +422,10 @@ def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["curvature_k1_rho", "curvature_k2_rho"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
     data["curvature_K_rho"] = data["curvature_k1_rho"] * data["curvature_k2_rho"]
@@ -381,6 +444,10 @@ def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["curvature_k1_rho", "curvature_k2_rho"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.FourierRZToroidalSurface",
+    ],
 )
 def _curvature_H_rho(params, transforms, profiles, data, **kwargs):
     data["curvature_H_rho"] = (data["curvature_k1_rho"] + data["curvature_k2_rho"]) / 2
@@ -555,6 +622,10 @@ def _curvature_H_theta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["n_zeta", "e_rho_r"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
     data["L_sff_zeta"] = dot(data["e_rho_r"], data["n_zeta"])
@@ -573,6 +644,10 @@ def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["n_zeta", "e_rho_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
     data["M_sff_zeta"] = dot(data["e_rho_t"], data["n_zeta"])
@@ -591,6 +666,10 @@ def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["n_zeta", "e_theta_t"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
     data["N_sff_zeta"] = dot(data["e_theta_t"], data["n_zeta"])
@@ -609,6 +688,10 @@ def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     # following notation from
@@ -641,6 +724,10 @@ def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     # following notation from
@@ -673,6 +760,10 @@ def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["curvature_k1_zeta", "curvature_k2_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
     data["curvature_K_zeta"] = data["curvature_k1_zeta"] * data["curvature_k2_zeta"]
@@ -691,6 +782,10 @@ def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
     profiles=[],
     coordinates="rtz",
     data=["curvature_k1_zeta", "curvature_k2_zeta"],
+    parameterization=[
+        "desc.equilibrium.equilibrium.Equilibrium",
+        "desc.geometry.surface.ZernikeRZToroidalSection",
+    ],
 )
 def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
     data["curvature_H_zeta"] = (

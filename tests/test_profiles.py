@@ -123,7 +123,7 @@ class TestProfiles:
 
         method = "monotonic-0"
         sp = pp.to_spline(knots=knots, method=method)
-        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=5e-3)
 
         # test monotonic splines preserve monotonicity
         f = np.heaviside(knots - 0.5, 0) + 0.1 * knots

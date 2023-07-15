@@ -763,10 +763,10 @@ def _approx_df(x, f, method, axis, **kwargs):
         if df.ndim > w1.ndim:
             w1 = jnp.expand_dims(w1, tuple(range(1, df.ndim)))
             w1 = jnp.moveaxis(w1, 0, axis)
-            w2 = jnp.expand_dims(w1, tuple(range(1, df.ndim)))
-            w2 = jnp.moveaxis(w1, 0, axis)
+            w2 = jnp.expand_dims(w2, tuple(range(1, df.ndim)))
+            w2 = jnp.moveaxis(w2, 0, axis)
 
-        whmean = (w1 / mk[:-1] + w2 / mk[1:]) / (w1 + w2)
+        whmean = (w1 / mk[:-1, :] + w2 / mk[1:, :]) / (w1 + w2)
 
         dk = jnp.where(condition, 0, 1.0 / whmean)
 
@@ -792,10 +792,12 @@ def _approx_df(x, f, method, axis, **kwargs):
                 d = jnp.where(mmm, 3.0 * m0, d)
                 return d
 
-            d0 = _edge_case(hk[0], hk[1], mk[0], mk[1])[None]
-            d1 = _edge_case(hk[-1], hk[-2], mk[-1], mk[-2])[None]
+            hk = 1 / hki
+            d0 = _edge_case(hk[0, :], hk[1, :], mk[0, :], mk[1, :])[None]
+            d1 = _edge_case(hk[-1, :], hk[-2, :], mk[-1, :], mk[-2, :])[None]
 
         dk = np.concatenate([d0, dk, d1])
+        dk = dk.reshape(fshp)
         return dk.reshape(fshp)
     else:  # method passed in does not use df from this function, just return 0
         return jnp.zeros_like(f)

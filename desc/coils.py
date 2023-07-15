@@ -229,7 +229,9 @@ class XYZCoil(Coil, XYZCurve):
         period of the theta variable used for the spline knots.
         if knots is None, this defaults to 2pi. If knots is not None, this must be
         supplied by the user
-     method : str
+    grid : Grid
+        default grid for computation
+    method : str
         method of interpolation
         - `'nearest'`: nearest neighbor interpolation
         - `'linear'`: linear interpolation
@@ -484,13 +486,22 @@ class CoilSet(Coil, MutableSequence):
         return cls(*coilset)
 
     @classmethod
-    def from_makegrid_coilfile(cls, coil_file, grid=None):
+    def from_makegrid_coilfile(cls, coil_file, method="cubic2", grid=None):
         """Create a CoilSet of XYZCoils from a MAKEGRID-formatted coil txtfile.
 
         Parameters
         ----------
         coil_file : str or path-like
             path to coil file in txt format
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        grid : Grid
+            default grid for computation
         """
         coils = []  # list of XYZCoils
         coilinds = []
@@ -512,7 +523,9 @@ class CoilSet(Coil, MutableSequence):
             tempy = np.append(coords[:, 1], np.array([coords[0, 1]]))
             tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
 
-            coils.append(XYZCoil(coords[:, -1][0], tempx, tempy, tempz, grid=grid))
+            coils.append(
+                XYZCoil(coords[:, -1][0], tempx, tempy, tempz, grid=grid, method=method)
+            )
 
         return CoilSet(*coils)
 

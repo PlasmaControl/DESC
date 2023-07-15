@@ -149,7 +149,7 @@ def test_map_coordinates2():
 
     out = eq.map_coordinates(
         t_grid.nodes,
-        ["rho", "theta_sfl", "phi"],
+        ["rho", "theta_PEST", "phi"],
         ["rho", "theta", "zeta"],
         period=(np.inf, 2 * np.pi, 2 * np.pi),
     )

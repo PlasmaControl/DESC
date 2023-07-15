@@ -332,7 +332,7 @@ def _theta_PEST_z(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["theta_PEST", "phi", "iota"],
+    data=["theta_PEST", "zeta", "iota"],
 )
 def _alpha(params, transforms, profiles, data, **kwargs):
     data["alpha"] = (data["theta_PEST"] - data["iota"] * data["phi"]) % (2 * jnp.pi)

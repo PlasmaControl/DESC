@@ -17,7 +17,7 @@ from .utils import (
 
 @register_compute_fun(
     name="B0",
-    label="\\partial_{\\rho} \\psi / \\sqrt{g}",
+    label="\\psi' / \\sqrt{g}",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -173,8 +173,7 @@ def _B_Z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_r",
-    label="\\partial_{\\rho \\rho} \\psi / \\sqrt{g} - \\partial_{\\rho} \\psi "
-    + "\\partial_{\\rho} \\sqrt{g} / g",
+    label="\\partial_{\\rho} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -298,7 +297,7 @@ def _B_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_t",
-    label="-\\partial_{\\rho} \\psi \\partial_{\\theta} \\sqrt{g} / g",
+    label="\\partial_{\\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -396,7 +395,7 @@ def _B_t(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_z",
-    label="-\\partial_{\\rho} \\psi \\partial_{\\zeta} \\sqrt{g} / g",
+    label="\\partial_{\\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -494,9 +493,7 @@ def _B_z(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_rr",
-    label="\\psi''' / \\sqrt{g} - 2 \\psi'' \\partial_{\\rho} \\sqrt{g} / g - "
-    + "\\psi' \\partial_{\\rho\\rho} \\sqrt{g} / g + "
-    + "2 \\psi' (\\partial_{\\rho} \\sqrt{g})^2 / (\\sqrt{g})^3",
+    label="\\partial_{\\rho \\rho} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
     description="",
@@ -660,8 +657,7 @@ def _B_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_tt",
-    label="-\\partial_{\\rho} \\psi \\partial_{\\theta\\theta} \\sqrt{g} / g + "
-    + "2 \\partial_{\\rho} \\psi (\\partial_{\\theta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
+    label="\\partial_{\\theta \\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -794,8 +790,7 @@ def _B_tt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_zz",
-    label="-\\partial_{\\rho} \\psi \\partial_{\\zeta\\zeta} \\sqrt{g} / g + "
-    + "2 \\partial_{\\rho} \\psi (\\partial_{\\zeta} \\sqrt{g})^2 / (\\sqrt{g})^{3}",
+    label="\\partial_{\\zeta \\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -928,9 +923,7 @@ def _B_zz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_rt",
-    label="\\psi'' \\partial_{\\theta} \\sqrt{g} / g + "
-    + "\\psi' \\partial_{\\rho\\theta} \\sqrt{g} / g + 2 \\psi' "
-    + "\\partial_{\\rho} \\sqrt{g} \\partial_{\\theta} \\sqrt{g} / (\\sqrt{g})^3",
+    label="\\partial_{\\rho\\theta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
     description="",
@@ -1105,9 +1098,7 @@ def _B_rt(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_tz",
-    label="-\\partial_{\\rho} \\psi \\partial_{\\theta\\zeta} \\sqrt{g} / g + "
-    + "2 \\partial_{\\rho} \\psi \\partial_{\\theta} \\sqrt{g} \\partial_{\\zeta} "
-    + "\\sqrt{g} / (\\sqrt{g})^{3}",
+    label="\\partial_{\\theta\\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meter",
     description="",
@@ -1257,9 +1248,7 @@ def _B_tz(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="B0_rz",
-    label="\\psi'' \\partial_{\\zeta} \\sqrt{g} / g + "
-    + "\\psi' \\partial_{\\rho\\zeta} \\sqrt{g} / g + 2 \\psi' "
-    + "\\partial_{\\rho} \\sqrt{g} \\partial_{\\zeta} \\sqrt{g} / (\\sqrt{g})^3",
+    label="\\partial_{\\rho\\zeta} (\\psi' / \\sqrt{g})",
     units="T \\cdot m^{-1}",
     units_long="Tesla / meters",
     description="",

@@ -83,7 +83,7 @@ def register_compute_fun(
         for p in parameterization:
             flag = False
             for base_name, aliases in _aliases.items():
-                if p in aliases:
+                if p in aliases or p == base_name:
                     data_index[base_name][name] = d.copy()
                     flag = True
             if not flag:

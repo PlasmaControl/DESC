@@ -1517,9 +1517,7 @@ class XYZCurve(Curve):
             coords = xyz2rpz(coords)
         return coords
 
-    def compute_frenet_frame(
-        self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"
-    ):
+    def compute_frenet_frame(self, X=None, Y=None, Z=None, grid=None, basis="xyz"):
         """Compute Frenet frame vectors using specified values.
 
         Parameters
@@ -1544,9 +1542,16 @@ class XYZCurve(Curve):
             locations
 
         """
-        raise NotImplementedError("Frenet Frame not implemented for XYZCurve ")
+        T = self.compute_coordinates(X, Y, Z, grid, dt=1, basis=basis)
+        N = self.compute_coordinates(X, Y, Z, grid, dt=2, basis=basis)
 
-    def compute_curvature(self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"):
+        T = T / jnp.linalg.norm(T, axis=1)[:, jnp.newaxis]
+        N = N / jnp.linalg.norm(N, axis=1)[:, jnp.newaxis]
+        B = jnp.cross(T, N, axis=1) * jnp.linalg.det(self.rotmat)
+
+        return T, N, B
+
+    def compute_curvature(self, X=None, Y=None, Z=None, grid=None):
         """Compute curvature using specified coefficients.
 
         Parameters
@@ -1569,7 +1574,11 @@ class XYZCurve(Curve):
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
         """
-        raise NotImplementedError("Curvature not implemented for XYZCurve ")
+        dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
+        d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
+        dxn = jnp.linalg.norm(dx, axis=1)[:, jnp.newaxis]
+        kappa = jnp.linalg.norm(jnp.cross(dx, d2x, axis=1) / dxn**3, axis=1)
+        return kappa
 
     def compute_torsion(self, X=None, Y=None, Z=None, grid=None):
         """Compute torsion using specified coefficientsnp.empty((0, 3)).

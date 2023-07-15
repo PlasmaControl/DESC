@@ -449,36 +449,6 @@ class TestXYZCurve:
         )
 
     @pytest.mark.unit
-    def test_curvature(self):
-        """Test curvature of circular curve."""
-        # make a simple circular curve of radius 2
-        R = 2
-        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        with pytest.raises(NotImplementedError):
-            c.compute_curvature(grid=20)
-
-    @pytest.mark.unit
-    def test_torsion(self):
-        """Test torsion of circular curve."""
-        # make a simple circular curve of radius 2
-        R = 2
-        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        with pytest.raises(NotImplementedError):
-            c.compute_torsion(grid=20)
-
-    @pytest.mark.unit
-    def test_frenet(self):
-        """Test frenet-seret frame of circular curve."""
-        # make a simple circular curve of radius 2
-        R = 2
-        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        with pytest.raises(NotImplementedError):
-            c.compute_frenet_frame(basis="rpz")
-
-    @pytest.mark.unit
     def test_coords(self):
         """Test lab frame coordinates of circular curve."""
         # make a simple circular curve of radius 2

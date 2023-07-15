@@ -2057,7 +2057,7 @@ def plot_coils(coils, grid=None, ax=None, return_data=False, **kwargs):
     plot_data["Y"] = []
     plot_data["Z"] = []
     for i, coil in enumerate(coils_list):
-        x, y, z = coil.compute_coordinates(grid=grid, basis="xyz").T
+        x, y, z = coil.compute("x", grid=grid, basis="xyz")["x"].T
         plot_data["X"].append(x)
         plot_data["Y"].append(y)
         plot_data["Z"].append(z)

@@ -471,7 +471,7 @@ class FourierXYZCurve(Curve):
         else:
             modes = np.asarray(modes)
 
-        assert issubclass(modes.dtype.type, np.integer)
+        assert np.all(modes.astype(int) == modes)
 
         N = np.max(abs(modes))
         self._basis = FourierSeries(N, NFP=1, sym=False)
@@ -774,6 +774,36 @@ class FourierXYZCurve(Curve):
         T = jnp.linalg.norm(T, axis=1)
         theta = transform.grid.nodes[:, 2]
         return jnp.trapz(T, theta)
+
+    @classmethod
+    def from_XYZCurve(cls, xyz_curve, N=10, grid=None):
+        """Create a FourierXYZCurve by fitting an XYZCurve object.
+
+        Parameters
+        ----------
+        xyz_curve: XYZCurve
+            fourier coefficients for X, Y, Z. If not given, defaults to values given
+            by X_n, Y_n, Z_n attributes
+        N : int
+            number of Fourier Modes to use in fitting the XYZCurve object.
+            Default is 10.
+        grid: Grid, int or array-like
+            dependent coordinates to fit at. Defaults to self.grid
+            If an integer, assumes that many linearly spaced points in (0,2pi)
+
+        Returns
+        -------
+        fourier_xyz_curve : FourierXYZCurve
+            FourierXYZCurve fit of the XYZCurve input object.
+        """
+        coords = xyz_curve.compute_coordinates(grid=grid)
+        eval_ts = xyz_curve._get_xq(grid=grid)  # evaluation points
+        basis = FourierSeries(N, NFP=1, sym=False)
+        transform = Transform(LinearGrid(zeta=eval_ts), basis=basis, build_pinv=True)
+        X_n = transform.fit(coords[:, 0])
+        Y_n = transform.fit(coords[:, 1])
+        Z_n = transform.fit(coords[:, 2])
+        return FourierXYZCurve(X_n, Y_n, Z_n, modes=basis.modes[:, 2])
 
     # TODO: methods for converting between representations
 

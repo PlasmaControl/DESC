@@ -34,7 +34,7 @@ class FourierRZToroidalSurface(Surface):
     sym : bool
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
-    rho : float (0,1)
+    rho : float [0,1]
         flux surface label for the toroidal surface
     grid : Grid
         default grid for computation
@@ -593,7 +593,7 @@ class ZernikeRZToroidalSection(Surface):
         whether to enforce stellarator symmetry. Default is "auto" which enforces if
         modes are symmetric. If True, non-symmetric modes will be truncated.
     spectral_indexing : {``'ansi'``, ``'fringe'``}
-        Indexing method, default value = ``'fringe'``
+        Indexing method, default value = ``'ansi'``
 
         For L=0, all methods are equivalent and give a "chevron" shaped
         basis (only the outer edge of the zernike pyramid of width M).
@@ -609,7 +609,7 @@ class ZernikeRZToroidalSection(Surface):
         decreasing size, ending in a diamond shape for L=2*M where
         the traditional fringe/U of Arizona indexing is recovered.
         For L > 2*M, adds chevrons to the bottom, making a hexagonal diamond
-    zeta : float (0,2pi)
+    zeta : float [0,2pi)
         toroidal angle for the section.
     grid : Grid
         default grid for computation
@@ -639,7 +639,7 @@ class ZernikeRZToroidalSection(Surface):
         Z_lmn=None,
         modes_R=None,
         modes_Z=None,
-        spectral_indexing="fringe",
+        spectral_indexing="ansi",
         sym="auto",
         zeta=0.0,
         grid=None,

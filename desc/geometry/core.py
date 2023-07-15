@@ -229,10 +229,13 @@ class Surface(IOAble, ABC):
             names = [names]
         if grid is None:
             NFP = self.NFP if hasattr(self, "NFP") else 1
-            if self.L == 0:
-                grid = LinearGrid(M=2 * self.M + 5, N=2 * self.N + 5, NFP=NFP)
-            else:
+            if hasattr(self, "rho"):  # constant rho surface
+                grid = LinearGrid(
+                    rho=np.array(self.rho), M=2 * self.M + 5, N=2 * self.N + 5, NFP=NFP
+                )
+            elif hasattr(self, "zeta"):  # constant zeta surface
                 grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=NFP)
+                grid._nodes[:, 2] = self.zeta
         if params is None:
             params = get_params(names, obj=self)
         if transforms is None:

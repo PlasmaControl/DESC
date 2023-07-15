@@ -1632,12 +1632,26 @@ class XYZCurve(Curve):
         length : float
             length of the curve.
         """
-        coords = self.compute_coordinates(X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=1)
-        # L = integral( sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )dt )
-        integrand = jnp.linalg.norm(coords, axis=1)
-        ts = self._get_xq(grid)
+        if self._method == "nearest":  # cannot use derivative method as deriv=0
+            coords = self.compute_coordinates(
+                X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=0
+            )
+            X = coords[:, 0]
+            Y = coords[:, 1]
+            Z = coords[:, 2]
+            lengths = jnp.sqrt(
+                (X[0:-1] - X[1:]) ** 2 + (Y[0:-1] - Y[1:]) ** 2 + (Z[0:-1] - Z[1:]) ** 2
+            )
+            return jnp.sum(lengths)
+        else:
+            coords = self.compute_coordinates(
+                X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=1
+            )
+            # L = integral( sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )dt )
+            integrand = jnp.linalg.norm(coords, axis=1)
+            ts = self._get_xq(grid)
 
-        return jnp.trapz(integrand, ts)
+            return jnp.trapz(integrand, ts)
 
     def to_FourierXYZCurve(self, N=10, grid=None):
         """Convert to a FourierXYZCurve object.

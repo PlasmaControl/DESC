@@ -9,7 +9,13 @@ import desc.examples
 from desc.compute import data_index
 from desc.compute.utils import compress
 from desc.equilibrium import EquilibriaFamily, Equilibrium
-from desc.geometry import FourierPlanarCurve, FourierRZCurve, FourierXYZCurve
+from desc.geometry import (
+    FourierPlanarCurve,
+    FourierRZCurve,
+    FourierRZToroidalSurface,
+    FourierXYZCurve,
+    ZernikeRZToroidalSection,
+)
 from desc.grid import LinearGrid, QuadratureGrid
 
 # convolve kernel is reverse of FD coeffs
@@ -1131,6 +1137,20 @@ def test_curve_compute_everything():
     }
 
     for p, thing in curves.items():
+        for key in data_index[p].keys():
+            data = thing.compute(key)
+            assert key in data
+
+
+@pytest.mark.unit
+def test_surface_compute_everything():
+    """Make sure we can compute every surface thing without errors."""
+    surfaces = {
+        "desc.geometry.surface.FourierRZToroidalSurface": FourierRZToroidalSurface(),
+        "desc.geometry.surface.ZernikeRZToroidalSection": ZernikeRZToroidalSection(),
+    }
+
+    for p, thing in surfaces.items():
         for key in data_index[p].keys():
             data = thing.compute(key)
             assert key in data

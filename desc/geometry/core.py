@@ -8,7 +8,7 @@ import numpy as np
 from desc.backend import jnp
 from desc.compute.utils import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
-from desc.grid import LinearGrid
+from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
 
 from .utils import reflection_matrix, rotation_matrix
@@ -49,7 +49,7 @@ class Curve(IOAble, ABC):
         names : str or array-like of str
             Name(s) of the quantity(s) to compute.
         grid : Grid or int, optional
-            Grid of coordinates to evaluate at. Defaults to the Linear grid.
+            Grid of coordinates to evaluate at. Defaults to a Linear grid.
             If an integer, uses that many equally spaced points.
         params : dict of ndarray
             Parameters from the equilibrium. Defaults to attributes of self.
@@ -193,6 +193,64 @@ class Surface(IOAble, ABC):
     @abstractmethod
     def change_resolution(self, *args, **kwargs):
         """Change the maximum resolution."""
+
+    def compute(
+        self,
+        names,
+        grid=None,
+        params=None,
+        transforms=None,
+        data=None,
+        **kwargs,
+    ):
+        """Compute the quantity given by name on grid.
+
+        Parameters
+        ----------
+        names : str or array-like of str
+            Name(s) of the quantity(s) to compute.
+        grid : Grid, optional
+            Grid of coordinates to evaluate at. Defaults to a Linear grid for constant
+            rho surfaces or a Quadrature grid for constant zeta surfaces.
+        params : dict of ndarray
+            Parameters from the equilibrium. Defaults to attributes of self.
+        transforms : dict of Transform
+            Transforms for R, Z, lambda, etc. Default is to build from grid
+        data : dict of ndarray
+            Data computed so far, generally output from other compute functions
+
+        Returns
+        -------
+        data : dict of ndarray
+            Computed quantity and intermediate variables.
+
+        """
+        if isinstance(names, str):
+            names = [names]
+        if grid is None:
+            NFP = self.NFP if hasattr(self, "NFP") else 1
+            if self.L == 0:
+                grid = LinearGrid(M=2 * self.M + 5, N=2 * self.N + 5, NFP=NFP)
+            else:
+                grid = QuadratureGrid(L=2 * self.L + 5, M=2 * self.M + 5, N=0, NFP=NFP)
+        if params is None:
+            params = get_params(names, obj=self)
+        if transforms is None:
+            transforms = get_transforms(names, obj=self, grid=grid, **kwargs)
+        if data is None:
+            data = {}
+        profiles = {}
+
+        data = compute_fun(
+            self,
+            names,
+            params=params,
+            transforms=transforms,
+            profiles=profiles,
+            data=data,
+            **kwargs,
+        )
+        return data
 
     @abstractmethod
     def compute_coordinates(self, params=None, grid=None, dt=0, dz=0):

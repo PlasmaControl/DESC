@@ -513,9 +513,6 @@ class CoilSet(Coil, MutableSequence):
             tempz = np.append(coords[:, 2], np.array([coords[0, 2]]))
 
             coils.append(XYZCoil(coords[:, -1][0], tempx, tempy, tempz, grid=grid))
-            # FIXME: # sign of current may need to be negative, need to check
-            # makegrid convention, but tests show
-            # the resulting field agrees better with DESC eq if negative curr
 
         return CoilSet(*coils)
 

@@ -8,6 +8,7 @@ from desc.backend import jnp, put, use_jax
 from desc.compute import arg_order, profile_names
 from desc.objectives import (
     AxisRSelfConsistency,
+    AxisWSelfConsistency,
     AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryWSelfConsistency,
@@ -71,6 +72,8 @@ def get_deltas(things1, things2):  # noqa: C901
                 deltas["Ra_n"] = a2.R_n - a1.R_n
             if not jnp.allclose(a2.Z_n, a1.Z_n):
                 deltas["Za_n"] = a2.Z_n - a1.Z_n
+            if not jnp.allclose(a2.W_n, a1.W_n):
+                deltas["Wa_n"] = a2.W_n - a1.W_n
 
     for key, val in profile_names.items():
         if key in things1:
@@ -253,11 +256,19 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         Ainv = jnp.linalg.pinv(A)
         dc = deltas["Za_n"]
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
+    if "Wa_n" in deltas.keys():
+        con = get_instance(constraints, AxisWSelfConsistency)
+        A = con.derivatives["jac_unscaled"]["W_lmn"](
+            *[jnp.zeros(con.dimensions[arg]) for arg in con.args]
+        )
+        Ainv = jnp.linalg.pinv(A)
+        dc = deltas["Wa_n"]
+        tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["W_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [
         arg
         for arg in arg_order
-        if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn", "Wb_lmn"]
+        if arg not in ["Ra_n", "Za_n", "Wa_n", "Rb_lmn", "Zb_lmn", "Wb_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(

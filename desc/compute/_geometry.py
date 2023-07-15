@@ -234,11 +234,11 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
-    name="L_sff",
-    label="L_{sff}",
+    name="L_sff_rho",
+    label="L_{\\mathrm{SFF},\\rho}",
     units="m",
     units_long="meters",
-    description="L coefficient of second fundamental form",
+    description="L coefficient of second fundamental form of constant rho surface",
     dim=1,
     params=[],
     transforms={},
@@ -246,17 +246,17 @@ def _a_major_over_a_minor(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["n_rho", "e_theta_t"],
 )
-def _L_sff(params, transforms, profiles, data, **kwargs):
-    data["L_sff"] = dot(data["e_theta_t"], data["n_rho"])
+def _L_sff_rho(params, transforms, profiles, data, **kwargs):
+    data["L_sff_rho"] = dot(data["e_theta_t"], data["n_rho"])
     return data
 
 
 @register_compute_fun(
-    name="M_sff",
-    label="M_{sff}",
+    name="M_sff_rho",
+    label="M_{\\mathrm{SFF},\\rho}",
     units="m",
     units_long="meters",
-    description="M coefficient of second fundamental form",
+    description="M coefficient of second fundamental form of constant rho surface",
     dim=1,
     params=[],
     transforms={},
@@ -264,17 +264,17 @@ def _L_sff(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["n_rho", "e_theta_z"],
 )
-def _M_sff(params, transforms, profiles, data, **kwargs):
-    data["M_sff"] = dot(data["e_theta_z"], data["n_rho"])
+def _M_sff_rho(params, transforms, profiles, data, **kwargs):
+    data["M_sff_rho"] = dot(data["e_theta_z"], data["n_rho"])
     return data
 
 
 @register_compute_fun(
-    name="N_sff",
-    label="N_{sff}",
+    name="N_sff_rho",
+    label="N_{\\mathrm{SFF},\\rho}",
     units="m",
     units_long="meters",
-    description="N coefficient of second fundamental form",
+    description="N coefficient of second fundamental form of constant rho surface",
     dim=1,
     params=[],
     transforms={},
@@ -282,106 +282,418 @@ def _M_sff(params, transforms, profiles, data, **kwargs):
     coordinates="rtz",
     data=["n_rho", "e_zeta_z"],
 )
-def _N_sff(params, transforms, profiles, data, **kwargs):
-    data["N_sff"] = dot(data["e_zeta_z"], data["n_rho"])
+def _N_sff_rho(params, transforms, profiles, data, **kwargs):
+    data["N_sff_rho"] = dot(data["e_zeta_z"], data["n_rho"])
     return data
 
 
 @register_compute_fun(
-    name="curvature_k1",
-    label="k_{1}",
+    name="curvature_k1_rho",
+    label="k_{1,\\rho}",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="First principle curvature of flux surfaces",
+    description="First principle curvature of constant rho surfaces",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
+    data=["g_tt", "g_tz", "g_zz", "L_sff_rho", "M_sff_rho", "N_sff_rho"],
 )
-def _curvature_k1(params, transforms, profiles, data, **kwargs):
+def _curvature_k1_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
     # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
     E = data["g_tt"]
     F = data["g_tz"]
     G = data["g_zz"]
-    L = data["L_sff"]
-    M = data["M_sff"]
-    N = data["N_sff"]
+    L = data["L_sff_rho"]
+    M = data["M_sff_rho"]
+    N = data["N_sff_rho"]
     a = E * G - F**2
     b = F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    data["curvature_k1"] = jnp.maximum(r1, r2)
-    data["curvature_k2"] = jnp.minimum(r1, r2)
+    data["curvature_k1_rho"] = jnp.maximum(r1, r2)
+    data["curvature_k2_rho"] = jnp.minimum(r1, r2)
     return data
 
 
 @register_compute_fun(
-    name="curvature_k2",
-    label="k_{2}",
+    name="curvature_k2_rho",
+    label="k_{2,\\rho}",
     units="m^{-1}",
     units_long="Inverse meters",
-    description="Second principle curvature of flux surfaces",
+    description="Second principle curvature of constant rho surfaces",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["g_tt", "g_tz", "g_zz", "L_sff", "M_sff", "N_sff"],
+    data=["g_tt", "g_tz", "g_zz", "L_sff_rho", "M_sff_rho", "N_sff_rho"],
 )
-def _curvature_k2(params, transforms, profiles, data, **kwargs):
+def _curvature_k2_rho(params, transforms, profiles, data, **kwargs):
     # following notation from
     # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
     E = data["g_tt"]
     F = data["g_tz"]
     G = data["g_zz"]
-    L = data["L_sff"]
-    M = data["M_sff"]
-    N = data["N_sff"]
+    L = data["L_sff_rho"]
+    M = data["M_sff_rho"]
+    N = data["N_sff_rho"]
     a = E * G - F**2
     b = F * M - L * G - E * N
     c = L * N - M**2
     r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
     r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
-    data["curvature_k1"] = jnp.maximum(r1, r2)
-    data["curvature_k2"] = jnp.minimum(r1, r2)
+    data["curvature_k1_rho"] = jnp.maximum(r1, r2)
+    data["curvature_k2_rho"] = jnp.minimum(r1, r2)
     return data
 
 
 @register_compute_fun(
-    name="curvature_K",
-    label="K",
+    name="curvature_K_rho",
+    label="K_{\\rho}",
     units="m^2",
     units_long="meters squared",
-    description="Gaussian curvature of flux surfaces",
+    description="Gaussian curvature of constant rho surfaces",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["curvature_k1", "curvature_k2"],
+    data=["curvature_k1_rho", "curvature_k2_rho"],
 )
-def _curvature_K(params, transforms, profiles, data, **kwargs):
-    data["curvature_K"] = data["curvature_k1"] * data["curvature_k2"]
+def _curvature_K_rho(params, transforms, profiles, data, **kwargs):
+    data["curvature_K_rho"] = data["curvature_k1_rho"] * data["curvature_k2_rho"]
     return data
 
 
 @register_compute_fun(
-    name="curvature_H",
-    label="H",
+    name="curvature_H_rho",
+    label="H_{\\rho}",
     units="m",
     units_long="meters",
-    description="Mean curvature of flux surfaces",
+    description="Mean curvature of constant rho surfaces",
     dim=1,
     params=[],
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["curvature_k1", "curvature_k2"],
+    data=["curvature_k1_rho", "curvature_k2_rho"],
 )
-def _curvature_H(params, transforms, profiles, data, **kwargs):
-    data["curvature_H"] = (data["curvature_k1"] + data["curvature_k2"]) / 2
+def _curvature_H_rho(params, transforms, profiles, data, **kwargs):
+    data["curvature_H_rho"] = (data["curvature_k1_rho"] + data["curvature_k2_rho"]) / 2
+    return data
+
+
+@register_compute_fun(
+    name="L_sff_theta",
+    label="L_{\\mathrm{SFF},\\theta}",
+    units="m",
+    units_long="meters",
+    description="L coefficient of second fundamental form of constant theta surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_theta", "e_zeta_z"],
+)
+def _L_sff_theta(params, transforms, profiles, data, **kwargs):
+    data["L_sff_theta"] = dot(data["e_zeta_z"], data["n_theta"])
+    return data
+
+
+@register_compute_fun(
+    name="M_sff_theta",
+    label="M_{\\mathrm{SFF},\\theta}",
+    units="m",
+    units_long="meters",
+    description="M coefficient of second fundamental form of constant theta surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_theta", "e_zeta_r"],
+)
+def _M_sff_theta(params, transforms, profiles, data, **kwargs):
+    data["M_sff_theta"] = dot(data["e_zeta_r"], data["n_theta"])
+    return data
+
+
+@register_compute_fun(
+    name="N_sff_theta",
+    label="N_{\\mathrm{SFF},\\theta}",
+    units="m",
+    units_long="meters",
+    description="N coefficient of second fundamental form of constant theta surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_theta", "e_rho_r"],
+)
+def _N_sff_theta(params, transforms, profiles, data, **kwargs):
+    data["N_sff_theta"] = dot(data["e_rho_r"], data["n_theta"])
+    return data
+
+
+@register_compute_fun(
+    name="curvature_k1_theta",
+    label="k_{1,\\theta}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="First principle curvature of constant theta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["g_rr", "g_rz", "g_zz", "L_sff_theta", "M_sff_theta", "N_sff_theta"],
+)
+def _curvature_k1_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_rr"]
+    F = data["g_rz"]
+    G = data["g_zz"]
+    L = data["L_sff_theta"]
+    M = data["M_sff_theta"]
+    N = data["N_sff_theta"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["curvature_k1_theta"] = jnp.maximum(r1, r2)
+    data["curvature_k2_theta"] = jnp.minimum(r1, r2)
+    return data
+
+
+@register_compute_fun(
+    name="curvature_k2_theta",
+    label="k_{2,\\theta}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Second principle curvature of constant theta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["g_rr", "g_rz", "g_zz", "L_sff_theta", "M_sff_theta", "N_sff_theta"],
+)
+def _curvature_k2_theta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_rr"]
+    F = data["g_rz"]
+    G = data["g_zz"]
+    L = data["L_sff_theta"]
+    M = data["M_sff_theta"]
+    N = data["N_sff_theta"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["curvature_k1_theta"] = jnp.maximum(r1, r2)
+    data["curvature_k2_theta"] = jnp.minimum(r1, r2)
+    return data
+
+
+@register_compute_fun(
+    name="curvature_K_theta",
+    label="K_{\\theta}",
+    units="m^2",
+    units_long="meters squared",
+    description="Gaussian curvature of constant theta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["curvature_k1_theta", "curvature_k2_theta"],
+)
+def _curvature_K_theta(params, transforms, profiles, data, **kwargs):
+    data["curvature_K_theta"] = data["curvature_k1_theta"] * data["curvature_k2_theta"]
+    return data
+
+
+@register_compute_fun(
+    name="curvature_H_theta",
+    label="H_{\\theta}",
+    units="m",
+    units_long="meters",
+    description="Mean curvature of constant theta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["curvature_k1_theta", "curvature_k2_theta"],
+)
+def _curvature_H_theta(params, transforms, profiles, data, **kwargs):
+    data["curvature_H_theta"] = (
+        data["curvature_k1_theta"] + data["curvature_k2_theta"]
+    ) / 2
+    return data
+
+
+@register_compute_fun(
+    name="L_sff_zeta",
+    label="L_{\\mathrm{SFF},\\zeta}",
+    units="m",
+    units_long="meters",
+    description="L coefficient of second fundamental form of constant zeta surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_zeta", "e_rho_r"],
+)
+def _L_sff_zeta(params, transforms, profiles, data, **kwargs):
+    data["L_sff_zeta"] = dot(data["e_rho_r"], data["n_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="M_sff_zeta",
+    label="M_{\\mathrm{SFF},\\zeta}",
+    units="m",
+    units_long="meters",
+    description="M coefficient of second fundamental form of constant zeta surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_zeta", "e_rho_t"],
+)
+def _M_sff_zeta(params, transforms, profiles, data, **kwargs):
+    data["M_sff_zeta"] = dot(data["e_rho_t"], data["n_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="N_sff_zeta",
+    label="N_{\\mathrm{SFF},\\zeta}",
+    units="m",
+    units_long="meters",
+    description="N coefficient of second fundamental form of constant zeta surface",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["n_zeta", "e_theta_t"],
+)
+def _N_sff_zeta(params, transforms, profiles, data, **kwargs):
+    data["N_sff_zeta"] = dot(data["e_theta_t"], data["n_zeta"])
+    return data
+
+
+@register_compute_fun(
+    name="curvature_k1_zeta",
+    label="k_{1,\\zeta}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="First principle curvature of constant zeta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
+)
+def _curvature_k1_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_rr"]
+    F = data["g_rt"]
+    G = data["g_tt"]
+    L = data["L_sff_zeta"]
+    M = data["M_sff_zeta"]
+    N = data["N_sff_zeta"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
+    data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
+    return data
+
+
+@register_compute_fun(
+    name="curvature_k2_zeta",
+    label="k_{2,\\zeta}",
+    units="m^{-1}",
+    units_long="Inverse meters",
+    description="Second principle curvature of constant zeta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["g_rr", "g_rt", "g_tt", "L_sff_zeta", "M_sff_zeta", "N_sff_zeta"],
+)
+def _curvature_k2_zeta(params, transforms, profiles, data, **kwargs):
+    # following notation from
+    # https://en.wikipedia.org/wiki/Parametric_surface#Curvature
+    E = data["g_rr"]
+    F = data["g_rt"]
+    G = data["g_tt"]
+    L = data["L_sff_zeta"]
+    M = data["M_sff_zeta"]
+    N = data["N_sff_zeta"]
+    a = E * G - F**2
+    b = F * M - L * G - E * N
+    c = L * N - M**2
+    r1 = (-b + jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    r2 = (-b - jnp.sqrt(b**2 - 4 * a * c)) / (2 * a)
+    data["curvature_k1_zeta"] = jnp.maximum(r1, r2)
+    data["curvature_k2_zeta"] = jnp.minimum(r1, r2)
+    return data
+
+
+@register_compute_fun(
+    name="curvature_K_zeta",
+    label="K_{\\zeta}",
+    units="m^2",
+    units_long="meters squared",
+    description="Gaussian curvature of constant zeta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["curvature_k1_zeta", "curvature_k2_zeta"],
+)
+def _curvature_K_zeta(params, transforms, profiles, data, **kwargs):
+    data["curvature_K_zeta"] = data["curvature_k1_zeta"] * data["curvature_k2_zeta"]
+    return data
+
+
+@register_compute_fun(
+    name="curvature_H_zeta",
+    label="H_{\\zeta}",
+    units="m",
+    units_long="meters",
+    description="Mean curvature of constant zeta surfaces",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["curvature_k1_zeta", "curvature_k2_zeta"],
+)
+def _curvature_H_zeta(params, transforms, profiles, data, **kwargs):
+    data["curvature_H_zeta"] = (
+        data["curvature_k1_zeta"] + data["curvature_k2_zeta"]
+    ) / 2
     return data

@@ -1151,7 +1151,7 @@ def _Z_rtz(params, transforms, profiles, data, **kwargs):
     data=["zeta", "omega"],
 )
 def _phi(params, transforms, profiles, data, **kwargs):
-    data["phi"] = data["zeta"] + data["omega"]
+    data["phi"] = (data["zeta"] + data["omega"]) % (2 * jnp.pi)
     return data
 
 

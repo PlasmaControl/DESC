@@ -855,7 +855,7 @@ class FourierXYZCurve(Curve):
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from
-             fourier_xyzcurve.compute_coordinates(grid=grid))
+            fourier_xyzcurve.compute_coordinates(grid=grid))
             If None, defaults to using an equal-arclength angle as the knots
         period: float
             period of the theta variable used for the spline knots.
@@ -1300,7 +1300,7 @@ class XYZCurve(Curve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary theta values to use for spline knots,
-         should be an 1D ndarray of same length as the input.
+        should be an 1D ndarray of same length as the input.
         If None, defaults to using an equal-arclength angle as the knot
     period: float
         period of the theta variable used for the spline knots.
@@ -1456,7 +1456,7 @@ class XYZCurve(Curve):
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1524,7 +1524,7 @@ class XYZCurve(Curve):
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1677,7 +1677,7 @@ class XYZCurve(Curve):
             should be an 1D ndarray of same length as the input.
             (input length in this case is determined by grid argument, since
             the input coordinates come from
-             fourier_xyzcurve.compute_coordinates(grid=grid))
+            fourier_xyzcurve.compute_coordinates(grid=grid))
             If None, defaults to using an equal-arclength angle as the knots
         period: float
             period of the theta variable used for the spline knots.

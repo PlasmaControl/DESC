@@ -498,6 +498,33 @@ class TestXYZCurve:
         np.testing.assert_allclose(z, 1)
 
     @pytest.mark.unit
+    def test_from_FourierXYZCurve(self):
+        """Test converting FourierXYZCurve to XYZCurve object."""
+        npts = 4000
+        # make a simple circular curve of radius 2
+        R = 2
+        c = FourierXYZCurve()
+        c2 = XYZCurve.from_FourierXYZCurve(c, grid=1000)
+        c3 = c.to_XYZCurve(grid=1000)
+
+        np.testing.assert_allclose(
+            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        np.testing.assert_allclose(
+            c2.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        np.testing.assert_allclose(
+            c3.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
+        grid = LinearGrid(N=20, endpoint=True)
+        coords1 = c.compute_coordinates(grid=grid)
+        coords2 = c2.compute_coordinates(grid=grid)
+        coords3 = c3.compute_coordinates(grid=grid)
+
+        np.testing.assert_allclose(coords1, coords2, atol=1e-10)
+        np.testing.assert_allclose(coords2, coords3)
+
+    @pytest.mark.unit
     def test_asserts(self):
         """Test error checking when creating or setting properties of XYZCurve."""
         # make a simple circular curve of radius 2

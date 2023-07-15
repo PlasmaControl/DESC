@@ -836,7 +836,47 @@ class FourierXYZCurve(Curve):
         X_n = transform.fit(coords[:, 0])
         Y_n = transform.fit(coords[:, 1])
         Z_n = transform.fit(coords[:, 2])
-        return FourierXYZCurve(X_n, Y_n, Z_n, modes=basis.modes[:, 2])
+        return cls(X_n, Y_n, Z_n, modes=basis.modes[:, 2])
+
+    def to_XYZCurve(
+        self,
+        knots=None,
+        period=None,
+        grid=None,
+        method="cubic2",
+        name="",
+    ):
+        """Create XYZCurve from FourierXYZCurve object.
+
+        Parameters
+        ----------
+        knots : ndarray
+            arbitrary theta values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+             fourier_xyzcurve.compute_coordinates(grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+        period: float
+            period of the theta variable used for the spline knots.
+            if knots is None, this defaults to 2pi. If knots is not None, this must be
+            supplied by the user
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        XYZCurve: XYZCurve,
+            XYZCurve object which is the spline representation of the FourierXYZCurve.
+        """
+        return XYZCurve.from_FourierXYZCurve(self, knots, period, grid, method, name)
 
     # TODO: to_rz method for converting to FourierRZCurve representation
     # (might be impossible to parameterize with toroidal angle phi)
@@ -1531,7 +1571,7 @@ class XYZCurve(Curve):
         """
         raise NotImplementedError("Curvature not implemented for XYZCurve ")
 
-    def compute_torsion(self, X=None, Y=None, Z=None, grid=None, dt=0, basis="xyz"):
+    def compute_torsion(self, X=None, Y=None, Z=None, grid=None):
         """Compute torsion using specified coefficientsnp.empty((0, 3)).
 
         Parameters
@@ -1554,7 +1594,15 @@ class XYZCurve(Curve):
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
         """
-        raise NotImplementedError("Torsion not implemented for XYZCurve ")
+        dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
+        d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
+        d3x = self.compute_coordinates(X, Y, Z, grid, dt=3)
+        dxd2x = jnp.cross(dx, d2x, axis=1)
+        tau = (
+            jnp.sum(dxd2x * d3x, axis=1)
+            / jnp.linalg.norm(dxd2x, axis=1)[:, jnp.newaxis] ** 2
+        )
+        return tau
 
     def compute_length(self, X=None, Y=None, Z=None, grid=None):
         """Compute the length of the curve specified by given cartesian spline points.
@@ -1575,14 +1623,6 @@ class XYZCurve(Curve):
         length : float
             length of the curve.
         """
-        # get default spline params if not passed in
-        if X is None:
-            X = self._X
-        if Y is None:
-            Y = self._Y
-        if Z is None:
-            Z = self._Z
-
         coords = self.compute_coordinates(X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=1)
         # L = integral( sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )dt )
         integrand = jnp.linalg.norm(coords, axis=1)
@@ -1606,5 +1646,53 @@ class XYZCurve(Curve):
             FourierXYZCurve fit of the XYZCurve input object.
         """
         return FourierXYZCurve.from_XYZCurve(self, N, grid)
+
+    @classmethod
+    def from_FourierXYZCurve(
+        cls,
+        fourier_xyzcurve,
+        knots=None,
+        period=None,
+        grid=None,
+        method="cubic2",
+        name="",
+    ):
+        """Create XYZCurve from FourierXYZCurve object.
+
+        Parameters
+        ----------
+        fourier_xyzcurve: FourierXYZCurve
+            FourierXYZCurve object to convert to XYZCurve
+        knots : ndarray
+            arbitrary theta values to use for spline knots,
+            should be an 1D ndarray of same length as the input.
+            (input length in this case is determined by grid argument, since
+            the input coordinates come from
+             fourier_xyzcurve.compute_coordinates(grid=grid))
+            If None, defaults to using an equal-arclength angle as the knots
+        period: float
+            period of the theta variable used for the spline knots.
+            if knots is None, this defaults to 2pi. If knots is not None, this must be
+            supplied by the user
+        method : str
+            method of interpolation
+            - `'nearest'`: nearest neighbor interpolation
+            - `'linear'`: linear interpolation
+            - `'cubic'`: C1 cubic splines (aka local splines)
+            - `'cubic2'`: C2 cubic splines (aka natural splines)
+            - `'catmull-rom'`: C1 cubic centripetal "tension" splines
+        name : str
+            name for this curve
+
+        Returns
+        -------
+        XYZCurve: XYZCurve,
+            XYZCurve object which is the spline representation of the FourierXYZCurve.
+        """
+        coords = fourier_xyzcurve.compute_coordinates(grid=grid, basis="xyz")
+
+        return cls(
+            coords[:, 0], coords[:, 1], coords[:, 2], knots, period, grid, method, name
+        )
 
     # TODO: methods for converting between representations

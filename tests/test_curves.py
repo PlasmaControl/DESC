@@ -210,7 +210,8 @@ class TestFourierXYZCurve:
         R = 2
         phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
         c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        c2 = FourierXYZCurve.from_XYZCurve(c)
+        c2 = FourierXYZCurve.from_XYZCurve(c, N=1, grid=100)
+        c3 = c.to_FourierXYZCurve(N=1, grid=100)
 
         np.testing.assert_allclose(
             c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
@@ -218,10 +219,16 @@ class TestFourierXYZCurve:
         np.testing.assert_allclose(
             c2.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
         )
+        np.testing.assert_allclose(
+            c3.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
+        )
         grid = LinearGrid(N=20, endpoint=True)
         coords1 = c.compute_coordinates(grid=grid)
-        coords2 = c.compute_coordinates(grid=grid)
-        np.testing.assert_allclose(coords1, coords2)
+        coords2 = c2.compute_coordinates(grid=grid)
+        coords3 = c3.compute_coordinates(grid=grid)
+
+        np.testing.assert_allclose(coords1, coords2, atol=1e-10)
+        np.testing.assert_allclose(coords2, coords3)
 
     @pytest.mark.unit
     def test_misc(self):

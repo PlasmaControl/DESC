@@ -1553,4 +1553,21 @@ class XYZCurve(Curve):
 
         return jnp.trapz(integrand, ts)
 
+    def to_FourierXYZCurve(self, N=10, grid=None):
+        """Convert to a FourierXYZCurve object.
+
+        N : int
+            number of Fourier Modes to use in fitting the XYZCurve object.
+            Default is 10.
+        grid: Grid, int or array-like
+            dependent coordinates to fit at. Defaults to self.grid
+            If an integer, assumes that many linearly spaced points in (0,2pi)
+
+        Returns
+        -------
+        fourier_xyz_curve : FourierXYZCurve
+            FourierXYZCurve fit of the XYZCurve input object.
+        """
+        return FourierXYZCurve.from_XYZCurve(self, N, grid)
+
     # TODO: methods for converting between representations

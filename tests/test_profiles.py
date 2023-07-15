@@ -87,13 +87,13 @@ class TestProfiles:
         pp = PowerSeriesProfile(
             modes=np.array([0, 2, 4]), params=np.array([1, -2, 1]), sym=False
         )  # base profile to work off of
-        knots = np.linspace(0, 1.0, 20, endpoint=True)
-        x = np.linspace(0, 0.9, 25)
+        knots = np.linspace(0, 1.0, 40, endpoint=True)
+        x = np.linspace(0, 0.99, 100)
 
         method = "nearest"
         sp = pp.to_spline(knots=knots, method=method)
         # should be exactly same if evaluated at knots + eps
-        np.testing.assert_allclose(pp(knots), sp(knots + 0.02))
+        np.testing.assert_allclose(pp(knots), sp(knots + 0.4 * (x[1] - x[0])))
 
         method = "linear"
         sp = pp.to_spline(knots=knots, method=method)
@@ -116,6 +116,27 @@ class TestProfiles:
         method = "cardinal"
         sp = pp.to_spline(knots=knots, method=method)
         np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "monotonic"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        method = "monotonic-0"
+        sp = pp.to_spline(knots=knots, method=method)
+        np.testing.assert_allclose(pp(x), sp(x), rtol=1e-5, atol=1e-3)
+
+        # test monotonic splines preserve monotonicity
+        f = np.heaviside(knots - 0.5, 0) + 0.1 * knots
+        spm = SplineProfile(values=f, knots=knots, method="monotonic")
+        spm0 = SplineProfile(values=f, knots=knots, method="monotonic-0")
+        spc = SplineProfile(values=f, knots=knots, method="cubic")
+
+        dfc = spc(x, dr=1)
+        dfm = spm(x, dr=1)
+        dfm0 = spm0(x, dr=1)
+        assert dfc.min() < 0  # cubic interpolation undershoots, giving negative slope
+        assert dfm.min() > 0  # monotonic interpolation doesn't
+        assert dfm0.min() >= 0  # monotonic-0 doesn't overshoot either
 
     @pytest.mark.unit
     def test_repr(self):

@@ -886,7 +886,7 @@ class SplineProfile(Profile):
         x = self._knots
         f = params
         df = self._Dx @ f
-        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, df=df)
+        fq = interp1d(xq, x, f, method=self._method, derivative=dr, extrap=True, fx=df)
         return fq
 
 

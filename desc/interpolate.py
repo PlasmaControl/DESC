@@ -661,8 +661,7 @@ def _approx_df(x, f, method, axis, **kwargs):
             axis=axis,
         )
         return fx
-
-    if method == "cubic2":
+    elif method == "cubic2":
         dx = jnp.diff(x)
         df = jnp.diff(f, axis=axis)
         if df.ndim > dx.ndim:
@@ -705,8 +704,7 @@ def _approx_df(x, f, method, axis, **kwargs):
         fx = jnp.linalg.solve(A, b)
         fx = jnp.moveaxis(fx.reshape(f.shape), 0, axis)
         return fx
-
-    if method in ["cardinal", "catmull-rom"]:
+    elif method in ["cardinal", "catmull-rom"]:
         dx = x[2:] - x[:-2]
         df = jnp.take(f, jnp.arange(2, f.shape[axis]), axis, mode="wrap") - jnp.take(
             f, jnp.arange(0, f.shape[axis] - 2), axis, mode="wrap"
@@ -740,8 +738,7 @@ def _approx_df(x, f, method, axis, **kwargs):
             c = 0
         fx = (1 - c) * jnp.concatenate([fx0, df, fx1], axis=axis)
         return fx
-
-    if method in ["monotonic", "monotonic-0"]:
+    elif method in ["monotonic", "monotonic-0"]:
         f = jnp.moveaxis(f, axis, 0)
         fshp = f.shape
         if f.ndim == 1:
@@ -788,6 +785,8 @@ def _approx_df(x, f, method, axis, **kwargs):
 
         dk = jnp.concatenate([d0, dk, d1])
         return dk.reshape(fshp)
+    else:  # method passed in does not use df from this function, just return 0
+        return jnp.zeros_like(f)
 
 
 # fmt: off

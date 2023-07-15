@@ -213,14 +213,29 @@ class FourierPlanarCoil(Coil, FourierPlanarCurve):
 
 
 class XYZCoil(Coil, XYZCurve):
-    """Coil parameterized by points in X,Y,Z.
+    """Coil parameterized by spline points in X,Y,Z.
 
     Parameters
     ----------
     current : float
         current through coil, in Amperes
     X, Y, Z: array-like
-        points for X, Y, Z descriving a closed curve
+        points for X, Y, Z describing a closed curve
+    knots : ndarray
+        arbitrary theta values to use for spline knots,
+         should be an 1D ndarray of same length as the input.
+        If None, defaults to using an equal-arclength angle as the knot
+    period: float
+        period of the theta variable used for the spline knots.
+        if knots is None, this defaults to 2pi. If knots is not None, this must be
+        supplied by the user
+     method : str
+        method of interpolation
+        - `'nearest'`: nearest neighbor interpolation
+        - `'linear'`: linear interpolation
+        - `'cubic'`: C1 cubic splines (aka local splines)
+        - `'cubic2'`: C2 cubic splines (aka natural splines)
+        - `'catmull-rom'`: C1 cubic centripetal "tension" splines
     name : str
         name for this coil
 
@@ -234,14 +249,13 @@ class XYZCoil(Coil, XYZCurve):
         X,
         Y,
         Z,
+        knots=None,
+        period=None,
         grid=None,
+        method="cubic2",
         name="",
     ):
-        super().__init__(current, X, Y, Z, grid, name)
-        self.X = X
-        self.Y = Y
-        self.Z = Z
-        self.coords = np.vstack((X, Y, Z)).T
+        super().__init__(current, X, Y, Z, knots, period, grid, method, name)
 
 
 class CoilSet(Coil, MutableSequence):
@@ -505,7 +519,7 @@ class CoilSet(Coil, MutableSequence):
 
         return CoilSet(*coils)
 
-    def save_in_MAKEGRID_format(self, coilsFilename, NFP=1, num_pts=100):
+    def save_in_MAKEGRID_format(self, coilsFilename, NFP=1, grid=None):
         """Save CoilSet of as a MAKEGRID-formatted coil txtfile.
 
         By default, each coil is assigned to the same Coilgroup in MAKEGRID
@@ -520,8 +534,9 @@ class CoilSet(Coil, MutableSequence):
             If > 1, assumes that the CoilSet is the coils for a coilset
             with a discrete toroidal symmetry of NFP, and so will only
             save the first len(coils)/NFP coils in the MAKEGRID file.
-        num_pts: int,
-            number of sample points along each coil to save.
+        grid: Grid, ndarray, int,
+            Grid of sample points along each coil to save.
+            if None, will default to each coils self._grid
         """
         assert (
             int(len(self.coils) / NFP) == len(self.coils) / NFP
@@ -550,25 +565,13 @@ class CoilSet(Coil, MutableSequence):
         # at the end of each individual coil
         for i in range(int(len(self.coils) / NFP)):
             coil = self.coils[i]
-            if isinstance(coil, XYZCoil):
-                # TODO: once spline is implemented for XYZCoil, change this
-                # to be the same as the other block
-                contour_X = coil.X[0:-1]
-                contour_Y = coil.Y[0:-1]
-                contour_Z = coil.Z[0:-1]
-            # FIXME: implement this properly for all coiltypes
-            # i.e. use numpts
-            elif isinstance(coil, Coil):
-                coords = coil.compute_coordinates(basis="xyz", grid=num_pts)
-                contour_X = coords[0:-1, 0]
-                contour_Y = coords[0:-1, 1]
-                contour_Z = coords[0:-1, 2]
-            else:
-                raise TypeError(
-                    "Can only save Coil objects to a MAKEGRID file,"
-                    + f"got object of type {type(coil)}"
-                )
-            currents = np.ones_like(contour_X) * coil.current
+            coords = coil.compute_coordinates(basis="xyz", grid=grid)
+
+            contour_X = np.asarray(coords[0:-1, 0])
+            contour_Y = np.asarray(coords[0:-1, 1])
+            contour_Z = np.asarray(coords[0:-1, 2])
+
+            currents = np.ones_like(contour_X) * float(coil.current)
             # close the curves
             contour_X = np.append(contour_X, contour_X[0])
             contour_Y = np.append(contour_Y, contour_Y[0])

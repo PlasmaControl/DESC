@@ -1517,7 +1517,7 @@ class XYZCurve(Curve):
             Z = self._Z
 
         coords = self.compute_coordinates(X=X, Y=Y, Z=Z, grid=grid, basis="xyz", dt=1)
-        # sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )
+        # L = integral( sqrt(x'(t)**2+y'(t)**2+z'(t)**2 )dt )
         integrand = jnp.linalg.norm(coords, axis=1)
         ts = self._get_xq(grid)
 

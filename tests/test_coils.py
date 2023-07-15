@@ -274,6 +274,69 @@ def test_save_and_load_MAKEGRID_coils(tmpdir_factory):
         assert line_orig == line_new
 
 
+@pytest.mark.unit
+def test_save_and_load_MAKEGRID_coils_Planar(tmpdir_factory):
+    """Test saving and reloading CoilSet with PlanarCoil from MAKEGRID file."""
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    path = tmpdir.join("coils.MAKEGRID_format_planar_coil")
+
+    # make a coilset with a single FourierPlanarCoil
+    coilset = CoilSet(FourierPlanarCoil(r_n=np.array([2, 0]), modes=np.array([0, 1])))
+    grid = LinearGrid(N=200, endpoint=True)
+    coilset.save_in_MAKEGRID_format(str(path), grid=grid)
+
+    coilset2 = CoilSet.from_makegrid_coilfile(str(path))
+
+    # check values at saved points, ensure they match
+    coords1 = coilset[0].compute_coordinates(grid=grid, basis="xyz")
+    X1 = coords1[:, 0]
+    Y1 = coords1[:, 1]
+    Z1 = coords1[:, 2]
+
+    coords2 = coilset2[0].compute_coordinates(grid=grid, basis="xyz")
+    X2 = coords2[:, 0]
+    Y2 = coords2[:, 1]
+    Z2 = coords2[:, 2]
+
+    np.testing.assert_allclose(coilset2[0].current, coilset[0].current)
+    np.testing.assert_allclose(X1, X2)
+    np.testing.assert_allclose(Y1, Y2)
+    np.testing.assert_allclose(Z1, Z2, atol=9e-15)
+
+    # check values at interpolated points, ensure they match closely
+    grid = LinearGrid(N=50, endpoint=True)
+    coords1 = coilset[0].compute_coordinates(grid=grid, basis="xyz")
+    X1 = coords1[:, 0]
+    Y1 = coords1[:, 1]
+    Z1 = coords1[:, 2]
+
+    coords2 = coilset2[0].compute_coordinates(grid=grid, basis="xyz")
+    X2 = coords2[:, 0]
+    Y2 = coords2[:, 1]
+    Z2 = coords2[:, 2]
+
+    np.testing.assert_allclose(coilset2[0].current, coilset[0].current)
+    np.testing.assert_allclose(X1, X2, atol=1e-15)
+    np.testing.assert_allclose(Y1, Y2, atol=1e-15)
+    np.testing.assert_allclose(Z1, Z2, atol=1e-15)
+
+
+@pytest.mark.unit
+def test_save_MAKEGRID_coils_assert(tmpdir_factory):
+    """Test saving CoilSet that with incompatible NFP throws an error."""
+    Ncoils = 22
+    input_path = f"./tests/inputs/coils.MAKEGRID_format_{Ncoils}_coils"
+    tmpdir = tmpdir_factory.mktemp("coil_files")
+    tmp_path = tmpdir.join("coils.MAKEGRID_format_{Ncoils}_coils")
+    shutil.copyfile(input_path, tmp_path)
+
+    coilset = CoilSet.from_makegrid_coilfile(str(tmp_path))
+    assert len(coilset) == Ncoils  # correct number of coils
+    path = tmpdir.join("coils.MAKEGRID_format_desc")
+    with pytest.raises(AssertionError):
+        coilset.save_in_MAKEGRID_format(str(path), NFP=3)
+
+
 # TODO: add test where the CoilSet is not only XYZcoils
 
 

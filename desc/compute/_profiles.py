@@ -593,7 +593,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num(params, transforms, profiles, data, **kwargs):
     if profiles["current"] is None:
-        return
+        return data
     # This function computes 𝛼+𝛽 as defined in the document attached
     # to GitHub pull request #556. 𝛼 supplements the rotational transform with
     # an additional term to account for the enclosed net toroidal current.
@@ -643,7 +643,7 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num_r(params, transforms, profiles, data, **kwargs):
     if profiles["current"] is None:
-        return
+        return data
     # This function computes d(𝛼+𝛽)/d𝜌 as defined in the document attached
     # to GitHub pull request #556. 𝛼 supplements the rotational transform with
     # an additional term to account for the enclosed net toroidal current.
@@ -733,7 +733,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     if profiles["current"] is None:
-        return
+        return data
     # This function computes d2(𝛼+𝛽)/d𝜌2 as defined in the document attached
     # to GitHub pull request #556. 𝛼 supplements the rotational transform with
     # an additional term to account for the enclosed net toroidal current.
@@ -848,7 +848,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
 )
 def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     if profiles["current"] is None:
-        return
+        return data
     # This function computes d3(𝛼+𝛽)/d𝜌3 as defined in the document attached
     # to GitHub pull request #556. 𝛼 supplements the rotational transform with
     # an additional term to account for the enclosed net toroidal current.

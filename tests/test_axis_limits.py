@@ -290,10 +290,3 @@ class TestAxisLimits:
         assert_is_continuous(get("W7-X"), names=continuous, kwargs=kwargs)
         # fixed current
         assert_is_continuous(get("QAS"), names=continuous, kwargs=kwargs)
-
-
-a = TestAxisLimits()
-a.test_data_index_deps()
-a.test_axis_limit_api()
-a.test_limit_existence()
-a.test_continuous_limits()

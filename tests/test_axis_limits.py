@@ -12,11 +12,12 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
-# Unless explicitly mentioned (in the source code of the compute function or
-# elsewhere), the only assumptions made to compute the magnetic axis limit of
+# Unless mentioned (in the source code of the compute function or elsewhere),
+# the only assumptions made to compute the magnetic axis limit of
 # quantities are that these functions tend toward zero as the magnetic axis
-# is approached, and that the limit of their derivatives is not zero.
-zero_limit_keys = {"rho", "psi", "psi_r", "e_theta"}
+# is approached, and that the limit of their rho derivatives is not zero.
+# Also d^n𝜓/(d𝜌)^n for n > 3 was assumed zero everywhere.
+zero_limit_keys = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)"}
 
 not_finite_limit_keys = {
     "D_Mercier",
@@ -43,6 +44,9 @@ not_finite_limit_keys = {
     "g^tz_t",
     "g^tz_z",
     "grad(alpha)",
+    "iota_num_rrr",  # Todo: this one exists. implement limit
+    "iota_den_rrr",  # Todo: this one exists. implement limit
+    "iota_rr",  # Todo: completing the above two automatically does this one
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
@@ -58,7 +62,17 @@ def get_matches(fun, pattern):
     return matches
 
 
-def is_continuous(
+def skip_atomic_profile(eq, name):
+    return (
+        (eq.atomic_number is None and "Zeff" in name)
+        or (eq.electron_temperature is None and "Te" in name)
+        or (eq.electron_density is None and "ne" in name)
+        or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.pressure is not None and "<J*B> Redl" in name)
+    )
+
+
+def assert_is_continuous(
     eq,
     names,
     delta=1e-5,
@@ -86,7 +100,7 @@ def is_continuous(
     desired_at_axis : float, optional
         If not provided, the values are extrapolated with a polynomial fit.
     kwargs : dict, optional
-        Keyword arguments to override the parameters above for given names.
+        Keyword arguments to override the parameters above for specific names.
         The dictionary should have the following structure:
         {
             "name1": {
@@ -113,10 +127,10 @@ def is_continuous(
     data = eq.compute(names, grid=grid)
 
     for name in names:
-        if data_index[name]["coordinates"] == "":
-            # can't check global scalars
+        if data_index[name]["coordinates"] == "" or skip_atomic_profile(eq, name):
             continue
-        quantity = (
+        # make single variable function of rho
+        profile = (
             grid.compress(data[name])
             if data_index[name]["coordinates"] == "r"
             else integrate(data[name])
@@ -125,26 +139,24 @@ def is_continuous(
         if fit is None:
             if np.ndim(data_index[name]["dim"]):
                 # can't polyfit tensor arrays like grad(B)
-                fit = (quantity[0] + quantity[1]) / 2
+                fit = (profile[0] + profile[1]) / 2
             else:
                 # fit the data to a polynomial to extrapolate to axis
-                poly = np.polyfit(rho[1:], quantity[1:], 6)
+                poly = np.polyfit(rho[1:], profile[1:], 6)
                 # constant term is the same as evaluating polynomial at rho=0
                 fit = poly[-1]
         np.testing.assert_allclose(
-            quantity[0],
-            fit,
+            actual=profile[0],
+            desired=fit,
             rtol=kwargs.get(name, {}).get("rtol", rtol),
             atol=kwargs.get(name, {}).get("atol", atol),
+            equal_nan=False,
             err_msg=name,
         )
 
 
 class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
-
-    # includes a fixed iota and fixed current equilibrium
-    eqs = (get("W7-X"), get("QAS"))
 
     @pytest.mark.unit
     def test_data_index_deps(self):
@@ -189,16 +201,7 @@ class TestAxisLimits:
     def test_limit_existence(self):
         """Test that only quantities which lack limits do not evaluate at axis."""
 
-        def skip_atomic_profile(eq, name):
-            return (
-                (eq.atomic_number is None and "Zeff" in name)
-                or (eq.electron_temperature is None and "Te" in name)
-                or (eq.electron_density is None and "ne" in name)
-                or (eq.ion_temperature is None and "Ti" in name)
-                or (eq.pressure is not None and "<J*B> Redl" in name)
-            )
-
-        for eq in TestAxisLimits.eqs:
+        def test(eq):
             grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
             assert grid.axis.size
             data = eq.compute(list(data_index.keys()), grid=grid)
@@ -211,6 +214,9 @@ class TestAxisLimits:
                     assert np.all(is_finite.T ^ is_axis), key
                 else:
                     assert np.all(is_finite), key
+
+        test(get("W7-X"))  # fixed iota
+        test(get("QAS"))  # fixed current
 
     @pytest.mark.unit
     def test_continuous_limits(self):
@@ -233,21 +239,19 @@ class TestAxisLimits:
             "F_rho": {"atol": 1e00},
             "|B|_rr": {"rtol": 5e-02},
             "F": {"atol": 1e00},
-            "iota_zero_current_den": {"atol": 1e02},  # fix
             "B_rho_rr": {"rtol": 5e-02},
             "B_zeta_rr": {"rtol": 5e-02},
             "G_rr": {"rtol": 5e-02},
-            "iota_zero_current_num": {"atol": 1e01},  # fix
             "J": {"atol": 1e00},
             "B0_rr": {"rtol": 5e-02},
             "B_rr": {"atol": 1e00},
             "(J sqrt(g))_r": {"atol": 1e00},
-            "iota_zero_current_num_rr": {"atol": 1e-02},  # fix
             "B^theta_rr": {"rtol": 5e-02},
             "J_R": {"atol": 1e00},
         }
-        kwargs = weaker_tolerance | dict.fromkeys(
-            zero_limit_keys, {"desired_at_axis": 0}
-        )
-        for eq in TestAxisLimits.eqs:
-            is_continuous(eq, names=continuous, kwargs=kwargs)
+        zero_limit = dict.fromkeys(zero_limit_keys, {"desired_at_axis": 0})
+        kwargs = weaker_tolerance | zero_limit
+        # fixed iota
+        assert_is_continuous(get("W7-X"), names=continuous, kwargs=kwargs)
+        # fixed current
+        assert_is_continuous(get("QAS"), names=continuous, kwargs=kwargs)

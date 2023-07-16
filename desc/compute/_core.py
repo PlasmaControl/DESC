@@ -2064,6 +2064,44 @@ def _lambda_rrr(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="lambda_rrrt",
+    label="\\partial_{\rho \\rho \\rho \\theta} \\lambda",
+    units="rad",
+    units_long="radians",
+    description="Poloidal stream function, third radial derivative and"
+    " first poloidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[3, 1, 0]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _lambda_rrrt(params, transforms, profiles, data, **kwargs):
+    data["lambda_rrrt"] = transforms["L"].transform(params["L_lmn"], 3, 1, 0)
+    return data
+
+
+@register_compute_fun(
+    name="lambda_rrrz",
+    label="\\partial_{\rho \\rho \\rho \\zeta} \\lambda",
+    units="rad",
+    units_long="radians",
+    description="Poloidal stream function, third radial derivative and"
+    " first toroidal derivative",
+    dim=1,
+    params=["L_lmn"],
+    transforms={"L": [[3, 0, 1]]},
+    profiles=[],
+    coordinates="rtz",
+    data=[],
+)
+def _lambda_rrrz(params, transforms, profiles, data, **kwargs):
+    data["lambda_rrrz"] = transforms["L"].transform(params["L_lmn"], 3, 0, 1)
+    return data
+
+
+@register_compute_fun(
     name="lambda_ttt",
     label="\\partial_{\\theta \\theta \\theta} \\lambda",
     units="rad",

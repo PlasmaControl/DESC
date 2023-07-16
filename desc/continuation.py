@@ -282,6 +282,7 @@ def _add_pressure(
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
+        eqi = eqi.copy()
 
         if checkpoint_path is not None:
             if verbose > 0:
@@ -414,6 +415,7 @@ def _add_shaping(
             )
         stop = stop or not eqi.is_nested()
         eqfam.append(eqi)
+        eqi = eqi.copy()
 
         if checkpoint_path is not None:
             if verbose > 0:

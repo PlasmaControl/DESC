@@ -566,6 +566,83 @@ class TestGrid:
         np.testing.assert_allclose(vol, vol_quad)
 
     @pytest.mark.unit
+    def test_repr(self):
+        """Test string representations of grid objects."""
+        qg = ConcentricGrid(2, 3, 4)
+        s = str(qg)
+        assert "ConcentricGrid" in s
+        assert "jacobi" in s
+        assert "L=2" in s
+        assert "M=3" in s
+        assert "N=4" in s
+
+    @pytest.mark.unit
+    def test_change_resolution(self):
+        """Test changing grid resolution."""
+
+        def test(grid, *desired_resolution):
+            assert (grid.L, grid.M, grid.N, grid.NFP) == desired_resolution
+            assert grid.num_rho == grid.unique_rho_idx.size
+            assert grid.num_theta == grid.unique_theta_idx.size
+            assert grid.num_zeta == grid.unique_zeta_idx.size
+            np.testing.assert_equal(
+                (grid.unique_rho_idx, grid.inverse_rho_idx),
+                np.unique(grid.nodes[:, 0], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_theta_idx, grid.inverse_theta_idx),
+                np.unique(grid.nodes[:, 1], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_equal(
+                (grid.unique_zeta_idx, grid.inverse_zeta_idx),
+                np.unique(grid.nodes[:, 2], return_index=True, return_inverse=True)[1:],
+            )
+            np.testing.assert_array_equal(
+                grid.axis, np.nonzero(grid.nodes[:, 0] == 0)[0]
+            )
+            # test that changing NFP updated the nodes
+            assert np.isclose(
+                grid.nodes[grid.unique_zeta_idx[-1], 2],
+                (grid.num_zeta - 1) / grid.num_zeta * 2 * np.pi / grid.NFP,
+            )
+
+        lg = LinearGrid(1, 2, 3)
+        lg.change_resolution(2, 3, 4, 5)
+        test(lg, 2, 3, 4, 5)
+        qg = QuadratureGrid(1, 2, 3)
+        qg.change_resolution(2, 3, 4, 5)
+        test(qg, 2, 3, 4, 5)
+        cg = ConcentricGrid(2, 3, 4)
+        cg.change_resolution(3, 4, 5, 2)
+        test(cg, 3, 4, 5, 2)
+        cg = ConcentricGrid(2, 3, 4)
+        cg.change_resolution(cg.L, cg.M, cg.N, NFP=5)
+        test(cg, cg.L, cg.M, cg.N, 5)
+
+    @pytest.mark.unit
+    def test_enforce_symmetry(self):
+        """Test correctness of enforce_symmetry() for uniformly spaced nodes.
+
+        Unlike enforce_symmetry(), the algorithm used in LinearGrid for
+        symmetry also works if the nodes are not uniformly spaced. This test
+        compares the two methods when the grid is uniformly spaced in theta,
+        as a means to ensure enforce_symmetry() is correct.
+        """
+        ntheta = 6
+        theta = np.linspace(0, 2 * np.pi, ntheta, endpoint=False)
+        lg_1 = LinearGrid(L=5, theta=theta, N=4, NFP=4, sym=True)
+        lg_2 = LinearGrid(L=5, theta=theta, N=4, NFP=4, sym=False)
+        # precondition for the following tests to work
+        np.testing.assert_allclose(lg_2.spacing[:, 1], 2 * np.pi / ntheta)
+
+        lg_2._sym = True
+        lg_2._enforce_symmetry()
+        np.testing.assert_allclose(lg_1.nodes, lg_2.nodes)
+        np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
+        lg_2._weights = lg_2._scale_weights()
+        np.testing.assert_allclose(lg_1.spacing, lg_2.spacing)
+        np.testing.assert_allclose(lg_1.weights, lg_2.weights)
+
     def test_symmetry_volume_integral(self):
         """Test volume integral of a symmetric function."""
         # Currently, midpoint rule is false for LinearGrid made with L=number.

@@ -929,7 +929,7 @@ def plot_fsa(
 
     """
     if np.isscalar(rho) and (int(rho) == rho):
-        rho = np.flipud(np.linspace(1, 0, rho + 1, endpoint=True))
+        rho = np.linspace(0, 1, rho + 1)
     else:
         rho = np.atleast_1d(rho)
     if M is None:
@@ -942,6 +942,9 @@ def plot_fsa(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
+    if "<" + name + ">" in data_index:
+        # To automatically compute the more involved magnetic axis limits.
+        name = "<" + name + ">"
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
@@ -957,11 +960,16 @@ def plot_fsa(
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
         plot_data_ylabel_key = f"<{name}>_fsa"
-        # todo: compute limit
         sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+        # Compute the magnetic axis limit.
+        if np.isfinite(values[grid.axis]).all():
+            # The limit may still exist if this conditional is not satisfied,
+            # but it can't be computed with the quantity agnostic method below.
+            sqrt_g_r = _compute(eq, "sqrt(g)_r", grid, reshape=False)
+            sqrt_g = grid.replace_at_axis(sqrt_g, sqrt_g_r, copy=True)
         values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
-        # theta average
+        # theta average (without sqrt(g))
         label = (
             r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
         )
@@ -2292,7 +2300,7 @@ def plot_boozer_surface(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         data = eq.compute("|B|_mn", grid=grid_compute, transforms=transforms_compute)
-    iota = compress(grid_compute, data["iota"])
+    iota = grid_compute.compress(data["iota"])
     data = transforms_plot["B"].transform(data["|B|_mn"])
     data = data.reshape((grid_plot.num_theta, grid_plot.num_zeta), order="F")
 

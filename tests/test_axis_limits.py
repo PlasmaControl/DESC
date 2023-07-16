@@ -47,20 +47,25 @@ not_finite_limit_keys = {
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
-    # Todo: these limits exist
+}
+
+todo_keys = {
+    # Todo: these limits exist, but may currently evaluate as nan.
     "iota_num_rrr",  # requires sqrt(g)_rrrr
     "iota_den_rrr",  # requires sqrt(g)_rrrr
     "iota_rr",  # already done, just needs limits of above two.
 }
 
 
-def skip_atomic_profile(eq, name):
+def skip_profile(eq, name):
     return (
         (eq.atomic_number is None and "Zeff" in name)
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
+        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+        or (eq.iota is None and name in todo_keys)
     )
 
 
@@ -119,7 +124,7 @@ def assert_is_continuous(
     data = eq.compute(names, grid=grid)
 
     for name in names:
-        if data_index[name]["coordinates"] == "" or skip_atomic_profile(eq, name):
+        if data_index[name]["coordinates"] == "" or skip_profile(eq, name):
             continue
         # make single variable function of rho
         profile = (
@@ -227,7 +232,7 @@ class TestAxisLimits:
             data = eq.compute(list(data_index.keys()), grid=grid)
             at_axis = grid.nodes[:, 0] == 0
             for key in data_index:
-                if skip_atomic_profile(eq, key):
+                if skip_profile(eq, key):
                     continue
                 is_finite = np.isfinite(data[key])
                 if key in not_finite_limit_keys:
@@ -285,3 +290,10 @@ class TestAxisLimits:
         assert_is_continuous(get("W7-X"), names=continuous, kwargs=kwargs)
         # fixed current
         assert_is_continuous(get("QAS"), names=continuous, kwargs=kwargs)
+
+
+a = TestAxisLimits()
+a.test_data_index_deps()
+a.test_axis_limit_api()
+a.test_limit_existence()
+a.test_continuous_limits()

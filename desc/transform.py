@@ -58,8 +58,8 @@ class Transform(IOAble):
         self._rcond = rcond if rcond is not None else "auto"
 
         if (
-            not np.all(self.grid.nodes[:, 2] == 0)
-            and not (self.grid.NFP == self.basis.NFP)
+            np.any(self.grid.nodes[:, 2] != 0)
+            and self.grid.NFP != self.basis.NFP
             and grid.node_pattern != "custom"
         ):
             warnings.warn(

@@ -12,6 +12,7 @@ from desc.basis import (
     PowerSeries,
 )
 from desc.coils import CoilSet, FourierXYZCoil
+from desc.compute import data_index
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid
@@ -251,6 +252,19 @@ def test_3d_rt(DSHAPE_current):
     grid = LinearGrid(rho=100, theta=100, zeta=0.0)
     fig, ax = plot_3d(eq, "psi", grid=grid)
     return fig
+
+
+@pytest.mark.unit
+def test_plot_fsa_axis_limit():
+    """Test magnetic axis limit of flux surface average is plotted."""
+    eq = get("W7-X")
+    rho = np.linspace(0, 1, 10)
+    grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP, rho=rho)
+    _, _, plot_data = plot_fsa(
+        eq, "|B|", rho=rho, M=eq.M_grid, N=eq.N_grid, with_sqrt_g=True, return_data=True
+    )
+    b_mag_avg = grid.compress(eq.compute("<|B|>", grid=grid)["<|B|>"])
+    np.testing.assert_allclose(plot_data["<|B|>"], b_mag_avg, equal_nan=False)
 
 
 @pytest.mark.unit

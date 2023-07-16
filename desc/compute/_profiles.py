@@ -68,7 +68,7 @@ def _psi_rr(params, transforms, profiles, data, **kwargs):
     units_long="Webers",
     description="Toroidal flux (normalized by 2pi), third radial derivative",
     dim=1,
-    params=["Psi"],
+    params=[],
     transforms={},
     profiles=[],
     coordinates="r",
@@ -589,7 +589,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=["current"],
     coordinates="r",
-    data=["lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)", "psi_r"],
+    data=["0", "lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)", "psi_r"],
 )
 def _iota_num(params, transforms, profiles, data, **kwargs):
     """
@@ -600,7 +600,9 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
+        data["iota_num"] = jnp.nan * data["0"]
         return data
+
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     alpha = (
         2
@@ -630,6 +632,7 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "lambda_t",
         "lambda_rt",
         "lambda_z",
@@ -654,7 +657,9 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
+        data["iota_num_r"] = jnp.nan * data["0"]
         return data
+
     current_r = profiles["current"].compute(params["c_l"], dr=1)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
     alpha_r = (
@@ -717,6 +722,7 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "lambda_t",
         "lambda_rt",
         "lambda_rrt",
@@ -747,7 +753,9 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
+        data["iota_num_rr"] = jnp.nan * data["0"]
         return data
+
     current_r = profiles["current"].compute(params["c_l"], dr=1)
     current_rr = profiles["current"].compute(params["c_l"], dr=2)
     # 4π^2 I = 4π^2 (mu_0 current / 2π) = 2π mu_0 current
@@ -832,6 +840,7 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "lambda_t",
         "lambda_rt",
         "lambda_rrt",
@@ -866,7 +875,9 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
+        data["iota_num_rrr"] = jnp.nan * data["0"]
         return data
+
     current_r = profiles["current"].compute(params["c_l"], dr=1)
     current_rr = profiles["current"].compute(params["c_l"], dr=2)
     current_rrr = profiles["current"].compute(params["c_l"], dr=3)
@@ -952,15 +963,19 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
-    data=["g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
+    data=["0", "g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
 )
 def _iota_den(params, transforms, profiles, data, **kwargs):
     """
     Computes 𝛾 as defined in the document attached to the description
     of GitHub pull request #556.
     """
+    if profiles["current"] is None:
+        data["iota_den"] = jnp.nan * data["0"]
+        return data
+
     # Assumes omega_t is zero at magnetic axis.
     gamma = transforms["grid"].replace_at_axis(
         ((1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"])
@@ -981,9 +996,10 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "g_tt",
         "g_tt_r",
         "g_tz",
@@ -1002,6 +1018,10 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     Computes d𝛾/d𝜌 as defined in the document attached to the description
     of GitHub pull request #556.
     """
+    if profiles["current"] is None:
+        data["iota_den_r"] = jnp.nan * data["0"]
+        return data
+
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -1042,9 +1062,10 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "g_tt",
         "g_tt_r",
         "g_tt_rr",
@@ -1068,6 +1089,10 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     Computes d2𝛾/d𝜌2 as defined in the document attached to the description
     of GitHub pull request #556.
     """
+    if profiles["current"] is None:
+        data["iota_den_rr"] = jnp.nan * data["0"]
+        return data
+
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]
@@ -1129,9 +1154,10 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     dim=1,
     params=[],
     transforms={"grid": []},
-    profiles=[],
+    profiles=["current"],
     coordinates="r",
     data=[
+        "0",
         "g_tt",
         "g_tt_r",
         "g_tt_rr",
@@ -1159,6 +1185,10 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
     Computes d3𝛾/d𝜌3 as defined in the document attached to the description
     of GitHub pull request #556.
     """
+    if profiles["current"] is None:
+        data["iota_den_rrr"] = jnp.nan * data["0"]
+        return data
+
     gamma = (
         (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
     ) / data["sqrt(g)"]

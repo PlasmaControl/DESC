@@ -413,40 +413,58 @@ class TestXYZCurve:
     @pytest.mark.unit
     def test_length(self):
         """Test length of circular curve."""
-        npts = 4000
-        # make a simple circular curve of radius 2
-        R = 2
-        phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
-        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
-        np.testing.assert_allclose(
-            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
-        )
-        c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
-        c.flip([0, 1, 0])
-        np.testing.assert_allclose(
-            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
-        )
+        for method in [
+            "nearest",
+            "linear",
+            "cubic",
+            "cubic2",
+            "catmull-rom",
+            "monotonic",
+            "monotonic-0",
+            "cardinal",
+        ]:
+            # make a simple circular curve of radius 2
+            R = 2
+            phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
+            # if nearest method, cant give more than the knot pts or it will return
+            # a length larger than the real one
+            npts = 4000 if method != "nearest" else phi + 0.1 * (phi[1] - phi[0])
+            c = XYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                method=method,
+            )
+            np.testing.assert_allclose(
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+            )
+            c.translate([1, 1, 1])
+            c.rotate(angle=np.pi)
+            c.flip([0, 1, 0])
+            np.testing.assert_allclose(
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+            )
 
-        # make a simple circular curve of radius 2 with supplied knots as phi
-        R = 2
-        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
-        c = XYZCurve(
-            X=R * np.cos(phi),
-            Y=R * np.sin(phi),
-            Z=np.zeros_like(phi),
-            knots=phi,
-            period=2 * np.pi,
-        )
-        np.testing.assert_allclose(
-            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
-        )
-        c.translate([1, 1, 1])
-        c.rotate(angle=np.pi)
-        c.flip([0, 1, 0])
-        np.testing.assert_allclose(
-            c.compute_length(grid=npts), R * 2 * np.pi, atol=2e-3
-        )
+            # make a simple circular curve of radius 2 with supplied knots as phi
+            R = 2
+            phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+            c = XYZCurve(
+                X=R * np.cos(phi),
+                Y=R * np.sin(phi),
+                Z=np.zeros_like(phi),
+                knots=phi,
+                period=2 * np.pi,
+                method=method,
+            )
+            np.testing.assert_allclose(
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+            )
+            c.translate([1, 1, 1])
+            c.rotate(angle=np.pi)
+            c.flip([0, 1, 0])
+            np.testing.assert_allclose(
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+            )
 
     @pytest.mark.unit
     def test_coords(self):

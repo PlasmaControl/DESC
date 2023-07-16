@@ -285,8 +285,8 @@ def _grad_alpha(params, transforms, profiles, data, **kwargs):
 )
 def _e_sub_rho_r(params, transforms, profiles, data, **kwargs):
     # e_rho_r = a^i e_i, where the a^i are the components specified below and the
-    # e_i are the basis vectors of the lab frame. omega_r e_2, -omega_r e_1, 0
-    # are the derivatives with respect to rho of e_1, e_2, e_3, respectively.
+    # e_i are the basis vectors of the polar lab frame. omega_r e_2, -omega_r e_1,
+    # 0 are the derivatives with respect to rho of e_1, e_2, e_3, respectively.
     data["e_rho_r"] = jnp.array(
         [
             -data["R"] * data["omega_r"] ** 2 + data["R_rr"],

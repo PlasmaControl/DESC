@@ -16,7 +16,7 @@ from desc.grid import LinearGrid
 # the only assumptions made to compute the magnetic axis limit of
 # quantities are that these functions tend toward zero as the magnetic axis
 # is approached, and that the limit of their rho derivatives is not zero.
-# Also d^n𝜓/(d𝜌)^n for n > 3 was assumed zero everywhere.
+# Also d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
 zero_limit_keys = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)"}
 
 not_finite_limit_keys = {
@@ -44,22 +44,14 @@ not_finite_limit_keys = {
     "g^tz_t",
     "g^tz_z",
     "grad(alpha)",
-    "iota_num_rrr",  # Todo: this one exists. implement limit
-    "iota_den_rrr",  # Todo: this one exists. implement limit
-    "iota_rr",  # Todo: completing the above two automatically does this one
     "|e^helical|",
     "|grad(theta)|",
     "<J*B> Redl",  # may not exist for all configurations
+    # Todo: these limits exist
+    "iota_num_rrr",  # requires sqrt(g)_rrrr
+    "iota_den_rrr",  # requires sqrt(g)_rrrr
+    "iota_rr",  # already done, just needs limits of above two.
 }
-
-
-def get_matches(fun, pattern):
-    src = inspect.getsource(fun)
-    # remove comments
-    src = "\n".join(line.partition("#")[0] for line in src.splitlines())
-    matches = re.findall(pattern, src)
-    matches = set(s.replace("'", "").replace('"', "") for s in matches)
-    return matches
 
 
 def skip_atomic_profile(eq, name):
@@ -155,6 +147,18 @@ def assert_is_continuous(
         )
 
 
+def get_matches(fun, pattern):
+    src = inspect.getsource(fun)
+    # attempt to remove any decorator functions
+    # (currently works without this filter, but better to be defensive)
+    src = src.partition("def ")[2]
+    # attempt to remove comments
+    src = "\n".join(line.partition("#")[0] for line in src.splitlines())
+    matches = pattern.findall(src)
+    matches = set(s.replace("'", "").replace('"', "") for s in matches)
+    return matches
+
+
 class TestAxisLimits:
     """Tests for compute functions evaluated at limits."""
 
@@ -162,24 +166,40 @@ class TestAxisLimits:
     def test_data_index_deps(self):
         """Ensure developers do not add extra (or forget needed) dependencies."""
         queried_deps = {}
+        pattern_keys = re.compile(r"(?<!_)data\[(.*?)\] =")
+        pattern_data = re.compile(r"(?<!_)data\[(.*?)\]")
+        pattern_profiles = re.compile(r"profiles\[(.*?)\]")
+        pattern_params = re.compile(r"params\[(.*?)\]")
         for module_name, module in inspect.getmembers(desc.compute, inspect.ismodule):
             if module_name[0] == "_":
                 for _, fun in inspect.getmembers(module, inspect.isfunction):
                     # quantities that this function computes
-                    keys = get_matches(fun, r"(?<!_)data\[(.*?)\] =")
+                    keys = get_matches(fun, pattern_keys)
                     # dependencies queried in source code of this function
-                    deps = get_matches(fun, r"(?<!_)data\[(.*?)\]") - keys
+                    deps = {
+                        "data": get_matches(fun, pattern_data) - keys,
+                        "profiles": get_matches(fun, pattern_profiles),
+                        "params": get_matches(fun, pattern_params),
+                    }
                     for key in keys:
                         queried_deps[key] = deps
 
         for key, val in data_index.items():
             deps = val["dependencies"]
-            data_deps = set(deps["data"])
-            assert len(data_deps) == len(deps["data"]), key
-            axis_limit_deps = set(deps["axis_limit_data"])
-            assert len(axis_limit_deps) == len(deps["axis_limit_data"]), key
-            assert data_deps.isdisjoint(axis_limit_deps), key
-            assert queried_deps[key] == data_deps | axis_limit_deps, key
+            data = set(deps["data"])
+            axis_limit_data = set(deps["axis_limit_data"])
+            profiles = set(deps["profiles"])
+            params = set(deps["params"])
+            # assert no duplicate dependencies
+            assert len(data) == len(deps["data"]), key
+            assert len(axis_limit_data) == len(deps["axis_limit_data"]), key
+            assert data.isdisjoint(axis_limit_data), key
+            assert len(profiles) == len(deps["profiles"]), key
+            assert len(params) == len(deps["params"]), key
+            # assert correct dependencies are queried
+            assert queried_deps[key]["data"] == data | axis_limit_data, key
+            assert queried_deps[key]["profiles"] == profiles, key
+            assert queried_deps[key]["params"] == params, key
 
     @pytest.mark.unit
     def test_axis_limit_api(self):
@@ -221,7 +241,14 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_continuous_limits(self):
         """Heuristic to test correctness of all quantities with limits."""
+        # It is possible for a discontinuity to propagate across dependencies,
+        # so this test does not make sense for keys that rely on discontinuous
+        # keys as dependencies.
         finite_discontinuous = {"curvature_k1", "curvature_k2"}
+        # Subtract out not_finite_limit_keys before search to avoid false
+        # positives for discontinuous keys. (Recall that nan and inf always
+        # propagate up dependencies, so we do not need to search up the
+        # dependency trees of keys in that set).
         continuous = data_index.keys() - not_finite_limit_keys - finite_discontinuous
         searching = True
         while searching:
@@ -234,6 +261,9 @@ class TestAxisLimits:
             searching = len(finite_discontinuous) > size
         continuous -= finite_discontinuous
 
+        # The need for a weaker tolerance on these keys may be due to large
+        # derivatives near axis, finite precision error, or a subpar polynomial
+        # regression fit against which the axis limit is compared.
         weaker_tolerance = {
             "B^zeta_rr": {"rtol": 5e-02},
             "F_rho": {"atol": 1e00},

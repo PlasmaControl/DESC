@@ -22,8 +22,10 @@ from .utils import dot, surface_integrals_map
     data=["iota_r", "psi_r"],
 )
 def _D_shear(params, transforms, profiles, data, **kwargs):
-    # Implements equations 4.16 in M. Landreman & R. Jorge (2020)
-    # doi:10.1017/S002237782000121X.
+    """
+    Implements equations 4.16 in M. Landreman & R. Jorge (2020)
+    doi:10.1017/S002237782000121X.
+    """
     data["D_shear"] = (data["iota_r"] / (4 * jnp.pi * data["psi_r"])) ** 2
     # Existence of limit at magnetic axis requires iota_r = 0 at axis.
     # If iota_rr = 0 at axis as well, then the limit is
@@ -46,8 +48,10 @@ def _D_shear(params, transforms, profiles, data, **kwargs):
     data=["psi_r", "iota_r", "B", "J", "G", "I_r", "|grad(psi)|", "|e_theta x e_zeta|"],
 )
 def _D_current(params, transforms, profiles, data, **kwargs):
-    # Implements equations 4.17 in M. Landreman & R. Jorge (2020)
-    # doi:10.1017/S002237782000121X.
+    """
+    Implements equations 4.17 in M. Landreman & R. Jorge (2020)
+    doi:10.1017/S002237782000121X.
+    """
     Xi = mu_0 * data["J"] - (data["I_r"] / data["psi_r"] * data["B"].T).T
     integrate = surface_integrals_map(transforms["grid"])
     data["D_current"] = (
@@ -87,8 +91,10 @@ def _D_current(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _D_well(params, transforms, profiles, data, **kwargs):
-    # Implements equations 4.18 in M. Landreman & R. Jorge (2020)
-    # doi:10.1017/S002237782000121X.
+    """
+    Implements equations 4.18 in M. Landreman & R. Jorge (2020)
+    doi:10.1017/S002237782000121X.
+    """
     integrate = surface_integrals_map(transforms["grid"])
     dp_dpsi = mu_0 * data["p_r"] / data["psi_r"]
     d2V_dpsi2 = (
@@ -126,8 +132,10 @@ def _D_well(params, transforms, profiles, data, **kwargs):
     data=["|grad(psi)|", "J*B", "|B|^2", "|e_theta x e_zeta|"],
 )
 def _D_geodesic(params, transforms, profiles, data, **kwargs):
-    # Implements equations 4.19 in M. Landreman & R. Jorge (2020)
-    # doi:10.1017/S002237782000121X.
+    """
+    Implements equations 4.19 in M. Landreman & R. Jorge (2020)
+    doi:10.1017/S002237782000121X.
+    """
     integrate = surface_integrals_map(transforms["grid"])
     data["D_geodesic"] = transforms["grid"].replace_at_axis(
         (
@@ -170,8 +178,10 @@ def _D_geodesic(params, transforms, profiles, data, **kwargs):
     data=["D_shear", "D_current", "D_well", "D_geodesic"],
 )
 def _D_Mercier(params, transforms, profiles, data, **kwargs):
-    # Implements equations 4.20 in M. Landreman & R. Jorge (2020)
-    # doi:10.1017/S002237782000121X.
+    """
+    Implements equations 4.20 in M. Landreman & R. Jorge (2020)
+    doi:10.1017/S002237782000121X.
+    """
     data["D_Mercier"] = (
         data["D_shear"] + data["D_current"] + data["D_well"] + data["D_geodesic"]
     )
@@ -191,17 +201,13 @@ def _D_Mercier(params, transforms, profiles, data, **kwargs):
     transforms={"grid": []},
     profiles=[],
     coordinates="r",
-    data=[
-        "V(r)",
-        "V_r(r)",
-        "p_r",
-        "<|B|^2>",
-        "<|B|^2>_r",
-    ],
+    data=["V(r)", "V_r(r)", "p_r", "<|B|^2>", "<|B|^2>_r"],
 )
 def _magnetic_well(params, transforms, profiles, data, **kwargs):
-    # Implements equation 3.2 in M. Landreman & R. Jorge (2020)
-    # doi:10.1017/S002237782000121X.
+    """
+    Implements equation 3.2 in M. Landreman & R. Jorge (2020)
+    doi:10.1017/S002237782000121X.
+    """
     # pressure = thermal + magnetic = 2 mu_0 p + |B|^2
     # The surface average operation is an additive homomorphism.
     # Thermal pressure is constant over a rho surface.

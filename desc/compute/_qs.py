@@ -70,9 +70,9 @@ def _w_mn(params, transforms, profiles, data, **kwargs):
     # indices of matching modes in w and B bases
     # need to use np instead of jnp here as jnp.where doesn't work under jit
     # even if the args are static
-    ib, iw = np.where((Bm[:, None] == -wm) * (Bn[:, None] == wn) * (wm != 0))
+    ib, iw = np.where((Bm[:, None] == -wm) & (Bn[:, None] == wn) & (wm != 0))
     jb, jw = np.where(
-        (Bm[:, None] == wm) * (Bn[:, None] == -wn) * (wm == 0) * (wn != 0)
+        (Bm[:, None] == wm) & (Bn[:, None] == -wn) & (wm == 0) & (wn != 0)
     )
     w_mn = put(w_mn, iw, sign(wn[iw]) * data["B_theta_mn"][ib] / jnp.abs(wm[iw]))
     w_mn = put(w_mn, jw, sign(wm[jw]) * data["B_zeta_mn"][jb] / jnp.abs(NFP * wn[jw]))

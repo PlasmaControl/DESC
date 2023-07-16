@@ -936,7 +936,7 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
         jnp.nan,
     )
     beta_rrr = surface_integrals(transforms["grid"], beta_rrr)
-    # force limit to nan for now because integration replaces nan with 0
+    # force limit to nan until completed because integration replaces nan with 0
     data["iota_num_rrr"] = alpha_rrr + transforms["grid"].replace_at_axis(
         beta_rrr, jnp.nan
     )
@@ -961,6 +961,7 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     Computes 𝛾 as defined in the document attached to the description
     of GitHub pull request #556.
     """
+    # Assumes omega_t is zero at magnetic axis.
     gamma = transforms["grid"].replace_at_axis(
         ((1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"])
         / data["sqrt(g)"],
@@ -1199,7 +1200,7 @@ def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
         jnp.nan,
     )
     gamma_rrr = surface_integrals(transforms["grid"], gamma_rrr)
-    # force limit to nan for now because integration replaces nan with 0
+    # force limit to nan until completed because integration replaces nan with 0
     data["iota_den_rrr"] = transforms["grid"].replace_at_axis(gamma_rrr, jnp.nan)
     return data
 

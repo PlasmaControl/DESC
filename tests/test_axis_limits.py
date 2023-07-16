@@ -225,13 +225,13 @@ class TestAxisLimits:
             grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
             assert grid.axis.size
             data = eq.compute(list(data_index.keys()), grid=grid)
-            is_axis = grid.nodes[:, 0] == 0
+            at_axis = grid.nodes[:, 0] == 0
             for key in data_index:
                 if skip_atomic_profile(eq, key):
                     continue
                 is_finite = np.isfinite(data[key])
                 if key in not_finite_limit_keys:
-                    assert np.all(is_finite.T ^ is_axis), key
+                    assert np.all(is_finite.T ^ at_axis), key
                 else:
                     assert np.all(is_finite), key
 

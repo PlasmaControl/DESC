@@ -1480,10 +1480,16 @@ def chebyshev(r, l, dr=0):
         basis function(s) evaluated at specified points
 
     """
-    assert dr == 0
     x = 2 * r - 1  # shift
     x, l, dr = map(jnp.asarray, (x, l, dr))
-    return jnp.cos(l * jnp.arccos(x))
+    if dr == 0:
+        return jnp.cos(l * jnp.arccos(x))
+    else:
+        # dy/dr = dy/dx * dx/dr = dy/dx * 2
+        raise NotImplementedError(
+            "Analytic radial derivatives of Chebyshev polynomials "
+            + "have not been implemented."
+        )
 
 
 @jit

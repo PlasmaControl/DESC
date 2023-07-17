@@ -63,11 +63,9 @@ class LinearConstraintProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective
         self._use_jit = False
         self._compiled = False
+        self._eq = eq
 
-        if eq is not None:
-            self.build(eq, verbose=verbose)
-
-    def build(self, eq, use_jit=None, verbose=1):
+    def build(self, eq=None, use_jit=None, verbose=1):
         """Build the objective.
 
         Parameters
@@ -81,6 +79,7 @@ class LinearConstraintProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Linear constraint projection build")
 
@@ -426,9 +425,7 @@ class ProximalProjection(ObjectiveFunction):
         # don't want to compile this, just use the compiled objective and constraint
         self._use_jit = False
         self._compiled = False
-
-        if eq is not None:
-            self.build(eq, verbose=verbose)
+        self._eq = eq
 
     def set_args(self, *args):
         """Set which arguments the objective should expect.
@@ -449,6 +446,10 @@ class ProximalProjection(ObjectiveFunction):
         self._args = [arg for arg in arg_order if arg in self._args]
         if "L_lmn" in self._args:
             self._args.remove("L_lmn")
+        if "Ra_n" in self._args:
+            self._args.remove("Ra_n")
+        if "Za_n" in self._args:
+            self._args.remove("Za_n")
         if "R_lmn" in self._args:
             self._args.remove("R_lmn")
             if "Rb_lmn" not in self._args:
@@ -511,7 +512,7 @@ class ProximalProjection(ObjectiveFunction):
             dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
             self._dxdc = np.hstack((self._dxdc, dxdZb))
 
-    def build(self, eq, use_jit=None, verbose=1):  # noqa: C901
+    def build(self, eq=None, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
 
         Parameters
@@ -525,15 +526,19 @@ class ProximalProjection(ObjectiveFunction):
             Level of output.
 
         """
+        eq = eq or self._eq
         timer = Timer()
         timer.start("Proximal projection build")
 
         self._eq = eq.copy()
         self._linear_constraints = get_fixed_boundary_constraints(
+            eq=eq,
             iota=self._eq.iota is not None,
             kinetic=self._eq.electron_temperature is not None,
         )
-        self._linear_constraints = maybe_add_self_consistency(self._linear_constraints)
+        self._linear_constraints = maybe_add_self_consistency(
+            eq, self._linear_constraints
+        )
 
         # we don't always build here because in ~all cases the user doesn't interact
         # with this directly, so if the user wants to manually rebuild they should

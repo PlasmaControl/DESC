@@ -61,7 +61,7 @@ class BoundaryRSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -74,6 +74,7 @@ class BoundaryRSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         modes = eq.surface.R_basis.modes
         idx = np.arange(eq.surface.R_basis.num_modes)
 
@@ -143,7 +144,7 @@ class BoundaryZSelfConsistency(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -156,6 +157,7 @@ class BoundaryZSelfConsistency(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         modes = eq.surface.Z_basis.modes
         idx = np.arange(eq.surface.Z_basis.num_modes)
 
@@ -181,6 +183,152 @@ class BoundaryZSelfConsistency(_Objective):
         """Compute boundary self consistency errror."""
         params = self._parse_args(*args, **kwargs)
         return jnp.dot(self._A, params["Z_lmn"]) - params["Zb_lmn"]
+
+
+class AxisRSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _print_value_fmt = "R axis self consistency error: {:10.3e} (m)"
+
+    def __init__(
+        self,
+        eq=None,
+        name="axis R self consistency",
+    ):
+
+        self._args = ["R_lmn", "Ra_n"]
+        super().__init__(
+            eq=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        ns = eq.axis.R_basis.modes[:, 2]
+        self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.R_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(eq.R_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute axis R self consistency errors."""
+        params = self._parse_args(*args, **kwargs)
+        f = jnp.dot(self._A, params["R_lmn"]) - params["Ra_n"]
+        return f
+
+
+class AxisZSelfConsistency(_Objective):
+    """Ensure consistency between Zernike and Fourier coefficients on axis.
+
+    Note: this constraint is automatically applied when needed, and does not need to be
+    included by the user.
+
+    Parameters
+    ----------
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = True
+    _fixed = False
+    _print_value_fmt = "Z axis self consistency error: {:10.3e} (m)"
+
+    def __init__(
+        self,
+        eq=None,
+        name="axis Z self consistency",
+    ):
+
+        self._args = ["Z_lmn", "Za_n"]
+        super().__init__(
+            eq=eq,
+            target=0,
+            weight=1,
+            name=name,
+            normalize=False,
+            normalize_target=False,
+        )
+
+    def build(self, eq=None, use_jit=False, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        ns = eq.axis.Z_basis.modes[:, 2]
+        self._dim_f = ns.size
+        self._A = np.zeros((self._dim_f, eq.Z_basis.num_modes))
+
+        for i, (l, m, n) in enumerate(eq.Z_basis.modes):
+            if m != 0:
+                continue
+            if (l // 2) % 2 == 0:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = 1
+            else:
+                j = np.argwhere(n == ns)
+                self._A[j, i] = -1
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Compute axis Z self consistency errors."""
+        params = self._parse_args(*args, **kwargs)
+        f = jnp.dot(self._A, params["Z_lmn"]) - params["Za_n"]
+        return f
 
 
 class FixBoundaryR(_Objective):
@@ -254,7 +402,7 @@ class FixBoundaryR(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -267,6 +415,7 @@ class FixBoundaryR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -405,7 +554,7 @@ class FixBoundaryZ(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -418,6 +567,7 @@ class FixBoundaryZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
             idx = np.array([], dtype=int)
@@ -522,7 +672,7 @@ class FixLambdaGauge(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -535,6 +685,7 @@ class FixLambdaGauge(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         L_basis = eq.L_basis
 
         if L_basis.sym:
@@ -603,7 +754,7 @@ class FixThetaSFL(_Objective):
 
         super().__init__(eq=eq, target=0, weight=1, name=name)
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -616,6 +767,7 @@ class FixThetaSFL(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         idx = np.arange(eq.L_basis.num_modes)
         modes_idx = idx
         self._idx = idx
@@ -649,7 +801,6 @@ class FixThetaSFL(_Objective):
         return "L_lmn"
 
 
-# TODO: make base class for FixAxis?
 class FixAxisR(_Objective):
     """Fixes magnetic axis R coefficients.
 
@@ -710,7 +861,7 @@ class FixAxisR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -723,7 +874,7 @@ class FixAxisR(_Objective):
             Level of output.
 
         """
-        R_basis = eq.R_basis
+        eq = eq or self._eq
 
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -756,50 +907,38 @@ class FixAxisR(_Objective):
                     )
                 )
 
-        if modes.size > 0:
-            ns = modes[:, 2]
-        else:
-            ns = np.array([[]], dtype=int)
-        # we need A to be M x N where N is number of modes in R_basis
-        # and M is the number of modes in the axis (that we are fixing)
-        self._A = np.zeros((ns.size, R_basis.num_modes))
-        self._dim_f = ns.size
-
-        for i, (l, m, n) in enumerate(R_basis.modes):
-            if m != 0:
-                continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
-
-        # use axis parameters as target if needed
-        if self._target_from_user is None:
-            self.target = np.zeros(self._dim_f)
-            for n, Rn in zip(eq.axis.R_basis.modes[:, 2], eq.axis.R_n):
-                j = np.argwhere(ns == n)
-                self.target[j] = Rn
-        else:  # rearrange given target to match modes order
+        self._dim_f = idx.size
+        if self._target_from_user is not None:
             if self._modes is True or self._modes is False:
                 raise RuntimeError(
                     "Attempting to provide target for R axis modes without "
                     + "providing modes array!"
                     + "You must pass in the modes corresponding to the"
-                    + "provided target axis"
+                    + "provided target"
                 )
+            # rearrange given target to match modes order
             self.target = self._target_from_user[modes_idx]
+
+        # Ra_lmn -> Ra optimization space
+        self._A = np.eye(eq.axis.R_basis.num_modes)[idx, :]
+
+        # use surface parameters as target if needed
+        if self._target_from_user is None:
+            self.target = eq.axis.R_n[idx]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, R_lmn, **kwargs):
+    def compute(self, Ra_n, **kwargs):
         """Compute axis R errors.
 
         Parameters
         ----------
-        R_lmn : ndarray
-            Spectral coefficients of R(rho,theta,zeta)
+        Ra_n : ndarray
+            Spectral coefficients of R(zeta) on axis
 
         Returns
         -------
@@ -807,8 +946,13 @@ class FixAxisR(_Objective):
             Axis R errors.
 
         """
-        f = jnp.dot(self._A, R_lmn)
+        f = jnp.dot(self._A, Ra_n)
         return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Ra_n"
 
 
 class FixAxisZ(_Objective):
@@ -871,7 +1015,7 @@ class FixAxisZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -884,7 +1028,7 @@ class FixAxisZ(_Objective):
             Level of output.
 
         """
-        Z_basis = eq.Z_basis
+        eq = eq or self._eq
 
         if self._modes is False or self._modes is None:  # no modes
             modes = np.array([[]], dtype=int)
@@ -917,48 +1061,38 @@ class FixAxisZ(_Objective):
                     )
                 )
 
-        if modes.size > 0:
-            ns = modes[:, 2]
-        else:
-            ns = np.array([[]], dtype=int)
-        self._A = np.zeros((ns.size, Z_basis.num_modes))
-        self._dim_f = ns.size
-
-        for i, (l, m, n) in enumerate(Z_basis.modes):
-            if m != 0:
-                continue
-            if (l // 2) % 2 == 0:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = 1
-            else:
-                j = np.argwhere(n == ns)
-                self._A[j, i] = -1
-
-        # use axis parameters as target if needed
-        if self._target_from_user is None:
-            self.target = np.zeros(self._dim_f)
-            for n, Zn in zip(eq.axis.Z_basis.modes[:, 2], eq.axis.Z_n):
-                j = np.argwhere(ns == n)
-                self.target[j] = Zn
-        else:  # rearrange given target to match modes order
+        self._dim_f = idx.size
+        if self._target_from_user is not None:
             if self._modes is True or self._modes is False:
                 raise RuntimeError(
                     "Attempting to provide target for Z axis modes without "
                     + "providing modes array!"
                     + "You must pass in the modes corresponding to the"
-                    + "provided target axis"
+                    + "provided target"
                 )
+            # rearrange given target to match modes order
             self.target = self._target_from_user[modes_idx]
+
+        # Ra_lmn -> Ra optimization space
+        self._A = np.eye(eq.axis.Z_basis.num_modes)[idx, :]
+
+        # use surface parameters as target if needed
+        if self._target_from_user is None:
+            self.target = eq.axis.Z_n[idx]
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["a"]
 
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
-    def compute(self, Z_lmn, **kwargs):
+    def compute(self, Za_n, **kwargs):
         """Compute axis Z errors.
 
         Parameters
         ----------
-        Z_lmn : ndarray
-            Spectral coefficients of Z(rho,theta,zeta) .
+        Za_n : ndarray
+            Spectral coefficients of Z(zeta) on axis.
 
         Returns
         -------
@@ -966,8 +1100,13 @@ class FixAxisZ(_Objective):
             Axis Z errors.
 
         """
-        f = jnp.dot(self._A, Z_lmn)
+        f = jnp.dot(self._A, Za_n)
         return f
+
+    @property
+    def target_arg(self):
+        """str: Name of argument corresponding to the target."""
+        return "Za_n"
 
 
 class FixModeR(_Objective):
@@ -1036,7 +1175,7 @@ class FixModeR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1049,6 +1188,7 @@ class FixModeR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1180,7 +1320,7 @@ class FixModeZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1193,6 +1333,7 @@ class FixModeZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1339,7 +1480,7 @@ class FixSumModesR(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1352,6 +1493,7 @@ class FixSumModesR(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.R_basis.modes
             idx = np.arange(eq.R_basis.num_modes)
@@ -1503,7 +1645,7 @@ class FixSumModesZ(_Objective):
             normalize_target=normalize_target,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1516,6 +1658,7 @@ class FixSumModesZ(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._modes is True:  # all modes
             modes = eq.Z_basis.modes
             idx = np.arange(eq.Z_basis.num_modes)
@@ -1655,7 +1798,7 @@ class _FixProfile(_Objective, ABC):
             name=name,
         )
 
-    def build(self, eq, profile=None, use_jit=False, verbose=1):
+    def build(self, eq=None, profile=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1670,6 +1813,7 @@ class _FixProfile(_Objective, ABC):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._profile is None or self._profile.params.size != eq.L + 1:
             self._profile = profile
 
@@ -1755,7 +1899,7 @@ class FixPressure(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1768,6 +1912,7 @@ class FixPressure(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.pressure is None:
             raise RuntimeError(
                 "Attempting to fix pressure on an equilibrium with no "
@@ -1869,7 +2014,7 @@ class FixIota(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1882,6 +2027,7 @@ class FixIota(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.iota is None:
             raise RuntimeError(
                 "Attempt to fix rotational transform on an equilibrium with no "
@@ -1978,7 +2124,7 @@ class FixCurrent(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -1991,6 +2137,7 @@ class FixCurrent(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.current is None:
             raise RuntimeError(
                 "Attempting to fix toroidal current on an equilibrium with no "
@@ -2090,7 +2237,7 @@ class FixElectronTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2103,6 +2250,7 @@ class FixElectronTemperature(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.electron_temperature is None:
             raise RuntimeError(
                 "Attempting to fix electron temperature on an equilibrium with no "
@@ -2202,7 +2350,7 @@ class FixElectronDensity(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2215,6 +2363,7 @@ class FixElectronDensity(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.electron_density is None:
             raise RuntimeError(
                 "Attempting to fix electron density on an equilibrium with no "
@@ -2314,7 +2463,7 @@ class FixIonTemperature(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2327,6 +2476,7 @@ class FixIonTemperature(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.ion_temperature is None:
             raise RuntimeError(
                 "Attempting to fix ion temperature on an equilibrium with no "
@@ -2428,7 +2578,7 @@ class FixAtomicNumber(_FixProfile):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2441,6 +2591,7 @@ class FixAtomicNumber(_FixProfile):
             Level of output.
 
         """
+        eq = eq or self._eq
         if eq.atomic_number is None:
             raise RuntimeError(
                 "Attempting to fix atomic number on an equilibrium with no "
@@ -2522,7 +2673,7 @@ class FixPsi(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=False, verbose=1):
+    def build(self, eq=None, use_jit=False, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -2535,6 +2686,7 @@ class FixPsi(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         self._dim_f = 1
 
         if self._target_from_user is None:

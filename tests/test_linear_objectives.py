@@ -2,6 +2,7 @@
 import numpy as np
 import pytest
 import scipy.linalg
+from qsc import Qsc
 
 import desc.examples
 from desc.compute import arg_order
@@ -10,6 +11,8 @@ from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
 from desc.objectives import (
     AspectRatio,
+    AxisRSelfConsistency,
+    AxisZSelfConsistency,
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
     FixAtomicNumber,
@@ -34,6 +37,7 @@ from desc.objectives import (
     QuasisymmetryTwoTerm,
     get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
+    get_NAE_constraints,
 )
 from desc.profiles import PowerSeriesProfile
 
@@ -51,6 +55,7 @@ def test_LambdaGauge_sym(DummyStellarator):
     eq.change_resolution(L=2, M=1, N=1)
     correct_constraint_matrix = np.zeros((0, 5))
     lam_con = FixLambdaGauge(eq)
+    lam_con.build()
     np.testing.assert_array_equal(lam_con._A, correct_constraint_matrix)
 
 
@@ -84,6 +89,7 @@ def test_LambdaGauge_asym():
     }
     eq = Equilibrium(**inputs)
     lam_con = FixLambdaGauge(eq)
+    lam_con.build()
 
     # make sure that any lambda in the null space gives lambda==0 at theta=zeta=0
     Z = scipy.linalg.null_space(lam_con._A)
@@ -111,9 +117,9 @@ def test_bc_on_interior_surfaces():
 def test_constrain_bdry_with_only_one_mode():
     """Test Fixing boundary with a surface with only one mode in its basis."""
     eq = Equilibrium()
-    FixZ = BoundaryZSelfConsistency()
+    FixZ = BoundaryZSelfConsistency(eq=eq)
     try:
-        FixZ.build(eq)
+        FixZ.build()
     except Exception:
         pytest.fail(
             "Error encountered when attempting to constrain surface with"
@@ -128,19 +134,21 @@ def test_constrain_asserts():
     eqc = Equilibrium(current=PowerSeriesProfile(0))
     # nonexistent toroidal current can't be constrained
     with pytest.raises(RuntimeError):
-        eqi.solve(constraints=FixCurrent())
+        eqi.solve(constraints=FixCurrent(eq=eqi))
     # nonexistent rotational transform can't be constrained
     with pytest.raises(RuntimeError):
-        eqc.solve(constraints=FixIota())
+        eqc.solve(constraints=FixIota(eq=eqc))
     # toroidal current and rotational transform can't be constrained simultaneously
     with pytest.raises(ValueError):
-        eqi.solve(constraints=(FixCurrent(), FixIota()))
+        eqi.solve(constraints=(FixCurrent(eq=eqi), FixIota(eq=eqi)))
     with pytest.raises(AssertionError):
-        eqi.solve(constraints=(FixPressure(target=2), FixPressure(target=1)))
+        eqi.solve(
+            constraints=(FixPressure(eq=eqi, target=2), FixPressure(eq=eqi, target=1))
+        )
     # cannot use two incompatible constraints
     with pytest.raises(AssertionError):
-        con1 = FixCurrent(target=eqc.c_l)
-        con2 = FixCurrent(target=eqc.c_l + 1)
+        con1 = FixCurrent(target=eqc.c_l, eq=eqc)
+        con2 = FixCurrent(target=eqc.c_l + 1, eq=eqc)
         eqc.solve(constraints=(con1, con2))
 
 
@@ -156,21 +164,21 @@ def test_fixed_mode_solve():
     eq = desc.examples.get("DSHAPE")
     eq.set_initial_guess()
     fixR = FixModeR(
-        modes=np.array([L, M, 0])
+        eq=eq, modes=np.array([L, M, 0])
     )  # no target supplied, so defaults to the eq's current R_LMN coeff
     fixZ = FixModeZ(
-        modes=np.array([L, -M, 0])
+        eq=eq, modes=np.array([L, -M, 0])
     )  # no target supplied, so defaults to the eq's current Z_LMN coeff
     orig_R_val = eq.R_lmn[eq.R_basis.get_idx(L=L, M=M, N=0)]
     orig_Z_val = eq.Z_lmn[eq.Z_basis.get_idx(L=L, M=-M, N=0)]
 
     constraints = (
-        FixLambdaGauge(),
-        FixPressure(),
-        FixIota(),
-        FixPsi(),
-        FixBoundaryR(),
-        FixBoundaryZ(),
+        FixLambdaGauge(eq=eq),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
         fixR,
         fixZ,
     )
@@ -204,10 +212,10 @@ def test_fixed_modes_solve():
     eq = desc.examples.get("DSHAPE")
     eq.set_initial_guess()
     fixR = FixSumModesR(
-        modes=modes_R, sum_weights=np.array([1, 2])
+        eq=eq, modes=modes_R, sum_weights=np.array([1, 2])
     )  # no target supplied, so defaults to the eq's current sum
     fixZ = FixSumModesZ(
-        modes=modes_Z, sum_weights=np.array([1, 2])
+        eq=eq, modes=modes_Z, sum_weights=np.array([1, 2])
     )  # no target supplied, so defaults to the eq's current sum
     orig_R_val = (
         eq.R_lmn[eq.R_basis.get_idx(L=modes_R[0, 0], M=modes_R[0, 1], N=0)]
@@ -219,12 +227,12 @@ def test_fixed_modes_solve():
     )
 
     constraints = (
-        FixLambdaGauge(),
-        FixPressure(),
-        FixIota(),
-        FixPsi(),
-        FixBoundaryR(),
-        FixBoundaryZ(),
+        FixLambdaGauge(eq=eq),
+        FixPressure(eq=eq),
+        FixIota(eq=eq),
+        FixPsi(eq=eq),
+        FixBoundaryR(eq=eq),
+        FixBoundaryZ(eq=eq),
         fixR,
         fixZ,
     )
@@ -263,12 +271,12 @@ def test_fixed_axis_and_theta_SFL_solve():
     orig_Z_val = eq.axis.Z_n
 
     constraints = (
-        FixThetaSFL(),
-        FixPressure(),
-        FixCurrent(),
-        FixPsi(),
-        FixAxisR(),
-        FixAxisZ(),
+        FixThetaSFL(eq=eq),
+        FixPressure(eq=eq),
+        FixCurrent(eq=eq),
+        FixPsi(eq=eq),
+        FixAxisR(eq=eq),
+        FixAxisZ(eq=eq),
     )
 
     eq.solve(
@@ -289,9 +297,9 @@ def test_fixed_axis_and_theta_SFL_solve():
 def test_factorize_linear_constraints_asserts():
     """Test error checking for factorize_linear_constraints."""
     eq = Equilibrium()
-    constraints = get_fixed_boundary_constraints(iota=False)
+    constraints = get_fixed_boundary_constraints(eq=eq, iota=False)
     for con in constraints:
-        con.build(eq, verbose=0)
+        con.build(verbose=0)
     constraints[3].bounds = (0, 1)  # bounds on FixPsi
 
     from desc.objectives.utils import factorize_linear_constraints
@@ -311,10 +319,10 @@ def test_build_init():
     eq = Equilibrium(M=3, N=1)
 
     # initialize the constraints without building
-    fbR1 = FixBoundaryR()
-    fbZ1 = FixBoundaryZ()
+    fbR1 = FixBoundaryR(eq=eq)
+    fbZ1 = FixBoundaryZ(eq=eq)
     for obj in (fbR1, fbZ1):
-        obj.build(eq)
+        obj.build()
 
     arg = fbR1.args[0]
     A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
@@ -328,6 +336,8 @@ def test_build_init():
 
     fbR1 = FixBoundaryR(eq=eq)
     fbZ1 = FixBoundaryZ(eq=eq)
+    for obj in (fbR1, fbZ1):
+        obj.build()
 
     arg = fbR1.args[0]
     A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
@@ -351,19 +361,19 @@ def test_kinetic_constraints():
         electron_temperature=np.array([1, 0, -1]),
         electron_density=np.array([2, 0, -2]),
     )
-    pcon = (FixPressure(),)
+    pcon = (FixPressure(eq=eqk),)
     kcon = (
-        FixAtomicNumber(),
-        FixElectronDensity(),
-        FixElectronTemperature(),
-        FixIonTemperature(),
+        FixAtomicNumber(eq=eqp),
+        FixElectronDensity(eq=eqp),
+        FixElectronTemperature(eq=eqp),
+        FixIonTemperature(eq=eqp),
     )
     for con in pcon:
         with pytest.raises(RuntimeError):
-            con.build(eqk)
+            con.build()
     for con in kcon:
         with pytest.raises(RuntimeError):
-            con.build(eqp)
+            con.build()
 
 
 @pytest.mark.unit
@@ -379,8 +389,8 @@ def test_correct_indexing_passed_modes():
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(target=8, weight=1e2),
+            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(eq=eq, target=8, weight=1e2),
         ),
         verbose=0,
     )
@@ -396,14 +406,14 @@ def test_correct_indexing_passed_modes():
         np.max(np.abs(eq.surface.Z_basis.modes), 1) > n + 1, :
     ]
     constraints = (
-        FixBoundaryR(modes=R_modes, normalize=False),
-        FixBoundaryZ(modes=Z_modes, normalize=False),
-        BoundaryRSelfConsistency(),
-        BoundaryZSelfConsistency(),
+        FixBoundaryR(eq=eq, modes=R_modes, normalize=False),
+        FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False),
+        BoundaryRSelfConsistency(eq=eq),
+        BoundaryZSelfConsistency(eq=eq),
     )
     for con in constraints:
-        con.build(eq, verbose=0)
-    objective.build(eq)
+        con.build(verbose=0)
+    objective.build()
     objective.set_args("Rb_lmn", "Zb_lmn")
     from desc.objectives.utils import factorize_linear_constraints
 
@@ -436,8 +446,8 @@ def test_correct_indexing_passed_modes_and_passed_target():
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(target=8, weight=1e2),
+            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(eq=eq, target=8, weight=1e2),
         ),
         verbose=0,
     )
@@ -462,10 +472,10 @@ def test_correct_indexing_passed_modes_and_passed_target():
         idxs.append(eq.surface.Z_basis.get_idx(*mode))
     target_Z = eq.surface.Z_lmn[idxs]
     constraints = (
-        FixBoundaryR(modes=R_modes, normalize=False, target=target_R),
-        FixBoundaryZ(modes=Z_modes, normalize=False, target=target_Z),
-        BoundaryRSelfConsistency(),
-        BoundaryZSelfConsistency(),
+        FixBoundaryR(eq=eq, modes=R_modes, normalize=False, target=target_R),
+        FixBoundaryZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
+        BoundaryRSelfConsistency(eq=eq),
+        BoundaryZSelfConsistency(eq=eq),
     )
     for con in constraints:
         con.build(eq, verbose=0)
@@ -502,8 +512,8 @@ def test_correct_indexing_passed_modes_axis():
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(target=8, weight=1e2),
+            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(eq=eq, target=8, weight=1e2),
         ),
         verbose=0,
     )
@@ -519,20 +529,24 @@ def test_correct_indexing_passed_modes_axis():
     Z_modes = np.flip(Z_modes, 0)
 
     constraints = (
-        FixAxisR(modes=R_modes, normalize=False),
-        FixAxisZ(modes=Z_modes, normalize=False),
-        FixModeR(modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
-        FixModeZ(modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
+        FixAxisR(eq=eq, modes=R_modes, normalize=False),
+        FixAxisZ(eq=eq, modes=Z_modes, normalize=False),
+        AxisRSelfConsistency(eq=eq),
+        AxisZSelfConsistency(eq=eq),
+        FixModeR(eq=eq, modes=np.array([[1, 1, 1], [2, 2, 2]]), normalize=False),
+        FixModeZ(eq=eq, modes=np.array([[1, 1, -1], [2, 2, -2]]), normalize=False),
         FixSumModesR(
+            eq=eq,
             modes=np.array([[3, 3, 3], [4, 4, 4]]),
             normalize=False,
             sum_weights=np.ones(2),
         ),
-        FixSumModesZ(modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
+        FixSumModesZ(eq=eq, modes=np.array([[3, 3, -3], [4, 4, -4]]), normalize=False),
     )
     for con in constraints:
-        con.build(eq, verbose=0)
-    objective.build(eq)
+        con.build(verbose=0)
+    objective.build()
+    objective.set_args("Ra_n", "Za_n")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -564,8 +578,8 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
 
     objective = ObjectiveFunction(
         (
-            QuasisymmetryTwoTerm(weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
-            AspectRatio(target=8, weight=1e2),
+            QuasisymmetryTwoTerm(eq=eq, weight=1e-2, helicity=(1, -eq.NFP), grid=grid),
+            AspectRatio(eq=eq, target=8, weight=1e2),
         ),
         verbose=0,
     )
@@ -589,9 +603,12 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
     target_Z = eq.axis.Z_n[idxs]
 
     constraints = (
-        FixAxisR(modes=R_modes, normalize=False, target=target_R),
-        FixAxisZ(modes=Z_modes, normalize=False, target=target_Z),
+        AxisRSelfConsistency(eq=eq),
+        AxisZSelfConsistency(eq=eq),
+        FixAxisR(eq=eq, modes=R_modes, normalize=False, target=target_R),
+        FixAxisZ(eq=eq, modes=Z_modes, normalize=False, target=target_Z),
         FixModeR(
+            eq=eq,
             modes=np.array([[1, 1, 1], [2, 2, 2]]),
             target=np.array(
                 [
@@ -602,6 +619,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
         FixModeZ(
+            eq=eq,
             modes=np.array([[1, 1, -1], [2, 2, -2]]),
             target=np.array(
                 [
@@ -612,6 +630,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
         FixSumModesR(
+            eq=eq,
             modes=np.array([[3, 3, 3], [4, 4, 4]]),
             target=np.array(
                 [
@@ -622,6 +641,7 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
             normalize=False,
         ),
         FixSumModesZ(
+            eq=eq,
             modes=np.array([[3, 3, -3], [4, 4, -4]]),
             target=np.array(
                 [
@@ -633,8 +653,9 @@ def test_correct_indexing_passed_modes_and_passed_target_axis():
         ),
     )
     for con in constraints:
-        con.build(eq, verbose=0)
-    objective.build(eq)
+        con.build(verbose=0)
+    objective.build()
+    objective.set_args("Ra_n", "Za_n")
     from desc.objectives.utils import factorize_linear_constraints
 
     xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
@@ -658,12 +679,12 @@ def test_FixBoundary_with_single_weight():
     """Test Fixing boundary with only a single, passed weight."""
     eq = Equilibrium()
     w = 1.1
-    FixZ = FixBoundaryZ(modes=np.array([[0, -1, 0]]), weight=w)
-    FixZ.build(eq)
+    FixZ = FixBoundaryZ(eq=eq, modes=np.array([[0, -1, 0]]), weight=w)
+    FixZ.build()
     np.testing.assert_array_equal(FixZ.weight.size, 1)
     np.testing.assert_array_equal(FixZ.weight, w)
-    FixR = FixBoundaryR(modes=np.array([[0, 1, 0]]), weight=w)
-    FixR.build(eq)
+    FixR = FixBoundaryR(eq=eq, modes=np.array([[0, 1, 0]]), weight=w)
+    FixR.build()
     np.testing.assert_array_equal(FixR.weight.size, 1)
     np.testing.assert_array_equal(FixR.weight, w)
 
@@ -672,48 +693,48 @@ def test_FixBoundary_with_single_weight():
 def test_FixBoundary_passed_target_no_passed_modes_error():
     """Test Fixing boundary with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixBoundaryZ(modes=True, target=np.array([[0]]))
+    FixZ = FixBoundaryZ(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixZ.build(eq)
-    FixZ = FixBoundaryZ(modes=False, target=np.array([[0]]))
+        FixZ.build()
+    FixZ = FixBoundaryZ(eq=eq, modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixZ.build(eq)
-    FixR = FixBoundaryR(modes=True, target=np.array([[0]]))
+        FixZ.build()
+    FixR = FixBoundaryR(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixR.build(eq)
-    FixR = FixBoundaryR(modes=False, target=np.array([[0]]))
+        FixR.build()
+    FixR = FixBoundaryR(eq=eq, modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixR.build(eq)
+        FixR.build()
 
 
 @pytest.mark.unit
 def test_FixAxis_passed_target_no_passed_modes_error():
     """Test Fixing Axis with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixAxisZ(modes=True, target=np.array([[0]]))
+    FixZ = FixAxisZ(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixZ.build(eq)
-    FixZ = FixAxisZ(modes=False, target=np.array([[0]]))
+        FixZ.build()
+    FixZ = FixAxisZ(eq=eq, modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixZ.build(eq)
-    FixR = FixAxisR(modes=True, target=np.array([[0]]))
+        FixZ.build()
+    FixR = FixAxisR(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixR.build(eq)
-    FixR = FixAxisR(modes=False, target=np.array([[0]]))
+        FixR.build()
+    FixR = FixAxisR(eq=eq, modes=False, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixR.build(eq)
+        FixR.build()
 
 
 @pytest.mark.unit
 def test_FixMode_passed_target_no_passed_modes_error():
     """Test Fixing Modes with no passed-in modes."""
     eq = Equilibrium()
-    FixZ = FixModeZ(modes=True, target=np.array([[0]]))
+    FixZ = FixModeZ(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixZ.build(eq)
-    FixR = FixModeR(modes=True, target=np.array([[0]]))
+        FixZ.build()
+    FixR = FixModeR(eq=eq, modes=True, target=np.array([[0]]))
     with pytest.raises(RuntimeError):
-        FixR.build(eq)
+        FixR.build()
 
 
 @pytest.mark.unit
@@ -753,17 +774,53 @@ def test_FixSumModes_False_or_None_modes():
         FixSumModesR(modes=None, target=np.array([[0, 1]]))
 
 
+def _is_any_instance(things, cls):
+    return any([isinstance(t, cls) for t in things])
+
+
 @pytest.mark.unit
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
     cs = get_fixed_axis_constraints(iota=False)
-    correct_cs = (
-        FixAxisR(),
-        FixAxisZ(),
-        FixLambdaGauge(),
-        FixPsi(),
-        FixPressure(),
-        FixCurrent(),
-    )
-    for c, cc in zip(cs, correct_cs):
-        assert type(c) == type(cc)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_fixed_axis_constraints(iota=True, kinetic=True)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixElectronDensity)
+    assert _is_any_instance(cs, FixElectronTemperature)
+    assert _is_any_instance(cs, FixIonTemperature)
+    assert _is_any_instance(cs, FixAtomicNumber)
+    assert _is_any_instance(cs, FixIota)
+
+
+@pytest.mark.unit
+def test_FixNAE_util_correct_objectives():
+    """Test util for fix NAE constraints."""
+    eq = Equilibrium()
+    qsc = Qsc.from_paper("precise QA")
+    cs = get_NAE_constraints(eq, qsc, iota=False)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixSumModesR)
+    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixPressure)
+    assert _is_any_instance(cs, FixCurrent)
+
+    cs = get_NAE_constraints(eq, qsc, iota=True, kinetic=True)
+    assert _is_any_instance(cs, FixAxisR)
+    assert _is_any_instance(cs, FixAxisZ)
+    assert _is_any_instance(cs, FixPsi)
+    assert _is_any_instance(cs, FixSumModesR)
+    assert _is_any_instance(cs, FixSumModesZ)
+    assert _is_any_instance(cs, FixElectronDensity)
+    assert _is_any_instance(cs, FixElectronTemperature)
+    assert _is_any_instance(cs, FixIonTemperature)
+    assert _is_any_instance(cs, FixAtomicNumber)
+    assert _is_any_instance(cs, FixIota)

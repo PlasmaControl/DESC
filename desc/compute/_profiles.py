@@ -627,7 +627,7 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="iota_zero_current_num",
-    label="\\iota_{0} numerator",
+    label="\\iota_{0~\\mathrm{numerator}}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Zero toroidal current rotational transform numerator",
@@ -675,7 +675,7 @@ def _iota_zero_current_num(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="iota_zero_current_num_r",
-    label="\\partial_{\\rho} \\iota_{0} numerator",
+    label="\\partial_{\\rho} \\iota_{0~\\mathrm{numerator}}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Zero toroidal current rotational transform numerator,"
@@ -716,7 +716,7 @@ def _iota_zero_current_num_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="iota_zero_current_num_rr",
-    label="\\partial_{\\rho\\rho} \\iota_{0} numerator",
+    label="\\partial_{\\rho\\rho} \\iota_{0~\\mathrm{numerator}}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Zero toroidal current rotational transform numerator,"
@@ -772,7 +772,7 @@ def _iota_zero_current_num_rr(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="iota_zero_current_den",
-    label="\\iota_{0} denominator",
+    label="\\iota_{0~\\mathrm{denominator}}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Zero toroidal current rotational transform denominator",
@@ -803,7 +803,7 @@ def _iota_zero_current_den(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="iota_zero_current_den_r",
-    label="\\partial_{\\rho} \\iota_{0} denominator",
+    label="\\partial_{\\rho} \\iota_{0~\\mathrm{denominator}}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Zero toroidal current rotational transform denominator,"
@@ -825,7 +825,7 @@ def _iota_zero_current_den_r(params, transforms, profiles, data, **kwargs):
 
 @register_compute_fun(
     name="iota_zero_current_den_rr",
-    label="\\partial_{\\rho\\rho} \\iota_{0} denominator",
+    label="\\partial_{\\rho\\rho} \\iota_{0~\\mathrm{denominator}}",
     units="m^{-1}",
     units_long="inverse meters",
     description="Zero toroidal current rotational transform denominator,"

@@ -944,9 +944,6 @@ def plot_fsa(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
-    if "<" + name + ">" in data_index:
-        # To automatically compute the more involved magnetic axis limits.
-        name = "<" + name + ">"
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
@@ -962,14 +959,22 @@ def plot_fsa(
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
         plot_data_ylabel_key = f"<{name}>_fsa"
-        sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-        # Compute the magnetic axis limit.
-        if np.isfinite(values[grid.axis]).all():
-            # The limit may still exist if this conditional is not satisfied,
-            # but it can't be computed with the quantity agnostic method below.
-            sqrt_g_r = _compute(eq, "sqrt(g)_r", grid, reshape=False)
-            sqrt_g = grid.replace_at_axis(sqrt_g, sqrt_g_r, copy=True)
-        values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
+        if "<" + name + ">" in data_index and not {"sqrt(g)", "V_r(r)"}.isdisjoint(
+            data_index["<" + name + ">"]["dependencies"]["data"]
+        ):
+            # To correctly compute the more involved magnetic axis limits.
+            # Second condition tries to ensure that the <name> is a surface
+            # average computed with a sqrt(g) factor.
+            values = _compute(eq, "<" + name + ">", grid, reshape=False)
+        else:
+            sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
+            # Compute the magnetic axis limit.
+            if np.isfinite(values[grid.axis]).all():
+                # The limit may still exist if this conditional is not satisfied,
+                # but it can't be computed with the quantity agnostic method below.
+                sqrt_g_r, _ = _compute(eq, "sqrt(g)_r", grid, reshape=False)
+                sqrt_g = grid.replace_at_axis(sqrt_g, sqrt_g_r, copy=True)
+            values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
         # theta average (without sqrt(g))
         label = (

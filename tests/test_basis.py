@@ -6,7 +6,6 @@ import pytest
 
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
-    ChebyshevPolynomial,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
@@ -139,6 +138,9 @@ class TestBasis:
         values = chebyshev(r[:, np.newaxis], l, dr=0)
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
 
+        with pytest.raises(AssertionError):
+            chebyshev(r[:, np.newaxis], l, dr=1)
+
     @pytest.mark.unit
     def test_zernike_radial(self):
         """Test zernike_radial function, comparing to analytic formulas."""
@@ -211,17 +213,6 @@ class TestBasis:
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
 
     @pytest.mark.unit
-    def test_chebyshev_polynomial(self):
-        """Test ChebyshevPolynomial evaluation."""
-        grid = LinearGrid(rho=11)
-        r = grid.nodes[:, 0]  # rho coordinates
-
-        basis = PowerSeries(L=2, sym=False)
-        correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
-        values = basis.evaluate(grid.nodes, derivatives=np.array([0, 0, 0]))
-        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
-
-    @pytest.mark.unit
     def test_double_fourier(self):
         """Test DoubleFourierSeries evaluation."""
         grid = LinearGrid(M=2, N=2)
@@ -253,10 +244,6 @@ class TestBasis:
         ps = PowerSeries(L=4, sym=False)
         ps.change_resolution(L=6)
         assert ps.num_modes == 7
-
-        cp = ChebyshevPolynomial(L=3)
-        cp.change_resolution(L=5)
-        assert cp.num_modes == 6
 
         fs = FourierSeries(N=3)
         fs.change_resolution(N=2)
@@ -318,12 +305,6 @@ class TestBasis:
         nodes = np.random.random((10, 3))
 
         basis = PowerSeries(L=3)
-        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
-        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
-        assert np.all(ft == 0)
-        assert np.all(fz == 0)
-
-        basis = ChebyshevPolynomial(L=3)
         ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
         fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
         assert np.all(ft == 0)

@@ -53,6 +53,15 @@ def test_kwarg_warning(DummyStellarator):
 
 
 @pytest.mark.unit
+def test_kwarg_future_warning(DummyStellarator):
+    """Test that passing in deprecated kwargs throws a warning."""
+    eq = Equilibrium.load(load_from=str(DummyStellarator["output_path"]))
+    with pytest.warns(FutureWarning):
+        fig, ax = plot_surfaces(eq, zeta=2)
+    return None
+
+
+@pytest.mark.unit
 @pytest.mark.solve
 @pytest.mark.mpl_image_compare(remove_text=True, tolerance=tol_1d)
 def test_1d_p(SOLOVEV):
@@ -286,7 +295,7 @@ def test_fsa_F_normalized(DSHAPE_current):
     """Test plotting flux surface average normalized force error on log scale."""
     eq = EquilibriaFamily.load(load_from=str(DSHAPE_current["desc_h5_path"]))[-1]
     fig, ax = plot_fsa(eq, "|F|", log=True, norm_F=True, norm_name="<|grad(p)|>_vol")
-    ax.set_ylim([1e-5, 1e-2])
+    ax.set_ylim([1e-6, 1e-3])
     return fig
 
 
@@ -710,7 +719,7 @@ def test_plot_boozer_surface():
     """Test plotting B in boozer coordinates."""
     eq = get("WISTELL-A")
     fig, ax, data = plot_boozer_surface(
-        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, fill=True
+        eq, M_booz=eq.M, N_booz=eq.N, return_data=True, rho=0.5, fieldlines=4
     )
     for string in [
         "|B|",

@@ -79,7 +79,7 @@ class MercierStability(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -92,6 +92,7 @@ class MercierStability(_Objective):
             Level of output.
 
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,
@@ -271,7 +272,7 @@ class MagneticWell(_Objective):
             name=name,
         )
 
-    def build(self, eq, use_jit=True, verbose=1):
+    def build(self, eq=None, use_jit=True, verbose=1):
         """Build constant arrays.
 
         Parameters
@@ -283,6 +284,7 @@ class MagneticWell(_Objective):
         verbose : int, optional
             Level of output.
         """
+        eq = eq or self._eq
         if self._grid is None:
             grid = LinearGrid(
                 M=eq.M_grid,

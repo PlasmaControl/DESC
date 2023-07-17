@@ -49,15 +49,15 @@ not_finite_limit_keys = {
     "<J*B> Redl",  # may not exist for all configurations
 }
 
+# Todo: these limits exist, but may currently evaluate as nan.
 todo_keys = {
-    # Todo: these limits exist, but may currently evaluate as nan.
     "iota_num_rrr",  # requires sqrt(g)_rrrr
     "iota_den_rrr",  # requires sqrt(g)_rrrr
     "iota_rr",  # already done, just needs limits of above two.
 }
 
 
-def skip_profile(eq, name):
+def _skip_profile(eq, name):
     return (
         (eq.atomic_number is None and "Zeff" in name)
         or (eq.electron_temperature is None and "Te" in name)
@@ -124,7 +124,7 @@ def assert_is_continuous(
     data = eq.compute(names, grid=grid)
 
     for name in names:
-        if data_index[name]["coordinates"] == "" or skip_profile(eq, name):
+        if data_index[name]["coordinates"] == "" or _skip_profile(eq, name):
             continue
         # make single variable function of rho
         profile = (
@@ -153,6 +153,7 @@ def assert_is_continuous(
 
 
 def get_matches(fun, pattern):
+    """Return all matches of ``pattern`` in source code of function ``fun``."""
     src = inspect.getsource(fun)
     # attempt to remove any decorator functions
     # (currently works without this filter, but better to be defensive)
@@ -232,7 +233,7 @@ class TestAxisLimits:
             data = eq.compute(list(data_index.keys()), grid=grid)
             at_axis = grid.nodes[:, 0] == 0
             for key in data_index:
-                if skip_profile(eq, key):
+                if _skip_profile(eq, key):
                     continue
                 is_finite = np.isfinite(data[key])
                 if key in not_finite_limit_keys:

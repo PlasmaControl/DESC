@@ -12,7 +12,6 @@ from desc.basis import (
     PowerSeries,
 )
 from desc.coils import CoilSet, FourierXYZCoil
-from desc.compute import data_index
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.examples import get
 from desc.grid import ConcentricGrid, Grid, LinearGrid, QuadratureGrid

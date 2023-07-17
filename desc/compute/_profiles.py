@@ -592,12 +592,11 @@ def _iota_rr(params, transforms, profiles, data, **kwargs):
     data=["0", "lambda_z", "g_tt", "lambda_t", "g_tz", "sqrt(g)", "psi_r"],
 )
 def _iota_num(params, transforms, profiles, data, **kwargs):
-    """
-    Computes 𝛼 + 𝛽 as defined in the document attached to the description
-    of GitHub pull request #556.
+    """Numerator of rotational transform formula.
 
-    𝛼 supplements the rotational transform with an additional term to account
-    for the enclosed net toroidal current.
+    Computes 𝛼 + 𝛽 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
         data["iota_num"] = jnp.nan * data["0"]
@@ -649,12 +648,11 @@ def _iota_num(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["g_tt_rr", "g_tz_rr", "sqrt(g)_rr", "psi_rrr"],
 )
 def _iota_num_r(params, transforms, profiles, data, **kwargs):
-    """
-    Computes d(𝛼+𝛽)/d𝜌 as defined in the document attached to the description
-    of GitHub pull request #556.
+    """Numerator of rotational transform formula, first radial derivative.
 
-    𝛼 supplements the rotational transform with an additional term to account
-    for the enclosed net toroidal current.
+    Computes d(𝛼+𝛽)/d𝜌 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
         data["iota_num_r"] = jnp.nan * data["0"]
@@ -745,12 +743,11 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
 )
 def _iota_num_rr(params, transforms, profiles, data, **kwargs):
-    """
-    Computes d2(𝛼+𝛽)/d𝜌2 as defined in the document attached to the description
-    of GitHub pull request #556.
+    """Numerator of rotational transform formula, second radial derivative.
 
-    𝛼 supplements the rotational transform with an additional term to account
-    for the enclosed net toroidal current.
+    Computes d2(𝛼+𝛽)/d𝜌2 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
         data["iota_num_rr"] = jnp.nan * data["0"]
@@ -867,12 +864,11 @@ def _iota_num_rr(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
-    """
-    Computes d3(𝛼+𝛽)/d𝜌3 as defined in the document attached to the description
-    of GitHub pull request #556.
+    """Numerator of rotational transform formula, third radial derivative.
 
-    𝛼 supplements the rotational transform with an additional term to account
-    for the enclosed net toroidal current.
+    Computes d3(𝛼+𝛽)/d𝜌3 as defined in the document attached to the description
+    of GitHub pull request #556. 𝛼 supplements the rotational transform with an
+    additional term to account for the enclosed net toroidal current.
     """
     if profiles["current"] is None:
         data["iota_num_rrr"] = jnp.nan * data["0"]
@@ -968,7 +964,8 @@ def _iota_num_rrr(params, transforms, profiles, data, **kwargs):
     data=["0", "g_tt", "g_tz", "sqrt(g)", "omega_t", "omega_z"],
 )
 def _iota_den(params, transforms, profiles, data, **kwargs):
-    """
+    """Denominator of rotational transform formula.
+
     Computes 𝛾 as defined in the document attached to the description
     of GitHub pull request #556.
     """
@@ -1014,7 +1011,8 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_rr", "g_tt_rr", "g_tz_rr"],
 )
 def _iota_den_r(params, transforms, profiles, data, **kwargs):
-    """
+    """Denominator of rotational transform formula, first radial derivative.
+
     Computes d𝛾/d𝜌 as defined in the document attached to the description
     of GitHub pull request #556.
     """
@@ -1085,7 +1083,8 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_rrr", "g_tt_rrr", "g_tz_rrr"],
 )
 def _iota_den_rr(params, transforms, profiles, data, **kwargs):
-    """
+    """Denominator of rotational transform formula, second radial derivative.
+
     Computes d2𝛾/d𝜌2 as defined in the document attached to the description
     of GitHub pull request #556.
     """
@@ -1181,7 +1180,8 @@ def _iota_den_rr(params, transforms, profiles, data, **kwargs):
     ],
 )
 def _iota_den_rrr(params, transforms, profiles, data, **kwargs):
-    """
+    """Denominator of rotational transform formula, third radial derivative.
+
     Computes d3𝛾/d𝜌3 as defined in the document attached to the description
     of GitHub pull request #556.
     """

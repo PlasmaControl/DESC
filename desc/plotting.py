@@ -965,7 +965,8 @@ def plot_fsa(
             # To correctly compute the more involved magnetic axis limits.
             # Second condition tries to ensure that the <name> is a surface
             # average computed with a sqrt(g) factor.
-            values = _compute(eq, "<" + name + ">", grid, reshape=False)
+            values, _ = _compute(eq, "<" + name + ">", grid, reshape=False)
+            values = grid.compress(values)
         else:
             sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
             # Compute the magnetic axis limit.

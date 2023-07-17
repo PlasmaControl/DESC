@@ -693,15 +693,14 @@ def _iota_num_r(params, transforms, profiles, data, **kwargs):
             (1 + data["lambda_t"])
             * data["g_tz_r"]
             * data["sqrt(g)_rr"]
-            / data["sqrt(g)_r"] ** 2
+            / (2 * data["sqrt(g)_r"] ** 2)
             + (
                 data["lambda_z"] * data["g_tt_rr"]
                 - 2 * data["lambda_rt"] * data["g_tz_r"]
                 - (1 + data["lambda_t"]) * data["g_tz_rr"]
             )
-            / data["sqrt(g)_r"]
-        )
-        / 2,
+            / (2 * data["sqrt(g)_r"])
+        ),
     )
     beta_r = surface_integrals(transforms["grid"], beta_r)
     data["iota_num_r"] = alpha_r + beta_r
@@ -1036,15 +1035,14 @@ def _iota_den_r(params, transforms, profiles, data, **kwargs):
             data["omega_t"]
             * data["g_tz_r"]
             * data["sqrt(g)_rr"]
-            / data["sqrt(g)_r"] ** 2
+            / (2 * data["sqrt(g)_r"] ** 2)
             + (
                 (1 + data["omega_z"]) * data["g_tt_rr"]
                 - 2 * data["omega_rt"] * data["g_tz_r"]
                 - data["omega_t"] * data["g_tz_rr"]
             )
-            / data["sqrt(g)_r"]
-        )
-        / 2,
+            / (2 * data["sqrt(g)_r"])
+        ),
     )
     gamma_r = surface_integrals(transforms["grid"], gamma_r)
     data["iota_den_r"] = gamma_r

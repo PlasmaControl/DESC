@@ -272,7 +272,7 @@ def test_plot_fsa_axis_limit():
         eq, "|B|", rho=rho, M=eq.M_grid, N=eq.N_grid, with_sqrt_g=True, return_data=True
     )
     b_mag_avg = grid.compress(eq.compute("<|B|>", grid=grid)["<|B|>"])
-    np.testing.assert_allclose(plot_data["<|B|>"], b_mag_avg, equal_nan=False)
+    np.testing.assert_allclose(plot_data["<|B|>_fsa"], b_mag_avg, equal_nan=False)
 
 
 @pytest.mark.unit

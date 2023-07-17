@@ -944,40 +944,44 @@ def plot_fsa(
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", (4, 4)))
 
     grid = LinearGrid(M=M, N=N, NFP=eq.NFP, rho=rho)
+
+    if "<" + name + ">" in data_index and with_sqrt_g != {
+        "sqrt(g)",
+        "V_r(r)",
+    }.isdisjoint(data_index["<" + name + ">"]["dependencies"]["data"]):
+        # Allows computing more involved magnetic axis limits.
+        # Last condition should ensure that the <name> is the desired surface
+        # average (i.e. computed with/without the sqrt(g) factor).
+        name = "<" + name + ">"
     values, label = _compute(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
     label = label.split("~")
-    if data_index[name]["coordinates"] == "r":
+    if data_index[name]["coordinates"] == "r" or data_index[name]["coordinates"] == "":
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
-        values = grid.compress(values)
+        if data_index[name]["coordinates"] == "r":
+            values = grid.compress(values)
     elif with_sqrt_g:
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
         plot_data_ylabel_key = f"<{name}>_fsa"
-        if "<" + name + ">" in data_index and not {"sqrt(g)", "V_r(r)"}.isdisjoint(
-            data_index["<" + name + ">"]["dependencies"]["data"]
-        ):
-            # To correctly compute the more involved magnetic axis limits.
-            # Second condition tries to ensure that the <name> is a surface
-            # average computed with a sqrt(g) factor.
-            values, _ = _compute(eq, "<" + name + ">", grid, reshape=False)
-            values = grid.compress(values)
-        else:
-            sqrt_g, _ = _compute(eq, "sqrt(g)", grid, reshape=False)
-            # Compute the magnetic axis limit.
-            if np.isfinite(values[grid.axis]).all():
-                # The limit may still exist if this conditional is not satisfied,
-                # but it can't be computed with the quantity agnostic method below.
-                sqrt_g_r, _ = _compute(eq, "sqrt(g)_r", grid, reshape=False)
-                sqrt_g = grid.replace_at_axis(sqrt_g, sqrt_g_r, copy=True)
-            values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
+        compute = lambda x: _compute(eq, x, grid, reshape=False)[0]
+        sqrt_g = compute("sqrt(g)")
+        # Attempt to compute the magnetic axis limit.
+        # Compute derivative depending on various naming schemes.
+        # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+        schemes = (name + "_r", name[:-3] + "_r(r)", name[:-3] + "r(r)")
+        values_r = next((compute(x) for x in schemes if x in data_index), np.nan)
+        if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
+            # Otherwise cannot compute axis limit in this agnostic manner.
+            sqrt_g = grid.replace_at_axis(sqrt_g, compute("sqrt(g)_r"), copy=True)
+        values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
-        # theta average (without sqrt(g))
+        # theta average
         label = (
             r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
         )

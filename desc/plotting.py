@@ -969,16 +969,20 @@ def plot_fsa(
         # flux surface average
         label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
         plot_data_ylabel_key = f"<{name}>_fsa"
-        compute = lambda x: _compute(eq, x, grid, reshape=False)[0]
-        sqrt_g = compute("sqrt(g)")
+        get_value = lambda x: _compute(eq, x, grid, reshape=False)[0]
+        sqrt_g = get_value("sqrt(g)")
         # Attempt to compute the magnetic axis limit.
         # Compute derivative depending on various naming schemes.
         # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
-        schemes = (name + "_r", name[:-3] + "_r(r)", name[:-3] + "r(r)")
-        values_r = next((compute(x) for x in schemes if x in data_index), np.nan)
+        schemes = (
+            name + "_r",
+            name[:-3] + "_r" + name[-3:],
+            name[:-3] + "r" + name[-3:],
+        )
+        values_r = next((get_value(x) for x in schemes if x in data_index), np.nan)
         if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
             # Otherwise cannot compute axis limit in this agnostic manner.
-            sqrt_g = grid.replace_at_axis(sqrt_g, compute("sqrt(g)_r"), copy=True)
+            sqrt_g = grid.replace_at_axis(sqrt_g, get_value("sqrt(g)_r"), copy=True)
         values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
         # theta average

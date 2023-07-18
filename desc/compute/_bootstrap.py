@@ -58,7 +58,9 @@ def _trapped_fraction(params, transforms, profiles, data, **kwargs):
     # Sum over the lambda grid points, using fori_loop for efficiency.
     def body_fun(jlambda, lambda_integral):
         flux_surf_avg_term = compute_averages(
-            jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax), sqrt_g, denominator=V_r
+            jnp.sqrt(1 - lambd[jlambda] * modB_over_Bmax),
+            sqrt_g=sqrt_g,
+            denominator=V_r,
         )
         return lambda_integral + lambda_weights[jlambda] * lambd[jlambda] / (
             Bmax_squared * flux_surf_avg_term

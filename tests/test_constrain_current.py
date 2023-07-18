@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import desc.io
-from desc.compute import compute as compute_fun
+from desc.compute import compute as compute_fun, data_index
 from desc.compute import get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
@@ -12,21 +12,30 @@ from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 class _ExactValueProfile:
     """Monkey patches the compute method of desc.Profile for testing."""
 
-    def __init__(self, eq, grid):
-        keys = ["current", "current_r", "current_rr"]
+    def __init__(self, eq, grid, profile_name="current"):
+        self.profile_name = profile_name
+        keys = []
+        i = 0
+        while self._get_name(i) in data_index:
+            keys += [self._get_name(i)]
+            i += 1
         self.params = get_params(keys=keys, eq=eq, has_axis=grid.axis.size)
         self.transforms = get_transforms(keys=keys, eq=eq, grid=grid)
         self.profiles = get_profiles(keys=keys, eq=eq, grid=grid)
 
+    def _get_name(self, dr):
+        return self.profile_name + "_" * bool(dr) + "r" * dr
+
     def compute(self, params, dr, *args, **kwargs):
-        """Return the surface average of B_theta (or derivative) in amperes."""
-        name = "current" + "_" * bool(dr) + "r" * dr
-        return compute_fun(
-            names=name,
-            params=self.params,
-            transforms=self.transforms,
-            profiles=self.profiles,
-        )[name]
+        name = self._get_name(dr)
+        if name in data_index:
+            return compute_fun(
+                names=name,
+                params=self.params,
+                transforms=self.transforms,
+                profiles=self.profiles,
+            )[name]
+        return np.nan
 
 
 class TestConstrainCurrent:
@@ -45,6 +54,10 @@ class TestConstrainCurrent:
         the compute functions for iota from a current profile are incorrect.
         """
 
+        iotas = ["iota", "iota_r"]
+        while iotas[-1] + "r" in data_index:
+            iotas += [iotas[-1] + "r"]
+
         def test(stellarator, grid_type):
             eq = desc.io.load(load_from=str(stellarator["desc_h5_path"]))[-1]
             kwargs = {"L": eq.L_grid, "M": eq.M_grid, "N": eq.N_grid, "NFP": eq.NFP}
@@ -54,7 +67,6 @@ class TestConstrainCurrent:
                 kwargs["axis"] = True
             grid = grid_type(**kwargs)
 
-            iotas = ["iota", "iota_r", "iota_rr"]
             monkey_patched_current = _ExactValueProfile(eq, grid)
             params = monkey_patched_current.params.copy()
             params["i_l"] = None
@@ -76,13 +88,23 @@ class TestConstrainCurrent:
                 transforms=monkey_patched_current.transforms,
                 profiles=monkey_patched_current.profiles,
             )
-            np.testing.assert_allclose(data["iota"], benchmark_data["iota"])
-            np.testing.assert_allclose(data["iota_r"], benchmark_data["iota_r"])
-            # Todo: compare axis as well when iota_rr limit completed
-            start = bool(grid.axis.size)
-            np.testing.assert_allclose(
-                data["iota_rr"][start:], benchmark_data["iota_rr"][start:]
-            )
+            # Evaluating the order n derivative of the rotational transform at
+            # the magnetic axis using a given toroidal current profile requires
+            # the order n + 2 derivative of that toroidal current profile.
+            # Computing the order n derivative of the resulting toroidal current
+            # as a function of rotational transform requires the order n
+            # derivative of the rotational transform.
+            # Therefore, this test cannot be used to cross-validate the magnetic
+            # axis limit of the two highest order derivatives of the rotational
+            # transform in data_index.
+            for iota in iotas:
+                skip_axis = grid.axis.size and iota in iotas[-2:]
+                np.testing.assert_allclose(
+                    actual=grid.compress(data[iota])[skip_axis:],
+                    desired=grid.compress(benchmark_data[iota])[skip_axis:],
+                    equal_nan=False,
+                    err_msg=iota,
+                )
 
         # works with any stellarators in desc/examples with fixed iota profiles
         test(DSHAPE, QuadratureGrid)

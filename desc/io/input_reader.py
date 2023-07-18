@@ -655,6 +655,109 @@ class InputReader:
         return inputs_list
 
     @staticmethod
+    def desc_output2input(filename, inputs, header=""):
+        """Generate a DESC input file from a DESC output file
+
+        Parameters
+        ----------
+        filename : str or path-like
+            name of the file to create
+        input : str or path-like
+            name of the DESC equilibrium object
+        header : str
+            text to print at the top of the file
+
+        """
+        # open the file, unless its already open
+        if not isinstance(filename, io.IOBase):
+            f = open(filename, "w+")
+        else:
+            f = filename
+        f.seek(0)
+        f.write(header + "\n")
+
+        eq = load(inputs)[-1]
+
+        f.write("# global parameters\n")
+        f.write("sym = {:1d} \n".format(eq.sym))
+        f.write("NFP = {:3d} \n".format(int(eq.NFP)))
+        f.write("Psi = {:.8f} \n".format(eq.Psi))
+
+        f.write("\n# spectral resolution\n")
+        f.write("L_rad" + "= {}\n".format(", ".join(eq0.L)))
+        f.write("M_pol" + "= {}\n".format(", ".join(eq0.M)))
+        f.write("N_tor" + "= {}\n".format(", ".join(eq0.N)))
+        f.write("L_grid" + "= {}\n".format(", ".join(eq0.L_grid)))
+        f.write("M_grid" + "= {}\n".format(", ".join(eq0.M_grid)))
+        f.write("N_grid" + "= {}\n".format(", ".join(eq0.N_grid)))
+
+        f.write("\n# continuation parameters\n")
+        f.write("bdry_ratio"+ " = {} \n".format(", ".join(eq.bdry_ratio)))
+        f.write("pres_ratio"+ " = {} \n".format(", ".join(eq.pres_ratio)))
+        f.write("curr_ratio"+ " = {} \n".format(", ".join(eq.curr_ratio)))
+        f.write("pert_order"+ " = {} \n".format(", ".join(eq.pert_order)))
+
+        #f.write("\n# solver tolerances\n")
+        #for key in ["ftol", "xtol", "gtol", "maxiter"]:
+        #    inputs_not_None = []
+        #    for inp in inputs:
+        #        if inp[key] is not None:
+        #            inputs_not_None.append(inp)
+        #    if not inputs_not_None:  # an  empty list evals to False
+        #        continue  # don't write line if all input tolerance are None
+
+        #    f.write(
+        #        key
+        #        + " = {}\n".format(
+        #            ", ".join([str(inp[key]) for inp in inputs_not_None])
+        #        )
+        #    )
+
+        #f.write("\n# solver methods\n")
+        #f.write("optimizer = {}\n".format(inputs[0]["optimizer"]))
+        #f.write("objective = {}\n".format(inputs[0]["objective"]))
+        #f.write("bdry_mode = {}\n".format(inputs[0]["bdry_mode"]))
+        #f.write("spectral_indexing = {}\n".format(inputs[0]["spectral_indexing"]))
+        #f.write("node_pattern = {}\n".format(inputs[0]["node_pattern"]))
+
+        #f.write("\n# pressure and rotational transform/current profiles\n")
+        #if "iota" in inputs[-1].keys():
+        #    char = "i"
+        #    profile = inputs[-1]["iota"]
+        #elif "current" in inputs[-1].keys():
+        #    char = "c"
+        #    profile = inputs[-1]["current"]
+        #ls = np.unique(np.concatenate([inputs[-1]["pressure"][:, 0], profile[:, 0]]))
+        #for l in ls:
+        #    idx = np.where(l == inputs[-1]["pressure"][:, 0])[0]
+        #    if len(idx):
+        #        p = inputs[-1]["pressure"][idx[0], 1]
+        #    else:
+        #        p = 0.0
+        #    idx = np.where(l == profile[:, 0])[0]
+        #    if len(idx):
+        #        i = profile[idx[0], 1]
+        #    else:
+        #        i = 0.0
+        #    f.write(
+        #        "l: {:3d}\tp = {:16.8E}\t{} = {:16.8E}\n".format(int(l), p, char, i)
+        #    )
+
+        #f.write("\n# fixed-boundary surface shape\n")
+        #for (l, m, n, R1, Z1) in inputs[-1]["surface"]:
+        #    f.write(
+        #        "l: {:3d}\tm: {:3d}\tn: {:3d}\tR1 = {:16.8E}\tZ1 = {:16.8E}\n".format(
+        #            int(l), int(m), int(n), R1, Z1
+        #        )
+        #    )
+
+        #f.write("\n# magnetic axis initial guess\n")
+        #for (n, R0, Z0) in inputs[0]["axis"]:
+        #    f.write("n: {:3d}\tR0 = {:16.8E}\tZ0 = {:16.8E}\n".format(int(n), R0, Z0))
+
+        #f.close()
+
+    @staticmethod
     def write_desc_input(filename, inputs, header=""):  # noqa: C901 - fxn too complex
         """Generate a DESC input file from a dictionary of parameters.
 
@@ -666,7 +769,6 @@ class InputReader:
             dictionary of input parameters
         header : str
             text to print at the top of the file
-
         """
         # open the file, unless its already open
         if not isinstance(filename, io.IOBase):

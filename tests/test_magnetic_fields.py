@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from desc.backend import jnp
+from desc.geometry import FourierRZToroidalSurface
 from desc.magnetic_fields import (
     PoloidalMagneticField,
     ScalarPotentialField,
@@ -130,3 +131,12 @@ class TestMagneticFields:
         r, z = field_line_integrate(r0, z0, phis, field)
         np.testing.assert_allclose(r[-1], 10, rtol=1e-6, atol=1e-6)
         np.testing.assert_allclose(z[-1], 0.001, rtol=1e-6, atol=1e-6)
+
+    @pytest.mark.unit
+    def test_Bnormal_calculation(self):
+        """Tests Bnormal calculation for simple toroidal field."""
+        tfield = ToroidalMagneticField(2, 1)
+        surface = FourierRZToroidalSurface()
+        Bnorm = tfield.compute_Bnormal(surface)
+        # should have 0 Bnormal because surface is axisymmetric
+        np.testing.assert_allclose(Bnorm, 0, atol=1e-15)

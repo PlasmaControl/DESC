@@ -75,6 +75,7 @@ Geometry
     desc.geometry.FourierXYZCurve
     desc.geometry.FourierPlanarCurve
     desc.geometry.FourierRZToroidalSurface
+    desc.geometry.XYZCurve
     desc.geometry.ZernikeRZToroidalSection
 
 Grid

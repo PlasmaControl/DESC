@@ -16,6 +16,18 @@ Basis
     desc.basis.ZernikePolynomial
     desc.basis.FourierZernikeBasis
 
+Coils
+*****
+.. autosummary::
+    :toctree: _api/coils
+    :recursive:
+    :template: class.rst
+
+    desc.coils.FourierRZCoil
+    desc.coils.FourierXYZCoil
+    desc.coils.FourierPlanarCoil
+    desc.coils.XYZCoil
+    desc.coils.CoilSet
 
 Continuation
 ************
@@ -158,6 +170,26 @@ Objective Functions
     desc.objectives.ToroidalCurrent
     desc.objectives.Volume
 
+Magnetic Fields
+***************
+
+.. autosummary::
+    :toctree: _api/magnetic_fields
+    :recursive:
+    :template: class.rst
+
+    desc.magnetic_fields.ScaledMagneticField
+    desc.magnetic_fields.SumMagneticField
+    desc.magnetic_fields.ToroidalMagneticField
+    desc.magnetic_fields.VerticalMagneticField
+    desc.magnetic_fields.PoloidalMagneticField
+    desc.magnetic_fields.SplineMagneticField
+    desc.magnetic_fields.ScalarPotentialField
+    desc.magnetic_fields.field_line_integrate
+    desc.magnetic_fields.read_BNORM_file
+    desc.magnetic_fields.biot_savart
+
+
 
 Optimize
 ********
@@ -170,6 +202,7 @@ Optimize
    desc.optimize.Optimizer
    desc.optimize.fmintr
    desc.optimize.lsqtr
+
 
 Perturbations
 *************

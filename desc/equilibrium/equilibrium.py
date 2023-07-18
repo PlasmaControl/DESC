@@ -17,6 +17,7 @@ from desc.objectives import (
     ForceBalance,
     ObjectiveFunction,
     get_equilibrium_objective,
+    get_fixed_axis_constraints,
     get_fixed_boundary_constraints,
 )
 from desc.optimize import Optimizer
@@ -92,7 +93,6 @@ class Equilibrium(_Configuration, IOAble):
     """
 
     _io_attrs_ = _Configuration._io_attrs_ + [
-        "_solved",
         "_L_grid",
         "_M_grid",
         "_N_grid",
@@ -123,7 +123,6 @@ class Equilibrium(_Configuration, IOAble):
         spectral_indexing=None,
         **kwargs,
     ):
-
         super().__init__(
             Psi,
             NFP,
@@ -163,7 +162,6 @@ class Equilibrium(_Configuration, IOAble):
         self._M_grid = M_grid if M_grid is not None else 2 * self.M
         self._N_grid = N_grid if N_grid is not None else 2 * self.N
         self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
-        self._solved = False
         self.optimizer_results = {}
 
     def __repr__(self):
@@ -223,15 +221,6 @@ class Equilibrium(_Configuration, IOAble):
         return self._node_pattern
 
     @property
-    def solved(self):
-        """bool: Whether the equilibrium has been solved."""
-        return self._solved
-
-    @solved.setter
-    def solved(self, solved):
-        self._solved = solved
-
-    @property
     def resolution(self):
         """dict: Spectral and real space resolution parameters of the Equilibrium."""
         return {
@@ -255,29 +244,39 @@ class Equilibrium(_Configuration, IOAble):
         )
 
     def change_resolution(
-        self, L=None, M=None, N=None, L_grid=None, M_grid=None, N_grid=None, NFP=None
+        self,
+        L=None,
+        M=None,
+        N=None,
+        L_grid=None,
+        M_grid=None,
+        N_grid=None,
+        NFP=None,
+        sym=None,
     ):
         """Set the spectral resolution and real space grid resolution.
 
         Parameters
         ----------
         L : int
-            maximum radial zernike mode number.
+            Maximum radial Zernike mode number.
         M : int
-            maximum poloidal fourier mode number.
+            Maximum poloidal Fourier mode number.
         N : int
-            maximum toroidal fourier mode number.
+            Maximum toroidal Fourier mode number.
         L_grid : int
-            radial real space grid resolution.
+            Radial real space grid resolution.
         M_grid : int
-            poloidal real space grid resolution.
+            Poloidal real space grid resolution.
         N_grid : int
-            toroidal real space grid resolution.
+            Toroidal real space grid resolution.
         NFP : int
-            number of field periods.
+            Number of field periods.
+        sym : bool
+            Whether to enforce stellarator symmetry.
 
         """
-        L_change = M_change = N_change = NFP_change = False
+        L_change = M_change = N_change = NFP_change = sym_change = False
         if L is not None and L != self.L:
             L_change = True
         if M is not None and M != self.M:
@@ -286,9 +285,11 @@ class Equilibrium(_Configuration, IOAble):
             N_change = True
         if NFP is not None and NFP != self.NFP:
             NFP_change = True
+        if sym is not None and sym != self.sym:
+            sym_change = True
 
-        if any([L_change, M_change, N_change, NFP_change]):
-            super().change_resolution(L, M, N, NFP)
+        if any([L_change, M_change, N_change, NFP_change, sym_change]):
+            super().change_resolution(L, M, N, NFP, sym)
 
         if L_grid is not None and L_grid != self.L_grid:
             self._L_grid = L_grid
@@ -482,11 +483,12 @@ class Equilibrium(_Configuration, IOAble):
         """
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
+                eq=self,
                 iota=objective != "vacuum" and self.iota is not None,
                 kinetic=self.electron_temperature is not None,
             )
         if not isinstance(objective, ObjectiveFunction):
-            objective = get_equilibrium_objective(objective)
+            objective = get_equilibrium_objective(eq=self, mode=objective)
         if not isinstance(optimizer, Optimizer):
             optimizer = Optimizer(optimizer)
 
@@ -537,7 +539,6 @@ class Equilibrium(_Configuration, IOAble):
             print("End of solver")
             objective.print_value(objective.x(eq))
 
-        eq.solved = result["success"]
         return eq, result
 
     def optimize(
@@ -548,6 +549,7 @@ class Equilibrium(_Configuration, IOAble):
         ftol=None,
         xtol=None,
         gtol=None,
+        ctol=None,
         maxiter=None,
         x_scale="auto",
         options=None,
@@ -564,7 +566,7 @@ class Equilibrium(_Configuration, IOAble):
             Objective function to satisfy. Default = fixed-boundary force balance.
         optimizer : str or Optimizer (optional)
             optimizer to use
-        ftol, xtol, gtol : float
+        ftol, xtol, gtol, ctol : float
             stopping tolerances. `None` will use defaults for given optimizer.
         maxiter : int
             Maximum number of solver steps.
@@ -601,10 +603,11 @@ class Equilibrium(_Configuration, IOAble):
             optimizer = Optimizer(optimizer)
         if constraints is None:
             constraints = get_fixed_boundary_constraints(
+                eq=self,
                 iota=self.iota is not None,
                 kinetic=self.electron_temperature is not None,
             )
-            constraints = (ForceBalance(), *constraints)
+            constraints = (ForceBalance(eq=self), *constraints)
 
         if copy:
             eq = self.copy()
@@ -618,6 +621,7 @@ class Equilibrium(_Configuration, IOAble):
             ftol=ftol,
             xtol=xtol,
             gtol=gtol,
+            ctol=ctol,
             x_scale=x_scale,
             verbose=verbose,
             maxiter=maxiter,
@@ -639,7 +643,6 @@ class Equilibrium(_Configuration, IOAble):
             for con in constraints:
                 con.print_value(*con.xs(eq))
 
-        eq.solved = result["success"]
         return eq, result
 
     def _optimize(  # noqa: C901
@@ -694,7 +697,7 @@ class Equilibrium(_Configuration, IOAble):
         perturb_options = {} if perturb_options is None else perturb_options
 
         if constraint is None:
-            constraint = get_equilibrium_objective()
+            constraint = get_equilibrium_objective(eq=self)
 
         timer = Timer()
         timer.start("Total time")
@@ -718,7 +721,6 @@ class Equilibrium(_Configuration, IOAble):
         iteration = 1
         success = None
         while success is None:
-
             timer.start("Step {} time".format(iteration))
             if verbose > 0:
                 print("====================")
@@ -860,12 +862,20 @@ class Equilibrium(_Configuration, IOAble):
 
         """
         if objective is None:
-            objective = get_equilibrium_objective()
+            objective = get_equilibrium_objective(eq=self)
         if constraints is None:
-            constraints = get_fixed_boundary_constraints(
-                iota=self.iota is not None,
-                kinetic=self.electron_temperature is not None,
-            )
+            if "Ra_n" in deltas or "Za_n" in deltas:
+                constraints = get_fixed_axis_constraints(
+                    eq=self,
+                    iota=self.iota is not None,
+                    kinetic=self.electron_temperature is not None,
+                )
+            else:
+                constraints = get_fixed_boundary_constraints(
+                    eq=self,
+                    iota=self.iota is not None,
+                    kinetic=self.electron_temperature is not None,
+                )
 
         eq = perturb(
             self,
@@ -879,7 +889,6 @@ class Equilibrium(_Configuration, IOAble):
             verbose=verbose,
             copy=copy,
         )
-        eq.solved = False
 
         return eq
 
@@ -905,7 +914,6 @@ class EquilibriaFamily(IOAble, MutableSequence):
     _io_attrs_ = ["_equilibria"]
 
     def __init__(self, *args):
-
         self.equilibria = []
         if len(args) == 1 and isinstance(args[0], list):
             for inp in args[0]:
@@ -930,7 +938,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol=None,
         xtol=None,
         gtol=None,
-        nfev=100,
+        maxiter=100,
         verbose=1,
         checkpoint_path=None,
     ):
@@ -955,8 +963,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol, xtol, gtol : float or array-like of float
             stopping tolerances for subproblem at each step. `None` will use defaults
             for given optimizer.
-        nfev : int or array-like of int
-            maximum number of function evaluations in each equilibrium subproblem.
+        maxiter : int or array-like of int
+            maximum number of iterations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -982,7 +990,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             ftol,
             xtol,
             gtol,
-            nfev,
+            maxiter,
             verbose,
             checkpoint_path,
         )
@@ -997,7 +1005,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol=None,
         xtol=None,
         gtol=None,
-        nfev=100,
+        maxiter=100,
         verbose=1,
         checkpoint_path=None,
         **kwargs,
@@ -1022,8 +1030,8 @@ class EquilibriaFamily(IOAble, MutableSequence):
         ftol, xtol, gtol : float
             stopping tolerances for subproblem at each step. `None` will use defaults
             for given optimizer.
-        nfev : int
-            maximum number of function evaluations in each equilibrium subproblem.
+        maxiter : int
+            maximum number of iterations in each equilibrium subproblem.
         verbose : integer
             * 0: no output
             * 1: summary of each iteration
@@ -1056,7 +1064,7 @@ class EquilibriaFamily(IOAble, MutableSequence):
             ftol,
             xtol,
             gtol,
-            nfev,
+            maxiter,
             verbose,
             checkpoint_path,
             **kwargs,

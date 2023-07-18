@@ -121,6 +121,25 @@ class TestDerivative:
         jac = AutoDiffDerivative(fun, num_blocks=3, shape=A.shape)
         np.testing.assert_allclose(jac(x), A)
 
+    @pytest.mark.unit
+    def test_jac_looped(self):
+        """Test computing the jacobian by explicit looping jvp."""
+
+        def test_fun(x, y, a):
+            return jnp.cos(x) + x * y + a
+
+        x = np.array([1, 5, 0.01, 200])
+        y = np.array([60, 1, 100, 0.02])
+        a = -2.0
+
+        jac1 = AutoDiffDerivative(test_fun, argnum=0, mode="fwd")
+        J1 = jac1.compute(x, y, a)
+
+        jac2 = AutoDiffDerivative(test_fun, argnum=0, mode="looped")
+        J2 = jac2.compute(x, y, a)
+
+        np.testing.assert_allclose(J1, J2, atol=1e-8)
+
 
 class TestJVP:
     """Test calculation of jacobian vector products."""
@@ -138,6 +157,7 @@ class TestJVP:
     dx = np.array([1, 2, 3]).astype(float)
     dc1 = np.array([3, 4, 5]).astype(float)
     dc2 = np.array([-3, 1, -2]).astype(float)
+    y = np.array([1, 2, 3, 4])
 
     @pytest.mark.unit
     def test_autodiff_jvp(self):
@@ -342,3 +362,15 @@ class TestJVP:
         np.testing.assert_allclose(
             df, np.array([-33858.0, -55584.0, -77310.0, -99036.0]), rtol=1e-4
         )
+
+    @pytest.mark.unit
+    def test_vjp(self):
+        """Tests using AD and FD for VJP calculation."""
+        df = AutoDiffDerivative.compute_vjp(
+            self.fun, 0, self.y, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([180.0, 3360.0, 19440.0]))
+        df = FiniteDiffDerivative.compute_vjp(
+            self.fun, 0, self.y, self.x, self.c1, self.c2
+        )
+        np.testing.assert_allclose(df, np.array([180.0, 3360.0, 19440.0]), rtol=1e-4)

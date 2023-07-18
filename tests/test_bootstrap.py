@@ -1173,8 +1173,9 @@ class TestBootstrapObjectives:
             NFP=eq.NFP,
         )
         obj = ObjectiveFunction(
-            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
+        obj.build()
         scalar_objective1 = obj.compute_scalar(obj.x(eq))
 
         # Scale |B|, changing <J*B> and <J*B>_Redl by "factor":
@@ -1191,8 +1192,9 @@ class TestBootstrapObjectives:
             factor ** (2.0 / 5) * Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
         )
         obj = ObjectiveFunction(
-            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
+        obj.build()
         scalar_objective2 = obj.compute_scalar(obj.x(eq))
 
         # Scale size, changing <J*B> and <J*B>_Redl by "factor":
@@ -1213,8 +1215,9 @@ class TestBootstrapObjectives:
             factor ** (-2.0 / 5) * Ti0 * np.array([1.02, -3, 3, -1]), modes=[0, 2, 4, 6]
         )
         obj = ObjectiveFunction(
-            BootstrapRedlConsistency(grid=grid, helicity=helicity), eq
+            BootstrapRedlConsistency(eq=eq, grid=grid, helicity=helicity)
         )
+        obj.build()
         scalar_objective3 = obj.compute_scalar(obj.x(eq))
 
         results = np.array([scalar_objective1, scalar_objective2, scalar_objective3])
@@ -1261,11 +1264,12 @@ class TestBootstrapObjectives:
             )
             obj = ObjectiveFunction(
                 BootstrapRedlConsistency(
+                    eq=eq,
                     grid=grid,
                     helicity=helicity,
                 ),
-                eq,
             )
+            obj.build()
             scalar_objective = obj.compute_scalar(obj.x(eq))
             print(f"grid_type:{grid_type} L:{L} M:{M} N:{N} obj:{scalar_objective}")
             return scalar_objective
@@ -1346,7 +1350,7 @@ class TestBootstrapObjectives:
             ftol=1e-8,
             constraints=get_fixed_boundary_constraints(kinetic=True),
             optimizer=Optimizer("lsq-exact"),
-            objective=ObjectiveFunction(objectives=ForceBalance()),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
 
         initial_output_file = str(
@@ -1358,14 +1362,14 @@ class TestBootstrapObjectives:
         # Done establishing the initial condition. Now set up the optimization.
 
         constraints = (
-            ForceBalance(),
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            FixElectronDensity(),
-            FixElectronTemperature(),
-            FixIonTemperature(),
-            FixAtomicNumber(),
-            FixPsi(),
+            ForceBalance(eq=eq),
+            FixBoundaryR(eq=eq),
+            FixBoundaryZ(eq=eq),
+            FixElectronDensity(eq=eq),
+            FixElectronTemperature(eq=eq),
+            FixIonTemperature(eq=eq),
+            FixAtomicNumber(eq=eq),
+            FixPsi(eq=eq),
         )
 
         # grid for bootstrap consistency objective:
@@ -1377,6 +1381,7 @@ class TestBootstrapObjectives:
         )
         objective = ObjectiveFunction(
             BootstrapRedlConsistency(
+                eq=eq,
                 grid=grid,
                 helicity=helicity,
             )
@@ -1465,7 +1470,7 @@ class TestBootstrapObjectives:
             ftol=1e-8,
             constraints=get_fixed_boundary_constraints(kinetic=True, iota=False),
             optimizer=Optimizer("lsq-exact"),
-            objective=ObjectiveFunction(objectives=ForceBalance()),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
 
         initial_output_file = str(
@@ -1477,15 +1482,15 @@ class TestBootstrapObjectives:
         # Done establishing the initial condition. Now set up the optimization.
 
         constraints = (
-            ForceBalance(),
-            FixBoundaryR(),
-            FixBoundaryZ(),
-            FixElectronDensity(),
-            FixElectronTemperature(),
-            FixIonTemperature(),
-            FixAtomicNumber(),
-            FixCurrent(indices=[0]),
-            FixPsi(),
+            ForceBalance(eq=eq),
+            FixBoundaryR(eq=eq),
+            FixBoundaryZ(eq=eq),
+            FixElectronDensity(eq=eq),
+            FixElectronTemperature(eq=eq),
+            FixIonTemperature(eq=eq),
+            FixAtomicNumber(eq=eq),
+            FixCurrent(eq=eq, indices=[0]),
+            FixPsi(eq=eq),
         )
 
         # grid for bootstrap consistency objective:
@@ -1497,6 +1502,7 @@ class TestBootstrapObjectives:
         )
         objective = ObjectiveFunction(
             BootstrapRedlConsistency(
+                eq=eq,
                 grid=grid,
                 helicity=helicity,
             )
@@ -1536,35 +1542,34 @@ class TestBootstrapObjectives:
 @pytest.mark.unit
 def test_bootstrap_objective_build():
     """Test defaults and warnings in bootstrap objective build method."""
-    obj = BootstrapRedlConsistency()
     # can't build without profiles
     eq = Equilibrium(L=3, M=3, N=3, NFP=2)
     with pytest.raises(RuntimeError):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e21
     )
     eq.electron_density = None
     with pytest.raises(RuntimeError):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e21
     )
     eq.ion_temperature = None
     with pytest.raises(RuntimeError):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e3, electron_density=1e25
     )
     # density too high
     with pytest.warns(UserWarning):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3, M=3, N=3, NFP=2, electron_temperature=1e5, electron_density=1e21
     )
     # electron temperature too high
     with pytest.warns(UserWarning):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1576,7 +1581,7 @@ def test_bootstrap_objective_build():
     )
     # ion temperature too high
     with pytest.warns(UserWarning):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1588,7 +1593,7 @@ def test_bootstrap_objective_build():
     )
     # density too low
     with pytest.warns(UserWarning):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1600,7 +1605,7 @@ def test_bootstrap_objective_build():
     )
     # electron temperature too low
     with pytest.warns(UserWarning):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
     eq = Equilibrium(
         L=3,
         M=3,
@@ -1612,8 +1617,10 @@ def test_bootstrap_objective_build():
     )
     # ion temperature too low
     with pytest.warns(UserWarning):
-        obj.build(eq)
+        BootstrapRedlConsistency(eq=eq).build()
 
+    obj = BootstrapRedlConsistency(eq=eq)
+    obj.build()
     # make sure default grid has the right nodes
     assert obj._transforms["grid"].num_theta == 13
     assert obj._transforms["grid"].num_zeta == 13

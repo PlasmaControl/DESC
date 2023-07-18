@@ -32,6 +32,7 @@
    notebooks/Saving_Equilibria_in_VMEC_Format
    notebooks/DESC_Fixed_Axis_NAE_Constraint
    notebooks/Toroidal_current_constraint
+   precise_qa
 
 .. toctree::
    :maxdepth: 1

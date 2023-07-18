@@ -279,3 +279,71 @@ class TestBasis:
         basis = FourierZernikeBasis(L=10, M=4, N=0, spectral_indexing="fringe")
         assert (basis.modes == [10, 0, 0]).all(axis=1).any()
         assert not (basis.modes == [10, 2, 0]).all(axis=1).any()
+
+    @pytest.mark.unit
+    def test_derivative_not_in_basis_zeros(self):
+        """Test that d/dx = 0 when x is not in the basis."""
+        nodes = np.random.random((10, 3))
+
+        basis = PowerSeries(L=3)
+        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
+        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
+        assert np.all(ft == 0)
+        assert np.all(fz == 0)
+
+        basis = FourierSeries(N=4)
+        fr = basis.evaluate(nodes, derivatives=[1, 0, 0])
+        ft = basis.evaluate(nodes, derivatives=[0, 1, 0])
+        assert np.all(fr == 0)
+        assert np.all(ft == 0)
+
+        basis = DoubleFourierSeries(M=2, N=4)
+        fr = basis.evaluate(nodes, derivatives=[1, 0, 0])
+        assert np.all(fr == 0)
+
+        basis = ZernikePolynomial(L=2, M=3)
+        fz = basis.evaluate(nodes, derivatives=[0, 0, 1])
+        assert np.all(fz == 0)
+
+    @pytest.mark.unit
+    def test_basis_resolutions_assert_integers(self):
+        """Test that basis modes are asserted as integers."""
+        L = 3.0
+        M = 3.0
+        N = 3.0
+
+        basis = PowerSeries(L=L)
+        assert isinstance(basis.L, int)
+        assert basis.L == 3
+
+        basis = FourierSeries(N=N)
+        assert isinstance(basis.N, int)
+        assert basis.N == 3
+
+        basis = DoubleFourierSeries(M=M, N=N)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.N, int)
+        assert basis.M == 3
+        assert basis.N == 3
+
+        basis = ZernikePolynomial(L=L, M=M)
+        assert isinstance(basis.M, int)
+        assert isinstance(basis.L, int)
+        assert basis.M == 3
+        assert basis.L == 3
+
+        L = 3.1
+        M = 3.1
+        N = 3.1
+
+        with pytest.raises(AssertionError):
+            PowerSeries(L=L)
+
+        with pytest.raises(AssertionError):
+            FourierSeries(N=N)
+
+        with pytest.raises(AssertionError):
+            DoubleFourierSeries(M=M, N=N)
+
+        with pytest.raises(AssertionError):
+            ZernikePolynomial(L=L, M=M)

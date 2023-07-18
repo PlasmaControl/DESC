@@ -14,7 +14,7 @@ from desc.grid import Grid, LinearGrid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
 from desc.transform import Transform
-from desc.vmec_utils import ptolemy_identity_rev
+from desc.vmec_utils import ptolemy_identity_fwd, ptolemy_identity_rev
 
 
 # TODO: vectorize this over multiple coils
@@ -61,6 +61,64 @@ def biot_savart(eval_pts, coil_pts, current):
     vec = jnp.cross(dvec[:, jnp.newaxis, :], Ri_vec, axis=-1)
     B = jnp.sum(Bmag[:, :, jnp.newaxis] * vec, axis=0)
     return B
+
+
+def read_BNORM_file(fname, eq, eval_grid=None, scale_by_curpol=True):
+    """Create BNORM-style .txt file containing Bnormal Fourier coefficients.
+
+    Parameters
+    ----------
+    fname : str
+        name of BNORM file to read and calculate Bnormal from.
+    eq : Equilibrium
+        Equilibrium to calculate the magnetic field's Bnormal on the surface of.
+    eval_grid : Grid, optional
+        Grid of points on the plasma surface to calculate the Bnormal at and then
+        fit with a DoubleFourierSeries, if None defaults to a LinearGrid with twice
+        the basis poloidal and toroidal resolutions
+    scale_by_curpol : bool, optional
+        Whether or not to un-scale the Bnormal coefficients by curpol
+        before calculating Bnormal, by default True
+        (set to False if it is known that the BNORM file was saved without scaling
+        by curpol)
+
+
+    Returns
+    -------
+    Bnormal: ndarray,
+        Bnormal distribution from the BNORM Fourier coefficients,
+        evaluated on the given eval_grid
+    """
+    curpol = (
+        (2 * jnp.pi / eq.NFP * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"])
+        if scale_by_curpol
+        else 1
+    )
+
+    data = np.genfromtxt(fname)
+
+    xm = data[:, 0]
+    xn = -data[:, 1]  # negate since BNORM uses sin(mu+nv) convention
+    Bnorm_mn = data[:, 2] / curpol  # these will only be sin terms
+
+    # convert to DESC Fourier representation i.e. like cos(mt)*cos(nz)
+    m, n, Bnorm_mn = ptolemy_identity_fwd(xm, xn, Bnorm_mn, np.zeros_like(Bnorm_mn))
+    basis = DoubleFourierSeries(int(np.max(m)), int(np.max(n)), sym=False, NFP=eq.NFP)
+    Bnorm_mn_desc_basis = np.zeros((basis.num_modes,))
+    for i, (mm, nn) in enumerate(zip(m, n)):
+        idx = basis.get_idx(L=0, M=mm, N=nn)
+        Bnorm_mn_desc_basis[idx] = Bnorm_mn[0, i]
+
+    if eval_grid is None:
+        eval_grid = LinearGrid(
+            rho=jnp.array(1.0), M=2 * basis.M, N=2 * basis.N, NFP=eq.NFP
+        )
+    trans = Transform(basis=basis, grid=eval_grid, build_pinv=True)
+
+    # fit Bnorm with Fourier Series
+    Bnorm = trans.transform(Bnorm_mn_desc_basis)
+
+    return Bnorm
 
 
 class MagneticField(IOAble, ABC):
@@ -158,7 +216,7 @@ class MagneticField(IOAble, ABC):
         Bnorm = jnp.sum(B * surf_normal, axis=-1)
         return Bnorm
 
-    def make_BNORM_file(
+    def save_BNORM_file(
         self,
         eq,
         fname,
@@ -240,14 +298,14 @@ class MagneticField(IOAble, ABC):
                 2
                 * jnp.pi
                 / eq.NFP
-                * eq.compute(name="G", grid=LinearGrid(rho=jnp.array(1)))["G"]
+                * eq.compute("G", grid=LinearGrid(rho=jnp.array(1)))["G"]
             )
             if scale_by_curpol
             else 1
         )
 
         # BNORM assumes |B| has sin sym so c=0, so we only need s
-        data = np.vstack((xm * curpol, Bnorm_xn * curpol, s)).T
+        data = np.vstack((xm, Bnorm_xn, s * curpol)).T
 
         np.savetxt(f"{fname}", data, fmt="%d %d %1.12e")
         return None

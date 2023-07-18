@@ -4,7 +4,8 @@ import numpy as np
 import pytest
 
 from desc.backend import jnp
-from desc.geometry import FourierRZToroidalSurface
+from desc.examples import get
+from desc.grid import LinearGrid
 from desc.magnetic_fields import (
     PoloidalMagneticField,
     ScalarPotentialField,
@@ -12,6 +13,7 @@ from desc.magnetic_fields import (
     ToroidalMagneticField,
     VerticalMagneticField,
     field_line_integrate,
+    read_BNORM_file,
 )
 
 
@@ -136,7 +138,39 @@ class TestMagneticFields:
     def test_Bnormal_calculation(self):
         """Tests Bnormal calculation for simple toroidal field."""
         tfield = ToroidalMagneticField(2, 1)
-        surface = FourierRZToroidalSurface()
+        surface = get("DSHAPE").surface
         Bnorm = tfield.compute_Bnormal(surface)
         # should have 0 Bnormal because surface is axisymmetric
-        np.testing.assert_allclose(Bnorm, 0, atol=1e-15)
+        np.testing.assert_allclose(Bnorm, 0, atol=3e-15)
+
+    @pytest.mark.unit
+    def test_Bnormal_save_and_load_DSHAPE(self, tmpdir_factory):
+        """Tests Bnormal save/load for simple toroidal field with DSHAPE."""
+        ### test on simple field first with tokamak
+        tmpdir = tmpdir_factory.mktemp("BNORM_files")
+        path = tmpdir.join("BNORM_desc.txt")
+        tfield = ToroidalMagneticField(2, 1)
+        eq = get("DSHAPE")
+        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
+        Bnorm = tfield.compute_Bnormal(eq.surface, grid=grid)
+        # should have 0 Bnormal because surface is axisymmetric
+        np.testing.assert_allclose(Bnorm, 0, atol=1e-14)
+
+        tfield.save_BNORM_file(eq, path)
+        Bnorm_from_file = read_BNORM_file(path, eq, grid)
+        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-14)
+
+    @pytest.mark.unit
+    def test_Bnormal_save_and_load_HLEIOTRON(self, tmpdir_factory):
+        """Tests Bnormal save/load for simple toroidal field with HELIOTRON."""
+        ### test on simple field with stellarator
+        tmpdir = tmpdir_factory.mktemp("BNORM_files")
+        path = tmpdir.join("BNORM_desc_heliotron.txt")
+        tfield = ToroidalMagneticField(2, 1)
+        eq = get("HELIOTRON")
+        grid = LinearGrid(rho=np.array(1.0), M=20, N=20, NFP=eq.NFP)
+        Bnorm = tfield.compute_Bnormal(eq.surface, grid=grid)
+
+        tfield.save_BNORM_file(eq, path)
+        Bnorm_from_file = read_BNORM_file(path, eq, grid)
+        np.testing.assert_allclose(Bnorm, Bnorm_from_file, atol=1e-12)

@@ -7,12 +7,9 @@ from inspect import getfullargspec
 import numpy as np
 
 from desc.backend import block_diag, jit, jnp, use_jax
-from desc.compute import arg_order
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable
-
-# XXX: could use `indices` instead of `arg_order` in ObjectiveFunction loops
 
 
 class ObjectiveFunction(IOAble):
@@ -56,11 +53,14 @@ class ObjectiveFunction(IOAble):
         """
         self._args = list(np.concatenate([obj.args for obj in self.objectives]))
         self._args += list(args)
-        self._args = [arg for arg in arg_order if arg in self._args]
+        self._args = sorted(set(self._args))
         self._set_state_vector()
 
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
+        self._args = np.concatenate([obj.args for obj in self.objectives])
+        self._args = sorted(set(self._args))
+
         self._dimensions = self.objectives[0].dimensions
 
         self._dim_x = 0
@@ -761,7 +761,7 @@ class _Objective(IOAble, ABC):
     def _set_dimensions(self, eq):
         """Set state vector component dimensions."""
         self._dimensions = {}
-        for arg in arg_order:
+        for arg in self.args:
             self._dimensions[arg] = np.atleast_1d(getattr(eq, arg)).size
 
     def _set_derivatives(self):
@@ -773,49 +773,28 @@ class _Objective(IOAble, ABC):
             "hess": {},
         }
 
-        for arg in arg_order:
-            if arg in self.args:  # derivative wrt arg
-                self._derivatives["jac_unscaled"][arg] = Derivative(
-                    self.compute_unscaled,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["jac_scaled"][arg] = Derivative(
-                    self.compute_scaled,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["grad"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="grad",
-                )
-                self._derivatives["hess"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="hess",
-                )
-            else:  # these derivatives are always zero
-                self._derivatives["jac_unscaled"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["jac_scaled"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["grad"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (1, self.dimensions[arg])
-                )
-                self._derivatives["hess"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dimensions[arg], self.dimensions[arg])
-                )
+        for arg in self.args:
+
+            self._derivatives["jac_unscaled"][arg] = Derivative(
+                self.compute_unscaled,
+                argnum=self.args.index(arg),
+                mode="fwd",
+            )
+            self._derivatives["jac_scaled"][arg] = Derivative(
+                self.compute_scaled,
+                argnum=self.args.index(arg),
+                mode="fwd",
+            )
+            self._derivatives["grad"][arg] = Derivative(
+                self.compute_scalar,
+                argnum=self.args.index(arg),
+                mode="grad",
+            )
+            self._derivatives["hess"][arg] = Derivative(
+                self.compute_scalar,
+                argnum=self.args.index(arg),
+                mode="hess",
+            )
 
     def jit(self):
         """Apply JIT to compute methods, or re-apply after updating self."""

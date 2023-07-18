@@ -11,24 +11,6 @@ from desc.grid import ConcentricGrid, LinearGrid
 
 from .data_index import data_index
 
-# defines the order in which objective arguments get concatenated into the state vector
-arg_order = (
-    "R_lmn",
-    "Z_lmn",
-    "L_lmn",
-    "p_l",
-    "i_l",
-    "c_l",
-    "Psi",
-    "Te_l",
-    "ne_l",
-    "Ti_l",
-    "Zeff_l",
-    "Ra_n",
-    "Za_n",
-    "Rb_lmn",
-    "Zb_lmn",
-)
 # map from profile name to equilibrium parameter name
 profile_names = {
     "pressure": "p_l",
@@ -42,7 +24,7 @@ profile_names = {
 
 
 def _sort_args(args):
-    return [arg for arg in arg_order if arg in args]
+    return sorted(set(args))
 
 
 def compute(names, params, transforms, profiles, data=None, **kwargs):

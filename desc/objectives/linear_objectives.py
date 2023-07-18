@@ -2,7 +2,7 @@
 
 Linear objective functions must be of the form `A*x-b`, where:
     - `A` is a constant matrix that can be pre-computed
-    - `x` is a vector of one or more arguments included in `compute.arg_order`
+    - `x` is an array of a single parameter
     - `b` is the desired vector set by `objective.target`
 """
 

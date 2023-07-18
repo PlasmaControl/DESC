@@ -5,7 +5,7 @@ import warnings
 from termcolor import colored
 
 from desc.backend import jnp, put, use_jax
-from desc.compute import arg_order, profile_names
+from desc.compute import profile_names
 from desc.objectives import (
     AxisRSelfConsistency,
     AxisZSelfConsistency,
@@ -244,7 +244,7 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         tangents += jnp.eye(objective.dim_x)[:, objective.x_idx["Z_lmn"]] @ Ainv @ dc
     # all other perturbations besides the boundary
     other_args = [
-        arg for arg in arg_order if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
+        arg for arg in objective.args if arg not in ["Ra_n", "Za_n", "Rb_lmn", "Zb_lmn"]
     ]
     if len([arg for arg in other_args if arg in deltas.keys()]):
         dc = jnp.concatenate(
@@ -623,8 +623,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if arg in deltas.keys()
         ]
     ):
+        ordered_args = sorted(set(objective_f.args + objective_g.args))
         x_idx = jnp.concatenate(
-            [objective_f.x_idx[arg] for arg in arg_order if arg in deltas.keys()]
+            [objective_f.x_idx[arg] for arg in ordered_args if arg in deltas.keys()]
         )
         x_idx = jnp.sort(x_idx)
         dxdc = jnp.eye(objective_f.dim_x)[:, x_idx]

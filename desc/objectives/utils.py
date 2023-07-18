@@ -328,16 +328,15 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     args = np.concatenate([obj.args for obj in constraints])
     args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
-    args = [arg for arg in arg_order if arg in args]
+    args = sorted(set(args))
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
     for arg in args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
-
-    A = []
-    b = []
+    A = {}
+    b = {}
     xp = jnp.zeros(dim_x)  # particular solution to Ax=b
 
     # linear constraint matrices for each objective
@@ -449,7 +448,7 @@ def align_jacobian(Fx, objective_f, objective_g):
     dim_f = Fx.shape[:1]
     A = {arg: Fx.T[x_idx[arg]] for arg in args}
     allargs = np.concatenate([objective_f.args, objective_g.args])
-    allargs = [arg for arg in arg_order if arg in allargs]
+    allargs = sorted(set(allargs))
     for arg in allargs:
         if arg not in A.keys():
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)

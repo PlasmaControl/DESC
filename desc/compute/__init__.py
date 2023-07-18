@@ -40,7 +40,6 @@ from . import (
 )
 from .data_index import data_index
 from .utils import (
-    arg_order,
     compute,
     get_data_deps,
     get_derivs,

@@ -277,7 +277,7 @@ class GenericObjective(_Objective):
         Parameters
         ----------
         args : ndarray
-            Parameters given by self.args.
+            Parameters given by `desc.compute.get_params(f)`
 
         Returns
         -------

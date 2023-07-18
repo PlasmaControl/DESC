@@ -796,7 +796,7 @@ class SplineProfile(Profile):
 
     """
 
-    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method", "_Dx"]
+    _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
     def __init__(
         self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""

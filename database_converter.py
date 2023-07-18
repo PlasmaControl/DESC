@@ -93,7 +93,7 @@ def desc_to_csv(  # noqa
     data_desc_runs["m_pol"] = eq.M
     data_desc_runs["m_grid"] = eq.M_grid
     data_desc_runs["n_tor"] = eq.N
-    data_desc_runs["N_grid"] = eq.N_grid
+    data_desc_runs["n_grid"] = eq.N_grid
 
     data_desc_runs[
         "bdry_ratio"
@@ -134,7 +134,12 @@ def desc_to_csv(  # noqa
         )
         data_configurations["current_specification"] = "net enclosed current"
         data_desc_runs["current_specification"] = "net enclosed current"
+    Dmerc = eq.compute("D_Mercier", grid=rho_grid)["D_Mercier"]
+    data_desc_runs["D_Mercier_max"] = np.max(Dmerc)
+    data_desc_runs["D_Mercier_min"] = np.min(Dmerc)
+    data_desc_runs["D_Mercier"] = Dmerc
 
+    data_desc_runs["iota_min"] = np.min(eq.compute("iota", grid=rho_grid_dense)["iota"])
     data_desc_runs["pressure_profile"] = eq.pressure(rho)
     data_desc_runs["pressure_max"] = np.max(eq.pressure(rho_dense))
     data_desc_runs["pressure_min"] = np.min(eq.pressure(rho_dense))
@@ -175,6 +180,17 @@ def desc_to_csv(  # noqa
     data_configurations["total_toroidal_current"] = float(
         f'{eq.compute("current")["current"][-1]:1.2e}'
     )
+    position_data = eq.compute(["R", "Z", "a_major/a_minor"])
+    data_configurations["R_excursion"] = float(
+        f'{np.max(position_data["R"])-np.min(position_data["R"]):1.4e}'
+    )
+    data_configurations["Z_excursion"] = float(
+        f'{np.max(position_data["Z"])-np.min(position_data["Z"]):1.4e}'
+    )
+    data_configurations["average_elongation"] = float(
+        f'{position_data["a_major/a_minor"]:1.4e}'
+    )
+    data_configurations["average_elongation"] = kwargs.get("config_class", None)
 
     # surface geometry
     # currently saving as VMEC format but I'd prefer if we could do DESC format...
@@ -271,6 +287,57 @@ def desc_to_csv(  # noqa
             if not configurations_csv_exists:
                 writer.writeheader()  # only need header if file did not exist already
             writer.writerow(data_configurations)
+    except OSError:
+        print("I/O error")
+
+    return None
+
+
+def device_or_concept_to_csv(  # noqa
+    name,
+    device_class=None,
+    NFP=None,
+    description=None,
+    stell_sym=None,
+    deviceid=None,
+):
+    """Save DESC as a csv with relevant information.
+
+    Args
+    ----
+        eq (Equilibrium or str): DESC equilibrium to save or path to .h5 of
+         DESC equilibrium to save
+        current: bool, if the equilibrium was solved with fixed current or not
+            if False, was solved with fixed iota
+
+    Returns
+    -------
+        None
+    """
+    # data dicts for each table
+    devices_and_concepts = {}
+
+    devices_csv_name = "devices_and_concepts.csv"
+
+    devices_and_concepts["name"] = name
+    devices_and_concepts["class"] = device_class
+
+    devices_and_concepts["NFP"] = NFP
+    devices_and_concepts["stell_sym"] = bool(stell_sym)
+
+    devices_and_concepts["description"] = description
+    devices_and_concepts["deviceid"] = deviceid
+
+    csv_columns_desc_runs = list(devices_and_concepts.keys())
+    csv_columns_desc_runs.sort()
+    desc_runs_csv_exists = os.path.isfile(devices_csv_name)
+
+    try:
+        with open(devices_csv_name, "a+") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=csv_columns_desc_runs)
+            if not desc_runs_csv_exists:
+                writer.writeheader()  # only need header if file did not exist already
+            writer.writerow(devices_and_concepts)
     except OSError:
         print("I/O error")
 

@@ -14,6 +14,11 @@ is_current = {
     "DSHAPE_CURRENT": True,
     "ESTELL": True,
 }
+is_device = {
+    "W7-X": "W7-X",
+    "NCSX": "NCSX",
+    "ATF": "ATF",
+}
 for root, dirs, files in os.walk("desc/examples"):
     for file in files:
         if file.find(".h5") != -1:
@@ -27,17 +32,23 @@ for root, dirs, files in os.walk("desc/examples"):
                 if file.find(name) != -1:
                     inputs[name] = file
 for name in names:
-    if "SOLOVEV" not in name or "CURRENT" in name:
-        continue
+    # if "SOLOVEV" not in name or "CURRENT" in name:
+    #     continue
     try:
         used_current = is_current[name]
     except KeyError:
         used_current = False
+    try:
+        device = is_device[name]
+    except KeyError:
+        device = False
+
     print(f"Saving example {name}")
     desc_to_csv(
         f"desc/examples/{name}_output.h5",
-        name="SOLOVEV",
+        name=name,
         provenance="Example Equilibrium From DESC Repository desc/examples folder",
         inputfilename=inputs[name],
         current=used_current,
+        deviceid=device,
     )

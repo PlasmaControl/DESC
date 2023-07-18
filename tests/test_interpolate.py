@@ -100,6 +100,19 @@ class TestInterp2D:
 
         fq = interp2d(x, y, xp, yp, fp, method="linear")
         np.testing.assert_allclose(fq, f(x, y), rtol=1e-4, atol=1e-2)
+        atol = 2e-3
+        rtol = 1e-5
+        fq = interp2d(x, y, xp, yp, fp, method="cubic")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
+
+        fq = interp2d(x, y, xp, yp, fp, method="cubic2")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
+
+        fq = interp2d(x, y, xp, yp, fp, method="catmull-rom")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
+
+        fq = interp2d(x, y, xp, yp, fp, method="cardinal")
+        np.testing.assert_allclose(fq, f(x, y), rtol=rtol, atol=atol)
 
 
 class TestInterp3D:
@@ -127,3 +140,16 @@ class TestInterp3D:
 
         fq = interp3d(x, y, z, xp, yp, zp, fp, method="linear")
         np.testing.assert_allclose(fq, f(x, y, z), rtol=1e-3, atol=1e-1)
+        atol = 5.5e-3
+        rtol = 1e-5
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="cubic")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)
+
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="cubic2")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)
+
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="catmull-rom")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)
+
+        fq = interp3d(x, y, z, xp, yp, zp, fp, method="cardinal")
+        np.testing.assert_allclose(fq, f(x, y, z), rtol=rtol, atol=atol)

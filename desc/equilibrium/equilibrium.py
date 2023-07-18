@@ -37,6 +37,7 @@ from desc.objectives import (
     get_fixed_boundary_constraints,
 )
 from desc.optimize import Optimizer
+from desc.optimizeable import Optimizeable, optimizeable_parameter
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
@@ -53,7 +54,7 @@ from .initial_guess import set_initial_guess
 from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
 
-class Equilibrium(IOAble):
+class Equilibrium(IOAble, Optimizeable):
     """Equilibrium is an object that represents a plasma equilibrium.
 
     It contains information about a plasma state, including the shapes of flux surfaces
@@ -173,6 +174,7 @@ class Equilibrium(IOAble):
         spectral_indexing=None,
         **kwargs,
     ):
+        super().__init__()
         errorif(
             not isinstance(Psi, numbers.Real),
             ValueError,
@@ -1058,6 +1060,7 @@ class Equilibrium(IOAble):
         """str: Method for specifying boundary condition."""
         return self._bdry_mode
 
+    @optimizeable_parameter
     @property
     def Psi(self):
         """float: Total toroidal flux within the last closed flux surface in Webers."""
@@ -1109,6 +1112,7 @@ class Equilibrium(IOAble):
         _assert_nonnegint(N, "N")
         self.change_resolution(N=N)
 
+    @optimizeable_parameter
     @property
     def R_lmn(self):
         """ndarray: Spectral coefficients of R."""
@@ -1118,6 +1122,7 @@ class Equilibrium(IOAble):
     def R_lmn(self, R_lmn):
         self._R_lmn[:] = R_lmn
 
+    @optimizeable_parameter
     @property
     def Z_lmn(self):
         """ndarray: Spectral coefficients of Z."""
@@ -1127,6 +1132,7 @@ class Equilibrium(IOAble):
     def Z_lmn(self, Z_lmn):
         self._Z_lmn[:] = Z_lmn
 
+    @optimizeable_parameter
     @property
     def L_lmn(self):
         """ndarray: Spectral coefficients of lambda."""
@@ -1136,6 +1142,7 @@ class Equilibrium(IOAble):
     def L_lmn(self, L_lmn):
         self._L_lmn[:] = L_lmn
 
+    @optimizeable_parameter
     @property
     def Rb_lmn(self):
         """ndarray: Spectral coefficients of R at the boundary."""
@@ -1145,6 +1152,7 @@ class Equilibrium(IOAble):
     def Rb_lmn(self, Rb_lmn):
         self.surface.R_lmn = Rb_lmn
 
+    @optimizeable_parameter
     @property
     def Zb_lmn(self):
         """ndarray: Spectral coefficients of Z at the boundary."""
@@ -1154,6 +1162,7 @@ class Equilibrium(IOAble):
     def Zb_lmn(self, Zb_lmn):
         self.surface.Z_lmn = Zb_lmn
 
+    @optimizeable_parameter
     @property
     def Ra_n(self):
         """ndarray: R coefficients for axis Fourier series."""
@@ -1163,6 +1172,7 @@ class Equilibrium(IOAble):
     def Ra_n(self, Ra_n):
         self.axis.R_n = Ra_n
 
+    @optimizeable_parameter
     @property
     def Za_n(self):
         """ndarray: Z coefficients for axis Fourier series."""
@@ -1181,6 +1191,7 @@ class Equilibrium(IOAble):
     def pressure(self, new):
         self._pressure = parse_profile(new, "pressure")
 
+    @optimizeable_parameter
     @property
     def p_l(self):
         """ndarray: Coefficients of pressure profile."""
@@ -1204,6 +1215,7 @@ class Equilibrium(IOAble):
     def electron_temperature(self, new):
         self._electron_temperature = parse_profile(new, "electron temperature")
 
+    @optimizeable_parameter
     @property
     def Te_l(self):
         """ndarray: Coefficients of electron temperature profile."""
@@ -1231,6 +1243,7 @@ class Equilibrium(IOAble):
     def electron_density(self, new):
         self._electron_density = parse_profile(new, "electron density")
 
+    @optimizeable_parameter
     @property
     def ne_l(self):
         """ndarray: Coefficients of electron density profile."""
@@ -1258,6 +1271,7 @@ class Equilibrium(IOAble):
     def ion_temperature(self, new):
         self._ion_temperature = parse_profile(new, "ion temperature")
 
+    @optimizeable_parameter
     @property
     def Ti_l(self):
         """ndarray: Coefficients of ion temperature profile."""
@@ -1283,6 +1297,7 @@ class Equilibrium(IOAble):
     def atomic_number(self, new):
         self._atomic_number = parse_profile(new, "atomic number")
 
+    @optimizeable_parameter
     @property
     def Zeff_l(self):
         """ndarray: Coefficients of effective atomic number profile."""
@@ -1306,6 +1321,7 @@ class Equilibrium(IOAble):
     def iota(self, new):
         self._iota = parse_profile(new, "iota")
 
+    @optimizeable_parameter
     @property
     def i_l(self):
         """ndarray: Coefficients of iota profile."""
@@ -1330,6 +1346,7 @@ class Equilibrium(IOAble):
     def current(self, new):
         self._current = parse_profile(new, "current")
 
+    @optimizeable_parameter
     @property
     def c_l(self):
         """ndarray: Coefficients of current profile."""

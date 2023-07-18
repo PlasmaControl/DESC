@@ -164,7 +164,6 @@ class MagneticField(IOAble, ABC):
         fname,
         basis_M=24,
         basis_N=24,
-        NFP=1,
         grid=None,
         sym="sin",
         scale_by_curpol=True,
@@ -237,10 +236,14 @@ class MagneticField(IOAble, ABC):
         # bsubvmnc."
         # this corresponds to 2pi/NFP*G(rho=1) in DESC
         curpol = (
-            2
-            * jnp.pi
-            / eq.NFP
-            * eq.compute(name="G", grid=LinearGrid(rho=jnp.array(1)))["G"]
+            (
+                2
+                * jnp.pi
+                / eq.NFP
+                * eq.compute(name="G", grid=LinearGrid(rho=jnp.array(1)))["G"]
+            )
+            if scale_by_curpol
+            else 1
         )
 
         # BNORM assumes |B| has sin sym so c=0, so we only need s

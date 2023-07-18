@@ -10,7 +10,6 @@ from scipy import special
 from scipy.constants import mu_0
 from termcolor import colored
 
-from desc.backend import jnp
 from desc.basis import FourierZernikeBasis, fourier, zernike_radial
 from desc.compute import compute as compute_fun
 from desc.compute import data_index
@@ -41,7 +40,7 @@ from desc.optimize import Optimizer
 from desc.perturbations import perturb
 from desc.profiles import PowerSeriesProfile, SplineProfile
 from desc.transform import Transform
-from desc.utils import Timer, copy_coeffs
+from desc.utils import Timer, copy_coeffs, errorif, isposint, only1, setdefault
 
 from .coords import (
     compute_flux_coords,
@@ -51,7 +50,7 @@ from .coords import (
     to_sfl,
 )
 from .initial_guess import set_initial_guess
-from .utils import parse_profile
+from .utils import _assert_nonnegint, parse_axis, parse_profile, parse_surface
 
 
 class Equilibrium(IOAble):
@@ -150,7 +149,7 @@ class Equilibrium(IOAble):
         "_node_pattern",
     ]
 
-    def __init__(  # noqa: C901
+    def __init__(
         self,
         Psi=1.0,
         NFP=None,
@@ -174,83 +173,84 @@ class Equilibrium(IOAble):
         spectral_indexing=None,
         **kwargs,
     ):
-        assert spectral_indexing in [None, "ansi", "fringe",], (
-            "spectral_indexing should be one of 'ansi', 'fringe', None, got "
-            + f"{spectral_indexing}"
+        errorif(
+            not isinstance(Psi, numbers.Real),
+            ValueError,
+            f"Psi should be a real integer or float, got {type(Psi)}",
         )
-        if spectral_indexing is None and hasattr(surface, "spectral_indexing"):
-            self._spectral_indexing = surface.spectral_indexing
-        elif spectral_indexing is None:
-            self._spectral_indexing = "ansi"
-        else:
-            self._spectral_indexing = spectral_indexing
-
-        assert isinstance(
-            Psi, numbers.Real
-        ), f"Psi should be a real integer or float, got {type(Psi)}"
         self._Psi = float(Psi)
 
-        assert (NFP is None) or (
-            isinstance(NFP, numbers.Real) and int(NFP) == NFP and NFP > 0
-        ), f"NFP should be a positive integer, got {type(NFP)}"
-        if NFP is not None:
-            self._NFP = NFP
-        elif hasattr(surface, "NFP"):
-            self._NFP = surface.NFP
-        elif hasattr(axis, "NFP"):
-            self._NFP = axis.NFP
-        else:
-            self._NFP = 1
+        errorif(
+            spectral_indexing
+            not in [
+                None,
+                "ansi",
+                "fringe",
+            ],
+            ValueError,
+            "spectral_indexing should be one of 'ansi', 'fringe', None, got "
+            + f"{spectral_indexing}",
+        )
+        self._spectral_indexing = setdefault(
+            spectral_indexing, getattr(surface, "spectral_indexing", "ansi")
+        )
 
-        assert sym in [
-            None,
-            True,
-            False,
-        ], f"sym should be one of True, False, None, got {sym}"
-        if sym is None and hasattr(surface, "sym"):
-            self._sym = surface.sym
-        elif sym is None:
-            self._sym = False
-        else:
-            self._sym = sym
+        errorif(
+            (NFP is not None) and not isposint(NFP),
+            ValueError,
+            f"NFP should be a positive integer, got {NFP}",
+        )
+        self._NFP = setdefault(NFP, getattr(surface, "NFP", getattr(axis, "NFP", 1)))
+
         # stellarator symmetry for bases
-        if self.sym:
-            self._R_sym = "cos"
-            self._Z_sym = "sin"
-        else:
-            self._R_sym = False
-            self._Z_sym = False
+        errorif(
+            sym
+            not in [
+                None,
+                True,
+                False,
+            ],
+            ValueError,
+            f"sym should be one of True, False, None, got {sym}",
+        )
+        self._sym = setdefault(sym, getattr(surface, "sym", False))
+        self._R_sym = "cos" if self.sym else False
+        self._Z_sym = "sin" if self.sym else False
+
+        # surface
+        self._surface, self._bdry_mode = parse_surface(
+            surface, self.NFP, self.sym, self.spectral_indexing
+        )
+
+        # magnetic axis
+        self._axis = parse_axis(axis, self.NFP, self.sym, self.surface)
 
         # resolution
-        assert (L is None) or (
-            isinstance(L, numbers.Real) and (L == int(L)) and (L >= 0)
-        ), f"L should be a non-negative integer or None, got {L}"
-        assert (M is None) or (
-            isinstance(M, numbers.Real) and (M == int(M)) and (M >= 0)
-        ), f"M should be a non-negative integer or None, got {M}"
-        assert (N is None) or (
-            isinstance(N, numbers.Real) and (N == int(N)) and (N >= 0)
-        ), f"N should be a non-negative integer or None, got {N}"
-        if N is not None:
-            self._N = int(N)
-        elif hasattr(surface, "N"):
-            self._N = surface.N
-        else:
-            self._N = 0
+        _assert_nonnegint(L, "L")
+        _assert_nonnegint(M, "M")
+        _assert_nonnegint(N, "N")
+        _assert_nonnegint(L_grid, "L_grid")
+        _assert_nonnegint(M_grid, "M_grid")
+        _assert_nonnegint(N_grid, "N_grid")
 
-        if M is not None:
-            self._M = int(M)
-        elif hasattr(surface, "M"):
-            self._M = surface.M
-        else:
-            self._M = 1
+        self._N = int(setdefault(N, self.surface.N))
+        self._M = int(setdefault(M, self.surface.M))
+        self._L = int(
+            setdefault(
+                L,
+                max(
+                    self.surface.L,
+                    self.M if (self.spectral_indexing == "ansi") else 2 * self.M,
+                ),
+            )
+        )
+        self._L_grid = setdefault(L_grid, 2 * self.L)
+        self._M_grid = setdefault(M_grid, 2 * self.M)
+        self._N_grid = setdefault(N_grid, 2 * self.N)
+        self._node_pattern = setdefault(node_pattern, "jacobi")
 
-        if L is not None:
-            self._L = int(L)
-        elif hasattr(surface, "L") and (surface.L > 0):
-            self._L = surface.L
-        else:
-            self._L = self.M if (self.spectral_indexing == "ansi") else 2 * self.M
+        self._surface.change_resolution(self.L, self.M, self.N)
+        self._axis.change_resolution(self.N)
 
         # bases
         self._R_basis = FourierZernikeBasis(
@@ -278,98 +278,6 @@ class Equilibrium(IOAble):
             spectral_indexing=self.spectral_indexing,
         )
 
-        # surface
-        if surface is None:
-            self._surface = FourierRZToroidalSurface(NFP=self.NFP, sym=self.sym)
-            self._bdry_mode = "lcfs"
-        elif isinstance(surface, Surface):
-            self._surface = surface
-            if isinstance(surface, FourierRZToroidalSurface):
-                self._bdry_mode = "lcfs"
-            if isinstance(surface, ZernikeRZToroidalSection):
-                self._bdry_mode = "poincare"
-        elif isinstance(surface, (np.ndarray, jnp.ndarray)):
-            if np.all(surface[:, 0] == 0):
-                self._bdry_mode = "lcfs"
-            elif np.all(surface[:, 2] == 0):
-                self._bdry_mode = "poincare"
-            else:
-                raise ValueError("boundary should either have l=0 or n=0")
-            if self.bdry_mode == "lcfs":
-                self._surface = FourierRZToroidalSurface(
-                    surface[:, 3],
-                    surface[:, 4],
-                    surface[:, 1:3].astype(int),
-                    surface[:, 1:3].astype(int),
-                    self.NFP,
-                    self.sym,
-                )
-            elif self.bdry_mode == "poincare":
-                self._surface = ZernikeRZToroidalSection(
-                    surface[:, 3],
-                    surface[:, 4],
-                    surface[:, :2].astype(int),
-                    surface[:, :2].astype(int),
-                    self.spectral_indexing,
-                    self.sym,
-                )
-        else:
-            raise TypeError("Got unknown surface type {}".format(surface))
-        self._surface.change_resolution(self.L, self.M, self.N)
-
-        # magnetic axis
-        if isinstance(axis, FourierRZCurve):
-            self._axis = axis
-        elif isinstance(axis, (np.ndarray, jnp.ndarray)):
-            self._axis = FourierRZCurve(
-                axis[:, 1],
-                axis[:, 2],
-                axis[:, 0].astype(int),
-                NFP=self.NFP,
-                sym=self.sym,
-                name="axis",
-            )
-        elif axis is None:  # use the center of surface
-            # TODO: make this method of surface, surface.get_axis()?
-            if isinstance(self.surface, FourierRZToroidalSurface):
-                self._axis = FourierRZCurve(
-                    R_n=self.surface.R_lmn[
-                        np.where(self.surface.R_basis.modes[:, 1] == 0)
-                    ],
-                    Z_n=self.surface.Z_lmn[
-                        np.where(self.surface.Z_basis.modes[:, 1] == 0)
-                    ],
-                    modes_R=self.surface.R_basis.modes[
-                        np.where(self.surface.R_basis.modes[:, 1] == 0)[0], -1
-                    ],
-                    modes_Z=self.surface.Z_basis.modes[
-                        np.where(self.surface.Z_basis.modes[:, 1] == 0)[0], -1
-                    ],
-                    NFP=self.NFP,
-                )
-            elif isinstance(self.surface, ZernikeRZToroidalSection):
-                # FIXME: include m=0 l!=0 modes
-                self._axis = FourierRZCurve(
-                    R_n=self.surface.R_lmn[
-                        np.where(
-                            (self.surface.R_basis.modes[:, 0] == 0)
-                            & (self.surface.R_basis.modes[:, 1] == 0)
-                        )
-                    ].sum(),
-                    Z_n=self.surface.Z_lmn[
-                        np.where(
-                            (self.surface.Z_basis.modes[:, 0] == 0)
-                            & (self.surface.Z_basis.modes[:, 1] == 0)
-                        )
-                    ].sum(),
-                    modes_R=[0],
-                    modes_Z=[0],
-                    NFP=self.NFP,
-                )
-        else:
-            raise TypeError("Got unknown axis type {}".format(axis))
-        self._axis.change_resolution(self.N)
-
         # profiles
         self._pressure = None
         self._iota = None
@@ -379,20 +287,27 @@ class Equilibrium(IOAble):
         self._ion_temperature = None
         self._atomic_number = None
 
-        if current is not None and iota is not None:
-            raise ValueError("Cannot specify both iota and current profiles.")
         if current is None and iota is None:
             current = 0
         use_kinetic = any(
             [electron_temperature is not None, electron_density is not None]
         )
-        if pressure is not None and use_kinetic:
-            raise ValueError("Cannot specify both pressure and kinetic profiles.")
-        if use_kinetic and (electron_temperature is None or electron_density is None):
-            raise ValueError(
-                "Must give at least electron temperature and density to use "
-                + "kinetic profiles."
-            )
+        errorif(
+            current is not None and iota is not None,
+            ValueError,
+            "Cannot specify both iota and current profiles.",
+        )
+        errorif(
+            pressure is not None and use_kinetic,
+            ValueError,
+            "Cannot specify both pressure and kinetic profiles.",
+        )
+        errorif(
+            use_kinetic and (electron_temperature is None or electron_density is None),
+            ValueError,
+            "Must give at least electron temperature and density to use "
+            + "kinetic profiles.",
+        )
         if use_kinetic and atomic_number is None:
             atomic_number = 1
         if use_kinetic and ion_temperature is None:
@@ -432,18 +347,19 @@ class Equilibrium(IOAble):
         eq_NFP = self.NFP
         surf_NFP = self.surface.NFP if hasattr(self.surface, "NFP") else self.NFP
         axis_NFP = self._axis.NFP
-
-        if not (eq_NFP == surf_NFP == axis_NFP):
-            raise ValueError(
-                "Unequal number of field periods for equilirium "
-                + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}"
-            )
+        errorif(
+            not (eq_NFP == surf_NFP == axis_NFP),
+            ValueError,
+            "Unequal number of field periods for equilibrium "
+            + f"{eq_NFP}, surface {surf_NFP}, and axis {axis_NFP}",
+        )
 
         # make sure symmetry agrees
-        assert (
-            self.sym == self.surface.sym
-        ), "Surface and Equilibrium must have the same symmetry"
-
+        errorif(
+            self.sym != self.surface.sym,
+            ValueError,
+            "Surface and Equilibrium must have the same symmetry",
+        )
         self._R_lmn = np.zeros(self.R_basis.num_modes)
         self._Z_lmn = np.zeros(self.Z_basis.num_modes)
         self._L_lmn = np.zeros(self.L_basis.num_modes)
@@ -454,27 +370,6 @@ class Equilibrium(IOAble):
             self.Z_lmn = kwargs.pop("Z_lmn")
         if "L_lmn" in kwargs:
             self.L_lmn = kwargs.pop("L_lmn")
-
-        assert (L_grid is None) or (
-            isinstance(L_grid, numbers.Real)
-            and (L_grid == int(L_grid))
-            and (L_grid >= 0)
-        ), "L_grid should be a non-negative integer or None, got {L_grid}"
-        assert (M_grid is None) or (
-            isinstance(M_grid, numbers.Real)
-            and (M_grid == int(M_grid))
-            and (M_grid >= 0)
-        ), "M_grid should be a non-negative integer or None, got {M_grid}"
-        assert (N_grid is None) or (
-            isinstance(N_grid, numbers.Real)
-            and (N_grid == int(N_grid))
-            and (N_grid >= 0)
-        ), "N_grid should be a non-negative integer or None, got {N_grid}"
-        self._L_grid = L_grid if L_grid is not None else 2 * self.L
-        self._M_grid = M_grid if M_grid is not None else 2 * self.M
-        self._N_grid = N_grid if N_grid is not None else 2 * self.N
-        self._node_pattern = node_pattern if node_pattern is not None else "jacobi"
-        self.optimizer_results = {}
 
     def _set_up(self):
         """Set unset attributes after loading.
@@ -598,16 +493,14 @@ class Equilibrium(IOAble):
             Whether to enforce stellarator symmetry.
 
         """
-        if L is not None and L != self.L:
-            self._L = L
-        if M is not None and M != self.M:
-            self._M = M
-        if N is not None and N != self.N:
-            self._N = N
-        if NFP is not None and NFP != self.NFP:
-            self._NFP = NFP
-        if sym is not None and sym != self.sym:
-            self._sym = sym
+        self._L = setdefault(L, self.L)
+        self._M = setdefault(M, self.M)
+        self._N = setdefault(N, self.N)
+        self._L_grid = setdefault(L_grid, self.L_grid)
+        self._M_grid = setdefault(M_grid, self.M_grid)
+        self._N_grid = setdefault(N_grid, self.N_grid)
+        self._NFP = setdefault(NFP, self.NFP)
+        self._sym = setdefault(sym, self.sym)
 
         old_modes_R = self.R_basis.modes
         old_modes_Z = self.Z_basis.modes
@@ -645,13 +538,6 @@ class Equilibrium(IOAble):
         self._Z_lmn = copy_coeffs(self.Z_lmn, old_modes_Z, self.Z_basis.modes)
         self._L_lmn = copy_coeffs(self.L_lmn, old_modes_L, self.L_basis.modes)
 
-        if L_grid is not None and L_grid != self.L_grid:
-            self._L_grid = L_grid
-        if M_grid is not None and M_grid != self.M_grid:
-            self._M_grid = M_grid
-        if N_grid is not None and N_grid != self.N_grid:
-            self._N_grid = N_grid
-
     def get_surface_at(self, rho=None, theta=None, zeta=None):
         """Return a representation for a given coordinate surface.
 
@@ -669,7 +555,17 @@ class Equilibrium(IOAble):
             surfaces of constant zeta.
 
         """
-        if (rho is not None) and (theta is None) and (zeta is None):
+        errorif(
+            not only1(rho is not None, theta is not None, zeta is not None),
+            ValueError,
+            f"Only one coordinate can be specified, got {rho}, {theta}, {zeta}",
+        )
+        errorif(
+            theta is not None,
+            NotImplementedError,
+            "Constant theta surfaces have not been implemented yet",
+        )
+        if rho is not None:
             assert (rho >= 0) and (rho <= 1)
             surface = FourierRZToroidalSurface(sym=self.sym, NFP=self.NFP, rho=rho)
             surface.change_resolution(self.M, self.N)
@@ -703,7 +599,7 @@ class Equilibrium(IOAble):
             )
             return surface
 
-        if (rho is None) and (theta is None) and (zeta is not None):
+        if zeta is not None:
             assert (zeta >= 0) and (zeta <= 2 * np.pi)
             surface = ZernikeRZToroidalSection(sym=self.sym, zeta=zeta)
             surface.change_resolution(self.L, self.M)
@@ -739,16 +635,6 @@ class Equilibrium(IOAble):
                 endpoint=True,
             )
             return surface
-        if (rho is None) and (theta is not None) and (zeta is None):
-            raise NotImplementedError(
-                "Constant theta surfaces have not been implemented yet"
-            )
-        else:
-            raise ValueError(
-                "Only one coordinate can be specified, got {}, {}, {}".format(
-                    rho, theta, zeta
-                )
-            )
 
     def get_profile(self, name, grid=None, **kwargs):
         """Return a SplineProfile of the desired quantity.
@@ -1129,16 +1015,17 @@ class Equilibrium(IOAble):
 
     @surface.setter
     def surface(self, new):
-        if isinstance(new, Surface):
-            assert (
-                self.sym == new.sym
-            ), "Surface and Equilibrium must have the same symmetry"
-            new.change_resolution(self.L, self.M, self.N)
-            self._surface = new
-        else:
-            raise TypeError(
-                f"surfaces should be of type Surface or a subclass, got {new}"
-            )
+        assert isinstance(
+            new, Surface
+        ), f"surfaces should be of type Surface or a subclass, got {new}"
+        assert (
+            self.sym == new.sym
+        ), "Surface and Equilibrium must have the same symmetry"
+        assert self.NFP == getattr(
+            new, "NFP", self.NFP
+        ), "Surface and Equilibrium must have the same NFP"
+        new.change_resolution(self.L, self.M, self.N)
+        self._surface = new
 
     @property
     def axis(self):
@@ -1147,20 +1034,18 @@ class Equilibrium(IOAble):
 
     @axis.setter
     def axis(self, new):
-        if isinstance(new, FourierRZCurve):
-            assert (
-                self.sym == new.sym
-            ), "Surface and Equilibrium must have the same symmetry"
-            new.change_resolution(self.N)
-            self._axis = new
-        else:
-            raise TypeError(
-                f"axis should be of type FourierRZCurve or a subclass, got {new}"
-            )
+        assert isinstance(
+            new, FourierRZCurve
+        ), f"axis should be of type FourierRZCurve or a subclass, got {new}"
+        assert self.sym == new.sym, "Axis and Equilibrium must have the same symmetry"
+        assert self.NFP == new.NFP, "Axis and Equilibrium must have the same NFP"
+        new.change_resolution(self.N)
+        self._axis = new
 
     @property
     def spectral_indexing(self):
         """str: Type of indexing used for the spectral basis."""
+        # TODO: allow this to change?
         return self._spectral_indexing
 
     @property
@@ -1201,9 +1086,7 @@ class Equilibrium(IOAble):
 
     @L.setter
     def L(self, L):
-        assert (
-            isinstance(L, numbers.Real) and (L == int(L)) and (L >= 0)
-        ), f"L should be a non-negative integer got {L}"
+        _assert_nonnegint(L, "L")
         self.change_resolution(L=L)
 
     @property
@@ -1213,9 +1096,7 @@ class Equilibrium(IOAble):
 
     @M.setter
     def M(self, M):
-        assert (
-            isinstance(M, numbers.Real) and (M == int(M)) and (M >= 0)
-        ), f"M should be a non-negative integer got {M}"
+        _assert_nonnegint(M, "M")
         self.change_resolution(M=M)
 
     @property
@@ -1225,9 +1106,7 @@ class Equilibrium(IOAble):
 
     @N.setter
     def N(self, N):
-        assert (
-            isinstance(N, numbers.Real) and (N == int(N)) and (N >= 0)
-        ), f"N should be a non-negative integer got {N}"
+        _assert_nonnegint(N, "N")
         self.change_resolution(N=N)
 
     @property
@@ -1309,11 +1188,11 @@ class Equilibrium(IOAble):
 
     @p_l.setter
     def p_l(self, p_l):
-        if self.pressure is None:
-            raise ValueError(
-                "Attempt to set pressure on an equilibrium "
-                + "with fixed kinetic profiles"
-            )
+        errorif(
+            self.pressure is None,
+            ValueError,
+            "Attempt to set pressure on an equilibrium with fixed kinetic profiles",
+        )
         self.pressure.params = p_l
 
     @property
@@ -1336,11 +1215,11 @@ class Equilibrium(IOAble):
 
     @Te_l.setter
     def Te_l(self, Te_l):
-        if self.electron_temperature is None:
-            raise ValueError(
-                "Attempt to set electron temperature on an equilibrium "
-                + "with fixed pressure"
-            )
+        errorif(
+            self.electron_temperature is None,
+            ValueError,
+            "Attempt to set electron temperature on an equilibrium with fixed pressure",
+        )
         self.electron_temperature.params = Te_l
 
     @property
@@ -1363,11 +1242,11 @@ class Equilibrium(IOAble):
 
     @ne_l.setter
     def ne_l(self, ne_l):
-        if self.electron_density is None:
-            raise ValueError(
-                "Attempt to set electron density on an equilibrium "
-                + "with fixed pressure"
-            )
+        errorif(
+            self.electron_density is None,
+            ValueError,
+            "Attempt to set electron density on an equilibrium with fixed pressure",
+        )
         self.electron_density.params = ne_l
 
     @property
@@ -1388,11 +1267,11 @@ class Equilibrium(IOAble):
 
     @Ti_l.setter
     def Ti_l(self, Ti_l):
-        if self.ion_temperature is None:
-            raise ValueError(
-                "Attempt to set ion temperature on an equilibrium "
-                + "with fixed pressure"
-            )
+        errorif(
+            self.ion_temperature is None,
+            ValueError,
+            "Attempt to set ion temperature on an equilibrium with fixed pressure",
+        )
         self.ion_temperature.params = Ti_l
 
     @property
@@ -1411,11 +1290,11 @@ class Equilibrium(IOAble):
 
     @Zeff_l.setter
     def Zeff_l(self, Zeff_l):
-        if self.atomic_number is None:
-            raise ValueError(
-                "Attempt to set atomic number on an equilibrium "
-                + "with fixed pressure"
-            )
+        errorif(
+            self.atomic_number is None,
+            ValueError,
+            "Attempt to set atomic number on an equilibrium with fixed pressure",
+        )
         self.atomic_number.params = Zeff_l
 
     @property
@@ -1434,11 +1313,12 @@ class Equilibrium(IOAble):
 
     @i_l.setter
     def i_l(self, i_l):
-        if self.iota is None:
-            raise ValueError(
-                "Attempt to set rotational transform on an equilibrium "
-                + "with fixed toroidal current"
-            )
+        errorif(
+            self.iota is None,
+            ValueError,
+            "Attempt to set rotational transform on an equilibrium"
+            + "with fixed toroidal current",
+        )
         self.iota.params = i_l
 
     @property
@@ -1457,11 +1337,12 @@ class Equilibrium(IOAble):
 
     @c_l.setter
     def c_l(self, c_l):
-        if self.current is None:
-            raise ValueError(
-                "Attempt to set toroidal current on an equilibrium with "
-                + "fixed rotational transform"
-            )
+        errorif(
+            self.current is None,
+            ValueError,
+            "Attempt to set toroidal current on an equilibrium with "
+            + "fixed rotational transform",
+        )
         self.current.params = c_l
 
     @property
@@ -1482,10 +1363,6 @@ class Equilibrium(IOAble):
     @property
     def L_grid(self):
         """int: Radial resolution of grid in real space."""
-        if not hasattr(self, "_L_grid"):
-            self._L_grid = (
-                self.M_grid if self.spectral_indexing == "ansi" else 2 * self.M_grid
-            )
         return self._L_grid
 
     @L_grid.setter
@@ -1496,8 +1373,6 @@ class Equilibrium(IOAble):
     @property
     def M_grid(self):
         """int: Poloidal resolution of grid in real space."""
-        if not hasattr(self, "_M_grid"):
-            self._M_grid = 1
         return self._M_grid
 
     @M_grid.setter
@@ -1508,8 +1383,6 @@ class Equilibrium(IOAble):
     @property
     def N_grid(self):
         """int: Toroidal resolution of grid in real space."""
-        if not hasattr(self, "_N_grid"):
-            self._N_grid = 0
         return self._N_grid
 
     @N_grid.setter
@@ -1520,8 +1393,6 @@ class Equilibrium(IOAble):
     @property
     def node_pattern(self):
         """str: Pattern for placement of nodes in curvilinear coordinates."""
-        if not hasattr(self, "_node_pattern"):
-            self._node_pattern = None
         return self._node_pattern
 
     @property

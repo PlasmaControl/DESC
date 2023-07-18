@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 import desc.io
-from desc.compute import compute as compute_fun, data_index
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import compute as compute_fun
+from desc.compute import data_index, get_params, get_profiles, get_transforms
 from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 
 

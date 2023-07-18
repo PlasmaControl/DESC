@@ -1471,6 +1471,7 @@ class XYZCurve(Curve):
         -------
         values : ndarray, shape(k,3)
             X, Y, Z or R, phi, Z coordinates of the curve
+
         """
         if X is None:
             X = self._X
@@ -1573,6 +1574,7 @@ class XYZCurve(Curve):
         -------
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
         d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
@@ -1587,7 +1589,7 @@ class XYZCurve(Curve):
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1602,6 +1604,7 @@ class XYZCurve(Curve):
         -------
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
         d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
@@ -1620,7 +1623,7 @@ class XYZCurve(Curve):
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1631,6 +1634,7 @@ class XYZCurve(Curve):
         -------
         length : float
             length of the curve.
+
         """
         if self._method == "nearest":  # cannot use derivative method as deriv=0
             coords = self.compute_coordinates(
@@ -1667,6 +1671,7 @@ class XYZCurve(Curve):
         -------
         fourier_xyz_curve : FourierXYZCurve
             FourierXYZCurve fit of the XYZCurve input object.
+
         """
         return FourierXYZCurve.from_XYZCurve(self, N, grid)
 
@@ -1711,6 +1716,7 @@ class XYZCurve(Curve):
         -------
         XYZCurve: XYZCurve,
             XYZCurve object which is the spline representation of the FourierXYZCurve.
+
         """
         coords = fourier_xyzcurve.compute_coordinates(grid=grid, basis="xyz")
 

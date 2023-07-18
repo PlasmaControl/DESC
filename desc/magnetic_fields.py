@@ -247,9 +247,9 @@ class MagneticField(IOAble, ABC):
         sym : str, optional
             if Bnormal is symmetric, by default "sin"
             NOTE: BNORM code only ever deals with sin-symmetric modes, so results
-                may not be as expected if attempt to create a BNORM file with a
-                non-symmetric Bnormal distribution, as only the sin-symmetric modes
-                will be saved.
+            may not be as expected if attempt to create a BNORM file with a
+            non-symmetric Bnormal distribution, as only the sin-symmetric modes
+            will be saved.
         scale_by_curpol : bool, optional
             Whether or not to scale the Bnormal coefficients by curpol
             which is expected by most other codes that accept BNORM files,

@@ -210,18 +210,19 @@ class TestAxisLimits:
     @pytest.mark.unit
     def test_axis_limit_api(self):
         """Test that axis limit dependencies are computed only when necessary."""
-        deps = {"B0", "psi_r", "sqrt(g)"}
+        name = "B0"
+        deps = {"psi_r", "sqrt(g)"}
         axis_limit_deps = {"psi_rr", "sqrt(g)_r"}
         eq = Equilibrium()
         grid = LinearGrid(L=2, M=2, N=2, axis=False)
         assert not grid.axis.size
-        data = eq.compute("B0", grid=grid).keys()
-        assert deps <= data and axis_limit_deps.isdisjoint(data)
+        data = eq.compute(name, grid=grid).keys()
+        assert name in data and deps < data and axis_limit_deps.isdisjoint(data)
         grid = LinearGrid(L=2, M=2, N=2, axis=True)
         assert grid.axis.size
-        data = eq.compute("B0", grid=grid)
-        assert deps | axis_limit_deps <= data.keys()
-        assert np.all(np.isfinite(data["B0"]))
+        data = eq.compute(name, grid=grid)
+        assert name in data and deps | axis_limit_deps < data.keys()
+        assert np.all(np.isfinite(data[name]))
 
     @pytest.mark.unit
     def test_limit_existence(self):
@@ -229,9 +230,9 @@ class TestAxisLimits:
 
         def test(eq):
             grid = LinearGrid(L=2, M=2, N=2, sym=eq.sym, NFP=eq.NFP, axis=True)
-            assert grid.axis.size
-            data = eq.compute(list(data_index.keys()), grid=grid)
             at_axis = grid.nodes[:, 0] == 0
+            assert at_axis.any()
+            data = eq.compute(list(data_index.keys()), grid=grid)
             for key in data_index:
                 if _skip_profile(eq, key):
                     continue

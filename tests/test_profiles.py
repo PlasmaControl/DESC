@@ -397,8 +397,8 @@ class TestProfiles:
             sym=True,
         )
         eq1.solve(
-            constraints=get_fixed_boundary_constraints(kinetic=False),
-            objective=ObjectiveFunction(objectives=ForceBalance()),
+            constraints=get_fixed_boundary_constraints(eq=eq1, kinetic=False),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq1)),
             maxiter=5,
         )
         eq2 = Equilibrium(
@@ -418,8 +418,8 @@ class TestProfiles:
             sym=True,
         )
         eq2.solve(
-            constraints=get_fixed_boundary_constraints(kinetic=True),
-            objective=ObjectiveFunction(objectives=ForceBalance()),
+            constraints=get_fixed_boundary_constraints(eq=eq2, kinetic=True),
+            objective=ObjectiveFunction(objectives=ForceBalance(eq=eq2)),
             maxiter=5,
         )
         np.testing.assert_allclose(eq1.R_lmn, eq2.R_lmn, atol=1e-14)

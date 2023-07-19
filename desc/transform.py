@@ -78,9 +78,7 @@ class Transform(IOAble):
         self._method = method
         # assign according to logic in setter function
         self.method = method
-        # assign according to logic in property function
-        self._matrices = None
-        self._matrices = self.matrices
+        self._matrices = self._get_matrices()
         if build:
             self.build()
         if build_pinv:
@@ -129,6 +127,18 @@ class Transform(IOAble):
             (self.derivatives[:, 0], self.derivatives[:, 1], self.derivatives[:, 2])
         )
         self._derivatives = self.derivatives[sort_idx]
+
+    def _get_matrices(self):
+        """Get matrices to compute all derivatives."""
+        n = np.amax(self.derivatives) + 1
+        matrices = {
+            "direct1": {
+                i: {j: {k: {} for k in range(n)} for j in range(n)} for i in range(n)
+            },
+            "fft": {i: {j: {} for j in range(n)} for i in range(n)},
+            "direct2": {i: {} for i in range(n)},
+        }
+        return matrices
 
     def _check_inputs_fft(self, grid, basis):
         """Check that inputs are formatted correctly for fft method."""
@@ -716,7 +726,7 @@ class Transform(IOAble):
         self._sort_derivatives()
 
         if len(derivs_to_add):
-            # if we actually added derivatives and didn't build them, then its not built
+            # if we actually added derivatives and didn't build them, then it's not built
             self._built = False
         if build:
             # we don't update self._built here because it is still built from before,
@@ -724,24 +734,16 @@ class Transform(IOAble):
             self.build()
 
     def _set_up(self):
-        # fixme? dummy method needed for _matrices attribute to persist?
-        self.method = self.method
+        """Recreate attributes that were not saved to output files."""
+        # fixme: Make api for reloading attributes that are not saved better.
+        # See equilibrium_io.py for the logic that calls this function.
         self._matrices = self.matrices
 
     @property
     def matrices(self):
         """dict: transform matrices such that x=A*c."""
-        if getattr(self, "_matrices", None) is None:
-            # to allow computing of highest order derivative
-            n = np.amax(self.derivatives) + 1
-            self._matrices = {
-                "direct1": {
-                    i: {j: {k: {} for k in range(n)} for j in range(n)}
-                    for i in range(n)
-                },
-                "fft": {i: {j: {} for j in range(n)} for i in range(n)},
-                "direct2": {i: {} for i in range(n)},
-            }
+        if not hasattr(self, "_matrices"):
+            self._matrices = self._get_matrices()
         return self._matrices
 
     @property

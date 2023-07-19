@@ -1553,13 +1553,13 @@ class XYZCurve(Curve):
         return T, N, B
 
     def compute_curvature(self, X=None, Y=None, Z=None, grid=None):
-        """Compute curvature using specified coefficients.
+        """Compute curvature using specified values at knots.
 
         Parameters
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid

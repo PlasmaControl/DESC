@@ -210,7 +210,7 @@ class BootstrapRedlConsistency(_Objective):
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = self._transforms["grid"].compress([self._transforms["grid"].spacing[:, 0]])
+        w = self._transforms["grid"].compress(self._transforms["grid"].spacing[:, 0])
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

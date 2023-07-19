@@ -41,14 +41,14 @@ pytest_mpl_tol = 7.8
 pytest_mpl_remove_text = True
 
 
-def trapped_fraction(grid, modB, sqrt_g):
+def trapped_fraction(grid, modB, sqrt_g, sqrt_g_r):
     """
     Helper function to test trapped fraction calculation.
 
     Function to help test the trapped fraction calculation on
     analytic B fields rather than Equilibrium objects.
     """
-    data = {"|B|": modB, "|B|^2": modB**2, "sqrt(g)": sqrt_g}
+    data = {"|B|": modB, "|B|^2": modB**2, "sqrt(g)": sqrt_g, "sqrt(g)_r": sqrt_g_r}
     params = None
     transforms = {"grid": grid}
     profiles = None
@@ -81,26 +81,32 @@ class TestBootstrapCompute:
             modB = np.where(
                 mask, 9.0 + 3.7 * np.sin(theta - NFP * zeta), 13.0 + 2.6 * np.cos(theta)
             )
-
-            f_t_data = trapped_fraction(grid, modB, sqrt_g)
+            # fixme: ask Patrick for preferred sqrt_g_r value to test
+            f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=np.nan)
             # The average of (b0 + b1 cos(theta))^2 is b0^2 + (1/2) * b1^2
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"],
-                grid.expand([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2]),
+                grid.expand(
+                    np.array([13.0**2 + 0.5 * 2.6**2, 9.0**2 + 0.5 * 3.7**2])
+                ),
             )
             np.testing.assert_allclose(
                 f_t_data["<1/|B|>"],
                 grid.expand(1 / np.sqrt([13.0**2 - 2.6**2, 9.0**2 - 3.7**2])),
             )
             np.testing.assert_allclose(
-                f_t_data["min_tz |B|"], grid.expand([13.0 - 2.6, 9.0 - 3.7]), rtol=1e-4
+                f_t_data["min_tz |B|"],
+                grid.expand(np.array([13.0 - 2.6, 9.0 - 3.7])),
+                rtol=1e-4,
             )
             np.testing.assert_allclose(
-                f_t_data["max_tz |B|"], grid.expand([13.0 + 2.6, 9.0 + 3.7]), rtol=1e-4
+                f_t_data["max_tz |B|"],
+                grid.expand(np.array([13.0 + 2.6, 9.0 + 3.7])),
+                rtol=1e-4,
             )
             np.testing.assert_allclose(
                 f_t_data["effective r/R0"],
-                grid.expand([2.6 / 13.0, 3.7 / 9.0]),
+                grid.expand(np.array([2.6 / 13.0, 3.7 / 9.0])),
                 rtol=1e-3,
             )
 
@@ -140,8 +146,8 @@ class TestBootstrapCompute:
             # For Jacobian, use eq (A7) for the theta dependence,
             # times an arbitrary overall scale factor
             sqrt_g = 6.7 * (1 + epsilon_3D * np.cos(theta))
-
-            f_t_data = trapped_fraction(grid, modB, sqrt_g)
+            # fixme: ask Patrick for preferred sqrt_g_r value to test
+            f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=np.nan)
 
             # Eq (C18) in Kim et al:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon

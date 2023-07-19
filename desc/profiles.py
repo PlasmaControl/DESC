@@ -592,9 +592,11 @@ class PowerSeriesProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params=[0], modes=None, grid=None, sym="auto", name=""):
+    def __init__(self, params=None, modes=None, grid=None, sym="auto", name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0]
         params = np.atleast_1d(params)
 
         if sym == "auto":  # sym = "even" if all odd modes are zero, else sym = False
@@ -631,7 +633,7 @@ class PowerSeriesProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            derivs=np.array([[i, 0, 0] for i in range(5)]),
             build=True,
         )
         return transform
@@ -914,10 +916,12 @@ class MTanhProfile(Profile):
 
     """
 
-    def __init__(self, params=[0, 0, 1, 1, 0], grid=None, name=""):
+    def __init__(self, params=None, grid=None, name=""):
 
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0, 0, 1, 1, 0]
         self._params = params
 
     def __repr__(self):
@@ -1166,9 +1170,11 @@ class FourierZernikeProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_basis", "_transform"]
 
-    def __init__(self, params=[0], modes=None, grid=None, sym="auto", NFP=1, name=""):
+    def __init__(self, params=None, modes=None, grid=None, sym="auto", NFP=1, name=""):
         super().__init__(grid, name)
 
+        if params is None:
+            params = [0]
         params = np.atleast_1d(params)
 
         if modes is None:
@@ -1212,7 +1218,7 @@ class FourierZernikeProfile(Profile):
         transform = Transform(
             grid,
             self.basis,
-            derivs=np.array([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]),
+            derivs=np.array([[i, 0, 0] for i in range(5)]),
             build=True,
         )
         return transform

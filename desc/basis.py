@@ -57,17 +57,13 @@ class Basis(IOAble, ABC):
             None,
         ], f"Unknown symmetry type {self.sym}"
         if self.sym in ["cos", "cosine"]:  # cos(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.modes[:, 1]) != sign(self.modes[:, 2]))
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[sign(self.modes[:, 1]) == sign(self.modes[:, 2])]
         elif self.sym in ["sin", "sine"]:  # sin(m*t-n*z) symmetry
-            non_sym_idx = np.where(sign(self.modes[:, 1]) == sign(self.modes[:, 2]))
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[sign(self.modes[:, 1]) != sign(self.modes[:, 2])]
         elif self.sym == "even":  # even powers of rho
-            non_sym_idx = np.where(self.modes[:, 0] % 2 != 0)
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[self.modes[:, 0] % 2 == 0]
         elif self.sym == "cos(t)":  # cos(m*t) terms only
-            non_sym_idx = np.where(sign(self.modes[:, 1]) < 0)
-            self._modes = np.delete(self.modes, non_sym_idx, axis=0)
+            self._modes = self.modes[sign(self.modes[:, 1]) >= 0]
         elif self.sym is None:
             self._sym = False
 

@@ -1,33 +1,39 @@
 """Base classes for optimizeable objects."""
 
 import inspect
+import warnings
+from abc import ABC
 
 from desc.backend import jnp
 
 
-class Optimizeable:
+class Optimizeable(ABC):
     """Base class for all objects in DESC that can be optimized.
 
     Sub-classes should decocate optimizeable attributes with the
     ``optimizeable_parameter`` decorator.
     """
 
-    def __init__(self):
-        self._optimizeable_params = []
-        p = []
-        for methodname in dir(self):
-            if methodname.startswith("__"):
-                continue
-            method = inspect.getattr_static(self, methodname)
-            if isinstance(method, property):
-                method = method.fget
-            if hasattr(method, "optimizeable"):
-                p.append(methodname)
-        self._optimizeable_params = p
-
     @property
     def optimizeable_params(self):
         """list: names of parameters that have been declared optimizeable."""
+        if not hasattr(self, "_optimizeable_params"):
+            p = []
+            for methodname in dir(self):
+                if methodname.startswith("__"):
+                    continue
+                # to avoid executing code and causing recursion
+                method = inspect.getattr_static(self, methodname)
+                if isinstance(method, property):
+                    method = method.fget  # we want the property itself, not the value
+                if hasattr(method, "optimizeable"):
+                    p.append(methodname)
+            self._optimizeable_params = p
+            if not len(p):
+                warnings.warn(
+                    f"Object {self} was subclassed from Optimizeable but no "
+                    + "optimizeable parameters were declared"
+                )
         return self._optimizeable_params
 
     @property
@@ -38,7 +44,8 @@ class Optimizeable:
     @params_dict.setter
     def params_dict(self, d):
         for key, val in d.items():
-            setattr(self, key, val)
+            if jnp.asarray(val).size:
+                setattr(self, key, val)
 
     @property
     def dimensions(self):
@@ -99,7 +106,31 @@ class Optimizeable:
 
 
 def optimizeable_parameter(f):
-    """Decorator to declare an attribute as optimizeable."""
+    """Decorator to declare an attribute or property as optimizeable.
+
+    The attribute should be a scalar or ndarray of floats.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        class MyClass(Optimizeable):
+
+            def __init__(self, x, y):
+                self.x = x
+                self.y = optimizeable_parameter(y)
+
+            @optimizeable_parameter
+            @property
+            def x(self):
+                return self._x
+
+            @x.setter
+            def x(self, new):
+                assert len(x) == 10
+                self._x = x
+
+    """
     if isinstance(f, property):
         f.fget.optimizeable = True
     else:

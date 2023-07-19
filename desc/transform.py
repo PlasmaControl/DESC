@@ -372,7 +372,7 @@ class Transform(IOAble):
 
         if self.method == "direct1":
             for d in self.derivatives:
-                self._matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
+                self.matrices["direct1"][d[0]][d[1]][d[2]] = self.basis.evaluate(
                     self.grid.nodes, d, unique=True
                 )
 
@@ -406,7 +406,7 @@ class Transform(IOAble):
         rcond = None if self.rcond == "auto" else self.rcond
         if self.method == "direct1":
             A = self.basis.evaluate(self.grid.nodes, np.array([0, 0, 0]))
-            self._matrices["pinv"] = (
+            self.matrices["pinv"] = (
                 scipy.linalg.pinv(A, rcond=rcond) if A.size else np.zeros_like(A.T)
             )
         elif self.method == "direct2":
@@ -726,18 +726,13 @@ class Transform(IOAble):
         self._sort_derivatives()
 
         if len(derivs_to_add):
-            # if we actually added derivatives and didn't build them, then it's not built
+            # if we actually added derivatives and didn't build them, then it's not
+            # built
             self._built = False
         if build:
             # we don't update self._built here because it is still built from before,
             # but it still might have unbuilt matrices from new derivatives
             self.build()
-
-    def _set_up(self):
-        """Recreate attributes that were not saved to output files."""
-        # fixme: Make api for reloading attributes that are not saved better.
-        # See equilibrium_io.py for the logic that calls this function.
-        self._matrices = self.matrices
 
     @property
     def matrices(self):

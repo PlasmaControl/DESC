@@ -39,6 +39,8 @@ class Basis(IOAble, ABC):
 
     def _set_up(self):
         """Do things after loading or changing resolution."""
+        # Also recreates any attributes not in _io_attrs on load from input file.
+        # See IOAble class docstring for more info.
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()

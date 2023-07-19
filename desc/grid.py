@@ -203,7 +203,10 @@ class Grid(IOAble):
         temp_spacing = self.spacing.copy()
         temp_spacing = (temp_spacing.T / duplicates ** (1 / 3)).T
         # scale weights sum to full volume
-        temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (1 / 3)
+        if temp_spacing.prod(axis=1).sum():
+            temp_spacing *= (4 * np.pi**2 / temp_spacing.prod(axis=1).sum()) ** (
+                1 / 3
+            )
         weights = temp_spacing.prod(axis=1)
 
         # Spacing is the differential element used for integration over surfaces.
@@ -226,9 +229,12 @@ class Grid(IOAble):
         # For this reason, duplicates should typically be deleted rather than rescaled.
         # Note we multiply each column by duplicates^(1/6) to account for the extra
         # division by duplicates^(1/2) in one of the columns above.
-        self._spacing *= (
-            4 * np.pi**2 / (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum()
-        ) ** (1 / 3)
+        if (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum():
+            self._spacing *= (
+                4
+                * np.pi**2
+                / (self.spacing.T * duplicates ** (1 / 6)).prod(axis=0).sum()
+            ) ** (1 / 3)
         return weights
 
     @property

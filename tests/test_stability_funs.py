@@ -264,7 +264,7 @@ def test_mercier_print(capsys):
 def test_magwell_print(capsys):
     """Test that the magnetic well stability criteria prints correctly."""
     eq = desc.examples.get("HELIOTRON")
-    grid = LinearGrid(L=12, M=12, N=6, axis=False)
+    grid = LinearGrid(L=12, M=12, N=6, NFP=eq.NFP, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
     obj.build()
 

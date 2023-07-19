@@ -130,8 +130,9 @@ def test_near_axis_input_files():
 def test_vmec_input_surface_threshold():
     """Test ."""
     path = ".//tests//inputs//input.QSC_r2_5.5_vmec"
-    surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
-    surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
+    with pytest.warns(UserWarning, match="Detected multiple inputs"):
+        surf_full = InputReader.parse_vmec_inputs(path)[-1]["surface"]
+        surf_trim = InputReader.parse_vmec_inputs(path, threshold=1e-6)[-1]["surface"]
     assert surf_full.shape[0] > surf_trim.shape[0]
     assert surf_full.shape[1] == surf_trim.shape[1] == 5
 

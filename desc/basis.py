@@ -39,6 +39,8 @@ class Basis(IOAble, ABC):
 
     def _set_up(self):
         """Do things after loading or changing resolution."""
+        # Also recreates any attributes not in _io_attrs on load from input file.
+        # See IOAble class docstring for more info.
         self._enforce_symmetry()
         self._sort_modes()
         self._create_idx()
@@ -608,7 +610,7 @@ class ZernikePolynomial(Basis):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. For L == M,
+        decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape.
@@ -651,7 +653,7 @@ class ZernikePolynomial(Basis):
             For L>0, the indexing scheme defines order of the basis functions:
 
             ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-            decreasing size, ending in a triagle shape. For L == M,
+            decreasing size, ending in a triangle shape. For L == M,
             the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
             to the bottom of the pyramid, increasing L while keeping M constant,
             giving a "house" shape.
@@ -830,7 +832,7 @@ class FourierZernikeBasis(Basis):
         For L>0, the indexing scheme defines order of the basis functions:
 
         ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-        decreasing size, ending in a triagle shape. For L == M,
+        decreasing size, ending in a triangle shape. For L == M,
         the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
         to the bottom of the pyramid, increasing L while keeping M constant,
         giving a "house" shape.
@@ -875,7 +877,7 @@ class FourierZernikeBasis(Basis):
             For L>0, the indexing scheme defines order of the basis functions:
 
             ``'ansi'``: ANSI indexing fills in the pyramid with triangles of
-            decreasing size, ending in a triagle shape. For L == M,
+            decreasing size, ending in a triangle shape. For L == M,
             the traditional ANSI pyramid indexing is recovered. For L>M, adds rows
             to the bottom of the pyramid, increasing L while keeping M constant,
             giving a "house" shape.
@@ -1252,37 +1254,49 @@ def zernike_radial(r, l, m, dr=0):
     beta = 0
     n = (l - m) // 2
     s = (-1) ** n
+    jacobi_arg = 1 - 2 * r**2
     if dr == 0:
-        out = r**m * _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
+        out = r**m * _jacobi(n, alpha, beta, jacobi_arg, 0)
     elif dr == 1:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
         out = m * r ** jnp.maximum(m - 1, 0) * f - 4 * r ** (m + 1) * df
     elif dr == 2:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
         out = (
-            m * (m - 1) * r ** jnp.maximum((m - 2), 0) * f
-            - 2 * 4 * m * r**m * df
-            + r**m * (16 * r**2 * d2f - 4 * df)
+            (m - 1) * m * r ** jnp.maximum(m - 2, 0) * f
+            - 4 * (2 * m + 1) * r**m * df
+            + 16 * r ** (m + 2) * d2f
         )
     elif dr == 3:
-        f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 0)
-        df = _jacobi(n, alpha, beta, 1 - 2 * r**2, 1)
-        d2f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 2)
-        d3f = _jacobi(n, alpha, beta, 1 - 2 * r**2, 3)
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
+        d3f = _jacobi(n, alpha, beta, jacobi_arg, 3)
         out = (
             (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 3, 0) * f
-            - 12 * (m - 1) * m * r ** jnp.maximum(m - 1, 0) * df
-            + 48 * r ** (m + 1) * d2f
+            - 12 * m**2 * r ** jnp.maximum(m - 1, 0) * df
+            + 48 * (m + 1) * r ** (m + 1) * d2f
             - 64 * r ** (m + 3) * d3f
-            + 48 * m * r ** (m + 1) * d2f
-            - 12 * m * r ** jnp.maximum(m - 1, 0) * df
+        )
+    elif dr == 4:
+        f = _jacobi(n, alpha, beta, jacobi_arg, 0)
+        df = _jacobi(n, alpha, beta, jacobi_arg, 1)
+        d2f = _jacobi(n, alpha, beta, jacobi_arg, 2)
+        d3f = _jacobi(n, alpha, beta, jacobi_arg, 3)
+        d4f = _jacobi(n, alpha, beta, jacobi_arg, 4)
+        out = (
+            (m - 3) * (m - 2) * (m - 1) * m * r ** jnp.maximum(m - 4, 0) * f
+            - 8 * m * (2 * m**2 - 3 * m + 1) * r ** jnp.maximum(m - 2, 0) * df
+            + 48 * (2 * m**2 + 2 * m + 1) * r**m * d2f
+            - 128 * (2 * m + 3) * r ** (m + 2) * d3f
+            + 256 * r ** (m + 4) * d4f
         )
     else:
         raise NotImplementedError(
-            "Analytic radial derivatives of zernike polynomials for order>3 "
+            "Analytic radial derivatives of zernike polynomials for order>4 "
             + "have not been implemented"
         )
     return s * jnp.where((l - m) % 2 == 0, out, 0)

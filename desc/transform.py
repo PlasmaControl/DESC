@@ -79,6 +79,7 @@ class Transform(IOAble):
         # assign according to logic in setter function
         self.method = method
         # assign according to logic in property function
+        self._matrices = None
         self._matrices = self.matrices
         if build:
             self.build()
@@ -722,10 +723,15 @@ class Transform(IOAble):
             # but it still might have unbuilt matrices from new derivatives
             self.build()
 
+    def _set_up(self):
+        # fixme? dummy method needed for _matrices attribute to persist?
+        self.method = self.method
+        self._matrices = self.matrices
+
     @property
     def matrices(self):
         """dict: transform matrices such that x=A*c."""
-        if not hasattr(self, "_matrices"):
+        if getattr(self, "_matrices", None) is None:
             # to allow computing of highest order derivative
             n = np.amax(self.derivatives) + 1
             self._matrices = {

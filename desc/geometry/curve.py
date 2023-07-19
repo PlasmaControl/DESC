@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from desc.grid import Grid, LinearGrid
-from desc.interpolate import _approx_df, interp1d
+from desc.interpolate import interp1d
 from desc.transform import Transform
 from desc.utils import copy_coeffs
 
@@ -1333,9 +1333,13 @@ class XYZCurve(Curve):
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
-        assert np.allclose(X[-1], X[0], atol=1e-15), "Must pass in a closed curve!"
-        assert np.allclose(Y[-1], Y[0], atol=1e-15), "Must pass in a closed curve!"
-        assert np.allclose(Z[-1], Z[0], atol=1e-15), "Must pass in a closed curve!"
+
+        assert np.allclose(X[-1], X[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Y[-1], Y[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Z[-1], Z[0], atol=1e-14), "Must pass in a closed curve!"
+        self._X = X
+        self._Y = Y
+        self._Z = Z
 
         if knots is None:
             # find equal arclength angle-like variable, and use that as theta
@@ -1356,13 +1360,7 @@ class XYZCurve(Curve):
         self._knots = knots
 
         self._method = method
-        self._Dx = _approx_df(
-            self._knots, np.eye(self._knots.size), self._method, axis=0
-        )
 
-        self._X = X
-        self._Y = Y
-        self._Z = Z
         if grid is None:
             self._grid = Grid(
                 jnp.vstack(
@@ -1390,6 +1388,9 @@ class XYZCurve(Curve):
                 "X should have the same size as the knots, "
                 + f"got {len(new)} X values for {len(self._knots)} knots"
             )
+        assert np.allclose(
+            self._X[-1], self._X[0], atol=1e-14
+        ), "Must pass in a closed curve!"
 
     @property
     def Y(self):
@@ -1405,6 +1406,9 @@ class XYZCurve(Curve):
                 "Y should have the same size as the knots, "
                 + f"got {len(new)} Y values for {len(self._knots)} knots"
             )
+        assert np.allclose(
+            self._Y[-1], self._Y[0], atol=1e-14
+        ), "Must pass in a closed curve!"
 
     @property
     def Z(self):
@@ -1420,6 +1424,9 @@ class XYZCurve(Curve):
                 "Z should have the same size as the knots, "
                 + f"got {len(new)} Z values for {len(self._knots)} knots"
             )
+        assert np.allclose(
+            self._Z[-1], self._Z[0], atol=1e-14
+        ), "Must pass in a closed curve!"
 
     @property
     def grid(self):
@@ -1443,7 +1450,7 @@ class XYZCurve(Curve):
         if isinstance(grid, Grid):
             return grid.nodes[:, 2]
         if np.isscalar(grid):
-            return np.linspace(0, self._period, grid)
+            return np.linspace(0, self._period, grid, endpoint=True)
         grid = np.atleast_1d(grid)
         if grid.ndim == 1:
             return grid
@@ -1480,9 +1487,6 @@ class XYZCurve(Curve):
         if Z is None:
             Z = self._Z
         xq = self._get_xq(grid)
-        df_X = self._Dx @ X
-        df_Y = self._Dx @ Y
-        df_Z = self._Dx @ Z
 
         Xq = interp1d(
             xq,
@@ -1491,7 +1495,6 @@ class XYZCurve(Curve):
             method=self._method,
             derivative=dt,
             period=self._period,
-            df=df_X,
         )
         Yq = interp1d(
             xq,
@@ -1500,7 +1503,6 @@ class XYZCurve(Curve):
             method=self._method,
             derivative=dt,
             period=self._period,
-            df=df_Y,
         )
         Zq = interp1d(
             xq,
@@ -1509,7 +1511,6 @@ class XYZCurve(Curve):
             method=self._method,
             derivative=dt,
             period=self._period,
-            df=df_Z,
         )
 
         coords = jnp.stack([Xq, Yq, Zq], axis=1)

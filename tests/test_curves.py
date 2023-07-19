@@ -423,12 +423,19 @@ class TestXYZCurve:
             "monotonic-0",
             "cardinal",
         ]:
-            # make a simple circular curve of radius 2
-            R = 2
+            R = 1
             phi = np.linspace(0, 2 * np.pi, 1001, endpoint=True)
             # if nearest method, cant give more than the knot pts or it will return
             # a length larger than the real one
-            npts = 4000 if method != "nearest" else phi + 0.1 * (phi[1] - phi[0])
+            npts = (
+                2000
+                if method != ["nearest", "linear"]
+                else phi + 0.1 * (phi[1] - phi[0])
+            )
+            # make sure that length error is less than what the error would be
+            # if were simply missing one segment of a linear interpolation,
+            #  to try to ensure we are not making that mistake
+            atol = R * 2 * np.pi / npts if method not in ["nearest", "linear"] else 3e-3
             c = XYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
@@ -436,18 +443,17 @@ class TestXYZCurve:
                 method=method,
             )
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
             )
             c.translate([1, 1, 1])
             c.rotate(angle=np.pi)
             c.flip([0, 1, 0])
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
             )
 
-            # make a simple circular curve of radius 2 with supplied knots as phi
-            R = 2
-            phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+            # make a simple circular curve with supplied knots as phi
+            phi = np.linspace(0, 2 * np.pi, 201, endpoint=True)
             c = XYZCurve(
                 X=R * np.cos(phi),
                 Y=R * np.sin(phi),
@@ -457,13 +463,39 @@ class TestXYZCurve:
                 method=method,
             )
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
             )
             c.translate([1, 1, 1])
             c.rotate(angle=np.pi)
             c.flip([0, 1, 0])
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=3e-3
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+            )
+
+            if method == "nearest":
+                continue  # don't test changing the grid if nearest
+                # since it will give wrong answers for
+                # grids with more than the initial num of knots
+            # check lengths when changing X,Y,Z from intial values
+            # and from changing grids
+            R = 1.1
+            c.X = R * np.cos(phi)
+            c.Y = R * np.sin(phi)
+            c.Z = np.ones_like(phi)
+            np.testing.assert_allclose(
+                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+            )
+
+            c.grid = LinearGrid(
+                L=0, M=0, zeta=np.linspace(0, 2 * np.pi, npts, endpoint=True)
+            )
+            np.testing.assert_allclose(
+                c.compute_length(grid=None), R * 2 * np.pi, atol=atol
+            )
+            phi = c.grid.nodes[:, 2]
+            c.grid = np.vstack((np.zeros_like(phi), np.zeros_like(phi), phi)).T
+            np.testing.assert_allclose(
+                c.compute_length(grid=None), R * 2 * np.pi, atol=atol
             )
 
     @pytest.mark.unit
@@ -513,7 +545,7 @@ class TestXYZCurve:
         np.testing.assert_allclose(coords2, coords3)
 
     @pytest.mark.unit
-    def test_asserts(self):
+    def test_asserts_and_errors(self):
         """Test error checking when creating or setting properties of XYZCurve."""
         # make a simple circular curve of radius 2
         R = 2
@@ -535,3 +567,26 @@ class TestXYZCurve:
                 knots=phi,
                 period=None,
             )
+        # change number of knots, should raise error since is different than
+        # existing knots
+        phi = np.linspace(0, 2 * np.pi, 102, endpoint=True)
+        with pytest.raises(ValueError):
+            c.X = R * np.cos(phi)
+        with pytest.raises(ValueError):
+            c.Y = R * np.sin(phi)
+        with pytest.raises(ValueError):
+            c.Z = np.zeros_like(phi)
+
+    @pytest.mark.unit
+    def test_misc(self):
+        """Test getting/setting misc attributes of XYZCurve."""
+        # make a simple circular curve of radius 2
+        R = 2
+        phi = np.linspace(0, 2 * np.pi, 101, endpoint=True)
+        c = XYZCurve(X=R * np.cos(phi), Y=R * np.sin(phi), Z=np.zeros_like(phi))
+        grid = LinearGrid(M=2, N=2)
+        c.grid = grid
+        assert grid.eq(c.grid)
+
+        s = c.copy()
+        assert s.eq(c)

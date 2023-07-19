@@ -5,7 +5,6 @@ import scipy.linalg
 from qsc import Qsc
 
 import desc.examples
-from desc.compute import arg_order
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid
@@ -304,9 +303,26 @@ def test_factorize_linear_constraints_asserts():
 
     from desc.objectives.utils import factorize_linear_constraints
 
+    args = (
+        "R_lmn",
+        "Z_lmn",
+        "L_lmn",
+        "p_l",
+        "i_l",
+        "c_l",
+        "Psi",
+        "Te_l",
+        "ne_l",
+        "Ti_l",
+        "Zeff_l",
+        "Ra_n",
+        "Za_n",
+        "Rb_lmn",
+        "Zb_lmn",
+    )
     with pytest.raises(ValueError):
         xp, A, b, Z, unfixed_idx, project, recover = factorize_linear_constraints(
-            constraints, arg_order
+            constraints, args
         )
 
 

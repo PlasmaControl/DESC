@@ -6,7 +6,6 @@ import warnings
 import numpy as np
 from termcolor import colored
 
-from desc.compute import arg_order
 from desc.equilibrium import EquilibriaFamily, Equilibrium
 from desc.objectives import get_equilibrium_objective, get_fixed_boundary_constraints
 from desc.optimize import Optimizer
@@ -574,10 +573,7 @@ def solve_continuation_automatic(  # noqa: C901
         verbose,
         checkpoint_path,
     )
-    for arg in arg_order:
-        val = np.asarray(getattr(eqfam[-1], arg))
-        if val.size:
-            setattr(eq, arg, val)
+    eq.params_dict = eqfam[-1].params_dict
     eqfam[-1] = eq
     timer.stop("Total time")
     if verbose > 0:
@@ -729,10 +725,7 @@ def solve_continuation(  # noqa: C901
                 verbose=verbose,
                 copy=False,
             )
-            for arg in arg_order:
-                val = np.asarray(getattr(eqp, arg))
-                if val.size:
-                    setattr(eqi, arg, val)
+            eqi.params_dict = eqp.params_dict
             deltas = {}
             del eqp
 

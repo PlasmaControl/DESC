@@ -5,7 +5,6 @@ from jax import lax
 from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
-from desc.compute import arg_order
 from desc.utils import Index, flatten_list, svd_inv_null
 
 from ._equilibrium import (
@@ -335,8 +334,8 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     for arg in args:
         x_idx[arg] = np.arange(dim_x, dim_x + dimensions[arg])
         dim_x += dimensions[arg]
-    A = {}
-    b = {}
+    A = []
+    b = []
     xp = jnp.zeros(dim_x)  # particular solution to Ax=b
 
     # linear constraint matrices for each objective
@@ -526,7 +525,7 @@ def combine_args(*objectives):
         Original ObjectiveFunctions modified to take the same state vector.
     """
     args = flatten_list([obj.args for obj in objectives])
-    args = [arg for arg in arg_order if arg in args]
+    args = sorted(set(args))
 
     for obj in objectives:
         obj.set_args(*args)

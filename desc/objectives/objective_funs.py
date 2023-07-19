@@ -58,9 +58,6 @@ class ObjectiveFunction(IOAble):
 
     def _set_state_vector(self):
         """Set state vector components, dimensions, and indices."""
-        self._args = np.concatenate([obj.args for obj in self.objectives])
-        self._args = sorted(set(self._args))
-
         self._dimensions = self.objectives[0].dimensions
 
         self._dim_x = 0

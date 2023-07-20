@@ -1089,7 +1089,8 @@ def test_compare_quantities_to_vmec():
     betatotal = fid.variables["betatotal"][()]
     fid.close()
 
-    eq = EquilibriaFamily.load(desc_file)[-1]
+    with pytest.warns(RuntimeWarning, match="Save attribute '_current'"):
+        eq = EquilibriaFamily.load(desc_file)[-1]
 
     # Compare 0D quantities:
     grid = QuadratureGrid(eq.L, M=eq.M, N=eq.N, NFP=eq.NFP)

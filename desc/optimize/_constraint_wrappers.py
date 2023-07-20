@@ -3,7 +3,6 @@
 import numpy as np
 
 from desc.backend import jnp
-from desc.compute import arg_order
 from desc.objectives import (
     BoundaryRSelfConsistency,
     BoundaryZSelfConsistency,
@@ -15,7 +14,7 @@ from desc.objectives.utils import (
     get_fixed_boundary_constraints,
     maybe_add_self_consistency,
 )
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, get_instance, sort_args
 
 from .utils import compute_jac_scale, f_where_x
 
@@ -95,7 +94,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         args = np.concatenate([obj.args for obj in self._constraints])
         args = np.concatenate((args, self._objective.args))
         # this is all args used by both constraints and objective
-        self._args = [arg for arg in arg_order if arg in args]
+        self._args = sort_args(args)
         self._dim_f = self._objective.dim_f
         self._dimensions = self._objective.dimensions
         self._scalar = self._objective.scalar
@@ -459,12 +458,12 @@ class ProximalProjection(ObjectiveFunction):
             + self._objective.args
             + list(np.concatenate([obj.args for obj in self._linear_constraints]))
         )
-        self._full_args = [arg for arg in arg_order if arg in self._full_args]
+        self._full_args = sort_args(self._full_args)
 
         # arguments being optimized are all args, but with internal degrees of freedom
         # replaced by boundary terms
         self._args = self._full_args.copy() + list(args)
-        self._args = [arg for arg in arg_order if arg in self._args]
+        self._args = sort_args(self._args)
         if "L_lmn" in self._args:
             self._args.remove("L_lmn")
         if "Ra_n" in self._args:
@@ -479,6 +478,7 @@ class ProximalProjection(ObjectiveFunction):
             self._args.remove("Z_lmn")
             if "Zb_lmn" not in self._args:
                 self._args.append("Zb_lmn")
+        self._args = sort_args(self._args)
         self._set_state_vector()
 
     def _set_state_vector(self):
@@ -507,31 +507,28 @@ class ProximalProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(self._linear_constraints, self._full_args)
 
         # dx/dc - goes from the full state to optimization variables
-        x_idx = np.concatenate(
-            [
-                self._x_idx_full[arg]
-                for arg in self._args
-                if arg not in ["Rb_lmn", "Zb_lmn"]
-            ]
-        )
-        x_idx.sort(kind="mergesort")
-        self._dxdc = np.eye(self._dim_x_full)[:, x_idx]
-        if "Rb_lmn" in self._args:
-            c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
-            A = c.derivatives["jac_unscaled"]["R_lmn"](
-                *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
-            )
-            Ainv = np.linalg.pinv(A)
-            dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
-            self._dxdc = np.hstack((self._dxdc, dxdRb))
-        if "Zb_lmn" in self._args:
-            c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
-            A = c.derivatives["jac_unscaled"]["Z_lmn"](
-                *[jnp.zeros(c.dimensions[arg]) for arg in c.args]
-            )
-            Ainv = np.linalg.pinv(A)
-            dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
-            self._dxdc = np.hstack((self._dxdc, dxdZb))
+        dxdc = []
+        for arg in self._args:
+            if arg not in ["Rb_lmn", "Zb_lmn"]:
+                x_idx = self._x_idx_full[arg]
+                dxdc.append(np.eye(self._dim_x_full)[:, x_idx])
+            if arg == "Rb_lmn":
+                c = get_instance(self._linear_constraints, BoundaryRSelfConsistency)
+                A = c.derivatives["jac_unscaled"]["R_lmn"](
+                    *[jnp.zeros(c.dimensions[arg1]) for arg1 in c.args]
+                )
+                Ainv = np.linalg.pinv(A)
+                dxdRb = np.eye(self._dim_x_full)[:, self._x_idx_full["R_lmn"]] @ Ainv
+                dxdc.append(dxdRb)
+            if arg == "Zb_lmn":
+                c = get_instance(self._linear_constraints, BoundaryZSelfConsistency)
+                A = c.derivatives["jac_unscaled"]["Z_lmn"](
+                    *[jnp.zeros(c.dimensions[arg1]) for arg1 in c.args]
+                )
+                Ainv = np.linalg.pinv(A)
+                dxdZb = np.eye(self._dim_x_full)[:, self._x_idx_full["Z_lmn"]] @ Ainv
+                dxdc.append(dxdZb)
+            self._dxdc = np.hstack(dxdc)
 
     def build(self, eq=None, use_jit=None, verbose=1):  # noqa: C901
         """Build the objective.
@@ -590,7 +587,7 @@ class ProximalProjection(ObjectiveFunction):
         self._allxopt = [self._objective.x(eq)]
         self._allxeq = [self._constraint.x(eq)]
         self.history = {}
-        for arg in arg_order:
+        for arg in self._full_args:
             self.history[arg] = [np.asarray(getattr(self._eq, arg)).copy()]
 
         self._built = True
@@ -663,7 +660,7 @@ class ProximalProjection(ObjectiveFunction):
             xed = self._constraint.unpack_state(xeq)
             xd.update(xod)
             xd.update(xed)
-            for arg in arg_order:
+            for arg in self._full_args:
                 val = xd.get(arg, self.history[arg][-1])
                 self.history[arg] += [np.asarray(val).copy()]
                 # ensure eq has correct values if we didn't go into else block above.
@@ -672,7 +669,7 @@ class ProximalProjection(ObjectiveFunction):
             for con in self._linear_constraints:
                 con.update_target(self._eq)
         else:
-            for arg in arg_order:
+            for arg in self._full_args:
                 val = self.history[arg][-1].copy()
                 if val.size:
                     setattr(self._eq, arg, val)

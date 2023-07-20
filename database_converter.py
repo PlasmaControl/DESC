@@ -190,7 +190,7 @@ def desc_to_csv(  # noqa
     data_configurations["average_elongation"] = float(
         f'{position_data["a_major/a_minor"]:1.4e}'
     )
-    data_configurations["average_elongation"] = kwargs.get("config_class", None)
+    data_configurations["class"] = kwargs.get("config_class", None)
 
     # surface geometry
     # currently saving as VMEC format but I'd prefer if we could do DESC format...

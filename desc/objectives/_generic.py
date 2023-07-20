@@ -150,6 +150,11 @@ class ObjectiveFromUser(_Objective):
         self._args = get_params(self._data_keys, has_axis=grid.axis.size)
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -166,12 +171,14 @@ class ObjectiveFromUser(_Objective):
             Computed quantity.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         f = self._fun_wrapped(data)
         return f
@@ -260,6 +267,7 @@ class GenericObjective(_Objective):
         else:
             grid = self._grid
 
+        self._data_keys = [self.f]
         if data_index[self.f]["dim"] == 0:
             self._dim_f = 1
             self._scalar = True
@@ -269,6 +277,11 @@ class GenericObjective(_Objective):
         self._args = get_params(self.f, has_axis=grid.axis.size)
         self._profiles = get_profiles(self.f, eq=eq, grid=grid)
         self._transforms = get_transforms(self.f, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
         super().build(eq=eq, use_jit=use_jit, verbose=verbose)
 
     def compute(self, *args, **kwargs):
@@ -285,16 +298,18 @@ class GenericObjective(_Objective):
             Computed quantity.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
-            self.f,
+            self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         f = data[self.f]
         if not self.scalar:
-            f = (f.T * self._transforms["grid"].weights).flatten()
+            f = (f.T * constants["transforms"]["grid"].weights).flatten()
         return f
 
 
@@ -396,6 +411,10 @@ class ToroidalCurrent(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -431,20 +450,27 @@ class ToroidalCurrent(_Objective):
             Toroidal current (A) through specified surfaces.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        return compress(self._transforms["grid"], data["current"], surface_label="rho")
+        return compress(
+            constants["transforms"]["grid"], data["current"], surface_label="rho"
+        )
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
         w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
             surface_label="rho",
         )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
@@ -574,6 +600,10 @@ class RotationalTransform(_Objective):
 
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
 
         timer.stop("Precomputing transforms")
         if verbose > 1:
@@ -605,20 +635,27 @@ class RotationalTransform(_Objective):
             rotational transform on specified flux surfaces.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        return compress(self._transforms["grid"], data["iota"], surface_label="rho")
+        return compress(
+            constants["transforms"]["grid"], data["iota"], surface_label="rho"
+        )
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
         w = compress(
-            self._transforms["grid"],
-            self._transforms["grid"].spacing[:, 0],
+            constants["transforms"]["grid"],
+            constants["transforms"]["grid"].spacing[:, 0],
             surface_label="rho",
         )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)

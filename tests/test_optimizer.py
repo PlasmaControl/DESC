@@ -349,7 +349,7 @@ def test_overstepping():
             self._built = True
 
         def compute(self, *args, **kwargs):
-            params = self._parse_args(*args, **kwargs)
+            params, _ = self._parse_args(*args, **kwargs)
             x = jnp.concatenate([jnp.atleast_1d(params[arg]) for arg in self.args])
             return x - self._x0
 
@@ -358,7 +358,7 @@ def test_overstepping():
     np.random.seed(0)
     objective = ObjectiveFunction(DummyObjective(eq=eq), use_jit=False)
     # make gradient super noisy so it stalls
-    objective.jac_scaled = lambda x: objective._jac_scaled(x) + 1e2 * (
+    objective.jac_scaled = lambda x, *args: objective._jac_scaled(x) + 1e2 * (
         np.random.random((objective._dim_f, x.size)) - 0.5
     )
 

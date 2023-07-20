@@ -4,11 +4,14 @@ import copy
 import os
 import pickle
 import pydoc
-from abc import ABC
+import types
+from abc import ABC, ABCMeta
 
 import h5py
+import numpy as np
 from termcolor import colored
 
+from desc.backend import register_pytree_node
 from desc.utils import equals
 
 from .hdf5_io import hdf5Reader, hdf5Writer
@@ -71,7 +74,79 @@ def load(load_from, file_format=None):
     return obj
 
 
-class IOAble(ABC):
+def _unjittable(x):
+    # strings and functions can't be args to jitted functions, and ints/bools are pretty
+    # much always flags or array sizes which also need to be a compile time constant
+    if isinstance(x, (list, tuple)):
+        return any([_unjittable(y) for y in x])
+    if isinstance(x, dict):
+        return any([_unjittable(y) for y in x.values()])
+    if hasattr(x, "dtype"):
+        return np.issubdtype(x.dtype, np.integer) or np.issubdtype(x.dtype, np.bool_)
+    return isinstance(x, (str, types.FunctionType, bool, int, np.int_))
+
+
+def _make_hashable(x):
+    # turn unhashable ndarray of ints nto a hashable tuple
+    if hasattr(x, "shape"):
+        return ("ndarray", x.shape, tuple(x.flatten()))
+    return x
+
+
+def _unmake_hashable(x):
+    # turn tuple of ints and shape to ndarray
+    if isinstance(x, tuple) and x[0] == "ndarray":
+        return np.array(x[2]).reshape(x[1])
+    return x
+
+
+# this gets used as a metaclass, to ensure that all of the subclasses that
+# inherit from IOAble get properly registered with JAX.
+# subclasses can define their own tree_flatten and tree_unflatten methods to override
+# default behavior
+class _AutoRegisterPytree(type):
+    def __init__(cls, *args, **kwargs):
+        def _generic_tree_flatten(obj):
+            """Convert DESC objects to JAX pytrees."""
+            if hasattr(obj, "tree_flatten"):
+                # use subclass method
+                return obj.tree_flatten()
+
+            children = {
+                key: val for key, val in obj.__dict__.items() if not _unjittable(val)
+            }
+            aux_data = tuple(
+                [
+                    (key, _make_hashable(val))
+                    for key, val in obj.__dict__.items()
+                    if _unjittable(val)
+                ]
+            )
+            return ((children,), aux_data)
+
+        def _generic_tree_unflatten(aux_data, children):
+            """Recreate a DESC object from JAX pytree."""
+            if hasattr(cls, "tree_unflatten"):
+                # use subclass method
+                return cls.tree_unflatten(aux_data, children)
+
+            obj = cls.__new__(cls)
+            obj.__dict__.update(children[0])
+            for kv in aux_data:
+                setattr(obj, kv[0], _unmake_hashable(kv[1]))
+            return obj
+
+        register_pytree_node(cls, _generic_tree_flatten, _generic_tree_unflatten)
+        super().__init__(*args, **kwargs)
+
+
+# need this for inheritance to work correctly between the metaclass and ABC
+# https://stackoverflow.com/questions/57349105/python-abc-inheritance-with-specified-metaclass
+class _CombinedMeta(_AutoRegisterPytree, ABCMeta):
+    pass
+
+
+class IOAble(ABC, metaclass=_CombinedMeta):
     """Abstract Base Class for savable and loadable objects.
 
     Objects inheriting from this class can be saved and loaded via hdf5 or pickle.

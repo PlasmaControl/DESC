@@ -5,11 +5,13 @@ import numpy as np
 import pytest
 
 from desc.basis import (
+    ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
     FourierSeries,
     FourierZernikeBasis,
     PowerSeries,
     ZernikePolynomial,
+    chebyshev,
     fourier,
     polyder_vec,
     polyval_vec,
@@ -125,6 +127,19 @@ class TestBasis:
 
         np.testing.assert_allclose(values, correct_vals, atol=1e-8)
         np.testing.assert_allclose(derivs, correct_ders, atol=1e-8)
+
+    @pytest.mark.unit
+    def test_chebyshev(self):
+        """Test chebyshev function for Chebyshev polynomial evaluation."""
+        l = np.array([0, 1, 2])
+        r = np.linspace(0, 1, 11)  # rho coordinates
+
+        correct_vals = np.array([np.ones_like(r), 2 * r - 1, 8 * r**2 - 8 * r + 1]).T
+        values = chebyshev(r[:, np.newaxis], l, dr=0)
+        np.testing.assert_allclose(values, correct_vals, atol=1e-8)
+
+        with pytest.raises(NotImplementedError):
+            chebyshev(r[:, np.newaxis], l, dr=1)
 
     @pytest.mark.unit
     def test_zernike_radial(self):
@@ -245,6 +260,10 @@ class TestBasis:
         zpf = ZernikePolynomial(L=0, M=3, spectral_indexing="fringe")
         zpf.change_resolution(L=6, M=3)
         assert zpf.num_modes == 16
+
+        cdf = ChebyshevDoubleFourierBasis(L=2, M=2, N=0)
+        cdf.change_resolution(L=3, M=2, N=1)
+        assert cdf.num_modes == 60
 
         fz = FourierZernikeBasis(L=3, M=3, N=0)
         fz.change_resolution(L=3, M=3, N=1)

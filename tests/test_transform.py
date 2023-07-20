@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import desc.examples
+from desc.backend import jit
 from desc.basis import (
     ChebyshevDoubleFourierBasis,
     DoubleFourierSeries,
@@ -597,3 +598,30 @@ class TestTransform:
             eq.Z_basis.num_modes,
         )
         _ = tr["Z"].project(f)
+
+
+@pytest.mark.unit
+def test_transform_pytree():
+    """Ensure that Transforms are valid pytree/JAX types."""
+    grid = LinearGrid(5, 6, 7)
+    basis = FourierZernikeBasis(4, 5, 6)
+    transform = Transform(grid, basis, build=True)
+
+    import jax
+
+    leaves, treedef = jax.tree_util.tree_flatten(transform)
+    transform = jax.tree_util.tree_unflatten(treedef, leaves)
+
+    @jit
+    def foo(x, tr):
+        # this one we pass in transform as a pytree
+        return tr.transform(x)
+
+    @jit
+    def bar(x):
+        # this one we close over it
+        return transform.transform(x)
+
+    x = np.random.random(basis.num_modes)
+    np.testing.assert_allclose(foo(x, transform), transform.transform(x))
+    np.testing.assert_allclose(bar(x), transform.transform(x))

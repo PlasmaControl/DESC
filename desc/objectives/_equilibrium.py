@@ -152,6 +152,11 @@ class ForceBalance(_Objective):
         self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -197,19 +202,22 @@ class ForceBalance(_Objective):
             MHD force balance error at each node (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
+
         fr = data["F_rho"] * data["|grad(rho)|"]
-        fr = fr * data["sqrt(g)"] * self._transforms["grid"].weights
+        fr = fr * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
         fb = data["F_helical"] * data["|e^helical|"]
-        fb = fb * data["sqrt(g)"] * self._transforms["grid"].weights
+        fb = fb * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
         return jnp.concatenate([fr, fb])
 
@@ -334,6 +342,11 @@ class RadialForceBalance(_Objective):
         self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -379,16 +392,18 @@ class RadialForceBalance(_Objective):
             Radial MHD force balance error at each node (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         f = data["F_rho"] * data["|grad(rho)|"]
-        return f * data["sqrt(g)"] * self._transforms["grid"].weights
+        return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
 
 class HelicalForceBalance(_Objective):
@@ -513,6 +528,11 @@ class HelicalForceBalance(_Objective):
         self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -558,16 +578,18 @@ class HelicalForceBalance(_Objective):
             Helical MHD force balance error at each node (N).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
         f = data["F_helical"] * data["|e^helical|"]
-        return f * data["sqrt(g)"] * self._transforms["grid"].weights
+        return f * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
 
 class Energy(_Objective):
@@ -703,6 +725,12 @@ class Energy(_Objective):
         self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+            "gamma": self._gamma,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -747,14 +775,16 @@ class Energy(_Objective):
             Total MHD energy in the plasma volume (J).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-            gamma=self._gamma,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            gamma=constants["gamma"],
         )
         return data["W"]
 
@@ -886,6 +916,11 @@ class CurrentDensity(_Objective):
         self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -921,16 +956,18 @@ class CurrentDensity(_Objective):
             Toroidal current at each node (A*m).
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
         )
-        jr = data["J^rho"] * data["sqrt(g)"] * self._transforms["grid"].weights
-        jt = data["J^theta"] * data["sqrt(g)"] * self._transforms["grid"].weights
-        jz = data["J^zeta"] * data["sqrt(g)"] * self._transforms["grid"].weights
+        jr = data["J^rho"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        jt = data["J^theta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
+        jz = data["J^zeta"] * data["sqrt(g)"] * constants["transforms"]["grid"].weights
 
         return jnp.concatenate([jr, jt, jz])

@@ -178,7 +178,7 @@ class TestConstructor:
             eq = Equilibrium(M=3.4)
         with pytest.raises(AssertionError):
             eq = Equilibrium(N=3.4)
-        with pytest.raises(AssertionError):
+        with pytest.raises(ValueError):
             eq = Equilibrium(NFP=3.4j)
         with pytest.raises(ValueError):
             eq = Equilibrium(surface=np.array([[1, 1, 1, 10, 2]]))

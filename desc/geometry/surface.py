@@ -279,7 +279,7 @@ class FourierRZToroidalSurface(Surface):
             inputs = InputReader.parse_vmec_inputs(f)[-1]
         else:
             inputs = InputReader().parse_inputs(f)[-1]
-        if inputs["bdry_ratio"] != 1:
+        if (inputs["bdry_ratio"] is not None) and (inputs["bdry_ratio"] != 1):
             warnings.warn(
                 "boundary_ratio = {} != 1, surface may not be as expected".format(
                     inputs["bdry_ratio"]

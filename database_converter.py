@@ -23,6 +23,12 @@ def get_config_hash(eq):  # or take in the data from a DESC eq?
     return None
 
 
+# TODO: add threshold to truncate at what amplitude surface Fourier coefficient
+# that it is working
+
+# TODO: make arrays stored in one line
+
+
 def desc_to_csv(  # noqa
     eq,
     current=True,
@@ -191,6 +197,8 @@ def desc_to_csv(  # noqa
         f'{position_data["a_major/a_minor"]:1.4e}'
     )
     data_configurations["class"] = kwargs.get("config_class", None)
+    if eq.N == 0:  # is axisymmetric
+        data_configurations["class"] = "AS"
 
     # surface geometry
     # currently saving as VMEC format but I'd prefer if we could do DESC format...

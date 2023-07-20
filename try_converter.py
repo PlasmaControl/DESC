@@ -18,6 +18,16 @@ is_device = {
     "W7-X": "W7-X",
     "NCSX": "NCSX",
     "ATF": "ATF",
+}  # QA, QH, QI, OT, OH, QP, AS
+symmetry = {
+    "W7-X": "QI",
+    "NCSX": "QA",
+    "ARIES-CS": "QA",
+    "ESTELL": "QA",
+    "precise_QA": "QA",
+    "precise_QH": "QH",
+    "QAS": "QA",
+    "WISTELL-A": "QH",
 }
 for root, dirs, files in os.walk("desc/examples"):
     for file in files:
@@ -42,13 +52,19 @@ for name in names:
         device = is_device[name]
     except KeyError:
         device = False
+    try:
+        sym_class = symmetry[name]
+    except KeyError:
+        sym_class = None
 
     print(f"Saving example {name}")
     desc_to_csv(
-        f"desc/examples/{name}_output.h5",
-        name=name,
+        f"desc/examples/{name}_output.h5",  # output filename
+        name=name,  # some string descriptive name, not necessarily unique
         provenance="Example Equilibrium From DESC Repository desc/examples folder",
         inputfilename=inputs[name],
         current=used_current,
         deviceid=device,
+        config_class=sym_class
+        # TODO: Add config class (symmetry)
     )

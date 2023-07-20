@@ -19,7 +19,11 @@ we evaluate the residuals.
 Next, we define the physics quantities we need to evaluate the objective (``_data_keys``),
 and the number of residuals that will be returned by ``compute`` (``_dim_f``).
 Next, we use some helper functions to build the required ``Tranform`` and ``Profile``
-objects needed to compute the desired physics quantities.
+objects needed to compute the desired physics quantities. These ``transforms`` and
+``profiles`` are then packaged into ``constants``, which will be passed to the ``compute``
+method. Other "constant" values that are needed to compute the given quantity such as
+hyperparameters or other objects that will not be optimized should also be included in
+``constants``.
 Finally, we call the base class ``build`` method to do some checking of array sizes and
 other misc. stuff.
 
@@ -27,8 +31,7 @@ other misc. stuff.
 generally return a vector of residuals that are minimized in a least squares sense, though
 the exact method will depend on the optimization algorithm. The main thing here is
 calling ``compute_fun`` to get physics quantities, and then performing any post-processing
-we want such as averaging, combining, etc. The final step is to call ``self._shift_scale``
-which subtracts out the target and applies weighting and normalizations.
+we want such as averaging, combining, etc.
 
 A full example objective with comments describing key points is given below:
 ::
@@ -47,8 +50,11 @@ A full example objective with comments describing key points is given below:
         eq : Equilibrium, optional
             Equilibrium that will be optimized to satisfy the Objective.
         target : float, ndarray, optional
-            Target value(s) of the objective.
+            Target value(s) of the objective. Only used if bounds is None.
             len(target) must be equal to Objective.dim_f
+        bounds : tuple, optional
+            Lower and upper bounds on the objective. Overrides target.
+            len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
         weight : float, ndarray, optional
             Weighting to apply to the Objective, relative to other Objectives.
             len(weight) must be equal to Objective.dim_f
@@ -73,15 +79,17 @@ A full example objective with comments describing key points is given below:
         def __init__(
             self,
             eq=None,
-            target=0,
+            target=None,
+            bounds=None,
             weight=1,
             normalize=True,
             normalize_target=True,
             grid=None,
             name="QS triple product",
         ):
-
             # we don't have to do much here, mostly just call ``super().__init__()``
+            if target is None and bounds is None:
+                target = 0 # default target value
             self.grid = grid
             super().__init__(
                 eq=eq,
@@ -133,6 +141,10 @@ A full example objective with comments describing key points is given below:
             # equilibrium, though in most cases that isn't necessary.
             self._profiles = get_profiles(self._data_keys, obj=eq, grid=self.grid)
             self._transforms = get_transforms(self._data_keys, obj=eq, grid=self.grid)
+            self._constants = {
+                "transforms": self._transforms,
+                "profiles": self._profiles,
+            }
 
             timer.stop("Precomputing transforms")
             if verbose > 1:
@@ -181,7 +193,9 @@ A full example objective with comments describing key points is given below:
 
             """
             # this parses the inputs into a dictionary expected by ``desc.compute.compute``
-            params = self._parse_args(*args, **kwargs)
+            params, constants = self._parse_args(*args, **kwargs)
+            if constants is None:
+                constants = self.constants
 
             # here we get the physics quantities from ``desc.compute.compute``
             data = compute_fun(
@@ -194,8 +208,7 @@ A full example objective with comments describing key points is given below:
             # next we do any additional processing, such as combining things,
             # averaging, etc. Here we just scale things by the quadrature weights from
             # the grid to make things roughly independent of the grid resolution.
-            f = data["f_T"] * self.grid.weights
-
-            # finally, we call ``self._shift_scale`` here to subtract out the target and
-            # apply weighing and normalizations.
-            return self._shift_scale(f)
+            f = data["f_T"] * constants["transforms"]["grid"].weights
+            # this is all we need to do here. Applying objective weights/targets/bounds
+            # is handled by the base class.
+            return f

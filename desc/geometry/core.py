@@ -10,11 +10,12 @@ from desc.compute.utils import compute as compute_fun
 from desc.compute.utils import get_params, get_transforms
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.io import IOAble
+from desc.optimizeable import Optimizeable
 
 from .utils import reflection_matrix, rotation_matrix
 
 
-class Curve(IOAble, ABC):
+class Curve(IOAble, Optimizeable, ABC):
     """Abstract base class for 1D curves in 3D space."""
 
     _io_attrs_ = ["_name", "shift", "rotmat"]
@@ -118,7 +119,7 @@ class Curve(IOAble, ABC):
         )
 
 
-class Surface(IOAble, ABC):
+class Surface(IOAble, Optimizeable, ABC):
     """Abstract base class for 2d surfaces in 3d space."""
 
     _io_attrs_ = ["_name", "_sym", "_L", "_M", "_N"]

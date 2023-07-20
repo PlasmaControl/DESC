@@ -483,7 +483,9 @@ class TestXYZCurve:
             c.Y = R * np.sin(phi)
             c.Z = np.ones_like(phi)
             np.testing.assert_allclose(
-                c.compute_length(grid=npts), R * 2 * np.pi, atol=atol
+                c.compute_length(grid=np.linspace(0, 2 * np.pi, npts, endpoint=True)),
+                R * 2 * np.pi,
+                atol=atol,
             )
 
             c.grid = LinearGrid(

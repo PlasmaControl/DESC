@@ -124,7 +124,11 @@ class BootstrapRedlConsistency(_Objective):
         ), "Helicity toroidal mode number should be 0 (QA) or +/- NFP (QH)"
         self._dim_f = grid.num_rho
         self._data_keys = ["<J*B>", "<J*B> Redl"]
-        self._args = get_params(self._data_keys, has_axis=grid.axis.size)
+        self._args = get_params(
+            self._data_keys,
+            obj="desc.equilibrium.equilibrium.Equilibrium",
+            has_axis=grid.axis.size,
+        )
 
         if eq.electron_temperature is None:
             raise RuntimeError(
@@ -177,8 +181,8 @@ class BootstrapRedlConsistency(_Objective):
             print("Precomputing transforms")
         timer.start("Precomputing transforms")
 
-        self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
-        self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
+        self._profiles = get_profiles(self._data_keys, obj=eq, grid=grid)
+        self._transforms = get_transforms(self._data_keys, obj=eq, grid=grid)
 
         self._constants = {
             "transforms": self._transforms,
@@ -209,6 +213,7 @@ class BootstrapRedlConsistency(_Objective):
         if constants is None:
             constants = self.constants
         data = compute_fun(
+            "desc.equilibrium.equilibrium.Equilibrium",
             self._data_keys,
             params=params,
             transforms=constants["transforms"],

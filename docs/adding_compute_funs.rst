@@ -24,6 +24,7 @@ The full code is below:
         profiles=[],
         coordinates="rtz",
         data=["p_r", "sqrt(g)", "B^theta", "B^zeta", "J^theta", "J^zeta"],
+        parameterization="desc.equilibrium.Equilibrium"
     )
     def _F_rho(params, transforms, profiles, data, **kwargs):
         data["F_rho"] = -data["p_r"] + data["sqrt(g)"] * (
@@ -76,6 +77,9 @@ metadata about the quanity. The necessary fields are detailed below:
   that this only includes direct dependencies (things that are used in this function).
   For example, we need ``sqrt(g)``, which itself depends on ``e_rho``, etc. But we don'take
   need to specify ``e_rho`` here, that dependency is determined automatically at runtime.
+* ``parameterization``: what sorts of DESC objects is this function for. Most functions
+  will just be for ``Equilibrium``, but some methods may also be for ``desc.geometry.Curve``,
+  or specific types eg ``desc.geometry.FourierRZCurve``.
 * ``kwargs``: If the compute function requires any additional arguments they should
   be specified like ``kwarg="thing"`` where the value is the name of the keyword argument
   that will be passed to the compute function. Most quantites do not take kwargs.

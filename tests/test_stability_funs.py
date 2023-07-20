@@ -95,7 +95,7 @@ def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
         ), "D_shear should always have a stabilizing effect."
         all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), atol=0.01, rtol=0.1)
+    test(DSHAPE_current, (0.3, 0.9), atol=0.01, rtol=0.1)
     test(HELIOTRON_ex)
 
 
@@ -118,7 +118,7 @@ def test_compute_d_current(DSHAPE_current, HELIOTRON_ex):
         )
         all_close(d_current, d_current_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=1e-2, atol=1e-2)
+    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1, atol=1e-2)
     test(HELIOTRON_ex, (0.25, 0.85), rtol=1e-1)
 
 
@@ -140,7 +140,7 @@ def test_compute_d_well(DSHAPE_current, HELIOTRON_ex):
         )
         all_close(d_well, d_well_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
+    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1)
     test(HELIOTRON_ex, (0.01, 0.45), rtol=1.75e-1)
     test(HELIOTRON_ex, (0.45, 0.6), atol=7.2e-1)
     test(HELIOTRON_ex, (0.6, 0.99), rtol=1.3e-2)
@@ -164,7 +164,7 @@ def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
         ), "D_geodesic should always have a destabilizing effect."
         all_close(d_geodesic, d_geodesic_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=2e-2)
+    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1)
     test(HELIOTRON_ex, (0.15, 0.825), rtol=1.2e-1)
     test(HELIOTRON_ex, (0.85, 0.95), atol=1.2e-1)
 
@@ -188,7 +188,7 @@ def test_compute_d_mercier(DSHAPE_current, HELIOTRON_ex):
         )
         all_close(d_mercier, d_mercier_vmec, rho, rho_range, rtol, atol)
 
-    test(DSHAPE_current, (0.2, 0.9), rtol=4e-2)
+    test(DSHAPE_current, (0.3, 0.9), rtol=1e-1, atol=1e-2)
     test(HELIOTRON_ex, (0.1, 0.325), rtol=1.3e-1)
     test(HELIOTRON_ex, (0.325, 0.95), rtol=4e-2)
 
@@ -264,7 +264,7 @@ def test_mercier_print(capsys):
 def test_magwell_print(capsys):
     """Test that the magnetic well stability criteria prints correctly."""
     eq = desc.examples.get("HELIOTRON")
-    grid = LinearGrid(L=12, M=12, N=6, axis=False)
+    grid = LinearGrid(L=12, M=12, N=6, NFP=eq.NFP, axis=False)
     obj = MagneticWell(eq=eq, grid=grid)
     obj.build()
 

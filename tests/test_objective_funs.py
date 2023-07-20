@@ -99,9 +99,9 @@ class TestObjectiveFunction:
                 target=10 * np.pi**2, weight=1 / np.pi**2, eq=eq, normalize=False
             )
             obj.build()
-            V = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            V_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
-            V_scalar = obj.compute_scalar(eq.R_lmn, eq.Z_lmn)
+            V = obj.compute_unscaled(*obj.xs(eq))
+            V_scaled = obj.compute_scaled_error(*obj.xs(eq))
+            V_scalar = obj.compute_scalar(*obj.xs(eq))
             np.testing.assert_allclose(V, 20 * np.pi**2)
             np.testing.assert_allclose(V_scaled, 10)
             np.testing.assert_allclose(V_scalar, 10)
@@ -116,8 +116,8 @@ class TestObjectiveFunction:
         def test(eq):
             obj = AspectRatio(target=5, weight=1, eq=eq)
             obj.build()
-            AR = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            AR_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
+            AR = obj.compute_unscaled(*obj.xs(eq))
+            AR_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(AR, 10)
             np.testing.assert_allclose(AR_scaled, 5)
 
@@ -131,8 +131,8 @@ class TestObjectiveFunction:
         def test(eq):
             obj = Elongation(target=0, weight=2, eq=eq)
             obj.build()
-            f = obj.compute_unscaled(eq.R_lmn, eq.Z_lmn)
-            f_scaled = obj.compute_scaled_error(eq.R_lmn, eq.Z_lmn)
+            f = obj.compute_unscaled(*obj.xs(eq))
+            f_scaled = obj.compute_scaled_error(*obj.xs(eq))
             np.testing.assert_allclose(f, 1.3 / 0.7, rtol=5e-3)
             np.testing.assert_allclose(f_scaled, 2 * (1.3 / 0.7), rtol=5e-3)
 

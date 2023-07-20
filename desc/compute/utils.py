@@ -8,6 +8,7 @@ from termcolor import colored
 
 from desc.backend import cond, fori_loop, jnp, put
 from desc.grid import ConcentricGrid, LinearGrid
+from desc.utils import sort_args
 
 from .data_index import data_index
 
@@ -21,10 +22,6 @@ profile_names = {
     "ion_temperature": "Ti_l",
     "atomic_number": "Zeff_l",
 }
-
-
-def _sort_args(args):
-    return sorted(set(args))
 
 
 def compute(names, params, transforms, profiles, data=None, **kwargs):
@@ -264,7 +261,7 @@ def get_params(keys, eq=None, has_axis=False, **kwargs):
     params = []
     for key in deps:
         params += data_index[key]["dependencies"]["params"]
-    params = _sort_args(list(set(params)))
+    params = sort_args(list(set(params)))
     if eq is None:
         return params
     params = {name: np.atleast_1d(getattr(eq, name)).copy() for name in params}

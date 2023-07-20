@@ -20,7 +20,7 @@ from desc.objectives.utils import (
 )
 from desc.optimize.tr_subproblems import trust_region_step_exact_svd
 from desc.optimize.utils import compute_jac_scale, evaluate_quadratic_form_jac
-from desc.utils import Timer, get_instance
+from desc.utils import Timer, get_instance, sort_args
 
 __all__ = ["get_deltas", "perturb", "optimal_perturb"]
 
@@ -261,7 +261,6 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
                 if arg in deltas.keys() and arg in objective.args
             ]
         )
-        x_idx = jnp.sort(x_idx)
         tangents += jnp.eye(objective.dim_x)[:, x_idx] @ dc
 
     # 1st order
@@ -623,7 +622,7 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
             if arg in deltas.keys()
         ]
     ):
-        ordered_args = sorted(set(objective_f.args + objective_g.args))
+        ordered_args = sort_args(objective_f.args + objective_g.args)
         x_idx = jnp.concatenate(
             [objective_f.x_idx[arg] for arg in ordered_args if arg in deltas.keys()]
         )

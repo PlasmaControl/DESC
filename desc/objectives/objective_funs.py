@@ -9,7 +9,7 @@ import numpy as np
 from desc.backend import block_diag, jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
-from desc.utils import Timer, is_broadcastable
+from desc.utils import Timer, is_broadcastable, sort_args
 
 
 class ObjectiveFunction(IOAble):
@@ -53,7 +53,7 @@ class ObjectiveFunction(IOAble):
         """
         self._args = list(np.concatenate([obj.args for obj in self.objectives]))
         self._args += list(args)
-        self._args = sorted(set(self._args))
+        self._args = sort_args(self._args)
         self._set_state_vector()
 
     def _set_state_vector(self):

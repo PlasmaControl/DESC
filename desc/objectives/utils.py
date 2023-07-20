@@ -5,7 +5,7 @@ from jax import lax
 from jax.scipy.special import logsumexp
 
 from desc.backend import jnp, put
-from desc.utils import Index, flatten_list, svd_inv_null
+from desc.utils import Index, flatten_list, sort_args, svd_inv_null
 
 from ._equilibrium import (
     CurrentDensity,
@@ -327,7 +327,7 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
     args = np.concatenate([obj.args for obj in constraints])
     args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
-    args = sorted(set(args))
+    args = sort_args(args)
     dimensions = constraints[0].dimensions
     dim_x = 0
     x_idx = {}
@@ -450,7 +450,7 @@ def align_jacobian(Fx, objective_f, objective_g):
     dim_f = Fx.shape[:1]
     A = {arg: Fx.T[x_idx[arg]] for arg in args}
     allargs = np.concatenate([objective_f.args, objective_g.args])
-    allargs = sorted(set(allargs))
+    allargs = sort_args(allargs)
     for arg in allargs:
         if arg not in A.keys():
             A[arg] = jnp.zeros((objective_f.dimensions[arg],) + dim_f)
@@ -528,7 +528,7 @@ def combine_args(*objectives):
         Original ObjectiveFunctions modified to take the same state vector.
     """
     args = flatten_list([obj.args for obj in objectives])
-    args = sorted(set(args))
+    args = sort_args(args)
 
     for obj in objectives:
         obj.set_args(*args)

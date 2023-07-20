@@ -5,6 +5,7 @@ import warnings
 from abc import ABC
 
 from desc.backend import jnp
+from desc.utils import sort_args
 
 
 class Optimizeable(ABC):
@@ -28,7 +29,7 @@ class Optimizeable(ABC):
                     method = method.fget  # we want the property itself, not the value
                 if hasattr(method, "optimizeable"):
                     p.append(methodname)
-            self._optimizeable_params = p
+            self._optimizeable_params = sort_args(p)
             if not len(p):
                 warnings.warn(
                     f"Object {self} was subclassed from Optimizeable but no "
@@ -61,7 +62,7 @@ class Optimizeable(ABC):
         dimensions = self.dimensions
         idx = {}
         dim_x = 0
-        for arg in sorted(self.optimizeable_params):
+        for arg in self.optimizeable_params:
             idx[arg] = jnp.arange(dim_x, dim_x + dimensions[arg])
             dim_x += dimensions[arg]
         return idx
@@ -81,7 +82,7 @@ class Optimizeable(ABC):
             given by ``x_idx``
         """
         return jnp.concatenate(
-            [jnp.atleast_1d(p[key]) for key in sorted(self.optimizeable_params)]
+            [jnp.atleast_1d(p[key]) for key in self.optimizeable_params]
         )
 
     def unpack_params(self, x):

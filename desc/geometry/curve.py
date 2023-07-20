@@ -1481,11 +1481,11 @@ class XYZCurve(Curve):
 
         """
         if X is None:
-            X = self._X
+            X = self.X
         if Y is None:
-            Y = self._Y
+            Y = self.Y
         if Z is None:
-            Z = self._Z
+            Z = self.Z
         xq = self._get_xq(grid)
 
         Xq = interp1d(

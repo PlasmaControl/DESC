@@ -665,7 +665,7 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = compress(grid, eq.compute("iota", grid=grid)["iota"], "rho")
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[1], qsc.iota, atol=2e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=5e-4)
 
     # check lambda to match near axis

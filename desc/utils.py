@@ -491,7 +491,11 @@ def parse_argname_change(arg, kwargs, oldname, newname):
 
 
 def setdefault(val, default, cond=None):
-    """Return val if it isn't None (or if cond is True), otherwise default."""
+    """Return val if condition is met, otherwise default.
+    
+    If cond is None, then it checks if val is not None, returning val
+    or default accordingly.
+    """
     if cond is None:
         cond = val is not None
     if cond:

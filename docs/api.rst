@@ -14,6 +14,7 @@ Basis
     desc.basis.FourierSeries
     desc.basis.DoubleFourierSeries
     desc.basis.ZernikePolynomial
+    desc.basis.ChebyshevDoubleFourierBasis
     desc.basis.FourierZernikeBasis
 
 Coils

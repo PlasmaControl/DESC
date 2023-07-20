@@ -144,42 +144,74 @@ class TestBasis:
     @pytest.mark.unit
     def test_zernike_radial(self):
         """Test zernike_radial function, comparing to analytic formulas."""
-        l = np.array([3, 4, 6])
-        m = np.array([1, 2, 2])
-        r = np.linspace(0, 1, 11)  # rho coordinates
 
-        # correct value functions
-        def Z3_1(x):
-            return 3 * x**3 - 2 * x
+        def test_zernike_radial(self):
+            """Test zernike_radial function, comparing to analytic formulas."""
+            # https://en.wikipedia.org/wiki/Zernike_polynomials#Radial_polynomials
 
-        def Z4_2(x):
-            return 4 * x**4 - 3 * x**2
+            def Z3_1(x, dx=0):
+                if dx == 0:
+                    return 3 * x**3 - 2 * x
+                if dx == 1:
+                    return 9 * x**2 - 2
+                if dx == 2:
+                    return 18 * x
+                if dx == 3:
+                    return np.full_like(x, 18)
+                if dx >= 4:
+                    return np.zeros_like(x)
 
-        def Z6_2(x):
-            return 15 * x**6 - 20 * x**4 + 6 * x**2
+            def Z4_2(x, dx=0):
+                if dx == 0:
+                    return 4 * x**4 - 3 * x**2
+                if dx == 1:
+                    return 16 * x**3 - 6 * x
+                if dx == 2:
+                    return 48 * x**2 - 6
+                if dx == 3:
+                    return 96 * x
+                if dx == 4:
+                    return np.full_like(x, 96)
+                if dx >= 5:
+                    return np.zeros_like(x)
 
-        # correct derivative functions
-        def dZ3_1(x):
-            return 9 * x**2 - 2
+            def Z6_2(x, dx=0):
+                if dx == 0:
+                    return 15 * x**6 - 20 * x**4 + 6 * x**2
+                if dx == 1:
+                    return 90 * x**5 - 80 * x**3 + 12 * x
+                if dx == 2:
+                    return 450 * x**4 - 240 * x**2 + 12
+                if dx == 3:
+                    return 1800 * x**3 - 480 * x
+                if dx == 4:
+                    return 5400 * x**2 - 480
+                if dx == 5:
+                    return 10800 * x
+                if dx == 6:
+                    return np.full_like(x, 10800)
+                if dx >= 7:
+                    return np.zeros_like(x)
 
-        def dZ4_2(x):
-            return 16 * x**3 - 6 * x
-
-        def dZ6_2(x):
-            return 90 * x**5 - 80 * x**3 + 12 * x
-
-        correct_vals = np.array([Z3_1(r), Z4_2(r), Z6_2(r)]).T
-        correct_ders = np.array([dZ3_1(r), dZ4_2(r), dZ6_2(r)]).T
-
-        values1 = zernike_radial(r[:, np.newaxis], l, m, 0)
-        derivs1 = zernike_radial(r[:, np.newaxis], l, m, 1)
-        values2 = zernike_radial_poly(r[:, np.newaxis], l, m, 0)
-        derivs2 = zernike_radial_poly(r[:, np.newaxis], l, m, 1)
-
-        np.testing.assert_allclose(values1, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs1, correct_ders, atol=1e-8)
-        np.testing.assert_allclose(values2, correct_vals, atol=1e-8)
-        np.testing.assert_allclose(derivs2, correct_ders, atol=1e-8)
+            l = np.array([3, 4, 6])
+            m = np.array([1, 2, 2])
+            r = np.linspace(0, 1, 11)  # rho coordinates
+            max_dr = 4
+            desired = {
+                dr: np.array([Z3_1(r, dr), Z4_2(r, dr), Z6_2(r, dr)]).T
+                for dr in range(max_dr + 1)
+            }
+            radial = {
+                dr: zernike_radial(r[:, np.newaxis], l, m, dr)
+                for dr in range(max_dr + 1)
+            }
+            radial_poly = {
+                dr: zernike_radial_poly(r[:, np.newaxis], l, m, dr)
+                for dr in range(max_dr + 1)
+            }
+            for dr in range(max_dr + 1):
+                np.testing.assert_allclose(radial[dr], desired[dr], err_msg=dr)
+                np.testing.assert_allclose(radial_poly[dr], desired[dr], err_msg=dr)
 
     @pytest.mark.unit
     def test_fourier(self):

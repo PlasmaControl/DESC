@@ -20,6 +20,7 @@ def get_DESC_runid(eq):  # or take in the data from a DESC eq?
 def get_config_hash(eq):  # or take in the data from a DESC eq?
     """Take in a DESC equilibrium and return a unique hash for the configuration."""
     # what to do? first 10 bdry modes and their strengths?
+    # name and a number?
     return None
 
 
@@ -28,20 +29,60 @@ def get_config_hash(eq):  # or take in the data from a DESC eq?
 
 # TODO: make arrays stored in one line
 
+# TODO: either make separate utilities for desc_runs csv and configurations csv,
+# or have the utility somehow check for if the configuration exists already,
+# or add configid to the arguments so that if it
+# is passed in, a new row in configuration
+# won't be created and instead the configid will be used, which points to
+# an existing configuration in the database
+
 
 def desc_to_csv(  # noqa
     eq,
     current=True,
+    name=None,
+    provenance=None,
+    description=None,
+    inputfilename=None,
+    initialization_method="surface",
     **kwargs,
 ):
-    """Save DESC as a csv with relevant information.
+    """Save DESC output file as a csv with relevant information.
 
     Args
     ----
         eq (Equilibrium or str): DESC equilibrium to save or path to .h5 of
          DESC equilibrium to save
-        current: bool, if the equilibrium was solved with fixed current or not
+        current (bool): True if the equilibrium was solved with fixed current or not
             if False, was solved with fixed iota
+        name (str) : name of configuration (and desc run)
+        provenance (str): where this configuration (and desc run) came from, e.g.
+            DESC github repo
+        description (str): description of the configuration (and desc run)
+        inputfilename (str): name of the input file corresponding to this
+            configuration (and desc run)
+        initialization_method (str): how the DESC equilibrium solution was initialized
+            one of "surface", "NAE", or the name of a .nc or .h5 file
+            corresponding to a VMEC (if .nc) or DESC (if .h5) solution
+
+    Kwargs
+    ------
+        date_created (str): when the DESC run was created, defaults to current day
+        publicationid (str): unique ID for a publication which this DESC output file is
+            associated with.
+        deviceid (str): unique ID for a device/concept which this configuration
+         is associated with.
+        config_class (str): class of configuration i.e. quasisymmetry (QA, QH, QP)
+            or omnigenity (QI, OT, OH) or axisymmetry (AS).
+            Defaults to None for a stellarator
+            and (AS) for a tokamak
+            #TODO: can we attempt to automatically detect this for QS configs?
+            maybe with a threshold on low QS, then if passes that, classify
+            based on largest Boozer mode? can add a flag to the table like
+            "automatically labelled class" if this occurs
+            to be transparent about source of the class if it was not a human
+
+
 
     Returns
     -------
@@ -74,13 +115,11 @@ def desc_to_csv(  # noqa
     data_desc_runs[
         "desc_run_ID"
     ] = None  # FIXME what should this be? how to hash? commit ID?
-    data_desc_runs["configid"] = kwargs.get(
-        "name", None
-    )  # FIXME what should this be? how to hash?
+    data_desc_runs["configid"] = name  # FIXME what should this be? how to hash?
 
     # FIXME: Defaults for these?
-    data_desc_runs["provenance"] = kwargs.pop("provenance", None)
-    data_desc_runs["description"] = kwargs.pop("description", None)
+    data_desc_runs["provenance"] = provenance
+    data_desc_runs["description"] = description
 
     data_desc_runs[
         "version"
@@ -88,11 +127,9 @@ def desc_to_csv(  # noqa
     data_desc_runs[
         "git_commit"
     ] = version  # this is basically redundant with git commit I think
-    data_desc_runs["inputfilename"] = kwargs.pop("inputfilename", None)
+    data_desc_runs["inputfilename"] = inputfilename
 
-    data_desc_runs["initialization_method"] = kwargs.pop(
-        "initialization_method", "surface"
-    )
+    data_desc_runs["initialization_method"] = initialization_method
 
     data_desc_runs["l_rad"] = eq.L
     data_desc_runs["l_grid"] = eq.L_grid
@@ -162,10 +199,8 @@ def desc_to_csv(  # noqa
     data_desc_runs["publicationid"] = kwargs.get("publicationid", None)
 
     ############ configuration Data Table ############
-    data_configurations["configid"] = kwargs.get(
-        "name", None
-    )  # FIXME what should this be? how to hash?
-    data_configurations["name"] = kwargs.get("name", None)
+    data_configurations["configid"] = name  # FIXME what should this be? how to hash?
+    data_configurations["name"] = name
     data_configurations["NFP"] = eq.NFP
     data_configurations["stell_sym"] = bool(eq.sym)
 
@@ -173,8 +208,8 @@ def desc_to_csv(  # noqa
     data_configurations["hashkey"] = get_config_hash(eq)  # FIXME: what is this?
 
     # FIXME: Defaults for these?
-    data_configurations["provenance"] = kwargs.pop("provenance", None)
-    data_configurations["description"] = kwargs.pop("description", None)
+    data_configurations["provenance"] = provenance
+    data_configurations["description"] = description
 
     data_configurations["toroidal_flux"] = eq.Psi
     data_configurations["aspect_ratio"] = eq.compute("R0/a")["R0/a"]
@@ -306,7 +341,7 @@ def device_or_concept_to_csv(  # noqa
     device_class=None,
     NFP=None,
     description=None,
-    stell_sym=None,
+    stell_sym=False,
     deviceid=None,
 ):
     """Save DESC as a csv with relevant information.
@@ -315,8 +350,14 @@ def device_or_concept_to_csv(  # noqa
     ----
         eq (Equilibrium or str): DESC equilibrium to save or path to .h5 of
          DESC equilibrium to save
-        current: bool, if the equilibrium was solved with fixed current or not
-            if False, was solved with fixed iota
+        device_class (str): class of device i.e. quasisymmetry (QA, QH, QP)
+            or omnigenity (QI, OT, OH) or axisymmetry (AS).
+        NFP (int): (Nominal) number of field periods for the device/concept
+        description (str): description of the device/concept
+        stell_sym (bool): (Nominal) stellarator symmetry of the device
+            (stellarator symmetry defined as R(theta, zeta) = R(-theta,-zeta)
+            and Z(theta, zeta) = -Z(-theta,-zeta))
+        deviceid (str): unique identifier for this device
 
     Returns
     -------

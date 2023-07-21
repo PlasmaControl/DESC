@@ -5,9 +5,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from netCDF4 import Dataset
 
-from desc.backend import jit, jnp, odeint
+from desc.backend import fori_loop, jit, jnp, odeint
 from desc.derivatives import Derivative
-from desc.geometry.utils import rpz2xyz_vec, xyz2rpz
+from desc.geometry.utils import rpz2xyz, rpz2xyz_vec, xyz2rpz, xyz2rpz_vec
 from desc.grid import Grid
 from desc.interpolate import _approx_df, interp2d, interp3d
 from desc.io import IOAble
@@ -57,6 +57,40 @@ def biot_savart(eval_pts, coil_pts, current):
     vec = jnp.cross(dvec[:, jnp.newaxis, :], Ri_vec, axis=-1)
     B = jnp.sum(Bmag[:, :, jnp.newaxis] * vec, axis=0)
     return B
+
+
+def biot_savart_general(re, rs, J, dV):
+    """Biot-Savart law for arbitrary sources.
+
+    Parameters
+    ----------
+    re : ndarray, shape(n_eval_pts, 3)
+        evaluation points to evaluate B at, in cartesian.
+    rs : ndarray, shape(n_src_pts, 3)
+        source points for current density J, in cartesian.
+    J : ndarray, shape(n_src_pts, 3)
+        current density vector at source points, in cartesian.
+    dV : ndarray, shape(n_src_pts)
+        volume element at source points
+
+    Returns
+    -------
+    B : ndarray, shape(n,3)
+        magnetic field in cartesian components at specified points
+    """
+    re, rs, J, dV = map(jnp.asarray, (re, rs, J, dV))
+    assert J.shape == rs.shape
+    JdV = J * dV[:, None]
+    B = jnp.zeros_like(re)
+
+    def body(i, B):
+        r = re - rs[i, :]
+        num = jnp.cross(JdV[i, :], r, axis=-1)
+        den = jnp.linalg.norm(r, axis=-1) ** 3
+        B = B + jnp.where(den[:, None] == 0, 0, num / den[:, None])
+        return B
+
+    return 1e-7 * fori_loop(0, J.shape[0], body, B)
 
 
 class MagneticField(IOAble, ABC):
@@ -795,3 +829,155 @@ def field_line_integrate(
     r = x[:, :, 0].T.reshape((len(phis), *rshape))
     z = x[:, :, 2].T.reshape((len(phis), *rshape))
     return r, z
+
+
+class CurrentPotentialField(MagneticField):
+    """Magnetic field due to a surface current potential.
+
+        surface current K is assumed given by
+        K = n x nabla(Phi)
+        where n is the winding surface unit normal
+              Phi is the current potential function,
+              which is a function of theta and zeta
+        this function then uses biot-savart to find the
+        B field from this current density K on the surface
+
+    Parameters
+    ----------
+    potential : callable
+        function to compute the current potential. Should have a signature of
+        the form potential(theta,zeta,*params) -> ndarray.
+        theta,zeta are poloidal and toroidal angles on the surface
+    surface : FourierRZToroidalSurface
+        winding surface on which the surface current described by
+        the current potential lies.
+    surface_grid : Grid,
+        grid upon which to evaluate the surface current density K
+    params : dict, optional
+        default parameters to pass to potential function (and its derivatives)
+    potential_dtheta: callable
+        function to compute the theta derivative of the current potential
+        if None, will use AD to calculate
+    potential_dzeta: callable
+        function to compute the theta derivative of the current potential
+        if None, will use AD to calculate
+
+
+    """
+
+    def __init__(
+        self,
+        potential,
+        surface,
+        surface_grid,
+        params={},
+        potential_dtheta=None,
+        potential_dzeta=None,
+    ):
+        self._potential = potential
+        self._surface = surface
+        self._surface_grid = surface_grid
+        self._params = params
+        if potential_dtheta:
+            self.Phi_t = potential_dtheta
+        else:
+            self.Phi_t = Derivative(potential, argnum=0, mode="grad")
+        if potential_dzeta:
+            self.Phi_z = potential_dzeta
+        else:
+            self.Phi_z = Derivative(potential, argnum=1, mode="grad")
+
+        # K can/should be precomputed I think
+        self._compute_surface_current()
+
+    @property
+    def surface_grid(self):
+        """Grid of points to evaluate surface current at."""
+        return self._surface_grid
+
+    @surface_grid.setter
+    def surface_grid(self, new):
+        if new != self._surface_grid:
+            self._surface_grid = new
+            # recompute K if surface grid changed
+            self._compute_surface_current()
+
+    @property
+    def params(self):
+        """Dict of parameters to pass to potential function and its derivatives."""
+        return self._surface_grid
+
+    @params.setter
+    def params(self, new):
+        if new != self._params:
+            self._params = new
+            # recompute K if params changed
+            self._compute_surface_current()
+
+    def _compute_surface_current(self, surface_grid=None, params=None):
+        if surface_grid is None:
+            surface_grid = self.surface_grid
+        if (params is None) or (len(params) == 0):
+            params = self._params
+
+        # surface is the source of current density for the magnetic field
+        # compute source positions rs, and their theta/zeta derivatives
+        self._rs = self._surface.compute_coordinates(grid=surface_grid, basis="xyz")
+        self._rs_t = self._surface.compute_coordinates(
+            grid=surface_grid, dt=1, basis="xyz"
+        )
+        self._rs_z = self._surface.compute_coordinates(
+            grid=surface_grid, dz=1, basis="xyz"
+        )
+        theta = surface_grid.nodes[:, 1]
+        zeta = surface_grid.nodes[:, 2]
+        # compute the dV element for  the surface needed for biot savart
+        self._dV = surface_grid.weights * jnp.linalg.norm(
+            jnp.cross(self._rs_t, self._rs_z, axis=-1), axis=-1
+        )
+
+        # compute the potential derivatives on the surface
+        phi_t = self.Phi_t(theta, zeta, **self._params)
+        phi_z = self.Phi_z(theta, zeta, **self._params)
+
+        # compute surface normal magnitude
+        ns_mag = jnp.linalg.norm(np.cross(self._rs_t, self._rs_z), axis=1)
+
+        # compute K = n x nabla(Phi)
+        self._K = (
+            -(phi_t * (1 / ns_mag) * self._rs_z.T).T
+            + (phi_z * (1 / ns_mag) * self._rs_t.T).T
+        )
+
+    def compute_magnetic_field(self, coords, params=None, basis="rpz"):
+        """Compute magnetic field at a set of points.
+
+        Parameters
+        ----------
+        coords : array-like shape(N,3) or Grid
+            cylindrical or cartesian coordinates
+        params : dict, optional
+            parameters to pass to scalar potential function
+        basis : {"rpz", "xyz"}
+            basis for input coordinates and returned magnetic field
+
+        Returns
+        -------
+        field : ndarray, shape(N,3)
+            magnetic field at specified points
+
+        """
+        assert basis.lower() in ["rpz", "xyz"]
+        if isinstance(coords, Grid):
+            coords = coords.nodes
+        coords = jnp.atleast_2d(coords)
+        if basis == "rpz":
+            coords = rpz2xyz(coords)
+
+        if (params is None) or (len(params) == 0):
+            params = self._params
+
+        B = biot_savart_general(coords, self._rs, self._K, self._dV)
+        if basis == "rpz":
+            B = xyz2rpz_vec(B, x=coords[:, 0], y=coords[:, 1])
+        return B

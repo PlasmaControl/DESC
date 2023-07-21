@@ -160,11 +160,17 @@ def assert_is_continuous(
         if _skip_this(eq, name) or data_index[name]["coordinates"] == "":
             continue
         # make single variable function of rho
-        profile = (
-            grid.compress(data[name])
-            if data_index[name]["coordinates"] == "r"
-            else integrate(data[name])
-        )
+        if data_index[name]["coordinates"] == "r":
+            profile = grid.compress(data[name])
+        else:
+            # Norms and integrals are continuous functions, so their composition
+            # cannot disrupt existing continuity. Note that the absolute value
+            # before the integration ensures that a discontinuous integrand does
+            # not become continuous once integrated.
+            profile = integrate(np.abs(data[name]))
+            if np.isnan(data[name][grid.axis]).any():
+                # integration replaced nan with 0, put it back
+                profile[0] = np.nan
         fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
         if fit is None:
             if np.ndim(data_index[name]["dim"]):

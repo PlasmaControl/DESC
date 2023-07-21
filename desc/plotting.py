@@ -2907,8 +2907,8 @@ def plot_basis(basis, return_data=False, **kwargs):
         mmax = abs(basis.modes[:, 1]).max().astype(int)
 
         grid = LinearGrid(rho=100, theta=100, endpoint=True)
-        r = grid.num_rho
-        v = grid.num_theta
+        r = grid.nodes[grid.unique_rho_idx, 0]
+        v = grid.nodes[grid.unique_theta_idx, 1]
 
         fig = plt.figure(figsize=kwargs.get("figsize", (3 * mmax, 3 * lmax / 2)))
 

@@ -50,23 +50,55 @@ not_finite_limit_keys = {
 }
 
 # Todo: these limits exist, but may currently evaluate as nan.
-todo_keys = {
-    "iota_num_rrr",  # requires sqrt(g)_rrrr
-    "iota_den_rrr",  # requires sqrt(g)_rrrr
-    "iota_rr",  # already done, just needs limits of above two.
+todo_limit = {
+    "fix_current": ["iota_num_rrr", "iota_den_rrr"],
+    "fix_iota": [],
+    "all": [],
 }
 
 
-def _skip_profile(eq, name):
+def _skip_this(eq, name):
     return (
-        (eq.atomic_number is None and "Zeff" in name)
+        name in todo_limit.get("all", [])
+        or (eq.current is None and name in todo_limit.get("fix_iota", []))
+        or (eq.iota is None and name in todo_limit.get("fix_current", []))
+        or (eq.atomic_number is None and "Zeff" in name)
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
         or (eq.ion_temperature is None and "Ti" in name)
         or (eq.pressure is not None and "<J*B> Redl" in name)
         or (eq.current is None and ("iota_num" in name or "iota_den" in name))
-        or (eq.iota is None and name in todo_keys)
     )
+
+
+def grow_seeds(seeds, search_space):
+    """Traverse the dependency DAG for keys in search space dependent on seeds.
+
+    Parameters
+    ----------
+    seeds : iterable
+        Keys to find paths toward.
+    search_space : iterable
+        Keys to consider returning.
+
+    Returns
+    -------
+    out : set
+        All keys in search space that have a path between it and any seed.
+
+    """
+    out = set(seeds)
+    for key in search_space:
+        deps = data_index[key]["full_with_axis_dependencies"]["data"]
+        if key not in out and not out.isdisjoint(deps):
+            out.add(key)
+    return out
+
+
+todo_limit = {
+    key: grow_seeds(val, search_space=data_index.keys() - not_finite_limit_keys)
+    for key, val in todo_limit.items()
+}
 
 
 def assert_is_continuous(
@@ -124,7 +156,7 @@ def assert_is_continuous(
     data = eq.compute(names, grid=grid)
 
     for name in names:
-        if data_index[name]["coordinates"] == "" or _skip_profile(eq, name):
+        if data_index[name]["coordinates"] == "" or _skip_this(eq, name):
             continue
         # make single variable function of rho
         profile = (
@@ -234,7 +266,7 @@ class TestAxisLimits:
             assert at_axis.any()
             data = eq.compute(list(data_index.keys()), grid=grid)
             for key in data_index:
-                if _skip_profile(eq, key):
+                if _skip_this(eq, key):
                     continue
                 is_finite = np.isfinite(data[key])
                 if key in not_finite_limit_keys:
@@ -243,7 +275,7 @@ class TestAxisLimits:
                     assert np.all(is_finite), key
 
         test(get("W7-X"))  # fixed iota
-        # test(get("QAS"))  # fixed current
+        test(get("QAS"))  # fixed current
 
     @pytest.mark.unit
     def test_continuous_limits(self):
@@ -252,21 +284,8 @@ class TestAxisLimits:
         # so this test does not make sense for keys that rely on discontinuous
         # keys as dependencies.
         finite_discontinuous = {"curvature_k1", "curvature_k2"}
-        # Subtract out not_finite_limit_keys before search to avoid false
-        # positives for discontinuous keys. (Recall that nan and inf always
-        # propagate up dependencies, so we do not need to search up the
-        # dependency trees of keys in that set).
-        continuous = data_index.keys() - not_finite_limit_keys - finite_discontinuous
-        searching = True
-        while searching:
-            size = len(finite_discontinuous)
-            for key in continuous:
-                if not finite_discontinuous.isdisjoint(
-                    data_index[key]["full_dependencies"]["data"]
-                ):
-                    finite_discontinuous.add(key)
-            searching = len(finite_discontinuous) > size
-        continuous -= finite_discontinuous
+        continuous = data_index.keys() - not_finite_limit_keys
+        continuous -= grow_seeds(finite_discontinuous, continuous)
 
         # The need for a weaker tolerance on these keys may be due to large
         # derivatives near axis, finite precision error, or a subpar polynomial
@@ -284,12 +303,16 @@ class TestAxisLimits:
             "B_rr": {"atol": 1e00},
             "(J sqrt(g))_r": {"atol": 1e00},
             "J^theta sqrt(g)": {"atol": 2},
+            "B^theta_r": {"atol": 1e-2},
             "B^theta_rr": {"rtol": 5e-02},
             "J_R": {"atol": 1e00},
+            "iota_r": {"atol": 1e-4},
+            "iota_num_rr": {"atol": 1e-3},
+            "alpha_r": {"rtol": 1e-2},
         }
         zero_limit = dict.fromkeys(zero_limit_keys, {"desired_at_axis": 0})
         kwargs = weaker_tolerance | zero_limit
         # fixed iota
         assert_is_continuous(get("W7-X"), names=continuous, kwargs=kwargs)
         # fixed current
-        # assert_is_continuous(get("QAS"), names=continuous, kwargs=kwargs)
+        assert_is_continuous(get("QAS"), names=continuous, kwargs=kwargs)

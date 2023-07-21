@@ -800,12 +800,12 @@ class SplineProfile(Profile):
 
     _io_attrs_ = Profile._io_attrs_ + ["_knots", "_method"]
 
-    def __init__(
-        self, values=[0, 0, 0], knots=None, grid=None, method="cubic2", name=""
-    ):
+    def __init__(self, values=None, knots=None, grid=None, method="cubic2", name=""):
 
         super().__init__(grid, name)
 
+        if values is None:
+            values = [0, 0, 0]
         values = np.atleast_1d(values)
         if knots is None:
             knots = np.linspace(0, 1, values.size)

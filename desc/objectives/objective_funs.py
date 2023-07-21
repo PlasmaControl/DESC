@@ -6,7 +6,7 @@ from inspect import getfullargspec
 
 import numpy as np
 
-from desc.backend import block_diag, jit, jnp, use_jax
+from desc.backend import jit, jnp, use_jax
 from desc.derivatives import Derivative
 from desc.io import IOAble
 from desc.utils import Timer, is_broadcastable, sort_args
@@ -21,9 +21,9 @@ class ObjectiveFunction(IOAble):
         List of objectives to be minimized.
     use_jit : bool, optional
         Whether to just-in-time compile the objectives and derivatives.
-    deriv_mode : {"batched", "blocked"}
-        method for computing derivatives. "batched" is generally faster, "blocked" may
-        use less memory. Note that the "blocked" Hessian will only be block diagonal.
+    deriv_mode : {"batched", "looped"}
+        method for computing derivatives. "batched" is generally faster, "looped" may
+        use less memory.
     verbose : int, optional
         Level of output.
 
@@ -38,7 +38,7 @@ class ObjectiveFunction(IOAble):
             isinstance(obj, _Objective) for obj in objectives
         ), "members of ObjectiveFunction should be instances of _Objective"
         assert use_jit in {True, False}
-        assert deriv_mode in {"batched", "blocked", "looped"}
+        assert deriv_mode in {"batched", "looped"}
 
         self._objectives = objectives
         self._use_jit = use_jit
@@ -120,34 +120,6 @@ class ObjectiveFunction(IOAble):
                     ]
                 ),
                 axis=0,
-            )
-
-        if self._deriv_mode == "blocked":
-            self._grad = lambda x, constants=None: jnp.concatenate(
-                [
-                    jnp.atleast_1d(
-                        self._derivatives["grad"][arg](x, constants=constants)
-                    )
-                    for arg in self.args
-                ]
-            )
-            self._jac_scaled = lambda x, constants=None: jnp.hstack(
-                [
-                    self._derivatives["jac_scaled"][arg](x, constants=constants)
-                    for arg in self.args
-                ]
-            )
-            self._jac_unscaled = lambda x, constants=None: jnp.hstack(
-                [
-                    self._derivatives["jac_unscaled"][arg](x, constants=constants)
-                    for arg in self.args
-                ]
-            )
-            self._hess = lambda x, constants=None: block_diag(
-                *[
-                    self._derivatives["hess"][arg](x, constants=constants)
-                    for arg in self.args
-                ]
             )
         if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")

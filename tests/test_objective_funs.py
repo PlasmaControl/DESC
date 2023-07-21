@@ -321,37 +321,25 @@ class TestObjectiveFunction:
 
 @pytest.mark.unit
 def test_derivative_modes():
-    """Test equality of derivatives using batched, blocked, looped methods."""
+    """Test equality of derivatives using batched, looped methods."""
     eq = Equilibrium(M=2, N=1, L=2)
     obj1 = ObjectiveFunction(MagneticWell(eq=eq), deriv_mode="batched", use_jit=False)
-    obj2 = ObjectiveFunction(MagneticWell(eq=eq), deriv_mode="blocked", use_jit=False)
     obj3 = ObjectiveFunction(MagneticWell(eq=eq), deriv_mode="looped", use_jit=False)
 
     obj1.build()
-    obj2.build()
     obj3.build()
     x = obj1.x(eq)
     g1 = obj1.grad(x)
-    g2 = obj2.grad(x)
     g3 = obj3.grad(x)
-    np.testing.assert_allclose(g1, g2, atol=1e-10)
     np.testing.assert_allclose(g1, g3, atol=1e-10)
     J1 = obj1.jac_scaled(x)
-    J2 = obj2.jac_scaled(x)
     J3 = obj3.jac_scaled(x)
-    np.testing.assert_allclose(J1, J2, atol=1e-10)
     np.testing.assert_allclose(J1, J3, atol=1e-10)
     J1 = obj1.jac_unscaled(x)
-    J2 = obj2.jac_unscaled(x)
     J3 = obj3.jac_unscaled(x)
-    np.testing.assert_allclose(J1, J2, atol=1e-10)
     np.testing.assert_allclose(J1, J3, atol=1e-10)
     H1 = obj1.hess(x)
-    H2 = obj2.hess(x)
     H3 = obj3.hess(x)
-    # blocked hessian is only block diagonal, so we only check the diag part
-    np.testing.assert_allclose(np.diag(H1), np.diag(H2), atol=1e-10)
-    # looped and batched should be full matrices
     np.testing.assert_allclose(H1, H3, atol=1e-10)
 
 

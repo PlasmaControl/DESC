@@ -426,7 +426,7 @@ def test_simsopt_QH_comparison():
     surface = FourierRZToroidalSurface(
         R_lmn=[1.0, 1.0 / aspect_target, Delta],
         modes_R=[[0, 0], [1, 0], [0, 1]],
-        Z_lmn=[0, 1.0 / aspect_target, Delta],
+        Z_lmn=[0, -1.0 / aspect_target, Delta],
         modes_Z=[[0, 0], [-1, 0], [0, -1]],
         NFP=nfp,
     )
@@ -559,8 +559,8 @@ def test_NAE_QSC_solve():
     np.testing.assert_allclose(theta_err[:, 0:-6], 0, atol=1e-3)
 
     # Make sure iota of solved equilibrium is same near axis as QSC
-    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"], "rho")
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
     np.testing.assert_allclose(iota[0], qsc.iota, atol=1e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=1e-3)
@@ -656,13 +656,13 @@ def test_NAE_QIC_solve():
 
     np.testing.assert_allclose(rho_err[:, 0:3], 0, atol=5e-2)
     # theta error isn't really an indicator of near axis behavior
-    # since its computed over the full radius, but just indicates that
+    # since it's computed over the full radius, but just indicates that
     # eq is similar to eq_fit
     np.testing.assert_allclose(theta_err, 0, atol=5e-2)
 
     # Make sure iota of solved equilibrium is same near axis as QIC
-    grid = LinearGrid(L=10, M=20, N=20, sym=True, axis=False)
-    iota = grid.compress(eq.compute("iota", grid=grid)["iota"], "rho")
+    grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
+    iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
     np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=5e-4)

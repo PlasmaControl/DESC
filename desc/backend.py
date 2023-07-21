@@ -74,6 +74,7 @@ if use_jax:  # noqa: C901 - FIXME: simplify this, define globally and then assig
     from jax.experimental.ode import odeint
     from jax.scipy.linalg import block_diag, cho_factor, cho_solve, qr, solve_triangular
     from jax.scipy.special import gammaln
+    from jax.tree_util import register_pytree_node
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".
@@ -126,6 +127,10 @@ else:
         solve_triangular,
     )
     from scipy.special import gammaln  # noqa: F401
+
+    def register_pytree_node(foo, *args):
+        """Dummy decorator for non-jax pytrees."""
+        return foo
 
     def put(arr, inds, vals):
         """Functional interface for array "fancy indexing".

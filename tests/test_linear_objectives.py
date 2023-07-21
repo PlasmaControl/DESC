@@ -76,11 +76,11 @@ def test_LambdaGauge_asym():
             [
                 [0, 0, 0, 3, 0],
                 [0, 1, 0, 1, 0],
-                [0, -1, 0, 0, 1],
+                [0, -1, 0, 0, -1],
                 [0, 1, 1, 0.3, 0],
-                [0, -1, -1, -0.3, 0],
+                [0, -1, -1, 0.3, 0],
                 [0, 1, -1, 0, -0.3],
-                [0, -1, 1, 0, -0.3],
+                [0, -1, 1, 0, 0.3],
             ],
         ),
         "axis": np.array([[-1, 0, -0.2], [0, 3.4, 0], [1, 0.2, 0]]),
@@ -781,14 +781,16 @@ def _is_any_instance(things, cls):
 @pytest.mark.unit
 def test_FixAxis_util_correct_objectives():
     """Test util for fix axis constraints."""
-    cs = get_fixed_axis_constraints(iota=False)
+    with pytest.warns(FutureWarning):
+        cs = get_fixed_axis_constraints(iota=False)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)
     assert _is_any_instance(cs, FixPressure)
     assert _is_any_instance(cs, FixCurrent)
 
-    cs = get_fixed_axis_constraints(iota=True, kinetic=True)
+    with pytest.warns(FutureWarning):
+        cs = get_fixed_axis_constraints(iota=True, kinetic=True)
     assert _is_any_instance(cs, FixAxisR)
     assert _is_any_instance(cs, FixAxisZ)
     assert _is_any_instance(cs, FixPsi)

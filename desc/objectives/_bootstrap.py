@@ -179,6 +179,12 @@ class BootstrapRedlConsistency(_Objective):
         self._profiles = get_profiles(self._data_keys, eq=eq, grid=grid)
         self._transforms = get_transforms(self._data_keys, eq=eq, grid=grid)
 
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+            "helicity": self._helicity,
+        }
+
         timer.stop("Precomputing transforms")
         if verbose > 1:
             timer.disp("Precomputing transforms")
@@ -198,19 +204,28 @@ class BootstrapRedlConsistency(_Objective):
             Bootstrap current self-consistency residual on each rho grid point.
 
         """
-        params = self._parse_args(*args, **kwargs)
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
         data = compute_fun(
             self._data_keys,
             params=params,
-            transforms=self._transforms,
-            profiles=self._profiles,
-            helicity=self.helicity,
+            transforms=constants["transforms"],
+            profiles=constants["profiles"],
+            helicity=constants["helicity"],
         )
-        return self._transforms["grid"].compress(data["<J*B>"] - data["<J*B> Redl"])
+        return constants["transforms"]["grid"].compress(
+            data["<J*B>"] - data["<J*B> Redl"]
+        )
 
     def _scale(self, *args, **kwargs):
         """Compute and apply the target/bounds, weighting, and normalization."""
-        w = self._transforms["grid"].compress(self._transforms["grid"].spacing[:, 0])
+        constants = kwargs.get("constants", None)
+        if constants is None:
+            constants = self.constants
+        w = constants["transforms"]["grid"].compress(
+            constants["transforms"]["grid"].spacing[:, 0]
+        )
         return super()._scale(*args, **kwargs) * jnp.sqrt(w)
 
     def print_value(self, *args, **kwargs):

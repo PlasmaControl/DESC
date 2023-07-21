@@ -1301,7 +1301,7 @@ class TestBootstrapObjectives:
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(kinetic=True),
+            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1339,7 +1339,7 @@ class TestBootstrapObjectives:
             verbose=3,
             objective=objective,
             constraints=constraints,
-            optimizer=Optimizer("scipy-trf"),
+            optimizer=Optimizer("proximal-scipy-trf"),
             ftol=1e-6,
         )
 
@@ -1390,30 +1390,30 @@ class TestBootstrapObjectives:
             modes_Z=[[-1, 0]],
             NFP=NFP,
         )
-
-        eq = Equilibrium(
-            surface=surface,
-            electron_density=ne,
-            electron_temperature=Te,
-            ion_temperature=Ti,
-            current=current,
-            Psi=B0 * np.pi * (aminor**2),
-            NFP=NFP,
-            L=LM_resolution,
-            M=LM_resolution,
-            N=0,
-            L_grid=2 * LM_resolution,
-            M_grid=2 * LM_resolution,
-            N_grid=0,
-            sym=True,
-        )
+        with pytest.warns(UserWarning, match="current profile is not an even"):
+            eq = Equilibrium(
+                surface=surface,
+                electron_density=ne,
+                electron_temperature=Te,
+                ion_temperature=Ti,
+                current=current,
+                Psi=B0 * np.pi * (aminor**2),
+                NFP=NFP,
+                L=LM_resolution,
+                M=LM_resolution,
+                N=0,
+                L_grid=2 * LM_resolution,
+                M_grid=2 * LM_resolution,
+                N_grid=0,
+                sym=True,
+            )
         current_L = 16
         eq.current.change_resolution(current_L)
 
         eq.solve(
             verbose=3,
             ftol=1e-8,
-            constraints=get_fixed_boundary_constraints(kinetic=True, iota=False),
+            constraints=get_fixed_boundary_constraints(eq=eq, kinetic=True, iota=False),
             optimizer=Optimizer("lsq-exact"),
             objective=ObjectiveFunction(objectives=ForceBalance(eq=eq)),
         )
@@ -1447,7 +1447,7 @@ class TestBootstrapObjectives:
             verbose=3,
             objective=objective,
             constraints=constraints,
-            optimizer=Optimizer("scipy-trf"),
+            optimizer=Optimizer("proximal-scipy-trf"),
             ftol=1e-6,
             gtol=0,  # It is critical to set gtol=0 when optimizing current profile!
         )
@@ -1551,6 +1551,15 @@ def test_bootstrap_objective_build():
     with pytest.warns(UserWarning):
         BootstrapRedlConsistency(eq=eq).build()
 
+    eq = Equilibrium(
+        L=3,
+        M=3,
+        N=3,
+        NFP=2,
+        electron_temperature=1e3,
+        electron_density=1e21,
+        ion_temperature=1e3,
+    )
     obj = BootstrapRedlConsistency(eq=eq)
     obj.build()
     # make sure default grid has the right nodes

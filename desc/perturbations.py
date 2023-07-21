@@ -399,7 +399,8 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     for key, value in deltas.items():
         setattr(eq_new, key, getattr(eq_new, key) + value)
     for constraint in constraints:
-        constraint.update_target(eq_new)
+        if hasattr(constraint, "update_target"):
+            constraint.update_target(eq_new)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective.args
     )
@@ -815,7 +816,8 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         setattr(eq_new, key, getattr(eq_new, key) + dc[idx0 : idx0 + len(value)])
         idx0 += len(value)
     for constraint in constraints:
-        constraint.update_target(eq_new)
+        if hasattr(constraint, "update_target"):
+            constraint.update_target(eq_new)
     xp, _, _, Z, unfixed_idx, project, recover = factorize_linear_constraints(
         constraints, objective_f.args
     )

@@ -15,7 +15,7 @@ from desc.compute._field import (
     _max_tz_modB,
     _min_tz_modB,
 )
-from desc.compute._geometry import _V_r_of_r
+from desc.compute._geometry import _V_r_of_r, _V_rr_of_r
 from desc.equilibrium import Equilibrium
 from desc.geometry import FourierRZToroidalSurface
 from desc.grid import LinearGrid, QuadratureGrid
@@ -53,6 +53,7 @@ def trapped_fraction(grid, modB, sqrt_g, sqrt_g_r):
     transforms = {"grid": grid}
     profiles = None
     data = _V_r_of_r(params, transforms, profiles, data)
+    data = _V_rr_of_r(params, transforms, profiles, data)
     data = _B2_fsa(params, transforms, profiles, data)
     data = _1_over_B_fsa(params, transforms, profiles, data)
     data = _max_tz_modB(params, transforms, profiles, data)
@@ -138,16 +139,18 @@ class TestBootstrapCompute:
             rho = grid.nodes[:, 0]
             theta = grid.nodes[:, 1]
             epsilon_3D = rho * epsilon_max
-            # Pick out unique values:
-            epsilon = np.array(sorted(list(set(epsilon_3D))))
+            epsilon = np.unique(epsilon_3D)
 
             # Eq (A6)   # noqa: E800
             modB = B0 / (1 + epsilon_3D * np.cos(theta))
             # For Jacobian, use eq (A7) for the theta dependence,
             # times an arbitrary overall scale factor
             sqrt_g = 6.7 * (1 + epsilon_3D * np.cos(theta))
-            # fixme: ask Patrick for preferred sqrt_g_r value to test
-            f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=np.nan)
+            # Above "Jacobian" is nonzero at magnetic axis, so set
+            # sqrt(g)_r as sqrt(g) to nullify automatic computation of
+            # limit which assumes sqrt(g) is true Jacobian and zero at the
+            # magnetic axis.
+            f_t_data = trapped_fraction(grid, modB, sqrt_g, sqrt_g_r=sqrt_g)
 
             # Eq (C18) in Kim et al:
             f_t_Kim = 1.46 * np.sqrt(epsilon) - 0.46 * epsilon
@@ -164,7 +167,7 @@ class TestBootstrapCompute:
                 f_t_data["effective r/R0"], grid.expand(epsilon), rtol=1e-4
             )
             # Eq (A8):
-            fsa_B2 = B0 * B0 / np.sqrt(1 - epsilon**2)
+            fsa_B2 = B0**2 / np.sqrt(1 - epsilon**2)
             np.testing.assert_allclose(
                 f_t_data["<|B|^2>"], grid.expand(fsa_B2), rtol=1e-6
             )
@@ -180,7 +183,7 @@ class TestBootstrapCompute:
             # Now compute f_t numerically by a different algorithm:
             modB = modB.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
             sqrt_g = sqrt_g.reshape((grid.num_zeta, grid.num_rho, grid.num_theta))
-            fourpisq = 4 * np.pi * np.pi
+            fourpisq = 4 * np.pi**2
             d_V_d_rho = np.mean(sqrt_g, axis=(0, 2)) / fourpisq
             f_t = np.zeros(grid.num_rho)
             for jr in range(grid.num_rho):

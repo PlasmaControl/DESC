@@ -35,6 +35,25 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
 
 
 @register_compute_fun(
+    name="J^theta sqrt(g)",
+    label="J^{\\theta} \\sqrt{g}",
+    units="A",
+    units_long="Amperes",
+    description="Contravariant poloidal component of plasma current density,"
+    " weighted by 3-D volume Jacobian",
+    dim=1,
+    params=[],
+    transforms={},
+    profiles=[],
+    coordinates="rtz",
+    data=["B_rho_z", "B_zeta_r"],
+)
+def _J_sup_theta_sqrt_g(params, transforms, profiles, data, **kwargs):
+    data["J^theta sqrt(g)"] = (data["B_rho_z"] - data["B_zeta_r"]) / mu_0
+    return data
+
+
+@register_compute_fun(
     name="J^theta",
     label="J^{\\theta}",
     units="A \\cdot m^{-3}",
@@ -45,10 +64,10 @@ def _J_sup_rho(params, transforms, profiles, data, **kwargs):
     transforms={},
     profiles=[],
     coordinates="rtz",
-    data=["sqrt(g)", "B_rho_z", "B_zeta_r"],
+    data=["sqrt(g)", "J^theta sqrt(g)"],
 )
 def _J_sup_theta(params, transforms, profiles, data, **kwargs):
-    data["J^theta"] = (data["B_rho_z"] - data["B_zeta_r"]) / (mu_0 * data["sqrt(g)"])
+    data["J^theta"] = data["J^theta sqrt(g)"] / data["sqrt(g)"]
     return data
 
 
@@ -92,18 +111,16 @@ def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     data=[
         "J^rho",
         "J^zeta",
-        "B_rho_z",
-        "B_zeta_r",
+        "J^theta sqrt(g)",
         "e_rho",
         "e_zeta",
         "e_theta / sqrt(g)",
     ],
 )
 def _J(params, transforms, profiles, data, **kwargs):
-    # J^theta e_theta refactored as below to resolve indeterminacy at axis.
     data["J"] = (
         data["J^rho"] * data["e_rho"].T
-        + (data["B_rho_z"] - data["B_zeta_r"]) / mu_0 * data["e_theta / sqrt(g)"].T
+        + data["J^theta sqrt(g)"] * data["e_theta / sqrt(g)"].T
         + data["J^zeta"] * data["e_zeta"].T
     ).T
     return data

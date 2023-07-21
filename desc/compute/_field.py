@@ -2693,8 +2693,8 @@ def _1_over_B_fsa(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["sqrt(g)_rr", "V_rrr(r)"],
 )
 def _B2_fsa_r(params, transforms, profiles, data, **kwargs):
-    B2_r = 2 * dot(data["B"], data["B_r"])
     integrate = surface_integrals_map(transforms["grid"])
+    B2_r = 2 * dot(data["B"], data["B_r"])
     num = integrate(data["sqrt(g)"] * data["|B|^2"])
     num_r = integrate(data["sqrt(g)_r"] * data["|B|^2"] + data["sqrt(g)"] * B2_r)
     data["<|B|^2>_r"] = transforms["grid"].replace_at_axis(

@@ -12,7 +12,7 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
-# Unless mentioned (in the source code of the compute function or elsewhere),
+# Unless mentioned in the source code of the compute function,
 # the only assumptions made to compute the magnetic axis limit of
 # quantities are that these functions tend toward zero as the magnetic axis
 # is approached, and that the limit of their rho derivatives is not zero.
@@ -283,6 +283,7 @@ class TestAxisLimits:
             "B0_rr": {"rtol": 5e-02},
             "B_rr": {"atol": 1e00},
             "(J sqrt(g))_r": {"atol": 1e00},
+            "J^theta sqrt(g)": {"atol": 2},
             "B^theta_rr": {"rtol": 5e-02},
             "J_R": {"atol": 1e00},
         }

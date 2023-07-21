@@ -552,7 +552,16 @@ class VMECIO:
         # grid for computing radial profile data
         grid = LinearGrid(M=eq.M_grid, N=eq.M_grid, NFP=eq.NFP, sym=eq.sym, rho=r_full)
         data = eq.compute(
-            ["<|B|^2>", "I", "G", "<J*B>", "sqrt(g)", "J^theta", "J^zeta", "D_Mercier"],
+            [
+                "<|B|^2>",
+                "I",
+                "G",
+                "<J*B>",
+                "sqrt(g)",
+                "J^theta sqrt(g)",
+                "J^zeta",
+                "D_Mercier",
+            ],
             grid=grid,
         )
 
@@ -586,7 +595,7 @@ class VMECIO:
         jcuru.units = "A/m^3"
         jcuru[:] = surface_averages(
             grid,
-            data["sqrt(g)"] * data["J^theta"] / (2 * data["rho"]),
+            data["J^theta sqrt(g)"] / (2 * data["rho"]),
             sqrt_g=data["sqrt(g)"],
             expand_out=False,
         )
@@ -792,12 +801,14 @@ class VMECIO:
         # half grid quantities
         half_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_half)
         data_half_grid = eq.compute(
-            ["J", "|B|", "B_rho", "B_theta", "B_zeta"], grid=half_grid
+            ["J", "|B|", "B_rho", "B_theta", "B_zeta", "sqrt(g)"], grid=half_grid
         )
 
         # full grid quantities
         full_grid = LinearGrid(M=M_nyq, N=N_nyq, NFP=NFP, rho=r_full)
-        data_full_grid = eq.compute(["J", "B_rho", "B_theta", "B_zeta"], grid=full_grid)
+        data_full_grid = eq.compute(
+            ["J", "B_rho", "B_theta", "B_zeta", "J^theta sqrt(g)"], grid=full_grid
+        )
 
         # Jacobian
         timer.start("Jacobian")
@@ -1000,7 +1011,7 @@ class VMECIO:
         bsubsmns[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             bsubsmnc[:, :] = c
             bsubsmnc[0, :] = (
@@ -1096,10 +1107,9 @@ class VMECIO:
         if verbose > 1:
             timer.disp("B_zeta")
 
-        # J^theta * sqrt(g)   # noqa: E800
-        timer.start("J^theta")
+        timer.start("J^theta sqrt(g)")
         if verbose > 0:
-            print("Saving J^theta")
+            print("Saving J^theta sqrt(g)")
         currumnc = file.createVariable(
             "currumnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1118,11 +1128,7 @@ class VMECIO:
             m = full_basis.modes[:, 1]
             n = full_basis.modes[:, 2]
         data = (
-            (
-                data_full_grid["J^theta"]
-                * data_full_grid["sqrt(g)"]
-                / (2 * data_full_grid["rho"])
-            )
+            (data_full_grid["J^theta sqrt(g)"] / (2 * data_full_grid["rho"]))
             .reshape(
                 (full_grid.num_theta, full_grid.num_rho, full_grid.num_zeta), order="F"
             )
@@ -1140,20 +1146,19 @@ class VMECIO:
         currumnc[0, :] = (  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currumns[:, :] = s
             currumns[0, :] = (
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^theta")
+        timer.stop("J^theta sqrt(g)")
         if verbose > 1:
-            timer.disp("J^theta")
+            timer.disp("J^theta sqrt(g)")
 
-        # J^zeta * sqrt(g)   # noqa: E800
-        timer.start("J^zeta")
+        timer.start("J^zeta sqrt(g)")
         if verbose > 0:
-            print("Saving J^zeta")
+            print("Saving J^zeta sqrt(g)")
         currvmnc = file.createVariable(
             "currvmnc", np.float64, ("radius", "mn_mode_nyq")
         )
@@ -1194,15 +1199,15 @@ class VMECIO:
         currvmnc[0, :] = -(  # linear extrapolation for coefficient at the magnetic axis
             s[1, :] - (c[2, :] - c[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
         )
-        # TODO: evaluate current at rho=0 nodes instead of extrapolation
+        # Todo: evaluate current at rho=0 nodes instead of extrapolation
         if not eq.sym:
             currvmns[:, :] = -s
             currumns[0, :] = -(
                 s[1, :] - (s[2, :] - s[1, :]) / (s_full[2] - s_full[1]) * s_full[1]
             )
-        timer.stop("J^zeta")
+        timer.stop("J^zeta sqrt(g)")
         if verbose > 1:
-            timer.disp("J^zeta")
+            timer.disp("J^zeta sqrt(g)")
 
         # TODO: these output quantities need to be added
         bdotgradv = file.createVariable("bdotgradv", np.float64, ("radius",))

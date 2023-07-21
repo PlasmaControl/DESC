@@ -48,8 +48,6 @@ class FourierRZToroidalSurface(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "_R_transform",
-        "_Z_transform",
         "rho",
         "_NFP",
     ]
@@ -401,8 +399,6 @@ class ZernikeRZToroidalSection(Surface):
         "_Z_lmn",
         "_R_basis",
         "_Z_basis",
-        "_R_transform",
-        "_Z_transform",
         "zeta",
         "_spectral_indexing",
     ]

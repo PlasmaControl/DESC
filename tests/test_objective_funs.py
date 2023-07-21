@@ -556,8 +556,8 @@ def test_plasma_vessel_distance():
 @pytest.mark.unit
 def test_mean_curvature():
     """Test for mean curvature objective function."""
-    # simple case like dshape should have mean curvature negative everywhere
-    eq = get("DSHAPE")
+    # simple case should have mean curvature negative everywhere
+    eq = Equilibrium()
     obj = MeanCurvature(eq=eq)
     obj.build()
     H = obj.compute_unscaled(*obj.xs(eq))

@@ -1150,16 +1150,16 @@ def _B_rt(params, transforms, profiles, data, **kwargs):
 )
 def _B0_tz(params, transforms, profiles, data, **kwargs):
     data["B0_tz"] = transforms["grid"].replace_at_axis(
-        -data["psi_r"]
+        data["psi_r"]
         * (
-            data["sqrt(g)_tz"] * data["sqrt(g)"]
-            + 2 * data["sqrt(g)_t"] * data["sqrt(g)_z"]
+            2 * data["sqrt(g)_t"] * data["sqrt(g)_z"]
+            - data["sqrt(g)_tz"] * data["sqrt(g)"]
         )
         / data["sqrt(g)"] ** 3,
-        lambda: -data["psi_rr"]
+        lambda: data["psi_rr"]
         * (
-            data["sqrt(g)_rtz"] * data["sqrt(g)_r"]
-            + 2 * data["sqrt(g)_rt"] * data["sqrt(g)_rz"]
+            2 * data["sqrt(g)_rt"] * data["sqrt(g)_rz"]
+            - data["sqrt(g)_rtz"] * data["sqrt(g)_r"]
         )
         / data["sqrt(g)_r"] ** 3,
     )

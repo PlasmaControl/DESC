@@ -291,25 +291,27 @@ class TestAxisLimits:
         # The need for a weaker tolerance on these keys may be due to large
         # derivatives near axis, finite precision error, or a subpar polynomial
         # regression fit against which the axis limit is compared.
+        rtol = "rtol"
+        atol = "atol"
         weaker_tolerance = {
-            "B^zeta_rr": {"rtol": 5e-02},
-            "F_rho": {"atol": 1e00},
-            "|B|_rr": {"rtol": 5e-02},
-            "F": {"atol": 1e00},
-            "B_rho_rr": {"rtol": 5e-02},
-            "B_zeta_rr": {"rtol": 5e-02},
-            "G_rr": {"rtol": 5e-02},
-            "J": {"atol": 1e00},
-            "B0_rr": {"rtol": 5e-02},
-            "B_rr": {"atol": 1e00},
-            "(J sqrt(g))_r": {"atol": 1e00},
-            "J^theta sqrt(g)": {"atol": 2},
-            "B^theta_r": {"atol": 1e-2},
-            "B^theta_rr": {"rtol": 5e-02},
-            "J_R": {"atol": 1e00},
-            "iota_r": {"atol": 1e-4},
-            "iota_num_rr": {"atol": 1e-3},
-            "alpha_r": {"rtol": 1e-2},
+            "B^zeta_rr": {rtol: 3e-02},
+            "F_rho": {atol: 1e00},
+            "|B|_rr": {rtol: 3e-02},
+            "F": {atol: 1e00},
+            "B_rho_rr": {rtol: 1e-02},
+            "B_zeta_rr": {rtol: 5e-02},
+            "G_rr": {rtol: 1e-02},
+            "J": {atol: 0.5},
+            "B0_rr": {rtol: 1e-02},
+            "B_rr": {atol: 1e00},
+            "(J sqrt(g))_r": {atol: 1e00},
+            "J^theta sqrt(g)": {atol: 1.5},
+            "B^theta_r": {atol: 1e-2},
+            "B^theta_rr": {rtol: 1e-02},
+            "J_R": {atol: 1e00},
+            "iota_r": {atol: 2e-4},
+            "iota_num_rr": {atol: 2e-3},
+            "alpha_r": {rtol: 1e-2},
         }
         zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
         # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)

@@ -1027,31 +1027,26 @@ def test_BdotgradB(DummyStellarator):
         load_from=str(DummyStellarator["output_path"]), file_format="hdf5"
     )
 
-    # partial derivative wrt theta
-    num_theta = 120
-    grid = LinearGrid(NFP=eq.NFP, theta=num_theta)
-    dtheta = grid.nodes[1, 1]
-    data = eq.compute(["B*grad(|B|)", "(B*grad(|B|))_t"], grid=grid)
-    Btilde_t = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dtheta
-    np.testing.assert_allclose(
-        data["(B*grad(|B|))_t"][2:-2],
-        Btilde_t[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_t"])),
-    )
+    def test_partial_derivative(name):
+        cases = {
+            "r": {"label": "rho", "column_id": 0},
+            "t": {"label": "theta", "column_id": 1},
+            "z": {"label": "zeta", "column_id": 2},
+        }[name[-1]]
+        grid = LinearGrid(NFP=eq.NFP, **{cases["label"]: 120})
+        dx = grid.nodes[1, cases["column_id"]]
+        data = eq.compute(["B*grad(|B|)", name], grid=grid)
+        Btilde_x = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dx
+        np.testing.assert_allclose(
+            actual=data[name][2:-2],
+            desired=Btilde_x[2:-2],
+            rtol=2e-2,
+            atol=2e-2 * np.mean(np.abs(data[name])),
+        )
 
-    # partial derivative wrt zeta
-    num_zeta = 120
-    grid = LinearGrid(NFP=eq.NFP, zeta=num_zeta)
-    dzeta = grid.nodes[1, 2]
-    data = eq.compute(["B*grad(|B|)", "(B*grad(|B|))_z"], grid=grid)
-    Btilde_z = np.convolve(data["B*grad(|B|)"], FD_COEF_1_4, "same") / dzeta
-    np.testing.assert_allclose(
-        data["(B*grad(|B|))_z"][2:-2],
-        Btilde_z[2:-2],
-        rtol=2e-2,
-        atol=2e-2 * np.mean(np.abs(data["(B*grad(|B|))_z"])),
-    )
+    test_partial_derivative("(B*grad(|B|))_r")
+    test_partial_derivative("(B*grad(|B|))_t")
+    test_partial_derivative("(B*grad(|B|))_z")
 
 
 # TODO: add test with stellarator example

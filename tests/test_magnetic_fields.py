@@ -2,9 +2,13 @@
 
 import numpy as np
 import pytest
+from scipy.constants import mu_0
 
 from desc.backend import jnp
+from desc.geometry import FourierRZToroidalSurface
+from desc.grid import LinearGrid
 from desc.magnetic_fields import (
+    CurrentPotentialField,
     PoloidalMagneticField,
     ScalarPotentialField,
     SplineMagneticField,
@@ -60,6 +64,81 @@ class TestMagneticFields:
         )
         np.testing.assert_allclose(
             field.compute_magnetic_field([1.0, np.pi / 4, 0]), [[0, 1, 0]]
+        )
+
+    @pytest.mark.unit
+    def test_current_potential_field(self):
+        """Test current potential magnetic field against analytic result."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+        )
+        # make a current potential corresponding a purely poloidal current
+        G = 1  # net poloidal current
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi
+        potential_dtheta = lambda theta, zeta, G: jnp.zeros_like(theta)
+        potential_dzeta = lambda theta, zeta, G: G * jnp.ones_like(theta) / 2 / jnp.pi
+
+        params = {"G": G}
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = CurrentPotentialField(
+            potential,
+            surface=surface,
+            surface_grid=LinearGrid(M=130, N=130),
+            params=params,
+            potential_dtheta=potential_dtheta,
+            potential_dzeta=potential_dzeta,
+        )
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+        )
+
+    @pytest.mark.unit
+    def test_current_potential_field_AD(self):
+        """Test current potential magnetic field against analytic result."""
+        surface = FourierRZToroidalSurface(
+            R_lmn=jnp.array([10, 1]),
+            Z_lmn=jnp.array([0, -1]),
+            modes_R=jnp.array([[0, 0], [1, 0]]),
+            modes_Z=jnp.array([[0, 0], [-1, 0]]),
+        )
+        # make a current potential corresponding a purely poloidal current
+        G = 1  # net poloidal current
+        potential = lambda theta, zeta, G: G * zeta / 2 / jnp.pi
+        params = {"G": G}
+        correct_field = lambda R, phi, Z: jnp.array([[0, mu_0 * G / 2 / jnp.pi / R, 0]])
+
+        field = CurrentPotentialField(
+            potential,
+            surface=surface,
+            surface_grid=LinearGrid(M=130, N=130),
+            params=params,
+            potential_dtheta=None,
+            potential_dzeta=None,
+        )
+
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, 0, 0]),
+            correct_field(10.0, 0, 0),
+            atol=1e-16,
+            err_msg="Current Potential Field failed with AD derivative",
+        )
+        np.testing.assert_allclose(
+            field.compute_magnetic_field([10.0, np.pi / 4, 0]),
+            correct_field(10.0, np.pi / 4, 0),
+            atol=1e-16,
+            err_msg="Current Potential Field failed with AD derivative",
         )
 
     @pytest.mark.slow

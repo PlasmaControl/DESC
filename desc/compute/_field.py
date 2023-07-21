@@ -2549,8 +2549,6 @@ def _B_mag_rz(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["|B|_rt", "sqrt(g)_r"],
 )
 def _grad_B(params, transforms, profiles, data, **kwargs):
-    # In the axis limit, |B|_t is 0. Cancellation occurs when decomposed into
-    # the basis vectors of the lab frame.
     data["grad(|B|)"] = (
         data["|B|_r"] * data["e^rho"].T
         + transforms["grid"].replace_at_axis(
@@ -3320,7 +3318,6 @@ def _kappa_g(params, transforms, profiles, data, **kwargs):
     axis_limit_data=["B_rt", "sqrt(g)_r"],
 )
 def _grad_B_vec(params, transforms, profiles, data, **kwargs):
-    # In the axis limit, |B|_t is 0 implying B_t is 0.
     B_t_over_sqrt_g = transforms["grid"].replace_at_axis(
         (data["B_t"].T / data["sqrt(g)"]).T,
         lambda: (data["B_rt"].T / data["sqrt(g)_r"]).T,

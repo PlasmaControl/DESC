@@ -17,9 +17,9 @@ from desc.grid import LinearGrid
 # quantities are that these functions tend toward zero as the magnetic axis
 # is approached, and that the limit of their rho derivatives is not zero.
 # Also d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
-zero_limit_keys = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)"}
+zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
 
-not_finite_limit_keys = {
+not_finite_limits = {
     "D_Mercier",
     "D_current",
     "D_geodesic",
@@ -49,9 +49,9 @@ not_finite_limit_keys = {
     "<J*B> Redl",  # may not exist for all configurations
 }
 
-# Todo: these limits exist, but may currently evaluate as nan.
-todo_limit = {
-    "fix_current": ["iota_num_rrr", "iota_den_rrr"],
+# don't need to add dependencies
+not_implemented_limits = {
+    "fix_current": ["iota_num_rrr", "iota_den_rrr"],  # needs sqrt(g)_rrrr
     "fix_iota": [],
     "all": [],
 }
@@ -59,9 +59,10 @@ todo_limit = {
 
 def _skip_this(eq, name):
     return (
-        name in todo_limit.get("all", [])
-        or (eq.current is None and name in todo_limit.get("fix_iota", []))
-        or (eq.iota is None and name in todo_limit.get("fix_current", []))
+        name in not_implemented_limits.get("all", [])
+        or (eq.current is None and name in not_implemented_limits.get("fix_iota", []))
+        or (eq.iota is None and name in not_implemented_limits.get("fix_current", []))
+        # above for skipping keys that do not have axis limits implemented
         or (eq.atomic_number is None and "Zeff" in name)
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)
@@ -90,14 +91,14 @@ def grow_seeds(seeds, search_space):
     out = set(seeds)
     for key in search_space:
         deps = data_index[key]["full_with_axis_dependencies"]["data"]
-        if key not in out and not out.isdisjoint(deps):
+        if not out.isdisjoint(deps):
             out.add(key)
     return out
 
 
-todo_limit = {
-    key: grow_seeds(val, search_space=data_index.keys() - not_finite_limit_keys)
-    for key, val in todo_limit.items()
+not_implemented_limits = {
+    group: grow_seeds(keys, data_index.keys() - not_finite_limits)
+    for group, keys in not_implemented_limits.items()
 }
 
 
@@ -156,7 +157,7 @@ def assert_is_continuous(
     data = eq.compute(names, grid=grid)
 
     for name in names:
-        if data_index[name]["coordinates"] == "" or _skip_this(eq, name):
+        if _skip_this(eq, name) or data_index[name]["coordinates"] == "":
             continue
         # make single variable function of rho
         profile = (
@@ -269,7 +270,7 @@ class TestAxisLimits:
                 if _skip_this(eq, key):
                     continue
                 is_finite = np.isfinite(data[key])
-                if key in not_finite_limit_keys:
+                if key in not_finite_limits:
                     assert np.all(is_finite.T ^ at_axis), key
                 else:
                     assert np.all(is_finite), key
@@ -284,7 +285,7 @@ class TestAxisLimits:
         # so this test does not make sense for keys that rely on discontinuous
         # keys as dependencies.
         finite_discontinuous = {"curvature_k1", "curvature_k2"}
-        continuous = data_index.keys() - not_finite_limit_keys
+        continuous = data_index.keys() - not_finite_limits
         continuous -= grow_seeds(finite_discontinuous, continuous)
 
         # The need for a weaker tolerance on these keys may be due to large
@@ -310,8 +311,9 @@ class TestAxisLimits:
             "iota_num_rr": {"atol": 1e-3},
             "alpha_r": {"rtol": 1e-2},
         }
-        zero_limit = dict.fromkeys(zero_limit_keys, {"desired_at_axis": 0})
-        kwargs = weaker_tolerance | zero_limit
+        zero_map = dict.fromkeys(zero_limits, {"desired_at_axis": 0})
+        # same as 'weaker_tolerance | zero_limit', but works on Python 3.8 (PEP 584)
+        kwargs = dict(weaker_tolerance, **zero_map)
         # fixed iota
         assert_is_continuous(get("W7-X"), names=continuous, kwargs=kwargs)
         # fixed current

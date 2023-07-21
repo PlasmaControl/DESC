@@ -23,8 +23,6 @@ from .utils import dot, surface_averages
     axis_limit_data=["sqrt(g)_r", "B_zeta_rt", "B_theta_rz"],
 )
 def _J_sup_rho(params, transforms, profiles, data, **kwargs):
-    # In the axis limit, J^rho is of indeterminate form 0/0. The cancellation in
-    # the numerator occurs when decomposed into the basis vectors of the lab frame.
     data["J^rho"] = (
         transforms["grid"].replace_at_axis(
             (data["B_zeta_t"] - data["B_theta_z"]) / data["sqrt(g)"],
@@ -87,7 +85,7 @@ def _J_sup_theta(params, transforms, profiles, data, **kwargs):
 )
 def _J_sup_zeta(params, transforms, profiles, data, **kwargs):
     # In the axis limit, J^zeta is of indeterminate form 0/0. The cancellation in
-    # the numerator occurs when decomposed into the basis vectors of the lab frame.
+    # the numerator occurs when decomposed into the polar basis vectors.
     data["J^zeta"] = (
         transforms["grid"].replace_at_axis(
             (data["B_theta_r"] - data["B_rho_t"]) / data["sqrt(g)"],

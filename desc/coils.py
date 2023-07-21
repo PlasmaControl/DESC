@@ -223,7 +223,7 @@ class XYZCoil(Coil, XYZCurve):
         points for X, Y, Z describing a closed curve
     knots : ndarray
         arbitrary theta values to use for spline knots,
-         should be an 1D ndarray of same length as the input.
+        should be an 1D ndarray of same length as the input.
         If None, defaults to using an equal-arclength angle as the knot
     period: float
         period of the theta variable used for the spline knots.

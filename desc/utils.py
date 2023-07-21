@@ -1,5 +1,6 @@
 """Utility functions, independent of the rest of DESC."""
 
+import numbers
 import warnings
 from itertools import combinations_with_replacement, permutations
 
@@ -487,3 +488,43 @@ def parse_argname_change(arg, kwargs, oldname, newname):
         )
         arg = kwargs.pop(oldname)
     return arg
+
+
+def setdefault(val, default, cond=None):
+    """Return val if condition is met, otherwise default.
+
+    If cond is None, then it checks if val is not None, returning val
+    or default accordingly.
+    """
+    if cond is None:
+        cond = val is not None
+    if cond:
+        return val
+    return default
+
+
+def isnonnegint(x):
+    """Determine if x is a non-negative integer."""
+    return isinstance(x, numbers.Real) and (x == int(x)) and (x >= 0)
+
+
+def isposint(x):
+    """Determine if x is a strictly positive integer."""
+    return isinstance(x, numbers.Real) and (x == int(x)) and (x > 0)
+
+
+def errorif(cond, err=ValueError, msg=""):
+    """Raise an error if condition is met.
+
+    Similar to assert but allows wider range of Error types, rather than
+    just AssertionError.
+    """
+    if cond:
+        raise err(msg)
+
+
+def only1(*args):
+    """Return True if 1 and only 1 of args evaluates to True."""
+    # copied from https://stackoverflow.com/questions/16801322/
+    i = iter(args)
+    return any(i) and not any(i)

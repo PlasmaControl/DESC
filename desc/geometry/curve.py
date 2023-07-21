@@ -7,7 +7,7 @@ import numpy as np
 from desc.backend import jnp, put
 from desc.basis import FourierSeries
 from desc.grid import Grid, LinearGrid
-from desc.interpolate import _approx_df, interp1d
+from desc.interpolate import interp1d
 from desc.transform import Transform
 from desc.utils import copy_coeffs
 
@@ -1333,9 +1333,13 @@ class XYZCurve(Curve):
     ):
         super().__init__(name)
         X, Y, Z = np.atleast_1d(X), np.atleast_1d(Y), np.atleast_1d(Z)
-        assert np.allclose(X[-1], X[0], atol=1e-15), "Must pass in a closed curve!"
-        assert np.allclose(Y[-1], Y[0], atol=1e-15), "Must pass in a closed curve!"
-        assert np.allclose(Z[-1], Z[0], atol=1e-15), "Must pass in a closed curve!"
+
+        assert np.allclose(X[-1], X[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Y[-1], Y[0], atol=1e-14), "Must pass in a closed curve!"
+        assert np.allclose(Z[-1], Z[0], atol=1e-14), "Must pass in a closed curve!"
+        self._X = X
+        self._Y = Y
+        self._Z = Z
 
         if knots is None:
             # find equal arclength angle-like variable, and use that as theta
@@ -1356,13 +1360,7 @@ class XYZCurve(Curve):
         self._knots = knots
 
         self._method = method
-        self._Dx = _approx_df(
-            self._knots, np.eye(self._knots.size), self._method, axis=0
-        )
 
-        self._X = X
-        self._Y = Y
-        self._Z = Z
         if grid is None:
             self._grid = Grid(
                 jnp.vstack(
@@ -1390,6 +1388,9 @@ class XYZCurve(Curve):
                 "X should have the same size as the knots, "
                 + f"got {len(new)} X values for {len(self._knots)} knots"
             )
+        assert np.allclose(
+            self._X[-1], self._X[0], atol=1e-14
+        ), "Must pass in a closed curve!"
 
     @property
     def Y(self):
@@ -1405,6 +1406,9 @@ class XYZCurve(Curve):
                 "Y should have the same size as the knots, "
                 + f"got {len(new)} Y values for {len(self._knots)} knots"
             )
+        assert np.allclose(
+            self._Y[-1], self._Y[0], atol=1e-14
+        ), "Must pass in a closed curve!"
 
     @property
     def Z(self):
@@ -1420,6 +1424,9 @@ class XYZCurve(Curve):
                 "Z should have the same size as the knots, "
                 + f"got {len(new)} Z values for {len(self._knots)} knots"
             )
+        assert np.allclose(
+            self._Z[-1], self._Z[0], atol=1e-14
+        ), "Must pass in a closed curve!"
 
     @property
     def grid(self):
@@ -1443,7 +1450,7 @@ class XYZCurve(Curve):
         if isinstance(grid, Grid):
             return grid.nodes[:, 2]
         if np.isscalar(grid):
-            return np.linspace(0, self._period, grid)
+            return np.linspace(0, self._period, grid, endpoint=True)
         grid = np.atleast_1d(grid)
         if grid.ndim == 1:
             return grid
@@ -1471,17 +1478,15 @@ class XYZCurve(Curve):
         -------
         values : ndarray, shape(k,3)
             X, Y, Z or R, phi, Z coordinates of the curve
+
         """
         if X is None:
-            X = self._X
+            X = self.X
         if Y is None:
-            Y = self._Y
+            Y = self.Y
         if Z is None:
-            Z = self._Z
+            Z = self.Z
         xq = self._get_xq(grid)
-        df_X = self._Dx @ X
-        df_Y = self._Dx @ Y
-        df_Z = self._Dx @ Z
 
         Xq = interp1d(
             xq,
@@ -1490,7 +1495,6 @@ class XYZCurve(Curve):
             method=self._method,
             derivative=dt,
             period=self._period,
-            df=df_X,
         )
         Yq = interp1d(
             xq,
@@ -1499,7 +1503,6 @@ class XYZCurve(Curve):
             method=self._method,
             derivative=dt,
             period=self._period,
-            df=df_Y,
         )
         Zq = interp1d(
             xq,
@@ -1508,7 +1511,6 @@ class XYZCurve(Curve):
             method=self._method,
             derivative=dt,
             period=self._period,
-            df=df_Z,
         )
 
         coords = jnp.stack([Xq, Yq, Zq], axis=1)
@@ -1552,13 +1554,13 @@ class XYZCurve(Curve):
         return T, N, B
 
     def compute_curvature(self, X=None, Y=None, Z=None, grid=None):
-        """Compute curvature using specified coefficients.
+        """Compute curvature using specified values at knots.
 
         Parameters
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1573,6 +1575,7 @@ class XYZCurve(Curve):
         -------
         kappa : ndarray, shape(k,)
             curvature of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
         d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
@@ -1587,7 +1590,7 @@ class XYZCurve(Curve):
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1602,6 +1605,7 @@ class XYZCurve(Curve):
         -------
         tau : ndarray, shape(k,)
             torsion of the curve at specified grid locations in phi
+
         """
         dx = self.compute_coordinates(X, Y, Z, grid, dt=1)
         d2x = self.compute_coordinates(X, Y, Z, grid, dt=2)
@@ -1620,7 +1624,7 @@ class XYZCurve(Curve):
         ----------
         X, Y, Z: array-like
             coordinate values at the knots for X, Y, Z.
-             If not given, defaults to values given
+            If not given, defaults to values given
             by X, Y, Z attributes
         grid : Grid, int or array-like
             locations to compute values at. Defaults to self.grid
@@ -1631,6 +1635,7 @@ class XYZCurve(Curve):
         -------
         length : float
             length of the curve.
+
         """
         if self._method == "nearest":  # cannot use derivative method as deriv=0
             coords = self.compute_coordinates(
@@ -1667,6 +1672,7 @@ class XYZCurve(Curve):
         -------
         fourier_xyz_curve : FourierXYZCurve
             FourierXYZCurve fit of the XYZCurve input object.
+
         """
         return FourierXYZCurve.from_XYZCurve(self, N, grid)
 
@@ -1711,6 +1717,7 @@ class XYZCurve(Curve):
         -------
         XYZCurve: XYZCurve,
             XYZCurve object which is the spline representation of the FourierXYZCurve.
+
         """
         coords = fourier_xyzcurve.compute_coordinates(grid=grid, basis="xyz")
 

@@ -8,6 +8,7 @@ import pytest
 from desc.coils import CoilSet, FourierPlanarCoil, FourierRZCoil, FourierXYZCoil
 from desc.geometry import FourierRZCurve
 from desc.grid import Grid, LinearGrid
+from desc.magnetic_fields import SumMagneticField, VerticalMagneticField
 
 
 class TestCoil:
@@ -38,6 +39,25 @@ class TestCoil:
         new_current = 3.5
         coil.current = new_current
         assert coil.current == new_current
+
+    @pytest.mark.unit
+    def test_SumMagneticField_with_Coil(self):
+        """Test SumMagneticField working with Coil and MagneticField objects."""
+        R = 2
+        y = 1
+        I = 1
+        B_Z = 2  # add constant vertical field of 2T
+        By_true = 1e-7 * 2 * np.pi * R**2 * I / (y**2 + R**2) ** (3 / 2)
+        B_true = np.array([0, By_true, 2])
+        coil = FourierXYZCoil(I)
+        coil.grid = LinearGrid(zeta=100, endpoint=True)
+        assert coil.grid.num_nodes == 100
+
+        field = SumMagneticField(coil, VerticalMagneticField(B_Z))
+        B_approx = field.compute_magnetic_field(
+            Grid([[10, y, 0], [10, -y, 0]]), basis="xyz"
+        )[0]
+        np.testing.assert_allclose(B_true, B_approx, rtol=1e-3, atol=1e-10)
 
 
 class TestCoilSet:
@@ -335,9 +355,6 @@ def test_save_MAKEGRID_coils_assert(tmpdir_factory):
     path = tmpdir.join("coils.MAKEGRID_format_desc")
     with pytest.raises(AssertionError):
         coilset.save_in_MAKEGRID_format(str(path), NFP=3)
-
-
-# TODO: add test where the CoilSet is not only XYZcoils
 
 
 @pytest.mark.unit

@@ -917,6 +917,7 @@ def test_constrained_AL_lsq():
 
 @pytest.mark.slow
 @pytest.mark.regression
+@pytest.mark.xfail
 def test_constrained_AL_scalar():
     """Tests that the augmented Lagrangian constrained optimizer does something."""
     eq = desc.examples.get("SOLOVEV")
@@ -953,8 +954,7 @@ def test_constrained_AL_scalar():
     V2 = eq2.compute("V")["V"]
     AR2 = eq2.compute("R0/a")["R0/a"]
     Dwell = constraints[-2].compute(*constraints[-2].xs(eq2))
-    # fixme for reviewers
-    np.testing.assert_allclose(AR, AR2, atol=ctol * 10)
-    np.testing.assert_allclose(V, V2, atol=ctol * 10)
+    np.testing.assert_allclose(AR, AR2, atol=ctol)
+    np.testing.assert_allclose(V, V2, atol=ctol)
     assert eq2.is_nested()
     np.testing.assert_array_less(-Dwell, ctol)

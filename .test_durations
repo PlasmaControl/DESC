@@ -290,7 +290,7 @@
     "tests/test_optimizer.py::test_bounded_optimization": 5.217513084411621,
     "tests/test_perturbations.py::test_perturbation_orders": 953.4179646968842,
     "tests/test_perturbations.py::test_perturb_with_float_without_error": 4.8092429637908936,
-    "tests/test_perturbations.py::test_optimal_perturb": 65.33948040008545,
+    "tests/test_perturbations.py::test_optimal_perturb": 250,
     "tests/test_plotting.py::test_kwarg_warning": 1.3703835010528564,
     "tests/test_plotting.py::test_1d_p": 2.3615925312042236,
     "tests/test_plotting.py::test_1d_fsa_consistency": 24.824483036994934,

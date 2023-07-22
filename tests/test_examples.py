@@ -331,7 +331,7 @@ def test_qh_optimization3():
     eq3a = run_qh_step(2, eq2)
     rho_err, theta_err = area_difference_desc(eq3, eq3a, Nr=1, Nt=1)
     # only need crude tolerances here to make sure the boundaries are
-    # similar, the main test is ensuring its not pathological and has good qs
+    # similar, the main test is ensuring it's not pathological and has good qs
     assert rho_err.mean() < 1
 
     obj = QuasisymmetryBoozer(helicity=(1, eq3a.NFP), eq=eq3a)

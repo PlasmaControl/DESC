@@ -977,6 +977,7 @@ def plot_fsa(
         eq, name, grid, kwargs.pop("component", None), reshape=False
     )
     label = label.split("~")
+    get_value = lambda x: _compute(eq, x, grid, reshape=False)[0]
     if data_index[name]["coordinates"] == "r" or data_index[name]["coordinates"] == "":
         # If the quantity is a surface function, averaging it again has no
         # effect, regardless of whether sqrt(g) is used.
@@ -985,37 +986,40 @@ def plot_fsa(
         plot_data_ylabel_key = f"{name}"
         if data_index[name]["coordinates"] == "r":
             values = grid.compress(values)
-    elif with_sqrt_g:
-        # flux surface average
-        label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
-        plot_data_ylabel_key = f"<{name}>_fsa"
-        get_value = lambda x: _compute(eq, x, grid, reshape=False)[0]
-        sqrt_g = get_value("sqrt(g)")
-        # Attempt to compute the magnetic axis limit.
-        # Compute derivative depending on various naming schemes.
-        # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
-        schemes = (
-            name + "_r",
-            name[:-3] + "_r" + name[-3:],
-            name[:-3] + "r" + name[-3:],
-        )
-        values_r = next((get_value(x) for x in schemes if x in data_index), np.nan)
-        if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
-            # Otherwise cannot compute axis limit in this agnostic manner.
-            sqrt_g = grid.replace_at_axis(sqrt_g, get_value("sqrt(g)_r"), copy=True)
-        values = surface_averages(grid, q=values, sqrt_g=sqrt_g, expand_out=False)
     else:
-        # theta average
-        label = (
-            r"$\langle " + label[0][1:] + r" \rangle_{\theta}~" + "~".join(label[1:])
-        )
+        is_nan = np.isnan(values)
+        if with_sqrt_g:  # flux surface average
+            sqrt_g = get_value("sqrt(g)")
+            # Attempt to compute the magnetic axis limit.
+            # Compute derivative depending on various naming schemes.
+            # e.g. B -> B_r, V(r) -> V_r(r), S_r(r) -> S_rr(r)
+            schemes = (
+                name + "_r",  # you
+                name[:-3] + "_r" + name[-3:],
+                name[:-3] + "r" + name[-3:],
+            )
+            values_r = next((get_value(x) for x in schemes if x in data_index), np.nan)
+            if (np.isfinite(values) & np.isfinite(values_r))[grid.axis].all():
+                # Otherwise cannot compute axis limit in this agnostic manner.
+                sqrt_g = grid.replace_at_axis(sqrt_g, get_value("sqrt(g)_r"), copy=True)
+            values = surface_averages(grid=grid, q=values, sqrt_g=sqrt_g)
+            label = r"$\langle " + label[0][1:] + r" \rangle~" + "~".join(label[1:])
+        else:  # theta average
+            values = surface_averages(grid=grid, q=values)
+            label = (
+                r"$\langle "
+                + label[0][1:]
+                + r" \rangle_{\theta}~"
+                + "~".join(label[1:])
+            )
+        # integration replaced nans with 0, put them back
+        values = grid.compress(np.where(is_nan, np.nan, values))
         plot_data_ylabel_key = f"<{name}>_fsa"
-        values = surface_averages(grid, q=values, expand_out=False)
 
     if norm_F:
         # normalize force by B pressure gradient
         norm_name = kwargs.pop("norm_name", "<|grad(|B|^2)|/2mu0>_vol")
-        norm_data, _ = _compute(eq, norm_name, grid, reshape=False)
+        norm_data = get_value(norm_name)
         values = values / np.nanmean(np.abs(norm_data))  # normalize
     if log:
         values = np.abs(values)  # ensure data is positive for log plot

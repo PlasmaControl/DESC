@@ -12,10 +12,10 @@ from desc.equilibrium import Equilibrium
 from desc.examples import get
 from desc.grid import LinearGrid
 
-# Unless mentioned in the source code of the compute function,
-# the only assumptions made to compute the magnetic axis limit of
-# quantities are that these functions tend toward zero as the magnetic axis
-# is approached, and that the limit of their rho derivatives is not zero.
+# Unless mentioned in the source code of the compute function, the assumptions
+# made to compute the magnetic axis limit can be reduced to assuming that these
+# functions tend toward zero as the magnetic axis is approached and that
+# d^2𝜓/(d𝜌)^2 and 𝜕√𝑔/𝜕𝜌 are both finite nonzero at the magnetic axis.
 # Also d^n𝜓/(d𝜌)^n for n > 3 is assumed zero everywhere.
 zero_limits = {"rho", "psi", "psi_r", "e_theta", "sqrt(g)", "B_t"}
 
@@ -51,17 +51,17 @@ not_finite_limits = {
 
 # don't need to add dependencies
 not_implemented_limits = {
-    "fix_current": ["iota_num_rrr", "iota_den_rrr"],  # needs sqrt(g)_rrrr
-    "fix_iota": [],
-    "all": [],
+    "fix_current": {"iota_num_rrr", "iota_den_rrr"},
+    "fix_iota": {},
+    "all": {},
 }
 
 
 def _skip_this(eq, name):
     return (
-        name in not_implemented_limits.get("all", [])
-        or (eq.current is None and name in not_implemented_limits.get("fix_iota", []))
-        or (eq.iota is None and name in not_implemented_limits.get("fix_current", []))
+        name in not_implemented_limits.get("all", {})
+        or (eq.current is None and name in not_implemented_limits.get("fix_iota", {}))
+        or (eq.iota is None and name in not_implemented_limits.get("fix_current", {}))
         # above for skipping keys that do not have axis limits implemented
         or (eq.atomic_number is None and "Zeff" in name)
         or (eq.electron_temperature is None and "Te" in name)
@@ -153,7 +153,7 @@ def assert_is_continuous(
     rho = np.linspace(0, 1, 10) * delta
     grid = LinearGrid(rho=rho, M=8, N=8, NFP=eq.NFP, sym=eq.sym)
     assert grid.axis.size
-    integrate = surface_integrals_map(grid, expand_out=False)
+    integrate = surface_integrals_map(grid)
     data = eq.compute(names, grid=grid)
 
     for name in names:
@@ -161,16 +161,16 @@ def assert_is_continuous(
             continue
         # make single variable function of rho
         if data_index[name]["coordinates"] == "r":
-            profile = grid.compress(data[name])
+            profile = data[name]
         else:
             # Norms and integrals are continuous functions, so their composition
             # cannot disrupt existing continuity. Note that the absolute value
             # before the integration ensures that a discontinuous integrand does
             # not become continuous once integrated.
             profile = integrate(np.abs(data[name]))
-            if np.isnan(data[name][grid.axis]).any():
-                # integration replaced nan with 0, put it back
-                profile[0] = np.nan
+            # integration replaced nans with 0, put them back
+            profile = np.where(np.isnan(data[name]), np.nan, profile)
+        profile = grid.compress(profile)
         fit = kwargs.get(name, {}).get("desired_at_axis", desired_at_axis)
         if fit is None:
             if np.ndim(data_index[name]["dim"]):
@@ -200,7 +200,7 @@ def get_matches(fun, pattern):
     # attempt to remove comments
     src = "\n".join(line.partition("#")[0] for line in src.splitlines())
     matches = pattern.findall(src)
-    matches = set(s.replace("'", "").replace('"', "") for s in matches)
+    matches = {s.replace("'", "").replace('"', "") for s in matches}
     return matches
 
 

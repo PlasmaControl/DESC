@@ -12,13 +12,14 @@ from desc.grid import ConcentricGrid, LinearGrid, QuadratureGrid
 class _ExactValueProfile:
     """Monkey patches the compute method of desc.Profile for testing."""
 
-    def __init__(self, eq, grid, profile_name="current"):
+    def __init__(self, eq, grid, profile_name):
         self.profile_name = profile_name
         keys = []
         i = 0
         while self._get_name(i) in data_index:
             keys += [self._get_name(i)]
             i += 1
+        self.max_dr = i - 1
         self.params = get_params(keys=keys, eq=eq, has_axis=grid.axis.size)
         self.transforms = get_transforms(keys=keys, eq=eq, grid=grid)
         self.profiles = get_profiles(keys=keys, eq=eq, grid=grid)
@@ -27,33 +28,37 @@ class _ExactValueProfile:
         return self.profile_name + "_" * bool(dr) + "r" * dr
 
     def compute(self, params, dr, *args, **kwargs):
+        if dr > self.max_dr:
+            return np.nan
         name = self._get_name(dr)
-        if name in data_index:
-            return compute_fun(
-                names=name,
-                params=self.params,
-                transforms=self.transforms,
-                profiles=self.profiles,
-            )[name]
-        return np.nan
+        return compute_fun(
+            names=name,
+            params=self.params,
+            transforms=self.transforms,
+            profiles=self.profiles,
+        )[name]
 
 
 class TestConstrainCurrent:
-    """Tests for running DESC with a fixed current profile."""
+    """Tests for computing iota from fixed current profile and vice versa."""
+
+    # Todo: add test_compute_toroidal_current
 
     @pytest.mark.unit
     @pytest.mark.solve
     def test_compute_rotational_transform(self, DSHAPE, HELIOTRON_vac):
-        """Test that compute functions recover iota and radial derivatives.
+        """Validate the computation of rotational transform from net toroidal current.
 
-        When the current is fixed to the current computed on an equilibrium
-        solved with iota fixed.
+        Cross-validates the computation of the rotational transform by feeding
+        the resulting net toroidal current of an equilibrium with a known
+        rotational transform to a method which computes the rotational transform
+        as a function of net toroidal current.
 
-        This tests that rotational transform computations from fixed-current profiles
-        are correct, among other things. For example, this test will fail if
-        the compute functions for iota from a current profile are incorrect.
+        This tests that rotational transform computations from known toroidal
+        current profiles are correct, among other things. For example, this test
+        will fail if the compute functions for iota given a current profile are
+        incorrect.
         """
-
         iotas = ["iota", "iota_r"]
         while iotas[-1] + "r" in data_index:
             iotas += [iotas[-1] + "r"]
@@ -67,26 +72,26 @@ class TestConstrainCurrent:
                 kwargs["axis"] = True
             grid = grid_type(**kwargs)
 
-            monkey_patched_current = _ExactValueProfile(eq, grid)
-            params = monkey_patched_current.params.copy()
-            params["i_l"] = None
-            params["c_l"] = None
-            # compute rotational transform from the above current profile, which
+            params = get_params(keys=iotas, eq=eq, has_axis=grid.axis.size)
+            transforms = get_transforms(keys=iotas, eq=eq, grid=grid)
+            profiles = get_profiles(keys=iotas, eq=eq, grid=grid)
+            monkey_patched_current = _ExactValueProfile(
+                eq, grid, profile_name="current"
+            )
+            # Compute rotational transform from the above current profile, which
             # is monkey patched to return a surface average of B_theta in amps
+            # as the input net toroidal current.
             data = compute_fun(
                 names=iotas,
-                params=params,
-                transforms=monkey_patched_current.transforms,
-                profiles={"iota": None, "current": monkey_patched_current},
+                params=dict(params, i_l=None, c_l=None),
+                transforms=transforms,
+                profiles=dict(profiles, iota=None, current=monkey_patched_current),
             )
-            # compute rotational transform using the equilibrium's default
-            # profile (directly from the power series which defines iota
-            # if the equilibrium fixes iota)
+            # Compute rotational transform using the equilibrium's default
+            # profile. For this test, this should be directly from the power
+            # series which defines the given rotational transform.
             benchmark_data = compute_fun(
-                names=iotas,
-                params=monkey_patched_current.params,
-                transforms=monkey_patched_current.transforms,
-                profiles=monkey_patched_current.profiles,
+                names=iotas, params=params, transforms=transforms, profiles=profiles
             )
             # Evaluating the order n derivative of the rotational transform at
             # the magnetic axis using a given toroidal current profile requires
@@ -106,7 +111,7 @@ class TestConstrainCurrent:
                     err_msg=iota,
                 )
 
-        # works with any stellarators in desc/examples with fixed iota profiles
+        # Only makes sense to test on configurations with fixed iota profiles.
         test(DSHAPE, QuadratureGrid)
         test(DSHAPE, ConcentricGrid)
         test(DSHAPE, LinearGrid)

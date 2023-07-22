@@ -972,13 +972,14 @@ def _iota_den(params, transforms, profiles, data, **kwargs):
         data["iota_den"] = jnp.nan * data["0"]
         return data
 
-    # Assumes omega_t is zero at magnetic axis.
+    gamma = (
+        (1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"]
+    ) / data["sqrt(g)"]
+    # Assumes toroidal stream function behaves such that the magnetic axis limit
+    # of gamma is zero (as it would if omega = 0 identically).
     gamma = transforms["grid"].replace_at_axis(
-        ((1 + data["omega_z"]) * data["g_tt"] - data["omega_t"] * data["g_tz"])
-        / data["sqrt(g)"],
-        0,
+        surface_integrals(transforms["grid"], gamma), 0
     )
-    gamma = surface_integrals(transforms["grid"], gamma)
     data["iota_den"] = gamma
     return data
 

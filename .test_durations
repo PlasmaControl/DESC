@@ -411,10 +411,10 @@
     "tests/test_vmec.py::TestVMECIO::test_ptolemy_linear_transform": 1.0929808616638184,
     "tests/test_vmec.py::TestVMECIO::test_fourier_to_zernike": 1.564780831336975,
     "tests/test_vmec.py::TestVMECIO::test_zernike_to_fourier": 1.6053714752197266,
-    "tests/test_vmec.py::test_load_then_save": 45.55219221115112,
-    "tests/test_vmec.py::test_vmec_save_asym": 30.782756328582764,
-    "tests/test_vmec.py::test_vmec_save_1": 1.1307034492492676,
-    "tests/test_vmec.py::test_vmec_save_2": 1.2249751091003418,
-    "tests/test_vmec.py::test_plot_vmec_comparison": 7.043433904647827,
-    "tests/test_vmec.py::test_vmec_boundary_subspace": 1.366995096206665
+    "tests/test_vmec.py::test_load_then_save": 120,
+    "tests/test_vmec.py::test_vmec_save_asym": 40,
+    "tests/test_vmec.py::test_vmec_save_1": 80,
+    "tests/test_vmec.py::test_vmec_save_2": 80,
+    "tests/test_vmec.py::test_plot_vmec_comparison": 40,
+    "tests/test_vmec.py::test_vmec_boundary_subspace": 5
 }

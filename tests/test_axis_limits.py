@@ -57,21 +57,6 @@ not_implemented_limits = {
 }
 
 
-def _skip_this(eq, name):
-    return (
-        name in not_implemented_limits.get("all", {})
-        or (eq.current is None and name in not_implemented_limits.get("fix_iota", {}))
-        or (eq.iota is None and name in not_implemented_limits.get("fix_current", {}))
-        # above for skipping keys that do not have axis limits implemented
-        or (eq.atomic_number is None and "Zeff" in name)
-        or (eq.electron_temperature is None and "Te" in name)
-        or (eq.electron_density is None and "ne" in name)
-        or (eq.ion_temperature is None and "Ti" in name)
-        or (eq.pressure is not None and "<J*B> Redl" in name)
-        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
-    )
-
-
 def grow_seeds(seeds, search_space):
     """Traverse the dependency DAG for keys in search space dependent on seeds.
 
@@ -85,7 +70,7 @@ def grow_seeds(seeds, search_space):
     Returns
     -------
     out : set
-        All keys in search space that have a path between it and any seed.
+        All keys in search space with any path in the dependency DAG to any seed.
 
     """
     out = set(seeds)
@@ -100,6 +85,21 @@ not_implemented_limits = {
     group: grow_seeds(keys, data_index.keys() - not_finite_limits)
     for group, keys in not_implemented_limits.items()
 }
+
+
+def _skip_this(eq, name):
+    return (
+        name in not_implemented_limits.get("all", {})
+        or (eq.current is None and name in not_implemented_limits.get("fix_iota", {}))
+        or (eq.iota is None and name in not_implemented_limits.get("fix_current", {}))
+        # above for skipping keys that do not have axis limits implemented
+        or (eq.atomic_number is None and "Zeff" in name)
+        or (eq.electron_temperature is None and "Te" in name)
+        or (eq.electron_density is None and "ne" in name)
+        or (eq.ion_temperature is None and "Ti" in name)
+        or (eq.pressure is not None and "<J*B> Redl" in name)
+        or (eq.current is None and ("iota_num" in name or "iota_den" in name))
+    )
 
 
 def assert_is_continuous(

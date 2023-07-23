@@ -49,11 +49,10 @@ not_finite_limits = {
     "<J*B> Redl",  # may not exist for all configurations
 }
 
-# don't need to add dependencies
+# reliant limits will be added to this set automatically
 not_implemented_limits = {
-    "fix_current": {"iota_num_rrr", "iota_den_rrr"},
-    "fix_iota": {},
-    "all": {},
+    "iota_num_rrr",
+    "iota_den_rrr",
 }
 
 
@@ -62,10 +61,10 @@ def grow_seeds(seeds, search_space):
 
     Parameters
     ----------
-    seeds : iterable
+    seeds : set
         Keys to find paths toward.
     search_space : iterable
-        Keys to consider returning.
+        Additional keys to consider returning.
 
     Returns
     -------
@@ -73,26 +72,22 @@ def grow_seeds(seeds, search_space):
         All keys in search space with any path in the dependency DAG to any seed.
 
     """
-    out = set(seeds)
+    out = seeds.copy()
     for key in search_space:
         deps = data_index[key]["full_with_axis_dependencies"]["data"]
-        if not out.isdisjoint(deps):
+        if not seeds.isdisjoint(deps):
             out.add(key)
     return out
 
 
-not_implemented_limits = {
-    group: grow_seeds(keys, data_index.keys() - not_finite_limits)
-    for group, keys in not_implemented_limits.items()
-}
+not_implemented_limits = grow_seeds(
+    not_implemented_limits, data_index.keys() - not_finite_limits
+)
 
 
 def _skip_this(eq, name):
     return (
-        name in not_implemented_limits.get("all", {})
-        or (eq.current is None and name in not_implemented_limits.get("fix_iota", {}))
-        or (eq.iota is None and name in not_implemented_limits.get("fix_current", {}))
-        # above for skipping keys that do not have axis limits implemented
+        name in not_implemented_limits
         or (eq.atomic_number is None and "Zeff" in name)
         or (eq.electron_temperature is None and "Te" in name)
         or (eq.electron_density is None and "ne" in name)

@@ -1043,3 +1043,186 @@ class BScaleLength(_Objective):
             profiles=constants["profiles"],
         )
         return data["L_grad(B)"]
+
+
+class B_dmin(_Objective):
+    """Targets |B| times the minimum distance from a surrounding surface.
+
+    Computes the minimum distance (d_min) from each point on the surface
+    grid to a point on the plasma grid and the magnitude of the magnetic
+    field (|B|) at that point. Then minimizes the function |B|*d_min
+
+    Parameters
+    ----------
+    surface : Surface
+        Bounding surface to penalize distance to.
+    eq : Equilibrium, optional
+        Equilibrium that will be optimized to satisfy the Objective.
+    target : float, ndarray, optional
+        Target value(s) of the objective. Only used if bounds is None.
+        len(target) must be equal to Objective.dim_f
+    bounds : tuple, optional
+        Lower and upper bounds on the objective. Overrides target.
+        len(bounds[0]) and len(bounds[1]) must be equal to Objective.dim_f
+    weight : float, ndarray, optional
+        Weighting to apply to the Objective, relative to other Objectives.
+        len(weight) must be equal to Objective.dim_f
+    normalize : bool
+        Whether to compute the error in physical units or non-dimensionalize.
+    normalize_target : bool
+        Whether target should be normalized before comparing to computed values.
+        if `normalize` is `True` and the target is in physical units, this should also
+        be set to True.
+    surface_grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate surface geometry at.
+    plasma_grid : Grid, ndarray, optional
+        Collocation grid containing the nodes to evaluate plasma geometry at.
+    name : str
+        Name of the objective function.
+
+    """
+
+    _scalar = False
+    _linear = False
+    _units = "(T*m)"
+    _print_value_fmt = "|B|*d_min: {:10.3e} "
+
+    def __init__(
+        self,
+        surface,
+        eq=None,
+        target=None,
+        bounds=None,
+        weight=1,
+        normalize=True,
+        normalize_target=True,
+        surface_grid=None,
+        plasma_grid=None,
+        name="B_dmin",
+    ):
+        if target is None and bounds is None:
+            target = 0
+        self._surface = surface
+        self._surface_grid = surface_grid
+        self._plasma_grid = plasma_grid
+        super().__init__(
+            eq=eq,
+            target=target,
+            weight=weight,
+            normalize=normalize,
+            normalize_target=normalize_target,
+            name=name,
+        )
+
+    def build(self, eq, use_jit=True, verbose=1):
+        """Build constant arrays.
+
+        Parameters
+        ----------
+        eq : Equilibrium, optional
+            Equilibrium that will be optimized to satisfy the Objective.
+        use_jit : bool, optional
+            Whether to just-in-time compile the objective and derivatives.
+        verbose : int, optional
+            Level of output.
+
+        """
+        eq = eq or self._eq
+        if self._surface_grid is None:
+            surface_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            surface_grid = self._surface_grid
+        if self._plasma_grid is None:
+            plasma_grid = LinearGrid(M=eq.M_grid, N=eq.N_grid, NFP=eq.NFP)
+        else:
+            plasma_grid = self._plasma_grid
+        if not np.allclose(surface_grid.nodes[:, 0], 1):
+            warnings.warn("Surface grid includes off-surface pts, should be rho=1")
+        if not np.allclose(plasma_grid.nodes[:, 0], 1):
+            warnings.warn("Plasma grid includes interior points, should be rho=1")
+
+        self._dim_f = self.grid.num_nodes
+        self._data_keys = ["X", "Y", "Z", "|B|"]
+        self._args = get_params(
+            self._data_keys, has_axis=plasma_grid.axis.size or surface_grid.axis.size
+        )
+
+        timer = Timer()
+        if verbose > 0:
+            print("Precomputing transforms")
+        timer.start("Precomputing transforms")
+
+        self._surface_coords = self._surface.compute_coordinates(
+            grid=surface_grid, basis="xyz"
+        )
+        self._profiles = get_profiles(
+            self._data_keys,
+            eq=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
+        self._transforms = get_transforms(
+            self._data_keys,
+            eq=eq,
+            grid=plasma_grid,
+            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
+        )
+
+        self._constants = {
+            "transforms": self._transforms,
+            "profiles": self._profiles,
+        }
+
+        timer.stop("Precomputing transforms")
+        if verbose > 1:
+            timer.disp("Precomputing transforms")
+
+        if self._normalize:
+            scales = compute_scaling_factors(eq)
+            self._normalization = scales["B"] * scales["a"]
+
+        super().build(eq=eq, use_jit=use_jit, verbose=verbose)
+
+    def compute(self, *args, **kwargs):
+        """Computes |B|*d_min.
+
+        Parameters
+        ----------
+        R_lmn : ndarray
+            Spectral coefficients of R(rho,theta,zeta) -- flux surface R coordinate (m).
+        Z_lmn : ndarray
+            Spectral coefficients of Z(rho,theta,zeta) -- flux surface Z coordinate (m).
+        L_lmn : ndarray
+            Spectral coefficients of lambda(rho,theta,zeta) -- poloidal stream function.
+        i_l : ndarray
+            Spectral coefficients of iota(rho) -- rotational transform profile.
+        c_l : ndarray
+            Spectral coefficients of I(rho) -- toroidal current profile.
+        Psi : float
+            Total toroidal magnetic flux within the last closed flux surface (Wb).
+
+        Returns
+        -------
+        f : ndarray
+            value of |B|*d_min at each point on the plasma .
+
+        """
+        params, constants = self._parse_args(*args, **kwargs)
+        if constants is None:
+            constants = self.constants
+
+        data = compute_fun(
+            self._data_keys,
+            params=params,
+            transforms=self._transforms,
+            profiles=self._profiles,
+        )
+
+        B_dmin_data = []
+        for x, y, z, mag_B in zip(data["X"], data["Y"], data["Z"], data["|B|"]):
+            plasma_coords = np.array([x, y, z])
+            dists = np.linalg.norm(plasma_coords - self._surface_coords, axis=-1)
+            d_min = dists.min()
+            B_dmin_data.append(mag_B * d_min)
+
+        return B_dmin_data

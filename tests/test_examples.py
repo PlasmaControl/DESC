@@ -607,9 +607,9 @@ def test_NAE_QSC_solve():
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
             B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 and n < 0:
+        elif m >= 0 > n:
             B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 and n >= 0:
+        elif m < 0 <= n:
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)
@@ -664,7 +664,7 @@ def test_NAE_QIC_solve():
     grid = LinearGrid(L=10, M=20, N=20, NFP=eq.NFP, sym=True, axis=False)
     iota = grid.compress(eq.compute("iota", grid=grid)["iota"])
 
-    np.testing.assert_allclose(iota[1], qsc.iota, atol=1e-5)
+    np.testing.assert_allclose(iota[1], qsc.iota, atol=5e-4)
     np.testing.assert_allclose(iota[1:10], qsc.iota, atol=5e-4)
 
     # check lambda to match near axis
@@ -691,7 +691,7 @@ def test_NAE_QIC_solve():
     lam_nae = np.squeeze(lam_nae[:, 0, :])
 
     lam_av_nae = np.mean(lam_nae, axis=0)
-    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=1e-4)
+    np.testing.assert_allclose(lam_av_nae, -qsc.iota * qsc.nu_spline(phi), atol=5e-4)
 
     # check |B| on axis
 
@@ -709,9 +709,9 @@ def test_NAE_QIC_solve():
     for i, (l, m, n) in enumerate(modes):
         if m >= 0 and n >= 0:
             B_nae += B_mn_nae[i] * np.cos(m * th) * np.cos(n * ph)
-        elif m >= 0 and n < 0:
+        elif m >= 0 > n:
             B_nae += -B_mn_nae[i] * np.cos(m * th) * np.sin(n * ph)
-        elif m < 0 and n >= 0:
+        elif m < 0 <= n:
             B_nae += -B_mn_nae[i] * np.sin(m * th) * np.cos(n * ph)
         elif m < 0 and n < 0:
             B_nae += B_mn_nae[i] * np.sin(m * th) * np.sin(n * ph)

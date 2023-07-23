@@ -984,8 +984,6 @@ def plot_fsa(
         # So we avoid surface averaging it and forgo the <> around the label.
         label = r"$ " + label[0][1:] + r" ~" + "~".join(label[1:])
         plot_data_ylabel_key = f"{name}"
-        if data_index[name]["coordinates"] == "r":
-            values = grid.compress(values)
     else:
         is_nan = np.isnan(values)
         if with_sqrt_g:  # flux surface average
@@ -1013,8 +1011,10 @@ def plot_fsa(
                 + "~".join(label[1:])
             )
         # integration replaced nans with 0, put them back
-        values = grid.compress(np.where(is_nan, np.nan, values))
+        values = np.where(is_nan, np.nan, values)
         plot_data_ylabel_key = f"<{name}>_fsa"
+    if data_index[name]["coordinates"] != "":
+        values = grid.compress(values)
 
     if norm_F:
         # normalize force by B pressure gradient
@@ -2126,9 +2126,9 @@ def plot_boozer_modes(
 
     """
     if rho is None:
-        rho = np.linspace(1, 0, num=21)
+        rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
-        rho = np.linspace(1, 0, num=rho + 1)
+        rho = np.linspace(1, 0, num=rho, endpoint=False)
 
     B_mn = np.array([[]])
     M_booz = kwargs.pop("M_booz", 2 * eq.M)
@@ -2468,9 +2468,9 @@ def plot_qs_error(  # noqa: 16 fxn too complex
     markers = parse_argname_change(markers, kwargs, "markers", "marker")
 
     if rho is None:
-        rho = np.linspace(1, 0, num=21)
+        rho = np.linspace(1, 0, num=20, endpoint=False)
     elif np.isscalar(rho) and rho > 1:
-        rho = np.linspace(1, 0, num=rho + 1)
+        rho = np.linspace(1, 0, num=rho, endpoint=False)
 
     fig, ax = _format_ax(ax, figsize=kwargs.pop("figsize", None))
 
@@ -2772,7 +2772,7 @@ def plot_basis(basis, return_data=False, **kwargs):
     title_fontsize = kwargs.pop("title_fontsize", None)
 
     if basis.__class__.__name__ == "PowerSeries":
-        # todo: lmax ununsed
+        # fixme: lmax unused
         lmax = abs(basis.modes[:, 0]).max()
         grid = LinearGrid(rho=100, endpoint=True)
         r = grid.nodes[:, 0]
@@ -2800,7 +2800,7 @@ def plot_basis(basis, return_data=False, **kwargs):
         return fig, ax
 
     elif basis.__class__.__name__ == "FourierSeries":
-        # todo nmax unused
+        # fixme nmax unused
         nmax = abs(basis.modes[:, 2]).max()
         grid = LinearGrid(zeta=100, NFP=basis.NFP, endpoint=True)
         z = grid.nodes[:, 2]

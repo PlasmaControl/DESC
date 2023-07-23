@@ -95,14 +95,13 @@ class TestSurfaceComputeUtils:
         def test_b_theta(surface_label, grid, eq):
             q = eq.compute("B_theta", grid=grid)["B_theta"]
             integrals = surface_integrals(grid, q, surface_label, expand_out=False)
-            assert (
-                integrals.size
-                == {
-                    "rho": grid.num_rho,
-                    "theta": grid.num_theta,
-                    "zeta": grid.num_zeta,
-                }[surface_label]
-            )
+            unique_size = {
+                "rho": grid.num_rho,
+                "theta": grid.num_theta,
+                "zeta": grid.num_zeta,
+            }[surface_label]
+            assert integrals.shape == (unique_size,), surface_label
+
             desired = benchmark_surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(
                 integrals, desired, atol=1e-16, err_msg=surface_label
@@ -132,14 +131,12 @@ class TestSurfaceComputeUtils:
             # The first dimension of q varies the domain u_1, u_2, and u_3
             # and the second dimension varies the codomain u_4, u_5, u_6.
             integrals = surface_integrals_transform(grid, surface_label)(q)
-            assert integrals.shape == (
-                {
-                    "rho": grid.num_rho,
-                    "theta": grid.num_theta,
-                    "zeta": grid.num_zeta,
-                }[surface_label],
-                grid.num_nodes,
-            ), surface_label
+            unique_size = {
+                "rho": grid.num_rho,
+                "theta": grid.num_theta,
+                "zeta": grid.num_zeta,
+            }[surface_label]
+            assert integrals.shape == (unique_size, grid.num_nodes), surface_label
 
             desired = benchmark_surface_integrals(grid, q, surface_label)
             np.testing.assert_allclose(integrals, desired, err_msg=surface_label)

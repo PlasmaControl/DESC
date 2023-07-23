@@ -91,7 +91,7 @@ def test_compute_d_shear(DSHAPE_current, HELIOTRON_ex):
         d_shear = grid.compress(eq.compute("D_shear", grid=grid)["D_shear"])
 
         assert np.all(
-            d_shear[np.isfinite(d_shear)] >= 0
+            d_shear[bool(grid.axis.size) :] >= 0
         ), "D_shear should always have a stabilizing effect."
         assert_all_close(d_shear, d_shear_vmec, rho, rho_range, rtol, atol)
 
@@ -160,7 +160,7 @@ def test_compute_d_geodesic(DSHAPE_current, HELIOTRON_ex):
         d_geodesic = grid.compress(eq.compute("D_geodesic", grid=grid)["D_geodesic"])
 
         assert np.all(
-            d_geodesic[np.isfinite(d_geodesic)] <= 0
+            d_geodesic[bool(grid.axis.size) :] <= 0
         ), "D_geodesic should always have a destabilizing effect."
         assert_all_close(d_geodesic, d_geodesic_vmec, rho, rho_range, rtol, atol)
 

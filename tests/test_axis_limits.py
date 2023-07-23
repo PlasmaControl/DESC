@@ -256,7 +256,7 @@ class TestAxisLimits:
         assert grid.axis.size
         data = eq.compute(name, grid=grid)
         assert name in data and deps | axis_limit_deps < data.keys()
-        assert np.all(np.isfinite(data[name]))
+        assert np.isfinite(data[name]).all()
 
     @pytest.mark.unit
     def test_limit_existence(self):

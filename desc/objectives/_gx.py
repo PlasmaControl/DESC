@@ -542,8 +542,8 @@ class GXWrapper(_Objective):
             rho = np.sqrt(self.psi)
             iota = fi(rho)
             zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
+            thetas = iota/np.abs(iota)*self.alpha*np.ones(len(zeta)) + iota*zeta
 
-            thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
 
             rhoa = rho*np.ones(len(zeta))
             c = np.vstack([rhoa,thetas,zeta]).T
@@ -639,10 +639,11 @@ class GXWrapper(_Objective):
         iotas = fi(np.sqrt(self.psi))
         shears = fs(np.sqrt(self.psi))
         
+        print("iotas is " + str(iotas))
         zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iotas),(np.pi*self.npol-self.alpha)/np.abs(iotas),2*self.nzgrid+1)
         iota = iotas * np.ones(len(zeta))
         shear = shears * np.ones(len(zeta))
-        thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
+        thetas = iotas/np.abs(iotas)*self.alpha*np.ones(len(zeta)) + iota*zeta
         
         rhoa = rho*np.ones(len(zeta))
         c = np.vstack([rhoa,thetas,zeta]).T
@@ -652,6 +653,7 @@ class GXWrapper(_Objective):
         if self._profiles_eq["iota"] is None:
             self.grid = Grid(coords)
             self._transforms = get_transforms(self._data_keys, eq=self.eq, grid=self.grid)
+            self._profiles = get_profiles(self._data_keys, eq=self.eq, grid=self.grid)
             data = {}
         
         data = compute_fun(
@@ -908,7 +910,6 @@ class GXWrapper(_Objective):
     def interp_to_new_grid(self,geo_array,zgrid,uniform_grid):
         geo_array_gx = np.zeros(len(geo_array))
         f = interp1d(zgrid,geo_array,kind='cubic')
-        
         for i in range(len(uniform_grid)-1):
             if uniform_grid[i] > zgrid[-1]:
                 print("OUT OF BOUNDS")

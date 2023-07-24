@@ -2,7 +2,6 @@
 
 import warnings
 from abc import ABC, abstractmethod
-from inspect import getfullargspec
 
 import numpy as np
 
@@ -708,12 +707,6 @@ class _Objective(IOAble, ABC):
         self._name = name
         self._use_jit = None
         self._built = False
-        # if args is already set don't overwrite it
-        self._args = getattr(
-            self,
-            "_args",
-            [arg for arg in getfullargspec(self.compute)[0] if arg != "self"],
-        )
         self._eq = eq
         if eq is None:
             warnings.warn(
@@ -822,8 +815,10 @@ class _Objective(IOAble, ABC):
         """Build constant arrays."""
         eq = eq or self._eq
         self._check_dimensions()
-        self._set_dimensions(eq)
         self._set_derivatives()
+        # kludge for now
+        self._args = eq.optimizeable_params
+        self._dimensions = eq.dimensions
         if use_jit is not None:
             self._use_jit = use_jit
         if self._use_jit:

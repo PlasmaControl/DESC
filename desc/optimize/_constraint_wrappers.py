@@ -91,14 +91,16 @@ class LinearConstraintProjection(ObjectiveFunction):
             if not con.built:
                 con.build(eq, verbose=verbose)
 
-        args = np.concatenate([obj.args for obj in self._constraints])
-        args = np.concatenate((args, self._objective.args))
+        # kludge for now since ProximalProjection can't take extra args
+        if isinstance(self._objective, ProximalProjection):
+            args = self._objective.args
+        else:
+            args = np.concatenate([obj.args for obj in self._constraints])
+            args = np.concatenate((args, self._objective.args))
         # this is all args used by both constraints and objective
         self._args = sort_args(args)
         self._dim_f = self._objective.dim_f
-        self._dimensions = self._objective.dimensions
         self._scalar = self._objective.scalar
-        self._dimensions = self._objective.dimensions
         self._objective.set_args(*self._args)
         self.set_args()
         (
@@ -112,6 +114,7 @@ class LinearConstraintProjection(ObjectiveFunction):
         ) = factorize_linear_constraints(
             self._constraints,
             self._args,
+            kludge=isinstance(self._objective, ProximalProjection),
         )
         self._dim_x_full = self._dim_x
         self._dim_x = self._Z.shape[1]

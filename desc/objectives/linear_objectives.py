@@ -50,7 +50,6 @@ class BoundaryRSelfConsistency(_Objective):
     ):
 
         self._surface_label = surface_label
-        self._args = ["R_lmn", "Rb_lmn"]
         super().__init__(
             eq=eq,
             target=0,
@@ -150,7 +149,6 @@ class BoundaryZSelfConsistency(_Objective):
     ):
 
         self._surface_label = surface_label
-        self._args = ["Z_lmn", "Zb_lmn"]
         super().__init__(
             eq=eq,
             target=0,
@@ -245,7 +243,6 @@ class AxisRSelfConsistency(_Objective):
         name="axis R self consistency",
     ):
 
-        self._args = ["R_lmn", "Ra_n"]
         super().__init__(
             eq=eq,
             target=0,
@@ -335,7 +332,6 @@ class AxisZSelfConsistency(_Objective):
         name="axis Z self consistency",
     ):
 
-        self._args = ["Z_lmn", "Za_n"]
         super().__init__(
             eq=eq,
             target=0,
@@ -459,7 +455,6 @@ class FixBoundaryR(_Objective):
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
-        self._args = ["Rb_lmn"]
         super().__init__(
             eq=eq,
             target=target,
@@ -625,7 +620,6 @@ class FixBoundaryZ(_Objective):
         self._modes = modes
         self._target_from_user = target
         self._surface_label = surface_label
-        self._args = ["Zb_lmn"]
         super().__init__(
             eq=eq,
             target=target,

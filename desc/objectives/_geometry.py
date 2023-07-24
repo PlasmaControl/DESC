@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.geometry.utils import rpz2xyz
 from desc.grid import LinearGrid, QuadratureGrid
 from desc.utils import Timer
@@ -96,11 +96,6 @@ class AspectRatio(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["R0/a"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -229,11 +224,6 @@ class Elongation(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["a_major/a_minor"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -362,11 +352,6 @@ class Volume(_Objective):
 
         self._dim_f = 1
         self._data_keys = ["V"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -541,11 +526,6 @@ class PlasmaVesselDistance(_Objective):
 
         self._dim_f = surface_grid.num_nodes
         self._data_keys = ["R", "phi", "Z"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=plasma_grid.axis.size or surface_grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -728,11 +708,6 @@ class MeanCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_H_rho"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -873,11 +848,6 @@ class PrincipalCurvature(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["curvature_k1_rho", "curvature_k2_rho"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -1015,11 +985,6 @@ class BScaleLength(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["L_grad(B)"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:

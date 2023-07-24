@@ -4,7 +4,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.compute.utils import compress
 from desc.grid import LinearGrid
 from desc.utils import Timer
@@ -106,11 +106,6 @@ class MercierStability(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["D_Mercier"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -294,11 +289,6 @@ class MagneticWell(_Objective):
 
         self._dim_f = grid.num_rho
         self._data_keys = ["magnetic well"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:

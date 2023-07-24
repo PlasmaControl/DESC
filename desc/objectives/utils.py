@@ -291,7 +291,9 @@ def get_equilibrium_objective(eq=None, mode="force", normalize=True):
     return ObjectiveFunction(objectives)
 
 
-def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
+def factorize_linear_constraints(
+    constraints, objective_args, kludge=False
+):  # noqa: C901
     """Compute and factorize A to get pseudoinverse and nullspace.
 
     Given constraints of the form Ax=b, factorize A to find a particular solution xp
@@ -324,8 +326,11 @@ def factorize_linear_constraints(constraints, objective_args):  # noqa: C901
 
     """
     # set state vector
-    args = np.concatenate([obj.args for obj in constraints])
-    args = np.concatenate((args, objective_args))
+    if kludge:
+        args = objective_args
+    else:
+        args = np.concatenate([obj.args for obj in constraints])
+        args = np.concatenate((args, objective_args))
     # this is all args used by both constraints and objective
     args = sort_args(args)
     dimensions = constraints[0]._dimensions

@@ -170,12 +170,9 @@ def perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
     if not objective.built:
         objective.build(eq, verbose=verbose)
     constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
-    con_args = []
     for con in constraints:
-        con_args += con.args
         if not con.built:
             con.build(eq, verbose=verbose)
-    objective.set_args(*con_args)
 
     if objective.scalar:  # FIXME: change to num objectives >= num parameters
         raise AttributeError(
@@ -572,14 +569,9 @@ def optimal_perturb(  # noqa: C901 - FIXME: break this up into simpler pieces
         eq=eq, iota=eq.iota is not None, kinetic=eq.electron_temperature is not None
     )
     constraints = maybe_add_self_consistency(eq=eq, constraints=constraints)
-    con_args = []
     for con in constraints:
-        con_args += con.args
         if not con.built:
             con.build(eq, verbose=verbose)
-    con_args += objective_f.args + objective_g.args
-    objective_f.set_args(*con_args)
-    objective_g.set_args(*con_args)
 
     (
         xp,

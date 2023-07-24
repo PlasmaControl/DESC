@@ -6,7 +6,7 @@ import numpy as np
 
 from desc.backend import jnp
 from desc.compute import compute as compute_fun
-from desc.compute import get_params, get_profiles, get_transforms
+from desc.compute import get_profiles, get_transforms
 from desc.grid import LinearGrid
 from desc.utils import Timer
 from desc.vmec_utils import ptolemy_linear_transform
@@ -118,11 +118,6 @@ class QuasisymmetryBoozer(_Objective):
             grid = self._grid
 
         self._data_keys = ["|B|_mn"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         assert grid.sym is False
         assert grid.num_rho == 1
@@ -310,11 +305,6 @@ class QuasisymmetryTwoTerm(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_C"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -471,11 +461,6 @@ class QuasisymmetryTripleProduct(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["f_T"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:
@@ -615,11 +600,6 @@ class Isodynamicity(_Objective):
 
         self._dim_f = grid.num_nodes
         self._data_keys = ["isodynamicity"]
-        self._args = get_params(
-            self._data_keys,
-            obj="desc.equilibrium.equilibrium.Equilibrium",
-            has_axis=grid.axis.size,
-        )
 
         timer = Timer()
         if verbose > 0:

@@ -15,8 +15,8 @@ from desc.transform import Transform
 save = False
 model = True
 fields = True
-ripple = True
-losses = True
+confinement = True
+OPinvarinat = True
 boundaries = False
 
 plt.rcParams["font.family"] = "DejaVu Sans"
@@ -421,9 +421,11 @@ if fields:
     else:
         plt.show()
 
-# effective ripple ====================================================================
+# confinement ====================================================================
 
-if ripple:
+if confinement:
+    fig, (ax0, ax1) = plt.subplots(nrows=2, ncols=1, figsize=(7, 13))
+    # effective ripple
     eps_pol = interp_helper(np.loadtxt("publications/dudt2023/neo_out.poloidal")[:, 1])
     eps_hel = interp_helper(np.loadtxt("publications/dudt2023/neo_out.helical")[:, 1])
     eps_tor = interp_helper(np.loadtxt("publications/dudt2023/neo_out.toroidal")[:, 1])
@@ -437,31 +439,21 @@ if ripple:
         np.loadtxt("publications/dudt2023/neo_out.toroidal_qs")[:, 1]
     )
     eps_w7x = interp_helper(np.loadtxt("publications/dudt2023/neo_out.w7x")[:, 1])
-    fig, ax = plt.subplots(figsize=(7, 7))
     s = np.linspace(0, 1, eps_pol.size + 1)[1:]
-    ax.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="OP")
-    ax.semilogy(s, eps_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
-    ax.semilogy(s, eps_hel, color=orange, linestyle="-", lw=4, label="OH")
-    ax.semilogy(s, eps_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
-    ax.semilogy(s, eps_tor, color=green, linestyle="-", lw=4, label="OT")
-    ax.semilogy(s, eps_tor_qs, color=green, linestyle=":", lw=4, label="QA")
+    ax0.semilogy(s, eps_pol, color=purple, linestyle="-", lw=4, label="OP")
+    ax0.semilogy(s, eps_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
+    ax0.semilogy(s, eps_hel, color=orange, linestyle="-", lw=4, label="OH")
+    ax0.semilogy(s, eps_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
+    ax0.semilogy(s, eps_tor, color=green, linestyle="-", lw=4, label="OT")
+    ax0.semilogy(s, eps_tor_qs, color=green, linestyle=":", lw=4, label="QA")
     s = np.linspace(0, 1, eps_w7x.size + 1)[1:]
-    ax.semilogy(s, eps_w7x, color="k", linestyle="--", lw=4, label="W7-X")
-    ax.legend(loc=(0.08, 0.25), ncol=4)
-    ax.set_xlim([0, 1])
-    ax.set_ylim([1e-8, 1e-2])
-    ax.set_xlabel(r"Normalized toroidal flux = $\rho^2$")
-    ax.set_ylabel(r"$\epsilon_{eff}^{3/2}$")
-    fig.tight_layout()
-    if save:
-        plt.savefig("publications/dudt2023/ripple.png")
-        plt.savefig("publications/dudt2023/ripple.eps")
-    else:
-        plt.show()
-
-# particle losses =====================================================================
-
-if losses:
+    ax0.semilogy(s, eps_w7x, color="k", linestyle="--", lw=4, label="W7-X")
+    ax0.legend(loc=(0.08, 0.25), ncol=4)
+    ax0.set_xlim([0, 1])
+    ax0.set_ylim([1e-8, 1e-2])
+    ax0.set_xlabel(r"Normalized toroidal flux = $\rho^2$")
+    ax0.set_ylabel(r"$\epsilon_{eff}^{3/2}$")
+    # particle losses
     lost_pol = 1 - interp_helper(
         np.sum(
             np.loadtxt("publications/dudt2023/confined_fraction_poloidal.dat")[:, 1:3],
@@ -510,32 +502,69 @@ if losses:
             axis=1,
         )
     )
-    fig, ax = plt.subplots(figsize=(7, 7))
     t = np.loadtxt("publications/dudt2023/confined_fraction_poloidal.dat")[:, 0]
-    ax.loglog(t, lost_pol, color=purple, linestyle="-", lw=4, label="OP")
-    ax.loglog(t, lost_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
-    ax.loglog(t, lost_hel, color=orange, linestyle="-", lw=4, label="OH")
-    ax.loglog(t, lost_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
-    ax.loglog(t, lost_tor, color=green, linestyle="-", lw=4, label="OT")
-    ax.loglog(t, lost_tor_qs, color=green, linestyle=":", lw=4, label="QA")
+    ax1.loglog(t, lost_pol, color=purple, linestyle="-", lw=4, label="OP")
+    ax1.loglog(t, lost_pol_qs, color=purple, linestyle=":", lw=4, label="QP")
+    ax1.loglog(t, lost_hel, color=orange, linestyle="-", lw=4, label="OH")
+    ax1.loglog(t, lost_hel_qs, color=orange, linestyle=":", lw=4, label="QH")
+    ax1.loglog(t, lost_tor, color=green, linestyle="-", lw=4, label="OT")
+    ax1.loglog(t, lost_tor_qs, color=green, linestyle=":", lw=4, label="QA")
     t = np.loadtxt("publications/dudt2023/confined_fraction_w7x.dat")[:, 0]
-    ax.loglog(t, lost_w7x, color="k", linestyle="--", lw=4, label="W7-X")
-    ax.legend(loc=(0.08, 0.85), ncol=4)
-    ax.set_xlim([1e-4, 2e-1])
-    ax.set_ylim([1e-3, 1e0])
-    ax.set_xlabel(r"Time (s)")
-    ax.set_ylabel(r"Fraction of alpha particles lost")
-    ax.text(
+    ax1.loglog(t, lost_w7x, color="k", linestyle="--", lw=4, label="W7-X")
+    ax1.legend(loc=(0.08, 0.85), ncol=4)
+    ax1.set_xlim([1e-4, 2e-1])
+    ax1.set_ylim([1e-3, 1e0])
+    ax1.set_xlabel(r"Time (s)")
+    ax1.set_ylabel(r"Fraction of alpha particles lost")
+    ax1.text(
         0.55,
         0.2,
         r"No losses for QH and QA",
-        transform=ax.transAxes,
+        transform=ax1.transAxes,
         verticalalignment="top",
     )
     fig.tight_layout()
     if save:
-        plt.savefig("publications/dudt2023/losses.png")
-        plt.savefig("publications/dudt2023/losses.eps")
+        plt.savefig("publications/dudt2023/confinement.png")
+        plt.savefig("publications/dudt2023/confinement.eps")
+    else:
+        plt.show()
+
+# OP 2nd adiabatic invariant ==========================================================
+
+if OPinvarinat:
+    fig, (ax0, ax1) = plt.subplots(nrows=2, ncols=1, figsize=(7, 7), sharex=True)
+    Bnorm = np.load("publications/dudt2023/Bnorm.npy")
+    # Delta J
+    DeltaJ_Goodman = np.load("publications/dudt2023/DeltaJ_Goodman.npy")
+    DeltaJ_Dudt = np.load("publications/dudt2023/DeltaJ_Dudt.npy")
+    ax0.semilogy(
+        Bnorm, DeltaJ_Goodman, color=purple, linestyle="-", lw=4, label="Goodman et al."
+    )
+    ax0.semilogy(
+        Bnorm, DeltaJ_Dudt, color=orange, linestyle="-", lw=4, label="Dudt et al."
+    )
+    ax0.set_ylabel(r"$\langle \Delta J \rangle / \langle J \rangle$")
+    ax0.legend(loc="upper right")
+    ax0.set_xlim([0, 1])
+    ax0.set_ylim([1e-5, 1e-1])
+    # dJ/drho
+    dJds_Goodman = np.load("publications/dudt2023/dJds_Goodman.npy")
+    dJds_Dudt = np.load("publications/dudt2023/dJds_Dudt.npy")
+    ax1.semilogy(
+        Bnorm, dJds_Goodman, color=purple, linestyle="-", lw=4, label="Goodman et al."
+    )
+    ax1.semilogy(
+        Bnorm, dJds_Dudt, color=orange, linestyle="-", lw=4, label="Dudt et al."
+    )
+    ax1.set_ylabel(r"$\langle dJ/ds \rangle / \langle J \rangle$")
+    ax1.set_xlabel(r"$(B - B_{min}) / (B_{max} - B_{min})$")
+    ax1.set_xlim([0, 1])
+    ax1.set_ylim([1e-3, 2e0])
+    fig.tight_layout()
+    if save:
+        plt.savefig("publications/dudt2023/OPinvarinat.png")
+        plt.savefig("publications/dudt2023/OPinvarinat.eps")
     else:
         plt.show()
 

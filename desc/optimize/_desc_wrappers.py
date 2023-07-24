@@ -214,27 +214,81 @@ def _optimize_desc_stochastic(
     assert constraint is None, f"method {method} doesn't support constraints"
     options = {} if options is None else options
     
-    def grad_fd(x_reduced,x0):
+    def grad_fd(x_reduced,x0,f):
         x = x_reduced
-        fx = objective.compute(x)
-#        dx = 0.1*np.abs(x0)
-        dx = 0.1*np.power(10,np.floor(np.log10(np.abs(x))))
+#        fx = objective.compute(x)
+        fx = f
+        print("FX IS " + str(fx))
+        dx = 1.0e-1*np.abs(x)
+               
+#        x = jnp.asarray(x).at[x == 0].set(0.001)
 
+#        dx = 0.1*np.power(10,np.floor(np.log10(np.abs(x))))
+        print("dx is " + str(dx))
         tang = np.eye(len(dx))
         jac = np.zeros((len(fx),len(tang)))
         for i in range(len(tang)):
             tang[i][i] = dx[i]
         for i in range(len(tang)):
-            df = (objective.compute(x_reduced+tang[:,i].T)-fx)/np.linalg.norm(objective.recover(tang[:,i].T))
+#            df = (objective.compute(x_reduced+tang[:,i].T)-fx)/np.linalg.norm(objective.recover(tang[:,i].T))
+
+            ob = objective.compute(x_reduced+tang[:,i].T)
+#            obm = objective.compute(x_reduced-tang[:,i].T)
+
+
+            print("OB IS " + str(ob))
+#            print("OBM IS " + str(obm))
+
+#            df = (ob-fx)/np.max(dx)
+#            df = (ob-fx)/np.linalg.norm(tang[:,i].T)
+#            if np.linalg.norm(ob) > np.linalg.norm(fx) and np.linalg.norm(obm) > np.linalg.norm(fx):
+#                print("SET TO 0")
+#                ob = np.zeros(len(ob))
+#                obm = np.zeros(len(obm))
+            df = (ob-fx)/(np.linalg.norm(objective.recover(tang[:,i].T)))
+
+
             jac[:,i] = df
         return fx.T @ jac
+
+    def grad_spsa(x_reduced,x0,f,ck):
+        x = x_reduced
+        #fx = objective.compute(x)
+        fx = f
+#        h = 0.2*np.power(10,np.floor(np.log10(np.abs(x))))
+        h = ck*np.abs(x)
+ 
+        jac = np.zeros((len(fx),len(h)))
+        
+        N = 1
+        for j in range(N):
+            djac = np.zeros((len(fx),len(h)))
+            dx = (np.random.binomial(1,0.5,x.shape)*2-1)*h
+            print("dx is " + str(dx))
+
+            ob = objective.compute(x + dx)
+#            print("OB IS " + str(ob))
+            obm = objective.compute(x - dx)
+#            print("OBM IS " + str(obm))
+            df = ob - obm
+            for i in range(len(x0)):
+                zx = np.zeros(len(x0))
+                zx[i] = dx[i]
+                djac[:,i] = np.abs(dx[i])/dx[i]*df/(2*np.linalg.norm(objective.recover(zx)))
+#                djac[:,i] = df/(2*dx[i])
+            jac = jac + djac
+        jac = jac/N
+
+        return fx.T @ jac
+
 
 
     result = sgd(
         objective,
         objective.compute_scalar,
         x0=x0,
-        grad=grad_fd,
+#        grad=grad_fd,
+        grad=grad_spsa,
         args=(),
         method=method,
         ftol=stoptol["ftol"],

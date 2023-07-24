@@ -108,13 +108,24 @@ def sgd(
     x = x0.copy()
     print("x is " + str(x))
     v = np.zeros_like(x)
-    f = fun(x, *args)
+    #f = fun(x, *args)
+    fa = obj.compute(x)
+    f = np.linalg.norm(fa)**2/2
     xopt = x
     fopt = f
     print("f is " + str(f))
     nfev += 1
-    g = grad(x,x0)
+#    c = 0.01
+    c = options.pop("c", 0.01)
+    ck = c
+    g = grad(x,x0,fa,ck)
     print("g is " + str(g))
+
+
+    gamma = 0.9
+    G = (1-gamma) * np.outer(g,g)
+    print("diagonal of G is " + str(G.diagonal()))
+
     ngev += 1
     
    
@@ -128,7 +139,10 @@ def sgd(
     alpha = options.pop("alpha", 2e-2 * x_norm / g_norm)
     beta = options.pop("beta", 0.9)
     assert len(options) == 0, "sgd got an unexpected option {}".format(options.keys())
-    
+
+    alpha0 = alpha
+
+
     success = None
     message = None
     step_norm = np.inf
@@ -140,16 +154,23 @@ def sgd(
     if return_all:
         allx = [x]
     v = beta * v + (1 - beta) * g
+
     print("v is " + str(v))
     print("alpha is " + str(alpha))
     x = x - alpha * v
+#    x = x - alpha*g
+#    x = x - alpha *(1/np.sqrt(G.diagonal())) * v
     print("x is " + str(x))
     print("updating eq")
     obj._objective._update_equilibrium(obj.recover(x),store=True)
 
-    fnew = fun(x, *args)
+#    fnew = fun(x, *args)
+    fa = obj.compute(x)
+    fnew = np.linalg.norm(fa)**2/2
     print("new f is " + str(fnew))
-    if fnew < fopt:
+
+#    if fnew < fopt:
+    if True:
         fopt = fnew
         xopt = x
     iteration += 1
@@ -175,19 +196,34 @@ def sgd(
         )
         if success is not None:
             break
+
+        alpha = alpha0/(1+iteration)**0.602
+        ck = c/(iteration+1)**0.101
         
-        g = grad(x,x0)
+        print("alpha is " + str(alpha))
+        print("ck is " + str(ck))
+
+        g = grad(x,x0,fa,ck)
+        G = gamma * G + (1-gamma) * np.outer(g,g)
         print("g is " + str(g))
+        print("diagonal of G is " + str(G.diagonal()))
         v = beta * v + (1 - beta) * g
+
         print("v is " + str(v))
         x = x - alpha * v
+#        x = x - alpha*g
+#        x = x - alpha *(1/np.sqrt(G.diagonal())) * v
+
         print("x is " + str(x))
         
         print("updating eq")
         obj._objective._update_equilibrium(obj.recover(x),store=True)
-        fnew = fun(x, *args)
+#        fnew = fun(x, *args)
+        fa = obj.compute(x)
+        fnew = np.linalg.norm(fa)**2/2
         print("new f is " + str(fnew))
-        if fnew < fopt:
+#        if fnew < fopt:
+        if True:
             fopt = fnew
             xopt = x
 
@@ -210,6 +246,7 @@ def sgd(
                 message = STATUS_MESSAGES["callback"]
 
         iteration += 1
+#        print("alpha is " + str(alpha))
 #    flast = fun(x,*args)
 #    xlast = x
     obj._objective._update_equilibrium(obj.recover(xopt),store=True)

@@ -542,6 +542,7 @@ class GXWrapper(_Objective):
             rho = np.sqrt(self.psi)
             iota = fi(rho)
             zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iota),(np.pi*self.npol-self.alpha)/np.abs(iota),2*self.nzgrid+1)
+
             thetas = self.alpha*np.ones(len(zeta)) + iota*zeta
 
             rhoa = rho*np.ones(len(zeta))
@@ -637,7 +638,7 @@ class GXWrapper(_Objective):
 
         iotas = fi(np.sqrt(self.psi))
         shears = fs(np.sqrt(self.psi))
-
+        
         zeta = np.linspace((-np.pi*self.npol-self.alpha)/np.abs(iotas),(np.pi*self.npol-self.alpha)/np.abs(iotas),2*self.nzgrid+1)
         iota = iotas * np.ones(len(zeta))
         shear = shears * np.ones(len(zeta))
@@ -666,7 +667,7 @@ class GXWrapper(_Objective):
         #normalizations       
         Lref = data_eq['a']
         Bref = 2*np.abs(psib)/Lref**2
-
+        print("Bref is " + str(Bref))
         #calculate bmag
         modB = data['|B|']
         bmag = modB/Bref
@@ -681,7 +682,9 @@ class GXWrapper(_Objective):
         lmbda_r = data['lambda_r']
         lmbda_t = data['lambda_t']
         lmbda_z = data['lambda_z']
-       
+      
+        
+
         grad_alpha_r = (lmbda_r - zeta*shear)
         grad_alpha_t = (1 + lmbda_t)
         grad_alpha_z = (-iota+lmbda_z)
@@ -696,7 +699,8 @@ class GXWrapper(_Objective):
         shat = -x/iotas * shear[0]/Lref
         gds2 = grad_alpha**2 * Lref**2 *self.psi
         #gds21 with negative sign?
-        gds21 = -shat/Bref * grad_psi_dot_grad_alpha
+
+        gds21 = shat/Bref * grad_psi_dot_grad_alpha
         gds22 = (shat/(Lref*Bref))**2 /self.psi * grad_psi**2*data['g^rr']
 
         #calculate gbdrift0 and cvdrift0
@@ -707,7 +711,7 @@ class GXWrapper(_Objective):
         jac = data['sqrt(g)']
         #gbdrift0 = (B_t*dB_z - B_z*dB_t)*2*rho*psib/jac
         #gbdrift0 with negative sign?
-        gbdrift0 = -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z + B_z*dB_t)*psib/jac * 2 * rho
+        gbdrift0 = -psib/np.abs(psib)*shat * 2 / modB**3 / rho*(B_t*dB_z - B_z*dB_t)*psib/jac * 2 * rho
         cvdrift0 = gbdrift0
 
         #calculate gbdrift and cvdrift
@@ -780,7 +784,17 @@ class GXWrapper(_Objective):
         #ds = nc.Dataset('/scratch/gpfs/pk2354/DESC/GX/gx.nc')
         
         qflux = ds['Fluxes/qflux']
-        qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
+        qflux = qflux[int(len(qflux)/2):]
+        
+        weighted_birkhoff = np.zeros(len(qflux))
+        N = len(weighted_birkhoff)
+        for i in range(1,N-1):
+            weighted_birkhoff[i] = np.exp(-1/(i/N*(1-i/N)))
+        norm = np.sum(weighted_birkhoff)
+        
+        weighted_birkhoff = weighted_birkhoff.reshape((len(qflux),1))
+        qflux_avg = np.sum(weighted_birkhoff*qflux/norm)
+#        qflux_avg = jnp.mean(qflux[int(len(qflux)/2):]) 
         print(qflux_avg)
         ds.close() 
         #os.rename('/scratch/gpfs/pk2354/DESC/GX/gx_nl.nc','/scratch/gpfs/pk2354/DESC/GX/gx_old.nc')
@@ -897,6 +911,7 @@ class GXWrapper(_Objective):
         
         for i in range(len(uniform_grid)-1):
             if uniform_grid[i] > zgrid[-1]:
+                print("OUT OF BOUNDS")
                 geo_array_gx[i] = geo_array_gx[i-1]
             else:
                 geo_array_gx[i] = f(np.round(uniform_grid[i],5))

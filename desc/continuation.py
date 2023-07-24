@@ -215,6 +215,7 @@ def _add_pressure(
     # make sure its at full radial/poloidal resolution
     eqi.change_resolution(L=eq.L, M=eq.M, L_grid=eq.L_grid, M_grid=eq.M_grid)
 
+    # TODO: do we need to rebuild/rebind these as we go?
     constraints_i = get_fixed_boundary_constraints(
         eq=eqi,
         iota=objective != "vacuum" and eq.iota is not None,
@@ -656,9 +657,9 @@ def solve_continuation(  # noqa: C901
 
     if not isinstance(optimizer, Optimizer):
         optimizer = Optimizer(optimizer)
-    objective_i = get_equilibrium_objective(eq=eqfam[-1], mode=objective)
+    objective_i = get_equilibrium_objective(eq=eqfam[0], mode=objective)
     constraints_i = get_fixed_boundary_constraints(
-        eq=eqfam[-1],
+        eq=eqfam[0],
         iota=objective != "vacuum" and eqfam[0].iota is not None,
         kinetic=eqfam[0].electron_temperature is not None,
     )

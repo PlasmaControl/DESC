@@ -68,59 +68,6 @@ class ObjectiveFunction(IOAble):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective functions."""
-        self._derivatives = {
-            "jac_scaled": {},
-            "jac_unscaled": {},
-            "grad": {},
-            "hess": {},
-        }
-        for arg in self.args:
-            self._derivatives["jac_scaled"][
-                arg
-            ] = lambda x, constants=None, arg=arg: jnp.vstack(
-                [
-                    obj.derivatives["jac_scaled"][arg](
-                        *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                        constants=const,
-                    )
-                    for obj, const in zip(self.objectives, constants)
-                ]
-            )
-            self._derivatives["jac_unscaled"][
-                arg
-            ] = lambda x, constants=None, arg=arg: jnp.vstack(
-                [
-                    obj.derivatives["jac_unscaled"][arg](
-                        *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                        constants=const,
-                    )
-                    for obj, const in zip(self.objectives, constants)
-                ]
-            )
-            self._derivatives["grad"][arg] = lambda x, constants=None, arg=arg: jnp.sum(
-                jnp.array(
-                    [
-                        obj.derivatives["grad"][arg](
-                            *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                            constants=const,
-                        )
-                        for obj, const in zip(self.objectives, constants)
-                    ]
-                ),
-                axis=0,
-            )
-            self._derivatives["hess"][arg] = lambda x, constants=None, arg=arg: jnp.sum(
-                jnp.array(
-                    [
-                        obj.derivatives["hess"][arg](
-                            *self._kwargs_to_args(self.unpack_state(x), obj.args),
-                            constants=const,
-                        )
-                        for obj, const in zip(self.objectives, constants)
-                    ]
-                ),
-                axis=0,
-            )
         if self._deriv_mode in {"batched", "looped"}:
             self._grad = Derivative(self.compute_scalar, mode="grad")
             self._hess = Derivative(self.compute_scalar, mode="hess")
@@ -792,58 +739,12 @@ class _Objective(IOAble, ABC):
 
     def _set_derivatives(self):
         """Set up derivatives of the objective wrt each argument."""
-        self._derivatives = {
-            "jac_scaled": {},
-            "jac_unscaled": {},
-            "grad": {},
-            "hess": {},
-        }
+        self._grad = Derivative(self.compute_scalar, mode="grad")
+        self._hess = Derivative(self.compute_scalar, mode="hess")
+        self._jac_scaled = Derivative(self.compute_scaled, mode="fwd")
+        self._jac_unscaled = Derivative(self.compute_unscaled, mode="fwd")
 
-        for arg in self.dimensions.keys():
-            if arg in self.args:  # derivative wrt arg
-                self._derivatives["jac_unscaled"][arg] = Derivative(
-                    self.compute_unscaled,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["jac_scaled"][arg] = Derivative(
-                    self.compute_scaled,
-                    argnum=self.args.index(arg),
-                    mode="fwd",
-                )
-                self._derivatives["grad"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="grad",
-                )
-                self._derivatives["hess"][arg] = Derivative(
-                    self.compute_scalar,
-                    argnum=self.args.index(arg),
-                    mode="hess",
-                )
-            else:  # these derivatives are always zero
-                self._derivatives["jac_unscaled"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["jac_scaled"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dim_f, self.dimensions[arg])
-                )
-                self._derivatives["grad"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (1, self.dimensions[arg])
-                )
-                self._derivatives["hess"][
-                    arg
-                ] = lambda *args, arg=arg, **kwargs: jnp.zeros(
-                    (self.dimensions[arg], self.dimensions[arg])
-                )
-
-    def jit(self):
+    def jit(self):  # noqa: C901
         """Apply JIT to compute methods, or re-apply after updating self."""
         self._use_jit = True
 
@@ -871,11 +772,29 @@ class _Objective(IOAble, ABC):
             pass
         self.compute_scalar = jit(self.compute_scalar)
 
-        del self._derivatives
-        self._set_derivatives()
-        for mode, val in self._derivatives.items():
-            for arg, deriv in val.items():
-                self._derivatives[mode][arg] = jit(self._derivatives[mode][arg])
+        try:
+            del self.jac_scaled
+        except AttributeError:
+            pass
+        self.jac_scaled = jit(self.jac_scaled)
+
+        try:
+            del self.jac_unscaled
+        except AttributeError:
+            pass
+        self.jac_unscaled = jit(self.jac_unscaled)
+
+        try:
+            del self.hess
+        except AttributeError:
+            pass
+        self.hess = jit(self.hess)
+
+        try:
+            del self.grad
+        except AttributeError:
+            pass
+        self.grad = jit(self.grad)
 
     def _check_dimensions(self):
         """Check that len(target) = len(bounds) = len(weight) = dim_f."""
@@ -975,6 +894,22 @@ class _Objective(IOAble, ABC):
         else:
             f = jnp.sum(self.compute_scaled_error(*args, **kwargs) ** 2) / 2
         return f.squeeze()
+
+    def grad(self, *args, **kwargs):
+        """Compute gradient vector of scalar form of the objective wrt x."""
+        return self._grad(*args, **kwargs)
+
+    def hess(self, *args, **kwargs):
+        """Compute Hessian matrix of scalar form of the objective wrt x."""
+        return self._hess(*args, **kwargs)
+
+    def jac_scaled(self, *args, **kwargs):
+        """Compute Jacobian matrx of vector form of the objective wrt x."""
+        return self._jac_scaled(*args, **kwargs)
+
+    def jac_unscaled(self, *args, **kwargs):
+        """Compute Jacobian matrx of vector form of the objective wrt x, unweighted."""
+        return self._jac_unscaled(*args, **kwargs)
 
     def print_value(self, *args, **kwargs):
         """Print the value of the objective."""
@@ -1078,11 +1013,6 @@ class _Objective(IOAble, ABC):
     def dimensions(self):
         """dict: Dimensions of the argument given by the dict keys."""
         return self._dimensions
-
-    @property
-    def derivatives(self):
-        """dict: Derivatives of the function wrt the argument given by the dict keys."""
-        return self._derivatives
 
     @property
     def dim_f(self):

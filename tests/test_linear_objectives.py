@@ -340,28 +340,14 @@ def test_build_init():
     for obj in (fbR1, fbZ1):
         obj.build()
 
-    arg = fbR1.args[0]
-    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
+    xz = {key: np.zeros_like(val) for key, val in eq.params_dict.items()}
+    arg = "Rb_lmn"
+    A = fbR1.jac_scaled(xz)[arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
 
-    arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
-
-    fbR1 = FixBoundaryR(eq=eq)
-    fbZ1 = FixBoundaryZ(eq=eq)
-    for obj in (fbR1, fbZ1):
-        obj.build()
-
-    arg = fbR1.args[0]
-    A = fbR1.derivatives["jac_scaled"][arg](np.zeros(fbR1.dimensions[arg]))
-    assert np.max(np.abs(A)) == 1
-    assert A.shape == (eq.surface.R_basis.num_modes, eq.surface.R_basis.num_modes)
-
-    arg = fbZ1.args[0]
-    A = fbZ1.derivatives["jac_scaled"][arg](np.zeros(fbZ1.dimensions[arg]))
+    arg = "Zb_lmn"
+    A = fbZ1.jac_scaled(xz)[arg]
     assert np.max(np.abs(A)) == 1
     assert A.shape == (eq.surface.Z_basis.num_modes, eq.surface.Z_basis.num_modes)
 
